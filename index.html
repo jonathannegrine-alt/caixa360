@@ -1579,6 +1579,7 @@
       } else {
         await verificarConexaoML();
         renderDashboard();
+        autoSyncML(); // background, sem await
       }
     }
 
@@ -2940,6 +2941,7 @@
           salvarCfg();
         }
 
+        localStorage.setItem('mk_ultimo_sync_ml', Date.now().toString());
         const msg = '✅ ' + data.liberacoes + ' liberações importadas'
           + (data.saldoMP ? ' · Saldo MP: R$ ' + fmt(data.saldoMP) : '');
         if(statusEl){ statusEl.className='ml-status-ok'; statusEl.textContent=msg; }
@@ -2950,6 +2952,16 @@
       } catch(e){
         if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ ' + e.message; }
       }
+    }
+
+    async function autoSyncML(){
+      if(!usuarioAtual) return;
+      const ultimo = parseInt(localStorage.getItem('mk_ultimo_sync_ml') || '0');
+      const THROTTLE_MS = 30 * 60 * 1000; // 30 minutos
+      if(Date.now() - ultimo < THROTTLE_MS) return;
+      const { data } = await supa.from('ml_tokens').select('usuario_id').eq('usuario_id', usuarioAtual.id).maybeSingle();
+      if(!data) return;
+      sincronizarML(); // fire-and-forget, atualiza em background
     }
 
     async function verificarConexaoML(){
