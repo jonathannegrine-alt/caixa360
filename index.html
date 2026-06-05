@@ -2885,7 +2885,8 @@
     function conectarML(){
       const url = 'https://auth.mercadolivre.com.br/authorization?response_type=code'
         + '&client_id=' + ML_CLIENT_ID
-        + '&redirect_uri=' + encodeURIComponent(ML_REDIRECT);
+        + '&redirect_uri=' + encodeURIComponent(ML_REDIRECT)
+        + '&scope=' + encodeURIComponent('offline_access read write');
       window.location.href = url;
     }
 
