@@ -1150,10 +1150,9 @@
           <div class="card-body">
             <div id="cfg-ml-status" style="font-size:13px;margin-bottom:14px;color:var(--text-muted);">Verificando conexão...</div>
             <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
-              <a href="https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=98776212333714&redirect_uri=https%3A%2F%2Fjonathannegrine-alt.github.io%2Fcaixa360%2F&scope=offline_access%20read%20write"
-                 class="btn-ml" style="font-size:13px;padding:9px 18px;text-decoration:none;">
+              <button type="button" class="btn-ml" style="font-size:13px;padding:9px 18px;" onclick="window.location.href='https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=98776212333714&redirect_uri=https%3A%2F%2Fjonathannegrine-alt.github.io%2Fcaixa360%2F&scope=offline_access%20read%20write'">
                 🛒 Conectar / Reconectar no Mercado Livre
-              </a>
+              </button>
               <button type="button" class="btn-out" id="cfg-btn-desconectar" onclick="desconectarML()" style="display:none;">Desconectar</button>
             </div>
             <div style="font-size:11px;color:#999;margin-top:10px;">
