@@ -2894,8 +2894,8 @@
       const hojeItens = JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]');
       const hojeTotal = hojeItens.reduce((s,i) => s + i.val, 0);
 
-      // Resumo stats — total inclui hoje pendente
-      const totalFut = liberacoes.reduce((s,l) => s + l.val, 0);
+      // Resumo stats — excluir hoje de liberacoes (evita double-count com hojeTotal)
+      const totalFut = liberacoes.filter(l => l.data > hoje).reduce((s,l) => s + l.val, 0);
       const total = totalFut + hojeTotal;
       const p7  = liberacoes.filter(l => diasDif(hoje, l.data) <= 7  && l.data > hoje).reduce((s,l) => s + l.val, 0);
       const p30 = liberacoes.filter(l => diasDif(hoje, l.data) <= 30 && l.data > hoje).reduce((s,l) => s + l.val, 0);
