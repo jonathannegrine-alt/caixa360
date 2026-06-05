@@ -2000,7 +2000,7 @@
       else if(page === 'calendario') renderCalendario();
       else if(page === 'simulador') renderFormSimulador();
       else if(page === 'skus') renderSKUs();
-      else if(page === 'receber') renderReceber();
+      else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config') renderCategorias();
     }
     
@@ -3064,19 +3064,27 @@
 
     async function verificarConexaoML(){
       if(!usuarioAtual) return;
-      const { data } = await supa.from('ml_tokens').select('ml_user_id,updated_at').eq('usuario_id', usuarioAtual.id).single();
       const naoConectado = document.getElementById('ml-nao-conectado');
       const conectado   = document.getElementById('ml-conectado');
       const infoEl      = document.getElementById('ml-info');
       if(!naoConectado) return;
-      if(data){
-        naoConectado.style.display = 'none';
-        conectado.style.display = 'block';
-        if(infoEl){
-          const dt = data.updated_at ? new Date(data.updated_at).toLocaleString('pt-BR') : '';
-          infoEl.textContent = '✅ Conectado' + (dt ? ' — última sync: ' + dt : '');
+      try {
+        // maybeSingle() não dá erro para 0 rows (diferente de .single())
+        const { data } = await supa.from('ml_tokens').select('ml_user_id,updated_at').eq('usuario_id', usuarioAtual.id).maybeSingle();
+        if(data){
+          naoConectado.style.display = 'none';
+          conectado.style.display = 'block';
+          if(infoEl){
+            const dt = data.updated_at ? new Date(data.updated_at).toLocaleString('pt-BR') : '';
+            infoEl.textContent = '✅ Conectado' + (dt ? ' — última sync: ' + dt : '');
+          }
+        } else {
+          naoConectado.style.display = 'block';
+          conectado.style.display = 'none';
+          if(infoEl) infoEl.textContent = '';
         }
-      } else {
+      } catch(e){
+        // Em caso de erro de rede, exibir botão de conectar como segurança
         naoConectado.style.display = 'block';
         conectado.style.display = 'none';
       }
