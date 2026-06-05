@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MK Gestão Financeira</title>
-  
+  <title>Caixa 360</title>
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.js"></script>
   <!-- Biblioteca XLSX para importação Excel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   
@@ -479,6 +481,73 @@
     .entry-title{font-weight:500;margin-bottom:3px;}
     .entry-meta{font-size:11px;color:var(--gray-600);}
     .entry-value{font-weight:600;font-size:15px;}
+
+    /* Tooltips (?) */
+    .tip{position:relative;display:inline-flex;align-items:center;margin-left:4px;vertical-align:middle;}
+    .tip-icon{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:9px;font-weight:700;cursor:help;flex-shrink:0;line-height:1;border:none;}
+    .tip-box{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:11px;font-weight:400;padding:8px 12px;border-radius:6px;white-space:normal;min-width:200px;max-width:280px;line-height:1.5;z-index:9999;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.3);}
+    .tip-box::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e293b;}
+    .tip:hover .tip-box,.tip:focus-within .tip-box{display:block;}
+    /* Variante para dentro de tabelas: abre para baixo */
+    .tip-down .tip-box{bottom:auto;top:calc(100% + 6px);}
+    .tip-down .tip-box::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:#1e293b;}
+
+    /* Calendário — saldo acumulado */
+    .cal-acum{font-size:10px;font-weight:700;margin-top:3px;padding-top:3px;border-top:1px dashed #e0e0e0;}
+    .cal-day.risco-leve{background:#fff5f5;}
+    .cal-day.risco-forte{background:#fee2e2;}
+
+    /* Saldo dashboard */
+    .saldo-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .saldo-field{display:flex;align-items:center;gap:4px;}
+    .saldo-label{font-size:11px;color:#666;white-space:nowrap;}
+    .saldo-input{width:140px;font-size:15px;font-weight:700;border:1px solid var(--gray-200);border-radius:6px;padding:5px 8px;text-align:right;}
+    .saldo-input:focus{border-color:var(--primary);outline:none;}
+    .saldo-total{font-size:18px;font-weight:800;color:var(--primary);}
+
+    /* Filtros período planilha */
+    .period-btns{display:flex;gap:4px;flex-wrap:wrap;}
+    .period-btn{padding:4px 10px;border:1px solid var(--gray-200);border-radius:4px;font-size:11px;cursor:pointer;background:#fff;color:var(--gray-600);}
+    .period-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+    .period-btn:hover:not(.active){border-color:var(--primary);color:var(--primary);}
+
+    /* ===== TELA DE LOGIN ===== */
+    #tela-login{display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);z-index:9999;align-items:center;justify-content:center;}
+    #tela-login.ativo{display:flex;}
+    .login-box{background:#fff;border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+    .login-logo{text-align:center;margin-bottom:28px;}
+    .login-logo-title{font-size:28px;font-weight:800;color:var(--primary);}
+    .login-logo-sub{font-size:13px;color:var(--gray-600);margin-top:2px;}
+    .login-tabs{display:flex;border-bottom:2px solid var(--gray-200);margin-bottom:24px;}
+    .login-tab{flex:1;padding:10px;text-align:center;cursor:pointer;font-size:13px;font-weight:600;color:var(--gray-600);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.2s;}
+    .login-tab.active{color:var(--primary);border-bottom-color:var(--primary);}
+    .login-form{display:flex;flex-direction:column;gap:14px;}
+    .login-input{padding:10px 14px;border:1px solid var(--gray-200);border-radius:8px;font-size:14px;outline:none;transition:border 0.2s;}
+    .login-input:focus{border-color:var(--primary);}
+    .login-btn{padding:12px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:background 0.2s;}
+    .login-btn:hover{background:#1d4ed8;}
+    .login-msg{font-size:12px;text-align:center;min-height:18px;}
+    .login-msg.erro{color:var(--danger);}
+    .login-msg.ok{color:var(--success);}
+    .login-link{font-size:12px;color:var(--primary);text-align:center;cursor:pointer;text-decoration:underline;background:none;border:none;width:100%;padding:0;}
+    .login-link:hover{color:#1d4ed8;}
+    #reset-form{display:none;flex-direction:column;gap:10px;margin-top:4px;}
+    .login-sync{display:none;flex-direction:column;align-items:center;gap:12px;padding:20px 0;}
+    .login-sync-spin{width:36px;height:36px;border:3px solid var(--gray-200);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+
+    /* ===== BARRA DO USUÁRIO ===== */
+    .user-bar{padding:10px 15px;border-top:1px solid var(--gray-200);margin-top:auto;font-size:12px;color:var(--gray-600);}
+    .user-bar-email{font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;}
+    .user-bar-sair{color:var(--danger);cursor:pointer;font-size:11px;margin-top:4px;display:inline-block;}
+    .user-bar-sair:hover{text-decoration:underline;}
+
+    /* ===== BOTÃO FEEDBACK ===== */
+    #btn-feedback{position:fixed;bottom:20px;right:20px;background:var(--primary);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,0.4);z-index:500;display:none;}
+    #btn-feedback.ativo{display:flex;align-items:center;justify-content:center;}
+    #modal-feedback{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;}
+    #modal-feedback.open{display:flex;}
+    .feedback-box{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:380px;}
   </style>
 </head>
 <body>
@@ -488,8 +557,8 @@
     <!-- SIDEBAR -->
     <div class="sidebar">
       <div class="logo">
-        <div class="logo-title">MK Gestão</div>
-        <div class="logo-sub">Financeiro Ecommerce</div>
+        <div class="logo-title">Caixa 360</div>
+        <div class="logo-sub">Gestão Financeira</div>
       </div>
       
       <ul class="nav-menu">
@@ -502,6 +571,61 @@
         <li class="nav-item" onclick="nav('skus')">📦 SKUs / Custos</li>
         <li class="nav-item" onclick="nav('config')">⚙️ Configurações</li>
       </ul>
+      <div class="user-bar" id="user-bar" style="display:none;">
+        <div class="user-bar-email" id="user-bar-email"></div>
+        <span class="user-bar-sair" onclick="sair()">Sair</span>
+      </div>
+    </div>
+
+    <!-- TELA DE LOGIN -->
+    <div id="tela-login" class="ativo">
+      <div class="login-box">
+        <div class="login-logo">
+          <div class="login-logo-title">Caixa 360</div>
+          <div class="login-logo-sub">Gestão Financeira para E-commerce</div>
+        </div>
+        <div class="login-tabs">
+          <div class="login-tab active" id="tab-entrar" onclick="mudarTab('entrar')">Entrar</div>
+          <div class="login-tab" id="tab-cadastrar" onclick="mudarTab('cadastrar')">Criar conta</div>
+        </div>
+        <div class="login-form">
+          <div id="campo-nome" style="display:none;">
+            <input class="login-input" type="text" id="login-nome" placeholder="Seu nome">
+          </div>
+          <input class="login-input" type="email" id="login-email" placeholder="E-mail" onkeydown="if(event.key==='Enter')fazerLogin()">
+          <input class="login-input" type="password" id="login-senha" placeholder="Senha (mínimo 6 caracteres)" onkeydown="if(event.key==='Enter')fazerLogin()">
+          <div style="font-size:11px;color:#888;margin-top:-8px;" id="senha-dica">Use letras e números. Mínimo 6 caracteres.</div>
+          <button class="login-btn" id="login-btn" onclick="fazerLogin()">Entrar</button>
+          <button class="login-link" id="link-esqueceu" onclick="mostrarResetSenha()">Esqueceu a senha?</button>
+          <div class="login-msg" id="login-msg"></div>
+        </div>
+        <div id="reset-form">
+          <div style="font-size:13px;color:#555;text-align:center;">Informe seu e-mail para receber o link de redefinição:</div>
+          <input class="login-input" type="email" id="reset-email" placeholder="Seu e-mail">
+          <button class="login-btn" onclick="enviarResetSenha()">Enviar link de redefinição</button>
+          <button class="login-link" onclick="ocultarResetSenha()">← Voltar ao login</button>
+          <div class="login-msg" id="reset-msg"></div>
+        </div>
+        <div class="login-sync" id="login-sync">
+          <div class="login-sync-spin"></div>
+          <div style="font-size:13px;color:#666;" id="login-sync-msg">Carregando seus dados...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTÃO FEEDBACK -->
+    <button id="btn-feedback" class="ativo" onclick="abrirFeedback()" title="Enviar feedback">💬</button>
+
+    <!-- MODAL FEEDBACK -->
+    <div id="modal-feedback">
+      <div class="feedback-box">
+        <h3 style="margin-bottom:12px;font-size:15px;">Enviar feedback</h3>
+        <textarea id="feedback-texto" placeholder="Conte o que achou, o que faltou ou algum problema..." style="width:100%;height:100px;padding:10px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;resize:vertical;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn" onclick="enviarFeedback()" style="flex:1;">Enviar</button>
+          <button class="btn-out" onclick="document.getElementById('modal-feedback').classList.remove('open')" style="flex:1;">Cancelar</button>
+        </div>
+      </div>
     </div>
     
     <!-- MAIN CONTENT -->
@@ -517,9 +641,12 @@
             <div class="score-gauge">
               <div class="score-arc">
                 <svg viewBox="0 0 200 200">
-                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#fee2e2" stroke-width="20" stroke-linecap="round"/>
-                  <path d="M 20 100 A 80 80 0 0 0 100 20" fill="none" stroke="#fef3c7" stroke-width="20" stroke-linecap="round"/>
-                  <path d="M 100 20 A 80 80 0 0 1 180 100" fill="none" stroke="#d1fae5" stroke-width="20" stroke-linecap="round"/>
+                  <!-- Terço esquerdo: vermelho (0–33%) -->
+                  <path d="M 20 100 A 80 80 0 0 1 60 30.72" fill="none" stroke="#fca5a5" stroke-width="20" stroke-linecap="round"/>
+                  <!-- Terço central: amarelo (34–66%) -->
+                  <path d="M 60 30.72 A 80 80 0 0 1 140 30.72" fill="none" stroke="#fde68a" stroke-width="20" stroke-linecap="round"/>
+                  <!-- Terço direito: verde (67–100%) -->
+                  <path d="M 140 30.72 A 80 80 0 0 1 180 100" fill="none" stroke="#6ee7b7" stroke-width="20" stroke-linecap="round"/>
                 </svg>
               </div>
               <div class="score-needle" id="score-needle"></div>
@@ -533,13 +660,21 @@
         <!-- Saldo atual -->
         <div class="card" style="margin-bottom:15px;">
           <div class="card-body" style="padding:12px 20px;">
-            <div class="d-flex gap-2" style="align-items:center;flex-wrap:wrap;">
-              <div style="font-size:13px;font-weight:600;">Saldo atual em caixa:</div>
-              <div class="d-flex gap-1" style="align-items:center;">
-                <span style="font-size:13px;color:#666;">R$</span>
-                <input type="number" id="saldo-inicial" step="100" style="width:150px;font-size:16px;font-weight:700;border:2px solid var(--primary);border-radius:6px;padding:4px 8px;" onchange="saldoAtual=+this.value;salvarCfg();recalc()" placeholder="0,00">
+            <div class="saldo-row">
+              <div class="saldo-field">
+                <span class="saldo-label">Mercado Pago</span>
+                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()">
               </div>
-              <span style="font-size:11px;color:#999;">(MP + outros bancos)</span>
+              <span style="font-size:18px;color:#ccc;">+</span>
+              <div class="saldo-field">
+                <span class="saldo-label">Outros bancos</span>
+                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()">
+              </div>
+              <span style="font-size:18px;color:#ccc;">=</span>
+              <div class="saldo-field">
+                <span class="saldo-label">Total em caixa</span>
+                <span class="saldo-total" id="saldo-total-label">R$ 0,00</span>
+              </div>
             </div>
           </div>
         </div>
@@ -547,22 +682,30 @@
         <!-- Stats -->
         <div class="stats-grid">
           <div class="stat-card success">
-            <div class="stat-label">Quanto posso comprar hoje</div>
+            <div class="stat-label">Quanto posso comprar
+              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Valor máximo viável hoje: busca o maior valor que não faz o saldo cair abaixo da reserva mínima em nenhum dia dos próximos 30 dias.</span></span>
+            </div>
             <div class="stat-value text-success" id="stat-comprar">—</div>
           </div>
-          
+
           <div class="stat-card warning">
-            <div class="stat-label">Pior saldo projetado (30d)</div>
+            <div class="stat-label">Pior saldo projetado (30d)
+              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Menor saldo acumulado projetado nos próximos 30 dias, considerando entradas confirmadas + projeção complementar e todas as contas a pagar.</span></span>
+            </div>
             <div class="stat-value text-warning" id="stat-pior">—</div>
           </div>
-          
+
           <div class="stat-card">
-            <div class="stat-label">Saldo disponível</div>
+            <div class="stat-label">Saldo disponível
+              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Soma do saldo no Mercado Pago e em outros bancos. Atualize os campos acima com os valores atuais.</span></span>
+            </div>
             <div class="stat-value" id="stat-saldo">—</div>
           </div>
-          
+
           <div class="stat-card">
-            <div class="stat-label">Cobertura de caixa</div>
+            <div class="stat-label">Cobertura de caixa
+              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Quantos dias o saldo atual cobre, com base na média de gastos dos últimos 30 dias. Quanto maior, mais seguro.</span></span>
+            </div>
             <div class="stat-value" id="stat-cobertura">— dias</div>
           </div>
         </div>
@@ -588,19 +731,27 @@
           <div class="card-body">
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:15px;">
               <div>
-                <div class="text-muted mb-1" style="font-size:11px;">Entrada Confirmada ML</div>
+                <div class="text-muted mb-1" style="font-size:11px;">Entrada Confirmada ML
+                  <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Valor total importado diretamente do relatório do Mercado Livre para o período selecionado. 100% confirmado.</span></span>
+                </div>
                 <div style="font-size:18px;font-weight:600;color:var(--success);" id="resumo-entrada">—</div>
               </div>
               <div>
-                <div class="text-muted mb-1" style="font-size:11px;">Projeção Complementar</div>
+                <div class="text-muted mb-1" style="font-size:11px;">Projeção Complementar
+                  <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Estimativa adicional para dias D+8 em diante: MAX(0, média histórica × fator prudencial − confirmado). Não soma sobre o que já está confirmado.</span></span>
+                </div>
                 <div style="font-size:18px;font-weight:600;color:#0891b2;" id="resumo-proj">—</div>
               </div>
               <div>
-                <div class="text-muted mb-1" style="font-size:11px;">Total a Pagar</div>
+                <div class="text-muted mb-1" style="font-size:11px;">Total a Pagar
+                  <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Soma de todas as contas a pagar em aberto no período selecionado.</span></span>
+                </div>
                 <div style="font-size:18px;font-weight:600;color:var(--danger);" id="resumo-pagar">—</div>
               </div>
               <div>
-                <div class="text-muted mb-1" style="font-size:11px;">Saldo do Período</div>
+                <div class="text-muted mb-1" style="font-size:11px;">Saldo do Período
+                  <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Entradas (confirmado + projeção) menos saídas (contas a pagar) no período. Positivo = sobra, negativo = déficit.</span></span>
+                </div>
                 <div style="font-size:18px;font-weight:600;" id="resumo-saldo">—</div>
               </div>
             </div>
@@ -640,13 +791,27 @@
       <!-- PLANILHA -->
       <div id="view-planilha" class="view">
         <h1 style="margin-bottom:20px;">Fluxo de Caixa</h1>
-        
+
         <div class="card">
-          <div class="card-header">
+          <div class="card-header" style="flex-wrap:wrap;gap:8px;">
             <div>Fluxo de Caixa — dia a dia</div>
-            <div class="d-flex gap-1">
+            <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
+              <div class="period-btns">
+                <button class="period-btn" onclick="setPlanilhaDias(7,this)">7d</button>
+                <button class="period-btn" onclick="setPlanilhaDias(15,this)">15d</button>
+                <button class="period-btn active" id="plan-dias-30" onclick="setPlanilhaDias(30,this)">30d</button>
+                <button class="period-btn" onclick="setPlanilhaDias(60,this)">60d</button>
+                <button class="period-btn" onclick="setPlanilhaDias(90,this)">90d</button>
+                <button class="period-btn" id="plan-btn-custom" onclick="togglePlanilhaCustom()">Personalizado</button>
+              </div>
+              <div id="plan-custom-range" style="display:none;" class="d-flex gap-1 align-items:center;">
+                <input type="date" id="plan-de" style="font-size:11px;padding:3px 6px;" onchange="renderPlanilha()">
+                <span style="align-self:center;font-size:11px;">até</span>
+                <input type="date" id="plan-ate" style="font-size:11px;padding:3px 6px;" onchange="renderPlanilha()">
+              </div>
+              <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px;"></div>
               <button class="btn-toggle active" id="plan-toggle-conf" onclick="togglePlanilha('confirmado')">Confirmado</button>
-              <button class="btn-toggle" id="plan-toggle-proj" onclick="togglePlanilha('projetado')">Confirmado + Projetado</button>
+              <button class="btn-toggle" id="plan-toggle-proj" onclick="togglePlanilha('projetado')">+ Projetado</button>
             </div>
           </div>
           <div class="card-body" style="overflow-x:auto;">
@@ -655,18 +820,19 @@
                 <tr>
                   <th>Data</th>
                   <th>Dia</th>
-                  <th id="th-conf">Entrada Conf. ML</th>
-                  <th id="th-proj">Projeção Compl.</th>
-                  <th id="th-total">Total Entrada</th>
-                  <th>A Pagar</th>
-                  <th>Saldo Dia</th>
-                  <th>Saldo Acum.</th>
-                  <th>Cobertura</th>
+                  <th id="th-conf">Entrada Conf. ML <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Valor importado diretamente do relatório do Mercado Livre para este dia. Dado real e confirmado.</span></span></th>
+                  <th id="th-proj">Projeção Compl. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Complemento prudencial (D+8+): MAX(0, média × fator − confirmado). Zero se o confirmado já supera a projeção.</span></span></th>
+                  <th id="th-total">Total Entrada <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">MAX(Confirmado ML, Projeção Prudencial). Nunca substitui um confirmado maior por uma projeção menor.</span></span></th>
+                  <th>A Pagar <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Soma de todas as contas a pagar em aberto com vencimento nesta data.</span></span></th>
+                  <th>Saldo Dia <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Entrada do dia menos saída do dia. Positivo = caixa cresce, negativo = caixa encolhe.</span></span></th>
+                  <th>Saldo Acum. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Saldo total acumulado até este dia (saldo anterior + saldo do dia). Vermelho se abaixo da reserva mínima.</span></span></th>
+                  <th>Cobertura <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Quantos dias o saldo acumulado cobriria se todo o dia seguinte fosse igual ao A Pagar desta linha.</span></span></th>
                 </tr>
               </thead>
               <tbody id="tbody-planilha"></tbody>
             </table>
           </div>
+          <div style="padding:8px 16px;font-size:11px;color:#999;border-top:1px solid var(--gray-100);" id="plan-label-periodo"></div>
         </div>
       </div>
       
@@ -681,38 +847,45 @@
               <button class="btn-toggle" id="pagar-view-cal" onclick="setPagarView('cal')" style="border-radius:0;border:none;">📅 Calendário</button>
             </div>
             <button class="btn" onclick="abrirModalLanc()">+ Novo</button>
-            <button class="btn-out" onclick="document.getElementById('import-pagar-csv').click()">📤 Importar CSV</button>
+            <button class="btn-out" onclick="abrirModalImportar()">📥 Importar dados</button>
+            <button class="btn-out" onclick="exportarCSV()">📤 Exportar CSV</button>
+            <!-- inputs ocultos para compatibilidade -->
             <input type="file" id="import-pagar-csv" accept=".csv" style="display:none" onchange="importarCSV()">
-            <button class="btn-out" onclick="document.getElementById('import-tiny-pagar').click()">📊 Importar XLS Tiny</button>
             <input type="file" id="import-tiny-pagar" accept=".xls,.xlsx" style="display:none" onchange="importarTinyXLSPagar()">
-            <button class="btn-out" onclick="exportarCSV()">📥 Exportar CSV</button>
           </div>
         </div>
-        
+
         <!-- Filtros -->
         <div class="card mb-2">
           <div class="card-body">
-            <div class="d-flex gap-1" style="flex-wrap:wrap;margin-bottom:10px;">
-              <input type="text" id="filtro-busca" placeholder="🔍 Buscar..." style="max-width:300px;" oninput="renderPagar()">
-              
-              <select id="filtro-periodo" onchange="renderPagar()">
-                <option value="mes">No mês (30d)</option>
-                <option value="semana">Na semana (7d)</option>
-                <option value="dia">No dia</option>
+            <div class="d-flex gap-1" style="flex-wrap:wrap;margin-bottom:8px;">
+              <input type="text" id="filtro-busca" placeholder="🔍 Buscar..." style="max-width:260px;" oninput="renderPagar()">
+
+              <select id="filtro-periodo" onchange="onFiltroPeridoChange()">
+                <option value="mes">Mês atual (30d)</option>
+                <option value="semana">Esta semana (7d)</option>
+                <option value="dia">Hoje</option>
                 <option value="todos">Todos</option>
+                <option value="custom">Personalizado</option>
               </select>
-              
+
               <select id="filtro-status" onchange="renderPagar()">
                 <option value="abertas">Em aberto</option>
                 <option value="todas">Todas</option>
                 <option value="pagas">Pagas</option>
                 <option value="atrasado">Atrasado</option>
               </select>
-              
+
               <select id="filtro-cat" onchange="renderPagar()">
                 <option value="">Todas categorias</option>
               </select>
             </div>
+            <div id="filtro-custom-range" style="display:none;" class="d-flex gap-1" style="align-items:center;">
+              <input type="date" id="filtro-de" style="font-size:12px;" onchange="renderPagar()">
+              <span style="font-size:12px;align-self:center;">até</span>
+              <input type="date" id="filtro-ate" style="font-size:12px;" onchange="renderPagar()">
+            </div>
+            <div id="filtro-label-ativo" style="font-size:11px;color:#666;margin-top:4px;"></div>
           </div>
         </div>
         
@@ -770,7 +943,11 @@
           <div class="card-body">
             <button class="btn" onclick="atualizarML()">⚡ Atualizar do ML</button>
             <div id="ml-status" style="margin-top:10px;font-size:12px;color:#666;"></div>
-            
+            <div style="margin-top:12px;padding:12px;background:#f9fafb;border-radius:6px;">
+              <div style="font-size:11px;font-weight:600;margin-bottom:6px;">Comando PowerShell:</div>
+              <code id="ml-cmd" style="font-size:10px;display:block;padding:8px;background:#fff;border:1px solid #e5e5e5;border-radius:4px;word-break:break-all;white-space:pre-wrap;"></code>
+              <button class="btn-out btn-sm" onclick="copiarCmdML()" style="margin-top:8px;">📋 Copiar comando</button>
+            </div>
             <div style="margin-top:15px;padding-top:15px;border-top:1px solid var(--gray-200);">
               <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Ou cole o JSON aqui diretamente:</div>
               <textarea id="ml-json-input" rows="4" style="width:100%;font-size:11px;font-family:monospace;" placeholder='Exemplo: {&quot;liberacoes&quot;:[{&quot;data&quot;:&quot;2026-05-20&quot;,&quot;val&quot;:1523.45}]}'></textarea>
@@ -828,7 +1005,9 @@
             
             <!-- Tipo -->
             <div class="form-group">
-              <label class="form-label">Tipo de Pagamento</label>
+              <label class="form-label">Tipo de Pagamento
+                <span class="tip"><span class="tip-icon">?</span><span class="tip-box">À vista: uma parcela. Parcelado: o sistema sugere as melhores datas para cada parcela conforme o fluxo projetado.</span></span>
+              </label>
               <div class="d-flex gap-1">
                 <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
                   <input type="radio" name="sim-tipo" value="vista" checked onchange="tipoSimulador=this.value;renderFormSimulador()"> À vista
@@ -838,23 +1017,29 @@
                 </label>
               </div>
             </div>
-            
+
             <!-- Form -->
             <div id="form-simulador">
               <div class="form-row">
                 <div class="form-group">
-                  <label class="form-label">Valor (R$)</label>
-                  <input type="number" id="sim-valor" step="0.01" placeholder="Deixe vazio para calcular">
+                  <label class="form-label">Valor (R$)
+                    <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Valor total da compra. Deixe vazio para o sistema calcular o máximo que pode pagar na data escolhida.</span></span>
+                  </label>
+                  <input type="text" id="sim-valor" class="money-input" placeholder="Deixe vazio para calcular" onblur="if(this.value)this.value=fmtMoney(parseMoney(this.value))" onkeydown="if(event.key==='Enter')simular()">
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Data de Pagamento</label>
-                  <input type="date" id="sim-data" placeholder="Deixe vazio para calcular">
+                  <label class="form-label">Data de Pagamento
+                    <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Data em que a compra será paga. Deixe vazio para o sistema encontrar a melhor data disponível nos próximos 30 dias.</span></span>
+                  </label>
+                  <input type="date" id="sim-data" onkeydown="if(event.key==='Enter')simular()">
                 </div>
               </div>
-              
+
               <div id="sim-parcelado" style="display:none;">
                 <div class="form-group">
-                  <label class="form-label">Opção de Parcelamento</label>
+                  <label class="form-label">Opção de Parcelamento
+                    <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Define os intervalos de pagamento das parcelas a partir de hoje. O sistema sugerirá a melhor data dentro de cada janela para manter o caixa saudável.</span></span>
+                  </label>
                   <select id="sim-parcelas">
                     <option value="30,60">2x (30/60 dias)</option>
                     <option value="30,60,90">3x (30/60/90 dias)</option>
@@ -863,7 +1048,7 @@
                   </select>
                 </div>
               </div>
-              
+
               <button class="btn" onclick="simular()" style="width:100%;margin-top:10px;">🎯 Simular</button>
             </div>
             
@@ -934,39 +1119,68 @@
             <div class="card-title">Parâmetros Financeiros</div>
           </div>
           <div class="card-body">
-            
-            <!-- Delay -->
+
+            <!-- Modo de Projeção -->
             <div class="form-group">
-              <label class="form-label">Delay / Zona Confirmada</label>
-              <div class="text-muted mb-1" style="font-size:11px;">Delay calculado: <span id="delay-calc">— dias</span></div>
-              <div class="d-flex gap-1" style="align-items:center;">
-                <input type="range" min="7" max="60" value="12" id="range-delay" style="flex:1;" oninput="cfgDelay=+this.value;document.getElementById('input-delay').value=this.value;document.getElementById('val-delay').textContent=this.value+' dias';salvarCfg();recalc()">
-                <input type="number" min="7" max="60" value="12" id="input-delay" style="width:80px;" oninput="cfgDelay=+this.value;document.getElementById('range-delay').value=this.value;document.getElementById('val-delay').textContent=this.value+' dias';salvarCfg();recalc()">
+              <label class="form-label">Modo de Projeção
+                <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Define como o sistema estima entradas futuras. "Extrato Realizado" usa a média dos últimos N dias de recebimentos. Os outros modos requerem integração com Supabase (fase futura).</span></span>
+              </label>
+              <div class="d-flex gap-1" style="flex-direction:column;gap:6px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                  <input type="radio" name="modo-proj" value="extrato" id="modo-extrato" checked onchange="modoProjecao=this.value;salvarCfg();recalc()">
+                  Extrato Realizado <span style="font-size:11px;color:var(--primary);font-weight:600;">← padrão</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:not-allowed;font-size:13px;opacity:0.5;" title="Disponível em breve">
+                  <input type="radio" name="modo-proj" value="pipeline" disabled>
+                  Pipeline Histórico <span style="font-size:10px;color:#999;">(em breve)</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:not-allowed;font-size:13px;opacity:0.5;" title="Disponível em breve">
+                  <input type="radio" name="modo-proj" value="hibrido" disabled>
+                  Híbrido <span style="font-size:10px;color:#999;">(em breve)</span>
+                </label>
               </div>
-              <div id="val-delay" class="text-muted" style="font-size:12px;margin-top:4px;">12 dias</div>
             </div>
-            
-            <!-- % Projeção -->
+
+            <!-- Fator Prudencial -->
             <div class="form-group">
-              <label class="form-label">% Aproveitamento da Projeção</label>
-              <input type="range" min="50" max="100" value="85" id="range-pct" oninput="cfgPct=this.value/100;document.getElementById('val-pct').textContent=this.value+'%';salvarCfg();recalc()">
-              <div id="val-pct" class="text-muted" style="font-size:12px;margin-top:4px;">85%</div>
+              <label class="form-label">Fator Prudencial de Caixa
+                <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Percentual conservador aplicado sobre a média de recebimentos realizados para proteger o caixa contra superprojeção. 75% = projeta 75% da média histórica. Aplica somente a partir de D+8.</span></span>
+              </label>
+              <input type="range" min="50" max="100" value="75" id="range-pct" oninput="cfgPct=this.value/100;document.getElementById('val-pct').textContent=this.value+'%';salvarCfg();recalc()" style="width:100%;">
+              <div id="val-pct" class="text-muted" style="font-size:12px;margin-top:4px;">75%</div>
             </div>
-            
+
             <!-- Reserva Mínima -->
             <div class="form-group">
-              <label class="form-label">Reserva Mínima de Segurança (R$)</label>
-              <input type="number" id="input-reserva" value="15000" step="1000" onchange="reservaMinima=+this.value;salvarCfg();recalc()">
-              <div class="text-muted" style="font-size:11px;margin-top:4px;">Saldo mínimo para operar com segurança</div>
+              <label class="form-label">Reserva Mínima de Segurança (R$)
+                <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Saldo mínimo que o caixa deve manter em qualquer momento. O simulador bloqueia compras que causem queda abaixo deste valor. Alertas vermelhos aparecem no calendário quando o saldo projetado fica abaixo.</span></span>
+              </label>
+              <input type="text" id="input-reserva" placeholder="0,00" class="money-input" onblur="reservaMinima=parseMoney(this.value);this.value=fmtMoney(reservaMinima);salvarCfg();recalc()">
+              <div class="text-muted" style="font-size:11px;margin-top:4px;">Saldo mínimo para operar com segurança. Sem valor padrão — defina conforme seu negócio.</div>
             </div>
-            
+
             <!-- Período Histórico -->
             <div class="form-group">
-              <label class="form-label">Período Histórico para Média</label>
-              <input type="range" min="7" max="365" value="30" id="range-hist" oninput="periodoHistorico=+this.value;document.getElementById('val-hist').textContent=this.value+' dias';salvarCfg();recalc()">
+              <label class="form-label">Período Histórico para Média
+                <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Quantos dias de recebimentos realizados usar para calcular a média base de projeção. Período maior = mais estável; período menor = mais reativo à sazonalidade recente.</span></span>
+              </label>
+              <input type="range" min="7" max="365" value="30" id="range-hist" oninput="periodoHistorico=+this.value;document.getElementById('val-hist').textContent=this.value+' dias';salvarCfg();recalc()" style="width:100%;">
               <div id="val-hist" class="text-muted" style="font-size:12px;margin-top:4px;">30 dias</div>
             </div>
-            
+
+            <!-- Delay (informativo) -->
+            <div class="form-group" style="background:#f9fafb;padding:12px;border-radius:6px;">
+              <label class="form-label" style="color:#666;">Delay médio calculado
+                <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Tempo médio entre hoje e as datas de liberação do ML importadas. Valor informativo — a nova lógica usa faixas fixas: D+1-7 sem projeção, D+8+ com projeção prudencial.</span></span>
+              </label>
+              <div style="font-size:14px;font-weight:600;color:#555;">Atual: <span id="delay-calc">— dias</span></div>
+              <div style="font-size:11px;color:#999;margin-top:4px;">Faixas ativas: D+1 a D+7 = só confirmado ML · D+8+ = MAX(confirmado, projeção prudencial)</div>
+              <!-- Inputs ocultos para compatibilidade com init() -->
+              <input type="hidden" id="range-delay" value="12">
+              <input type="hidden" id="input-delay" value="12">
+              <div id="val-delay" style="display:none;">12 dias</div>
+            </div>
+
           </div>
         </div>
         
@@ -1012,6 +1226,22 @@
             <p style="font-size:11px;color:#999;margin-bottom:8px;">Parcelamentos são detectados automaticamente pelo padrão "Parcela (X/Y)" no histórico.</p>
             <input type="file" id="tiny-xls" accept=".xls,.xlsx" onchange="importarTinyXLS()">
             <div id="tiny-status" style="font-size:12px;margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <!-- Minha Conta -->
+        <div class="card" id="card-minha-conta" style="display:none;">
+          <div class="card-header">
+            <div class="card-title">🔐 Minha Conta</div>
+          </div>
+          <div class="card-body">
+            <div class="form-group" style="max-width:380px;">
+              <label class="form-label">Alterar senha</label>
+              <input type="password" id="nova-senha" placeholder="Nova senha (mínimo 6 caracteres)" class="login-input" style="margin-bottom:8px;display:block;width:100%;box-sizing:border-box;">
+              <input type="password" id="confirmar-senha" placeholder="Confirmar nova senha" class="login-input" style="margin-bottom:12px;display:block;width:100%;box-sizing:border-box;">
+              <button class="btn" onclick="trocarSenha()">Salvar nova senha</button>
+              <div id="msg-trocar-senha" style="font-size:12px;margin-top:8px;min-height:16px;"></div>
+            </div>
           </div>
         </div>
 
@@ -1187,6 +1417,38 @@
     </div>
   </div>
   
+  <!-- MODAL IMPORTAR DADOS -->
+  <div class="modal" id="modal-importar">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="modal-header">
+        <div class="modal-title">📥 Importar dados</div>
+        <button class="btn-out btn-sm" onclick="fecharModal('modal-importar')">✕</button>
+      </div>
+      <div class="modal-body" style="padding:10px 0;">
+        <div onclick="document.getElementById('import-tiny-pagar').click();fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">📊</span>
+          <div><div style="font-weight:600;font-size:13px;">Importar XLS Tiny ERP</div><div style="font-size:11px;color:#666;">Importa contas a pagar do Tiny ERP (.xls/.xlsx)</div></div>
+        </div>
+        <div onclick="document.getElementById('import-pagar-csv').click();fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">📋</span>
+          <div><div style="font-weight:600;font-size:13px;">Importar planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">Colunas: data | descrição | fornecedor | valor | categoria | pago</div></div>
+        </div>
+        <div onclick="baixarPlanilhaModelo()" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">⬇️</span>
+          <div><div style="font-weight:600;font-size:13px;">Baixar planilha modelo</div><div style="font-size:11px;color:#666;">Baixa CSV com exemplos e instruções de preenchimento</div></div>
+        </div>
+        <div onclick="document.getElementById('import-json').click();fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">💾</span>
+          <div><div style="font-weight:600;font-size:13px;">Importar backup completo (JSON)</div><div style="font-size:11px;color:#666;">Restaura todos os dados de um backup exportado</div></div>
+        </div>
+        <div onclick="nav('receber');fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">💵</span>
+          <div><div style="font-weight:600;font-size:13px;">Importar recebimentos ML</div><div style="font-size:11px;color:#666;">Vai para a página "A Receber ML" para colar o JSON do Mercado Livre</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL IMPOSTO LOTE -->
   <div class="modal" id="modal-imposto-lote">
     <div class="modal-content" style="max-width:400px;">
@@ -1211,6 +1473,275 @@
   </div>
   
   <script>
+    // ===== SUPABASE =====
+    const SUPA_URL = 'https://qasrccmtrllotukyeiax.supabase.co';
+    const SUPA_KEY = 'sb_publishable_7TU_CA9JlPgoYTpKHkH8dA_FSBgvPVd';
+    const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+    let usuarioAtual = null;
+
+    // ===== AUTH =====
+    let loginTab = 'entrar';
+
+    function mudarTab(tab){
+      loginTab = tab;
+      document.getElementById('tab-entrar').className = 'login-tab' + (tab==='entrar'?' active':'');
+      document.getElementById('tab-cadastrar').className = 'login-tab' + (tab==='cadastrar'?' active':'');
+      document.getElementById('campo-nome').style.display = tab==='cadastrar' ? 'block' : 'none';
+      document.getElementById('login-btn').textContent = tab==='entrar' ? 'Entrar' : 'Criar conta';
+      document.getElementById('link-esqueceu').style.display = tab==='entrar' ? 'block' : 'none';
+      document.getElementById('login-msg').textContent = '';
+    }
+
+    async function fazerLogin(){
+      const email = document.getElementById('login-email').value.trim();
+      const senha = document.getElementById('login-senha').value;
+      const nome  = document.getElementById('login-nome').value.trim();
+      const msg   = document.getElementById('login-msg');
+
+      if(!email || !senha){ msg.className='login-msg erro'; msg.textContent='Preencha e-mail e senha.'; return; }
+      msg.className='login-msg'; msg.textContent='Aguarde...';
+
+      let res;
+      if(loginTab === 'entrar'){
+        res = await supa.auth.signInWithPassword({email, password:senha});
+      } else {
+        if(!nome){ msg.className='login-msg erro'; msg.textContent='Informe seu nome.'; return; }
+        res = await supa.auth.signUp({email, password:senha, options:{data:{nome}}});
+      }
+
+      if(res.error){
+        msg.className='login-msg erro';
+        msg.textContent = traduzirErroAuth(res.error.message);
+        return;
+      }
+
+      if(loginTab === 'cadastrar' && !res.data.session){
+        msg.className='login-msg ok';
+        msg.textContent='Conta criada! Verifique seu e-mail para confirmar.';
+        return;
+      }
+
+      await entrarNoApp(res.data.user);
+    }
+
+    function traduzirErroAuth(msg){
+      if(!msg) return 'Erro desconhecido.';
+      if(msg.includes('Failed to fetch') || msg.includes('fetch')) return 'Sem conexão com o servidor. Verifique sua internet e tente novamente.';
+      if(msg.includes('Invalid login')) return 'E-mail ou senha incorretos.';
+      if(msg.includes('already registered')) return 'Este e-mail já está cadastrado. Tente entrar.';
+      if(msg.includes('Password should be') || msg.includes('password')) return 'Senha deve ter pelo menos 6 caracteres.';
+      if(msg.includes('Unable to validate') || msg.includes('invalid')) return 'E-mail inválido.';
+      if(msg.includes('Email not confirmed')) return 'Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.';
+      if(msg.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns minutos.';
+      return 'Erro: ' + msg;
+    }
+
+    async function entrarNoApp(user){
+      usuarioAtual = user;
+      document.getElementById('login-sync').style.display = 'flex';
+      document.querySelector('.login-form').style.display = 'none';
+      document.querySelector('.login-tabs').style.display = 'none';
+      document.getElementById('login-sync-msg').textContent = 'Carregando seus dados...';
+
+      await carregarDoSupabase();
+
+      document.getElementById('tela-login').classList.remove('ativo');
+      document.getElementById('user-bar').style.display = 'block';
+      document.getElementById('user-bar-email').textContent = user.email;
+      document.getElementById('card-minha-conta').style.display = 'block';
+      renderDashboard();
+    }
+
+    async function sair(){
+      if(!confirm('Sair da conta?')) return;
+      await supa.auth.signOut();
+      usuarioAtual = null;
+      pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
+      document.getElementById('tela-login').classList.add('ativo');
+      document.getElementById('user-bar').style.display = 'none';
+      document.getElementById('card-minha-conta').style.display = 'none';
+      document.querySelector('.login-form').style.display = 'flex';
+      document.querySelector('.login-tabs').style.display = 'flex';
+      document.getElementById('login-sync').style.display = 'none';
+      document.getElementById('login-msg').textContent = '';
+      document.getElementById('login-email').value = '';
+      document.getElementById('login-senha').value = '';
+      ocultarResetSenha();
+    }
+
+    // ===== RESET / TROCA DE SENHA =====
+    function mostrarResetSenha(){
+      document.querySelector('.login-form').style.display = 'none';
+      document.querySelector('.login-tabs').style.display = 'none';
+      document.getElementById('reset-form').style.display = 'flex';
+      document.getElementById('reset-email').value = document.getElementById('login-email').value;
+      document.getElementById('reset-msg').textContent = '';
+    }
+
+    function ocultarResetSenha(){
+      document.getElementById('reset-form').style.display = 'none';
+      document.querySelector('.login-form').style.display = 'flex';
+      document.querySelector('.login-tabs').style.display = 'flex';
+      document.getElementById('reset-msg').textContent = '';
+    }
+
+    async function enviarResetSenha(){
+      const email = document.getElementById('reset-email').value.trim();
+      const msg = document.getElementById('reset-msg');
+      if(!email){ msg.className='login-msg erro'; msg.textContent='Informe o e-mail.'; return; }
+      msg.className='login-msg'; msg.textContent='Enviando...';
+      const { error } = await supa.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + window.location.pathname
+      });
+      if(error){
+        msg.className='login-msg erro';
+        msg.textContent = 'Erro: ' + error.message;
+      } else {
+        msg.className='login-msg ok';
+        msg.textContent = 'Link enviado! Verifique seu e-mail.';
+      }
+    }
+
+    async function trocarSenha(){
+      const nova = document.getElementById('nova-senha').value;
+      const confirmar = document.getElementById('confirmar-senha').value;
+      const msgEl = document.getElementById('msg-trocar-senha');
+      msgEl.style.color = '';
+      if(!nova || nova.length < 6){ msgEl.style.color='var(--danger)'; msgEl.textContent='A senha deve ter pelo menos 6 caracteres.'; return; }
+      if(nova !== confirmar){ msgEl.style.color='var(--danger)'; msgEl.textContent='As senhas não coincidem.'; return; }
+      msgEl.textContent = 'Salvando...';
+      const { error } = await supa.auth.updateUser({ password: nova });
+      if(error){
+        msgEl.style.color = 'var(--danger)';
+        msgEl.textContent = 'Erro: ' + error.message;
+      } else {
+        msgEl.style.color = 'var(--success)';
+        msgEl.textContent = 'Senha alterada com sucesso!';
+        document.getElementById('nova-senha').value = '';
+        document.getElementById('confirmar-senha').value = '';
+      }
+    }
+
+    // ===== SUPABASE — CARREGAR DADOS =====
+    async function carregarDoSupabase(){
+      if(!usuarioAtual) return;
+      const uid = usuarioAtual.id;
+
+      const [rPag, rLib, rSku, rCat, rCfg] = await Promise.all([
+        supa.from('pagamentos').select('*').eq('usuario_id', uid),
+        supa.from('liberacoes').select('*').eq('usuario_id', uid),
+        supa.from('skus').select('*').eq('usuario_id', uid),
+        supa.from('categorias').select('*').eq('usuario_id', uid),
+        supa.from('configuracoes').select('*').eq('usuario_id', uid).single()
+      ]);
+
+      if(rPag.data) pagamentos = rPag.data.map(p => ({
+        id:p.id, desc:p.descricao, forn:p.forn, val:p.val, data:p.data,
+        cat:p.cat, pago:p.pago, tipo:p.tipo, grupo_id:p.grupo_id,
+        parcela:p.parcela, valorPago:p.valor_pago
+      }));
+
+      if(rLib.data) liberacoes = rLib.data.map(l => ({data:l.data, val:l.val}));
+
+      if(rSku.data) skus = rSku.data.map(s => ({id:s.id, sku:s.sku, custo:s.custo, imposto:s.imposto}));
+
+      if(rCat.data) categorias = rCat.data.map(c => ({id:c.id, nome:c.nome, impactaDRE:c.impacta_dre}));
+
+      if(rCfg.data && rCfg.data.cfg){
+        const c = rCfg.data.cfg;
+        if(c.saldoMP !== undefined) saldoMP = c.saldoMP;
+        if(c.saldoOutros !== undefined) saldoOutros = c.saldoOutros;
+        if(c.cfgPct !== undefined) cfgPct = c.cfgPct;
+        if(c.reservaMinima !== undefined) reservaMinima = c.reservaMinima;
+        if(c.periodoHistorico !== undefined) periodoHistorico = c.periodoHistorico;
+        if(c.modoProjecao !== undefined) modoProjecao = c.modoProjecao;
+        saldoAtual = saldoMP + saldoOutros;
+      }
+
+      // Fallback: se não tem nada no Supabase, tenta localStorage
+      if(pagamentos.length === 0 && liberacoes.length === 0){
+        carregar();
+      }
+    }
+
+    // ===== SUPABASE — SALVAR DADOS =====
+    async function salvarSupabase(){
+      if(!usuarioAtual) return;
+      const uid = usuarioAtual.id;
+
+      // Pagamentos: full replace (garante que deletados somem do servidor)
+      await supa.from('pagamentos').delete().eq('usuario_id', uid);
+      if(pagamentos.length > 0){
+        await supa.from('pagamentos').insert(pagamentos.map(p => ({
+          usuario_id: uid,
+          descricao: p.desc, forn: p.forn||'', val: p.val, data: p.data,
+          cat: p.cat||'', pago: p.pago||false, tipo: p.tipo||'unico',
+          grupo_id: p.grupo_id||null, parcela: p.parcela||null, valor_pago: p.valorPago||null
+        })));
+      }
+
+      // Categorias: full replace
+      await supa.from('categorias').delete().eq('usuario_id', uid);
+      if(categorias.length > 0){
+        await supa.from('categorias').insert(categorias.map(c => ({
+          usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false
+        })));
+      }
+
+      // SKUs: full replace
+      await supa.from('skus').delete().eq('usuario_id', uid);
+      if(skus.length > 0){
+        await supa.from('skus').insert(skus.map(s => ({
+          usuario_id: uid, sku: s.sku, custo: s.custo, imposto: s.imposto
+        })));
+      }
+    }
+
+    async function salvarCfgSupabase(){
+      if(!usuarioAtual) return;
+      const cfg = {saldoMP, saldoOutros, cfgPct, reservaMinima, periodoHistorico, modoProjecao};
+      await supa.from('configuracoes').upsert({usuario_id: usuarioAtual.id, cfg, updated_at: new Date().toISOString()});
+    }
+
+    async function salvarLiberacoesSupabase(){
+      if(!usuarioAtual) return;
+      const uid = usuarioAtual.id;
+      await supa.from('liberacoes').delete().eq('usuario_id', uid);
+      if(liberacoes.length > 0){
+        const rows = liberacoes.map(l => ({usuario_id: uid, data: l.data, val: l.val}));
+        await supa.from('liberacoes').insert(rows);
+      }
+    }
+
+    // ===== FEEDBACK =====
+    function abrirFeedback(){ document.getElementById('modal-feedback').classList.add('open'); }
+    async function enviarFeedback(){
+      const texto = document.getElementById('feedback-texto').value.trim();
+      if(!texto) return;
+      if(usuarioAtual){
+        await supa.from('feedbacks').insert({
+          usuario_id: usuarioAtual.id,
+          mensagem: texto,
+          pagina: document.querySelector('.nav-item.active')?.textContent || ''
+        });
+      }
+      document.getElementById('feedback-texto').value = '';
+      document.getElementById('modal-feedback').classList.remove('open');
+      alert('Feedback enviado! Obrigado.');
+    }
+
+    // ===== LOG DE ERROS =====
+    window.onerror = function(msg, url, line, col, err){
+      if(usuarioAtual){
+        supa.from('erros_log').insert({
+          usuario_id: usuarioAtual.id,
+          erro: msg,
+          stack: err?.stack || '',
+          pagina: document.querySelector('.nav-item.active')?.textContent || ''
+        });
+      }
+    };
+
     // ===== ESTADO GLOBAL =====
     let pagamentos = [];
     let liberacoes = [];
@@ -1221,13 +1752,16 @@
     let saldoAtual = 0;    // total = saldoMP + saldoOutros
     let saldoMP = 0;        // saldo Mercado Pago (pode vir da API)
     let saldoOutros = 0;    // outros bancos (manual)
-    let cfgDelay = 12;
-    let cfgPct = 0.85;
-    let reservaMinima = 15000;
+    let cfgDelay = 8;       // mantido para compatibilidade — lógica agora usa faixas fixas D+1-7/D+8+
+    let cfgPct = 0.75;      // Fator Prudencial de Caixa (padrão 75%)
+    let reservaMinima = 0;
     let periodoHistorico = 30;
+    let modoProjecao = 'extrato'; // 'extrato' | 'pipeline' | 'hibrido'
     
     // Estado UI
     let planilhaMode = 'confirmado';
+    let planilhaDias = 30;
+    let planilhaCustomMode = false;
     let calendarioMode = 'confirmado';
     let mesAtual = new Date();
     let tipoSimulador = 'vista';
@@ -1332,22 +1866,33 @@
 
     // ===== CÁLCULOS =====
     function getEntrada(data){
-      // Entrada confirmada ML
       const conf = liberacoes.filter(l => l.data === data).reduce((s,l) => s + l.val, 0);
-      
-      // Projeção complementar (após delay)
+
       let proj = 0;
       const hoje = getToday();
       const diasAteData = diasDif(hoje, data);
-      
-      if(diasAteData > cfgDelay){
-        // Calcular média
+
+      // D+1 a D+7: usar SOMENTE confirmado ML (sem projeção)
+      // D+8 em diante: MAX(confirmado, projeção prudencial)
+      if(diasAteData >= 8){
         const limiteHist = addDias(hoje, -periodoHistorico);
         const libHist = liberacoes.filter(l => l.data >= limiteHist && l.data < hoje);
-        const media = libHist.length > 0 ? libHist.reduce((s,l) => s + l.val, 0) / libHist.length : 1000;
-        proj = media * cfgPct;
+        let totalBase = libHist.reduce((s,l) => s + l.val, 0);
+
+        // Fallback: sem histórico passado, usa liberações futuras como proxy da média diária
+        if(totalBase === 0 && liberacoes.length > 0){
+          const limFut = addDias(hoje, periodoHistorico);
+          const libFut = liberacoes.filter(l => l.data >= hoje && l.data <= limFut);
+          totalBase = libFut.reduce((s,l) => s + l.val, 0);
+        }
+
+        // Dividir pelo período (não pelo número de entradas) → média diária correta
+        const media = totalBase / periodoHistorico;
+        const projPrudencial = media * cfgPct;
+        // Complemento = MAX(0, projPrudencial - conf) → nunca diminui o confirmado
+        proj = Math.max(0, projPrudencial - conf);
       }
-      
+
       return {conf, proj, total: conf + proj};
     }
     
@@ -1355,46 +1900,37 @@
       return pagamentos.filter(p => p.data === data && !p.pago).reduce((s,p) => s + p.val, 0);
     }
     
-    function calcScore(){
-      // Saldo atual (simplificado - assume saldo inicial)
-      const saldo = reservaMinima * 2; // Mock
-      
-      // Média de gastos diários
+    function calcMediaGastoDia(){
       const hoje = getToday();
       const limite = addDias(hoje, -30);
       const pagos = pagamentos.filter(p => p.pago && p.data >= limite);
       const totalPago = pagos.reduce((s,p) => s + (p.valorPago || p.val), 0);
-      const mediaGasto = totalPago / 30;
-      
-      // Dias de cobertura
-      const dias = mediaGasto > 0 ? saldo / mediaGasto : 30;
-      
-      // Score 0-100
-      const score = Math.min(100, Math.round((dias / 30) * 100));
-      
-      return score;
+      return totalPago / 30;
     }
-    
+
+    function calcScore(){
+      const mediaGasto = calcMediaGastoDia();
+      const dias = mediaGasto > 0 ? saldoAtual / mediaGasto : 30;
+      return Math.min(100, Math.max(0, Math.round((dias / 30) * 100)));
+    }
+
     function calcMaxCompra(){
-      // Simplificado - retorna mock
-      return 5000;
+      return calcularMaxPagar(getToday());
     }
-    
+
     function calcPiorSaldo(){
       const hoje = getToday();
       let saldo = saldoAtual;
       let pior = saldo;
-      
+
       for(let i=0; i<30; i++){
         const data = addDias(hoje, i);
         const e = getEntrada(data);
         const entrada = planilhaMode === 'confirmado' ? e.conf : e.total;
-        const pag = getPag(data);
-        
-        saldo += entrada - pag;
+        saldo += entrada - getPag(data);
         if(saldo < pior) pior = saldo;
       }
-      
+
       return pior;
     }
     
@@ -1421,136 +1957,175 @@
     
     // ===== RENDERS =====
     function renderDashboard(){
-      // Score
       const score = calcScore();
       document.getElementById('score-value').textContent = score;
-      
-      // Ponteiro (0-100 → 0-180 graus)
-      const graus = score * 1.8;
       const needle = document.getElementById('score-needle');
-      needle.style.transform = `rotate(${graus - 90}deg)`;
-      
-      // Stats
+      needle.style.transform = `rotate(${score * 1.8 - 90}deg)`;
+
+      const mediaGasto = calcMediaGastoDia();
+      const cobertura = mediaGasto > 0 ? Math.round(saldoAtual / mediaGasto) : 0;
+
       document.getElementById('stat-comprar').textContent = fmt(calcMaxCompra());
       document.getElementById('stat-pior').textContent = fmt(calcPiorSaldo());
       document.getElementById('stat-saldo').textContent = fmt(saldoAtual);
-      document.getElementById('stat-cobertura').textContent = '15 dias'; // Mock
-      
-      // Resumo
-      const hoje = getToday();
-      let totalEntrada = 0, totalPagar = 0;
-      
-      for(let i=0; i<30; i++){
-        const data = addDias(hoje, i);
-        totalEntrada += getEntrada(data).conf;
-        totalPagar += getPag(data);
-      }
-      
-      // Resumo via função com filtro
+      document.getElementById('stat-cobertura').textContent = cobertura + ' dias';
+
       atualizarResumo();
     }
     
+    function setPlanilhaDias(dias, btn){
+      planilhaDias = dias;
+      planilhaCustomMode = false;
+      document.getElementById('plan-custom-range').style.display = 'none';
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      if(btn) btn.classList.add('active');
+      renderPlanilha();
+    }
+
+    function togglePlanilhaCustom(){
+      planilhaCustomMode = true;
+      document.getElementById('plan-custom-range').style.display = 'flex';
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('plan-btn-custom').classList.add('active');
+      renderPlanilha();
+    }
+
     function renderPlanilha(){
       const tbody = document.getElementById('tbody-planilha');
       const hoje = getToday();
       let saldoAcum = saldoAtual;
       let html = '';
-      
-      // Atualizar botões
+
       document.getElementById('plan-toggle-conf').className = 'btn-toggle' + (planilhaMode === 'confirmado' ? ' active' : '');
       document.getElementById('plan-toggle-proj').className = 'btn-toggle' + (planilhaMode === 'projetado' ? ' active' : '');
-      
-      // Atualizar colunas visíveis conforme modo
-      const thConf = document.getElementById('th-conf');
+
       const thProj = document.getElementById('th-proj');
       const thTotal = document.getElementById('th-total');
-      if(thConf) thConf.style.display = planilhaMode === 'projetado' ? '' : '';
       if(thProj) thProj.style.display = planilhaMode === 'projetado' ? '' : 'none';
       if(thTotal) thTotal.style.display = planilhaMode === 'projetado' ? '' : 'none';
 
-      for(let i=0; i<30; i++){
-        const data = addDias(hoje, i);
-        const dia = nomeDia(data);
-        const e = getEntrada(data);
-        const entrada = planilhaMode === 'confirmado' ? e.conf : e.total;
-        const pag = getPag(data);
+      // Determinar intervalo de datas
+      let dataIni, dataFim;
+      if(planilhaCustomMode){
+        dataIni = document.getElementById('plan-de')?.value || hoje;
+        dataFim = document.getElementById('plan-ate')?.value || addDias(hoje, 30);
+      } else {
+        dataIni = hoje;
+        dataFim = addDias(hoje, planilhaDias - 1);
+      }
+
+      const showProj = planilhaMode === 'projetado';
+      let d = dataIni;
+
+      while(d <= dataFim){
+        const dia = nomeDia(d);
+        const e = getEntrada(d);
+        const entrada = showProj ? e.total : e.conf;
+        const pag = getPag(d);
         const saldoDia = entrada - pag;
         saldoAcum += saldoDia;
-        const cobertura = saldoAcum / (pag || 100);
-        const corSaldo = saldoAcum < reservaMinima ? 'text-danger' : '';
-        const showProj = planilhaMode === 'projetado';
+        const corSaldo = saldoAcum < reservaMinima && reservaMinima > 0 ? 'text-danger' : '';
+        const bgRisco = saldoAcum < reservaMinima && reservaMinima > 0 ? 'background:#fff5f5;' : '';
 
-        html += `<tr>
-          <td>${ptDate(data)}</td>
+        html += `<tr style="${bgRisco}">
+          <td>${ptDate(d)}</td>
           <td>${dia}</td>
-          <td>${fmt(e.conf)}</td>
-          ${showProj ? `<td>${fmt(e.proj)}</td><td>${fmt(entrada)}</td>` : ''}
-          <td>${fmt(pag)}</td>
+          <td style="color:var(--success);">${e.conf > 0 ? fmt(e.conf) : '—'}</td>
+          ${showProj ? `<td style="color:#0891b2;">${e.proj > 0 ? fmt(e.proj) : '—'}</td><td style="font-weight:600;">${fmt(entrada)}</td>` : ''}
+          <td style="color:var(--danger);">${pag > 0 ? fmt(pag) : '—'}</td>
           <td class="${saldoDia < 0 ? 'text-danger' : 'text-success'}">${fmt(saldoDia)}</td>
-          <td class="${corSaldo}">${fmt(saldoAcum)}</td>
-          <td>${Math.round(cobertura)} dias</td>
+          <td class="${corSaldo}" style="font-weight:600;">${fmt(saldoAcum)}</td>
+          <td style="font-size:11px;color:#888;">${pag > 0 ? Math.round(saldoAcum / pag) + 'd' : '—'}</td>
         </tr>`;
+
+        d = addDias(d, 1);
       }
-      
-      tbody.innerHTML = html;
+
+      tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px;color:#999;">Nenhum dado no período</td></tr>';
+
+      const labelEl = document.getElementById('plan-label-periodo');
+      if(labelEl) labelEl.textContent = 'Período: ' + ptDate(dataIni) + ' até ' + ptDate(dataFim);
     }
     
-    function renderPagar(){
-      const lista = document.getElementById('lista-pagar');
-      const busca = document.getElementById('filtro-busca').value.toLowerCase();
-      const periodo = document.getElementById('filtro-periodo').value;
-      const status = document.getElementById('filtro-status').value;
-      const cat = document.getElementById('filtro-cat').value;
-      
+    function onFiltroPeridoChange(){
+      const periodo = document.getElementById('filtro-periodo')?.value || '';
+      const customRange = document.getElementById('filtro-custom-range');
+      if(customRange) customRange.style.display = periodo === 'custom' ? 'flex' : 'none';
+      renderPagar();
+    }
+
+    function getPagamentosFiltrados(){
+      const busca = (document.getElementById('filtro-busca')?.value || '').toLowerCase();
+      const periodo = document.getElementById('filtro-periodo')?.value || '';
+      const status = document.getElementById('filtro-status')?.value || '';
+      const cat = document.getElementById('filtro-cat')?.value || '';
       const hoje = getToday();
-      
-      // Filtrar
-      let filtrados = pagamentos.filter(p => {
-        // Busca
-        if(busca && !p.desc.toLowerCase().includes(busca) && 
-           !p.forn.toLowerCase().includes(busca)) return false;
-        
-        // Período
+
+      // Período personalizado
+      let customDe = '', customAte = '';
+      if(periodo === 'custom'){
+        customDe = document.getElementById('filtro-de')?.value || '';
+        customAte = document.getElementById('filtro-ate')?.value || '';
+      }
+
+      // Atualizar label do filtro ativo
+      const labelEl = document.getElementById('filtro-label-ativo');
+      if(labelEl){
+        if(periodo === 'dia') labelEl.textContent = 'Filtro ativo: Hoje (' + ptDate(hoje) + ')';
+        else if(periodo === 'semana') labelEl.textContent = 'Filtro ativo: Esta semana (' + ptDate(hoje) + ' até ' + ptDate(addDias(hoje, 7)) + ')';
+        else if(periodo === 'mes') labelEl.textContent = 'Filtro ativo: Próximos 30 dias (' + ptDate(hoje) + ' até ' + ptDate(addDias(hoje, 30)) + ')';
+        else if(periodo === 'custom' && customDe && customAte) labelEl.textContent = 'Filtro ativo: ' + ptDate(customDe) + ' até ' + ptDate(customAte);
+        else labelEl.textContent = '';
+      }
+
+      return pagamentos.filter(p => {
+        if(busca && !p.desc.toLowerCase().includes(busca) &&
+           !(p.forn || '').toLowerCase().includes(busca)) return false;
         if(periodo === 'dia' && p.data !== hoje) return false;
-        if(periodo === 'semana' && diasDif(hoje, p.data) > 7) return false;
-        if(periodo === 'mes' && diasDif(hoje, p.data) > 30) return false;
-        
-        // Status
+        if(periodo === 'semana' && (p.data < hoje || diasDif(hoje, p.data) > 7)) return false;
+        if(periodo === 'mes' && (p.data < hoje || diasDif(hoje, p.data) > 30)) return false;
+        if(periodo === 'custom'){
+          if(customDe && p.data < customDe) return false;
+          if(customAte && p.data > customAte) return false;
+        }
         if(status === 'abertas' && p.pago) return false;
         if(status === 'pagas' && !p.pago) return false;
         if(status === 'atrasado' && (p.pago || p.data >= hoje)) return false;
-        
-        // Categoria
         if(cat && p.cat !== cat) return false;
-        
         return true;
       });
-      
-      // Ordenar por data
+    }
+
+    function renderPagar(){
+      const lista = document.getElementById('lista-pagar');
+      const hoje = getToday();
+
+      const filtrados = getPagamentosFiltrados();
       filtrados.sort((a,b) => a.data.localeCompare(b.data));
-      
-      // Total
-      const total = filtrados.filter(p => !p.pago).reduce((s,p) => s + p.val, 0);
-      document.getElementById('total-filtrado').textContent = fmt(total);
-      
-      // Renderizar
+
+      // Total do filtro (sem seleção)
+      const totalFiltro = filtrados.filter(p => !p.pago).reduce((s,p) => s + p.val, 0);
+      document.getElementById('total-filtrado').textContent = fmt(totalFiltro);
+
       if(filtrados.length === 0){
         lista.innerHTML = '<div style="padding:40px;text-align:center;color:#999;">Nenhuma conta encontrada</div>';
         return;
       }
-      
+
       let html = '';
-      filtrados.forEach((p, i) => {
+      filtrados.forEach(p => {
         const idx = pagamentos.indexOf(p);
         const isAtrasado = !p.pago && p.data < hoje;
-        const badge = p.pago ? '<span class="badge badge-success">Pago</span>' : 
-                      isAtrasado ? '<span class="badge badge-danger">Atrasado</span>' : 
-                      '<span class="badge badge-warning">Em aberto</span>';
-        
+        const badge = p.pago
+          ? '<span class="badge badge-success">Pago</span>'
+          : isAtrasado
+            ? '<span class="badge badge-danger">Atrasado</span>'
+            : '<span class="badge badge-warning">Em aberto</span>';
+
         html += `<div class="entry" onclick="editarLanc(${idx})">
-          <input type="checkbox" class="cb-pagar" data-idx="${idx}" onclick="event.stopPropagation();atualizarContPagar()">
+          <input type="checkbox" class="cb-pagar" data-idx="${idx}" data-val="${p.val}" onclick="event.stopPropagation();atualizarContPagar()">
           <div class="entry-main">
-            <div class="entry-title">${p.desc}</div>
+            <div class="entry-title">${p.desc}${p.parcela ? ' <span style="font-size:10px;color:#999;">('+p.parcela+')</span>' : ''}</div>
             <div class="entry-meta">${ptDate(p.data)} • ${p.forn || 'Sem fornecedor'} • ${p.cat}</div>
           </div>
           <div style="text-align:right;">
@@ -1559,85 +2134,99 @@
           </div>
         </div>`;
       });
-      
+
       lista.innerHTML = html;
     }
     
     function renderCalendario(){
       const grid = document.getElementById('calendario-grid');
       const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-      
-      // Atualizar label do mês
+
       document.getElementById('cal-mes-label').textContent = meses[mesAtual.getMonth()] + ' ' + mesAtual.getFullYear();
-      
-      // Atualizar botões toggle
       document.getElementById('cal-toggle-conf').className = 'btn-toggle' + (calendarioMode === 'confirmado' ? ' active' : '');
       document.getElementById('cal-toggle-proj').className = 'btn-toggle' + (calendarioMode === 'projetado' ? ' active' : '');
-      
-      // Primeiro dia do mês
-      const primeiroDia = new Date(mesAtual.getFullYear(), mesAtual.getMonth(), 1);
-      const diaSemana = primeiroDia.getDay(); // 0=dom, 1=seg...
-      
-      // Último dia do mês
-      const ultimoDia = new Date(mesAtual.getFullYear(), mesAtual.getMonth() + 1, 0);
+
+      const ano = mesAtual.getFullYear();
+      const mes = mesAtual.getMonth();
+      const primeiroDia = new Date(ano, mes, 1);
+      const ultimoDia = new Date(ano, mes + 1, 0);
       const diasNoMes = ultimoDia.getDate();
-      
-      // Dias do mês anterior para preencher
-      const diasAnteriores = diaSemana;
-      
-      // Construir HTML
-      let html = '<div class="cal-grid">';
-      
-      // Headers
-      const diasSemana = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-      diasSemana.forEach(d => {
-        html += `<div class="cal-header">${d}</div>`;
-      });
-      
-      // Dias do mês anterior
-      const mesAnt = new Date(mesAtual.getFullYear(), mesAtual.getMonth(), 0);
-      const diasMesAnt = mesAnt.getDate();
-      
-      for(let i = diasAnteriores - 1; i >= 0; i--){
-        const dia = diasMesAnt - i;
-        html += `<div class="cal-day outro-mes"><div class="cal-day-num">${dia}</div></div>`;
-      }
-      
-      // Dias do mês atual
+      const diasAnteriores = primeiroDia.getDay();
       const hoje = getToday();
-      
+
+      // Calcular saldo acumulado até o primeiro dia do mês (para continuar a projeção corretamente)
+      // Partir de saldoAtual e simular do 1º dia do mês em diante
+      const primeiroDiaMes = dateStr(new Date(ano, mes, 1));
+      let saldoAcum = saldoAtual;
+      // Ajustar saldo acumulado até primeiro dia do mês (em relação a hoje)
+      const dHoje = parseDate(hoje);
+      const dPrimeiro = new Date(ano, mes, 1);
+      if(dPrimeiro < dHoje){
+        // Mês passado: recalcular do início do mês
+        let d = primeiroDiaMes;
+        const sFim = hoje;
+        saldoAcum = saldoAtual;
+        // Não temos histórico real; apenas projetar do mês sem ajuste
+      } else if(dPrimeiro > dHoje){
+        // Mês futuro: projetar do hoje até o início do mês
+        let d = hoje;
+        while(d < primeiroDiaMes){
+          const e = getEntrada(d);
+          const entrada = calendarioMode === 'confirmado' ? e.conf : e.total;
+          saldoAcum += entrada - getPag(d);
+          d = addDias(d, 1);
+        }
+      }
+      // Mês atual: saldo começa de saldoAtual (ajustado pelo loop do hoje até o dia 1)
+      if(dPrimeiro <= dHoje && dHoje <= ultimoDia){
+        // Já estamos neste mês — simular do dia 1 até hoje
+        saldoAcum = saldoAtual;
+        let d = primeiroDiaMes;
+        while(d < hoje){
+          const e = getEntrada(d);
+          const entrada = calendarioMode === 'confirmado' ? e.conf : e.total;
+          saldoAcum -= (entrada - getPag(d)); // reverter para chegar ao saldo no dia 1
+          d = addDias(d, 1);
+        }
+      }
+
+      let html = '<div class="cal-grid">';
+      ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d => html += `<div class="cal-header">${d}</div>`);
+
+      // Dias mês anterior
+      const mesAnt = new Date(ano, mes, 0);
+      const diasMesAnt = mesAnt.getDate();
+      for(let i = diasAnteriores - 1; i >= 0; i--)
+        html += `<div class="cal-day outro-mes"><div class="cal-day-num">${diasMesAnt - i}</div></div>`;
+
       for(let dia = 1; dia <= diasNoMes; dia++){
-        const data = dateStr(new Date(mesAtual.getFullYear(), mesAtual.getMonth(), dia));
+        const data = dateStr(new Date(ano, mes, dia));
         const isHoje = data === hoje;
-        
-        // Calcular valores do dia
         const e = getEntrada(data);
         const entrada = calendarioMode === 'confirmado' ? e.conf : e.total;
         const pag = getPag(data);
-        const saldo = entrada - pag;
-        
-        // Calcular alturas das barras (proporcionais ao maior valor)
-        const maxVal = Math.max(entrada, pag, 1000);
-        const alturaEntrada = Math.round((entrada / maxVal) * 40);
-        const alturaSaida = Math.round((pag / maxVal) * 40);
-        
-        html += `<div class="cal-day ${isHoje ? 'hoje' : ''}" onclick="abrirDia('${data}')">
+        const saldoDia = entrada - pag;
+        saldoAcum += saldoDia;
+
+        const riscoLeve = reservaMinima > 0 && saldoAcum < reservaMinima && saldoAcum >= 0;
+        const riscoForte = saldoAcum < 0;
+        const classeRisco = riscoForte ? ' risco-forte' : riscoLeve ? ' risco-leve' : '';
+        const corAcum = riscoForte ? 'var(--danger)' : riscoLeve ? '#e65c00' : 'var(--success)';
+
+        html += `<div class="cal-day${isHoje ? ' hoje' : ''}${classeRisco}" onclick="abrirDia('${data}')">
           <div class="cal-day-num">${dia}</div>
           ${entrada > 0 ? `<div class="cal-valor-entrada">+${fmt(entrada)}</div>` : ''}
           ${pag > 0 ? `<div class="cal-valor-saida">-${fmt(pag)}</div>` : ''}
           ${e.proj > 0 && calendarioMode === 'projetado' ? `<div class="cal-valor-proj">~${fmt(e.proj)}</div>` : ''}
-          ${entrada > 0 || pag > 0 ? `<div class="cal-saldo ${saldo >= 0 ? 'text-success' : 'text-danger'}">${fmt(saldo)}</div>` : ''}
+          ${entrada > 0 || pag > 0 ? `<div class="cal-saldo ${saldoDia >= 0 ? 'text-success' : 'text-danger'}">${fmt(saldoDia)}</div>` : ''}
+          <div class="cal-acum" style="color:${corAcum};">≡ ${fmt(saldoAcum)}</div>
         </div>`;
       }
-      
-      // Dias do próximo mês
+
       const totalDias = diasAnteriores + diasNoMes;
-      const diasRestantes = 35 - totalDias; // 5 linhas × 7 dias = 35
-      
-      for(let dia = 1; dia <= diasRestantes; dia++){
+      for(let dia = 1; dia <= (35 - totalDias); dia++)
         html += `<div class="cal-day outro-mes"><div class="cal-day-num">${dia}</div></div>`;
-      }
-      
+
       html += '</div>';
       grid.innerHTML = html;
     }
@@ -1657,17 +2246,24 @@
     }
     
     function simular(){
-      const valor = parseFloat(document.getElementById('sim-valor').value) || 0;
+      const valor = parseMoney(document.getElementById('sim-valor').value) || 0;
       const data = document.getElementById('sim-data').value;
       const resultado = document.getElementById('sim-resultado');
-      
+
+      // Modo parcelado com valor preenchido → sugerir melhores datas por parcela
+      if(tipoSimulador === 'parcelado' && valor > 0){
+        simularParcelado(valor);
+        return;
+      }
+
       // Caso 1: Só valor → encontrar melhor data
       if(valor > 0 && !data){
         const melhorData = encontrarMelhorData(valor);
         if(melhorData){
+          const det = simularDetalhado(valor, melhorData);
           resultado.innerHTML = `<div class="alert alert-info" style="margin-bottom:10px;">
             ✅ Melhor data para pagar <strong>${fmt(valor)}</strong>: <strong>${ptDate(melhorData)}</strong>
-            <div style="margin-top:4px;font-size:12px;">Saldo mínimo após pagamento: ${fmt(simularSaldo(valor, melhorData))}</div>
+            <div style="margin-top:4px;font-size:12px;">Menor saldo no período: ${fmt(det.minSaldo)} (em ${ptDate(det.dataCritica)})</div>
           </div>` + renderPlanilhaSimulador(valor, melhorData);
         } else {
           resultado.innerHTML = `<div class="alert alert-danger">
@@ -1689,12 +2285,13 @@
       
       // Caso 3: Valor + data → verificar viabilidade
       if(valor > 0 && data){
-        const saldoFinal = simularSaldo(valor, data);
-        const viavel = saldoFinal >= reservaMinima;
+        const det = simularDetalhado(valor, data);
+        const viavel = det.minSaldo >= reservaMinima;
+        const diff = Math.abs(det.minSaldo - reservaMinima);
 
         const badge = viavel
-          ? `<div class="alert alert-info">✅ Compra VIÁVEL! Saldo mínimo: <strong class="text-success">${fmt(saldoFinal)}</strong></div>`
-          : `<div class="alert alert-warning">⚠️ Compra ARRISCADA. Saldo cairia para: <strong class="text-danger">${fmt(saldoFinal)}</strong><div style="margin-top:4px;font-size:11px;">Abaixo da reserva mínima (${fmt(reservaMinima)})</div></div>`;
+          ? `<div class="alert alert-info">✅ Compra VIÁVEL! Menor saldo no período: <strong class="text-success">${fmt(det.minSaldo)}</strong> (em ${ptDate(det.dataCritica)})</div>`
+          : `<div class="alert alert-warning">⚠️ Compra ARRISCADA. Saldo mais baixo: <strong class="text-danger">${fmt(det.minSaldo)}</strong> em ${ptDate(det.dataCritica)}<div style="margin-top:4px;font-size:11px;">Reserva mínima: ${fmt(reservaMinima)} · Faltam ${fmt(diff)} para cobrir a reserva</div></div>`;
 
         resultado.innerHTML = badge + renderPlanilhaSimulador(valor, data);
         return;
@@ -1702,7 +2299,65 @@
       
       resultado.innerHTML = `<div class="alert alert-warning">Preencha pelo menos um campo (valor ou data)</div>`;
     }
-    
+
+    function simularParcelado(valor){
+      const parcelasOpt = document.getElementById('sim-parcelas').value;
+      const offsetDias = parcelasOpt.split(',').map(Number);
+      const n = offsetDias.length;
+      const valorParcela = valor / n;
+      const hoje = getToday();
+      const resultado = document.getElementById('sim-resultado');
+
+      let html = `<div style="margin-bottom:12px;padding:10px 14px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;">
+        <strong>${fmt(valor)}</strong> em ${n}x de <strong>${fmt(valorParcela)}</strong>
+        <span style="font-size:11px;color:#666;margin-left:8px;">(simulação independente por parcela)</span>
+      </div><div style="display:flex;flex-direction:column;gap:8px;">`;
+
+      let primeiraData = null;
+      let todosViaveis = true;
+
+      offsetDias.forEach((d, idx) => {
+        const dataBase = addDias(hoje, d);
+        let melhorData = dataBase;
+        let melhorSaldo = simularSaldo(valorParcela, dataBase);
+
+        // Tenta ±10 dias em torno da data nominal para encontrar o melhor dia
+        for(let j = -10; j <= 10; j++){
+          const dataTest = addDias(dataBase, j);
+          if(dataTest < hoje) continue;
+          const s = simularSaldo(valorParcela, dataTest);
+          if(s > melhorSaldo){ melhorSaldo = s; melhorData = dataTest; }
+        }
+
+        if(!primeiraData) primeiraData = melhorData;
+        const viavel = melhorSaldo >= reservaMinima;
+        if(!viavel) todosViaveis = false;
+        const ajustado = melhorData !== dataBase;
+
+        html += `<div style="padding:12px 14px;border-radius:8px;background:${viavel?'#f0fdf4':'#fff5f5'};border:1px solid ${viavel?'#86efac':'#fca5a5'};">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span style="font-weight:600;font-size:13px;">Parcela ${idx+1}/${n} — ${fmt(valorParcela)}</span>
+            <span style="font-size:12px;color:${viavel?'var(--success)':'var(--danger)'};">${viavel?'✅ Viável':'⚠️ Arriscado'}</span>
+          </div>
+          <div>Melhor data: <strong>${ptDate(melhorData)}</strong>
+            <span style="font-size:11px;color:#888;margin-left:6px;">(dia +${d} a partir de hoje${ajustado?' → ajustado':''})</span>
+          </div>
+          <div style="font-size:12px;color:#666;margin-top:2px;">
+            Saldo mín. após pagamento: <strong style="color:${viavel?'var(--success)':'var(--danger)'};">${fmt(melhorSaldo)}</strong>
+            ${reservaMinima > 0 ? `· Reserva mínima: ${fmt(reservaMinima)}` : ''}
+          </div>
+        </div>`;
+      });
+
+      html += `</div><div style="margin-top:8px;font-size:11px;color:#888;">* Cada parcela é simulada individualmente sobre o fluxo atual. Para ver o impacto acumulado, confira a planilha abaixo.</div>`;
+
+      const resumoBadge = todosViaveis
+        ? `<div class="alert alert-info" style="margin-bottom:12px;">✅ Todas as parcelas são viáveis no fluxo projetado.</div>`
+        : `<div class="alert alert-warning" style="margin-bottom:12px;">⚠️ Uma ou mais parcelas podem comprometer o caixa. Analise datas alternativas.</div>`;
+
+      resultado.innerHTML = resumoBadge + html + renderPlanilhaSimulador(valorParcela, primeiraData || hoje);
+    }
+
     function encontrarMelhorData(valor){
       const hoje = getToday();
       
@@ -1736,22 +2391,25 @@
     }
     
     function simularSaldo(valor, dataPag){
+      return simularDetalhado(valor, dataPag).minSaldo;
+    }
+
+    // Retorna {minSaldo, dataCritica} — pior saldo e o dia em que ocorre
+    function simularDetalhado(valor, dataPag){
       const hoje = getToday();
       let saldo = saldoAtual;
-      
+      let minSaldo = saldo;
+      let dataCritica = hoje;
+
       for(let i=0; i<30; i++){
         const data = addDias(hoje, i);
         const e = getEntrada(data);
-        const entrada = e.total; // Usa total (confirmado + projeção)
-        const pag = getPag(data);
-        
-        // Se é o dia do pagamento simulado, adiciona ao total
-        const pagDia = data === dataPag ? pag + valor : pag;
-        
-        saldo += entrada - pagDia;
+        const pagDia = getPag(data) + (data === dataPag ? valor : 0);
+        saldo += e.total - pagDia;
+        if(saldo < minSaldo){ minSaldo = saldo; dataCritica = data; }
       }
-      
-      return saldo;
+
+      return {minSaldo, dataCritica};
     }
     
     function renderSKUs(){
@@ -2055,44 +2713,45 @@
       localStorage.setItem('mk_pagamentos', JSON.stringify(pagamentos));
       localStorage.setItem('mk_liberacoes', JSON.stringify(liberacoes));
       localStorage.setItem('mk_categorias', JSON.stringify(categorias));
+      localStorage.setItem('mk_skus', JSON.stringify(skus));
       salvarCfg();
+      // Sync nuvem (fire-and-forget — localStorage já garantiu os dados)
+      salvarSupabase();
+      salvarLiberacoesSupabase();
     }
-    
+
     function salvarCfg(){
       localStorage.setItem('mk_cfg', JSON.stringify({
-        cfgDelay,
-        cfgPct,
-        reservaMinima,
-        periodoHistorico,
-        saldoAtual,
-        saldoMP,
-        saldoOutros
+        cfgDelay, cfgPct, reservaMinima, periodoHistorico,
+        saldoAtual, saldoMP, saldoOutros, modoProjecao
       }));
+      salvarCfgSupabase();
     }
-    
+
     function carregar(){
-      // Carregar dados
       const p = localStorage.getItem('mk_pagamentos');
       const l = localStorage.getItem('mk_liberacoes');
       const c = localStorage.getItem('mk_categorias');
+      const s = localStorage.getItem('mk_skus');
       const cfg = localStorage.getItem('mk_cfg');
-      
+
       if(p) pagamentos = JSON.parse(p);
       if(l) liberacoes = JSON.parse(l);
       if(c) categorias = JSON.parse(c);
-      
+      if(s) skus = JSON.parse(s);
+
       if(cfg){
         const obj = JSON.parse(cfg);
-        cfgDelay = obj.cfgDelay || 12;
-        saldoAtual = obj.saldoAtual || 0;
+        cfgDelay = obj.cfgDelay || 8;
         saldoMP = obj.saldoMP || 0;
         saldoOutros = obj.saldoOutros || 0;
-        cfgPct = obj.cfgPct || 0.85;
-        reservaMinima = obj.reservaMinima || 15000;
+        saldoAtual = obj.saldoAtual || (saldoMP + saldoOutros);
+        cfgPct = obj.cfgPct !== undefined ? obj.cfgPct : 0.75;
+        reservaMinima = obj.reservaMinima || 0;
         periodoHistorico = obj.periodoHistorico || 30;
+        modoProjecao = obj.modoProjecao || 'extrato';
       }
-      
-      // Se não tem dados, carregar exemplo
+
       if(pagamentos.length === 0 && liberacoes.length === 0){
         carregarDadosExemplo();
         salvar();
@@ -2200,9 +2859,55 @@
     }
 
     function gerarCmdML(){
-      // Credenciais removidas por segurança.
-      // Use seu script PowerShell local para gerar o JSON
-      // e cole no campo abaixo.
+      const cmd = `# ============================================================
+# PASSO 1: Renovar token (executar sempre antes)
+# ============================================================
+$resp = Invoke-RestMethod -Method POST \
+  -Uri "https://api.mercadolibre.com/oauth/token" \
+  -ContentType "application/x-www-form-urlencoded" \
+  -Body "grant_type=refresh_token&client_id=98776212333714&client_secret=MYtLKCH965Bekhl39TYxhLSiml0kXnVr&refresh_token=TG-6a09e54eebbd6f0001ec584a-1980904340"
+$token = "Bearer " + $resp.access_token
+Write-Host "Token renovado:" $resp.access_token
+
+# ============================================================
+# PASSO 2: Buscar saldo do Mercado Pago
+# ============================================================
+$saldo = Invoke-RestMethod -Method GET \
+  -Uri "https://api.mercadolibre.com/users/me/mercadopago/account/balance" \
+  -Headers @{Authorization=$token}
+$saldoMP = [math]::Round($saldo.available_balance, 2)
+Write-Host "Saldo MP: R$" $saldoMP
+
+# ============================================================
+# PASSO 3: Buscar liberações futuras
+# ============================================================
+$all = @(); $off = 0
+do {
+  $url = "https://api.mercadolibre.com/collections/search?status=approved&released=no&sort=money_release_date&criteria=asc&limit=200&offset=$off&range=money_release_date&begin_date=$(Get-Date -Format 'yyyy-MM-dd')T00:00:00.000-03:00&end_date=2026-12-31T23:59:59.000-03:00"
+  $r = Invoke-RestMethod -Method GET -Uri $url -Headers @{Authorization=$token}
+  $all += $r.results | ForEach-Object { $_.collection }
+  $off += 200; $total = $r.paging.total
+  Write-Host "Buscados: $off de $total"
+} while ($off -lt $total -and $off -lt 5000)
+
+# ============================================================
+# PASSO 4: Agrupar por data e enviar para o app
+# ============================================================
+$liberacoes = $all | Group-Object { $_.money_release_date.Substring(0,10) } |
+  Select-Object Name,
+    @{N='Total';E={[math]::Round(($_.Group | Measure-Object net_received_amount -Sum).Sum,2)}},
+    @{N='Qtd';E={$_.Count}}
+
+$body = @{
+  liberacoes = $liberacoes
+  saldoMP    = $saldoMP
+} | ConvertTo-Json -Depth 3
+
+Write-Host "Cole o JSON abaixo no campo do app:"
+Write-Host $body`;
+
+      const cmdEl = document.getElementById('ml-cmd');
+      if(cmdEl) cmdEl.textContent = cmd;
     }
 
     function copiarCmdML(){
@@ -2772,7 +3477,7 @@
         if(dados.saldoMP !== undefined){
           saldoMP = parseFloat(dados.saldoMP) || 0;
           const mpInput = document.getElementById('saldo-mp');
-          if(mpInput) mpInput.value = saldoMP;
+          if(mpInput) mpInput.value = fmtMoney(saldoMP);
           atualizarSaldoTotal();
           document.getElementById('ml-status').textContent =
             '✅ ' + liberacoes.length + ' liberações + saldo MP R$ ' + fmt(saldoMP) + ' importados!';
@@ -2848,9 +3553,9 @@
             <th style="${th}">Conf. ML</th>
             <th style="${th}">Proj. compl.</th>
             <th style="${th}">A pagar</th>
-            <th style="${th}">Compra simulada ℹ️</th>
-            <th style="${th}">Saldo real acum. ℹ️</th>
-            <th style="${th}">Saldo simulado acum. ℹ️</th>
+            <th style="${th}">Compra simulada <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Valor que você está simulando pagar neste dia. Edite para testar diferentes cenários.</span></span></th>
+            <th style="${th}">Saldo real acum. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Saldo acumulado sem considerar a compra simulada — o que o caixa terá de qualquer forma.</span></span></th>
+            <th style="${th}">Saldo simulado acum. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Saldo acumulado após deduzir a compra simulada. Fica vermelho se cair abaixo da reserva mínima.</span></span></th>
             <th style="${th}">Status</th>
           </tr></thead><tbody>`;
 
@@ -2867,9 +3572,10 @@
           <td style="${td};color:#0891b2;">${d.proj>0?fmt(d.proj):'—'}</td>
           <td style="${td};color:var(--danger);">${d.pag>0?fmt(d.pag):'—'}</td>
           <td style="${td};padding:2px 4px;">
-            <input type="number" value="${d.compra||''}" min="0" step="100"
+            <input type="text" value="${d.compra>0?fmtMoney(d.compra):''}"
               style="width:120px;padding:4px 6px;border:1px solid ${d.compra>0?'var(--primary)':'#e5e5e5'};border-radius:4px;font-size:12px;background:${d.compra>0?'#eff6ff':'#fff'};"
-              onchange="simPlanilhaDados[${i}].compra=+this.value||0;recalcularSimulador()">
+              onblur="if(this.value)this.value=fmtMoney(parseMoney(this.value))"
+              onchange="simPlanilhaDados[${i}].compra=parseMoney(this.value)||0;recalcularSimulador()">
           </td>
           <td style="${td};font-weight:600;color:${saldoReal<reservaMinima?'var(--danger)':'var(--success)'};">${fmt(saldoReal)}</td>
           <td style="${td};font-weight:600;color:${saldoSim<reservaMinima?'var(--danger)':'var(--success)'};">${fmt(saldoSim)}</td>
@@ -2913,7 +3619,10 @@
         pago:     {label:'✓ Pago',      items:[], css:'pago'},
       };
 
-      pagamentos.forEach((p, idx) => {
+      // Usa os mesmos filtros da lista
+      const filtrados = getPagamentosFiltrados();
+      filtrados.forEach(p => {
+        const idx = pagamentos.indexOf(p);
         if(p.pago) cols.pago.items.push({p, idx});
         else if(p.data === hoje) cols.hoje.items.push({p, idx});
         else if(p.data < hoje) cols.atrasado.items.push({p, idx});
@@ -3047,13 +3756,25 @@
     }
 
     function atualizarContPagar(){
-      const sel = document.querySelectorAll('.cb-pagar:checked').length;
+      const checks = document.querySelectorAll('.cb-pagar:checked');
+      const sel = checks.length;
+      const total = document.querySelectorAll('.cb-pagar').length;
+
       const el = document.getElementById('pagar-sel-count');
       if(el) el.textContent = sel > 0 ? sel + ' selecionado(s)' : '';
+
       const cbTodos = document.getElementById('cb-todos');
-      const total = document.querySelectorAll('.cb-pagar').length;
-      if(cbTodos) cbTodos.indeterminate = sel > 0 && sel < total;
-      if(cbTodos) cbTodos.checked = sel === total && total > 0;
+      if(cbTodos){ cbTodos.indeterminate = sel > 0 && sel < total; cbTodos.checked = sel === total && total > 0; }
+
+      // Total dinâmico: selecionados > 0 → total dos selecionados; senão → total do filtro
+      const totalEl = document.getElementById('total-filtrado');
+      if(totalEl && sel > 0){
+        const somasel = Array.from(checks).reduce((s, cb) => s + (parseFloat(cb.dataset.val) || 0), 0);
+        totalEl.textContent = fmt(somasel) + ' (selecionados)';
+      } else if(totalEl && sel === 0){
+        // Restaurar total do filtro
+        renderPagar();
+      }
     }
 
     function getIdxsSelecionadosPagar(){
@@ -3075,42 +3796,96 @@
       salvar(); renderPagar(); recalc();
     }
 
+    // ===== UTILS MONETÁRIOS =====
+    function parseMoney(str){
+      if(!str) return 0;
+      // Aceita "1.234,56" ou "1234.56" ou "1234,56"
+      const s = String(str).trim().replace(/[R$\s]/g,'');
+      if(s.includes(',') && s.includes('.')){
+        // Formato pt-BR: 1.234,56
+        return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0;
+      } else if(s.includes(',')){
+        return parseFloat(s.replace(',','.')) || 0;
+      }
+      return parseFloat(s) || 0;
+    }
+
+    function fmtMoney(n){
+      if(!n && n !== 0) return '';
+      return n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+    }
+
+    // ===== IMPORTAR MODAL =====
+    function abrirModalImportar(){
+      document.getElementById('modal-importar').classList.add('open');
+    }
+
+    function baixarPlanilhaModelo(){
+      const csv = '﻿' +
+        'data;descricao;fornecedor;valor;categoria;pago\n' +
+        '# Instruções: data no formato AAAA-MM-DD, valor com vírgula, pago: sim ou nao\n' +
+        '2026-06-10;Fornecedor ABC;Fornecedor ABC;1500,00;Fornecedor;nao\n' +
+        '2026-06-15;Aluguel galpão;Locadora XYZ;3200,00;Aluguel;nao\n' +
+        '2026-06-20;Imposto DAS;Receita Federal;890,50;Imposto;sim\n';
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'modelo_contas_pagar.csv';
+      a.click();
+      fecharModal('modal-importar');
+    }
+
     // ===== INIT =====
     function init(){
-      // Atualizar valores nos controles
-      const saldoInput = document.getElementById('saldo-inicial');
-      if(saldoInput) saldoInput.value = saldoOutros || '';
-      const saldoMPInput = document.getElementById('saldo-mp');
-      if(saldoMPInput) saldoMPInput.value = saldoMP || '';
-      const saldoTotalLabel = document.getElementById('saldo-total-label');
-      if(saldoTotalLabel) saldoTotalLabel.textContent = fmt(saldoMP + saldoOutros);
-      document.getElementById('range-delay').value = cfgDelay;
-      document.getElementById('input-delay').value = cfgDelay;
-      document.getElementById('val-delay').textContent = cfgDelay + ' dias';
-      
-      document.getElementById('range-pct').value = Math.round(cfgPct * 100);
-      document.getElementById('val-pct').textContent = Math.round(cfgPct * 100) + '%';
-      
-      document.getElementById('input-reserva').value = reservaMinima;
-      
-      document.getElementById('range-hist').value = periodoHistorico;
-      document.getElementById('val-hist').textContent = periodoHistorico + ' dias';
-      
-      // Popular selects de categorias
-      atualizarSelectCategorias();
+      // Saldos
+      const mpEl = document.getElementById('saldo-mp');
+      const outrosEl = document.getElementById('saldo-inicial');
+      const totalEl = document.getElementById('saldo-total-label');
+      if(mpEl) mpEl.value = saldoMP > 0 ? fmtMoney(saldoMP) : '';
+      if(outrosEl) outrosEl.value = saldoOutros > 0 ? fmtMoney(saldoOutros) : '';
+      if(totalEl) totalEl.textContent = fmt(saldoAtual);
 
-      // Delay calculado
+      // Fator Prudencial
+      const pctVal = Math.round(cfgPct * 100);
+      const rangePct = document.getElementById('range-pct');
+      const valPct = document.getElementById('val-pct');
+      if(rangePct) rangePct.value = pctVal;
+      if(valPct) valPct.textContent = pctVal + '%';
+
+      // Reserva mínima
+      const reservaEl = document.getElementById('input-reserva');
+      if(reservaEl) reservaEl.value = reservaMinima > 0 ? fmtMoney(reservaMinima) : '';
+
+      // Período histórico
+      const histEl = document.getElementById('range-hist');
+      const valHist = document.getElementById('val-hist');
+      if(histEl) histEl.value = periodoHistorico;
+      if(valHist) valHist.textContent = periodoHistorico + ' dias';
+
+      // Modo projeção
+      const modoEl = document.getElementById('modo-extrato');
+      if(modoEl && modoProjecao === 'extrato') modoEl.checked = true;
+
+      // Delay calculado (informativo)
       const delayCalc = calcularDelayReal();
       const delayEl = document.getElementById('delay-calc');
       if(delayEl) delayEl.textContent = delayCalc !== null ? delayCalc + ' dias' : '— (sem dados ML)';
+
+      // Categorias
+      atualizarSelectCategorias();
 
       // Renderizar dashboard
       renderDashboard();
     }
     
     // ===== START =====
-    carregar();
-    init();
+    // Verifica se já existe sessão ativa (usuário já logado)
+    supa.auth.getSession().then(({data}) => {
+      if(data.session && data.session.user){
+        entrarNoApp(data.session.user);
+      }
+      // Se não tem sessão, a tela de login já está visível (class "ativo")
+    });
     
   </script>
   
