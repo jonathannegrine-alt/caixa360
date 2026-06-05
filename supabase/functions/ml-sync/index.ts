@@ -67,30 +67,74 @@ Deno.serve(async (req) => {
       }, `usuario_id=eq.${userId}`)
     }
 
-    // Buscar releases do ML
+    // Buscar releases do ML com filtro de data
     const hoje = new Date().toISOString().substring(0, 10)
+    const amanha = new Date(Date.now() + 86400000).toISOString().substring(0, 10)
+    const anoFim = new Date().getFullYear()
+    const endDate = `${anoFim}-12-31T23:59:59.000-03:00`
+    const beginDate = `${amanha}T00:00:00.000-03:00`
+    const seen = new Set<number>()
     const all: any[] = []
     let offset = 0
-    while (offset < 5000) {
-      const url = `https://api.mercadolibre.com/collections/search?status=approved&released=no&sort=money_release_date&criteria=asc&limit=200&offset=${offset}&range=money_release_date&begin_date=${hoje}T00:00:00.000-03:00&end_date=2027-12-31T23:59:59.000-03:00`
+    while (offset < 10000) {
+      const url = `https://api.mercadolibre.com/collections/search?status=approved&released=no&sort=money_release_date&criteria=asc&limit=200&offset=${offset}&range=money_release_date&begin_date=${beginDate}&end_date=${endDate}`
       const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
       const data = await r.json()
-      if (data.error || !data.results) break
-      all.push(...data.results.map((x: any) => x.collection || x))
+      if (data.error) break
+      if (!data.results || data.results.length === 0) break
+      for (const x of data.results) {
+        const item = x.collection || x
+        if (item.id && seen.has(item.id)) continue  // deduplicar por ID
+        if (item.id) seen.add(item.id)
+        all.push(item)
+      }
       offset += 200
       if (offset >= (data.paging?.total ?? 0)) break
     }
 
-    // Agrupar por data
+    // Agrupar por data (apenas datas >= hoje como segurança extra)
     const byDate: Record<string, number> = {}
     for (const item of all) {
       const date = (item.money_release_date || '').substring(0, 10)
-      if (!date) continue
+      if (!date || date < amanha) continue
       byDate[date] = (byDate[date] || 0) + (item.net_received_amount || 0)
     }
     const liberacoes = Object.entries(byDate).map(([data, val]) => ({
       usuario_id: userId, data, val: Math.round((val as number) * 100) / 100
     }))
+
+    // Buscar releases de HOJE por hora (released=no = ainda não creditado)
+    const hojeEnd = `${hoje}T23:59:59.000-03:00`
+    const hojeStart = `${hoje}T00:00:00.000-03:00`
+    const seenHoje = new Set<number>()
+    const allHoje: any[] = []
+    let offsetHoje = 0
+    while (offsetHoje < 5000) {
+      const urlH = `https://api.mercadolibre.com/collections/search?status=approved&released=no&sort=money_release_date&criteria=asc&limit=200&offset=${offsetHoje}&range=money_release_date&begin_date=${hojeStart}&end_date=${hojeEnd}`
+      const rH = await fetch(urlH, { headers: { Authorization: `Bearer ${accessToken}` } })
+      const dH = await rH.json()
+      if (dH.error) break
+      if (!dH.results || dH.results.length === 0) break
+      for (const x of dH.results) {
+        const item = x.collection || x
+        if (item.id && seenHoje.has(item.id)) continue
+        if (item.id) seenHoje.add(item.id)
+        allHoje.push(item)
+      }
+      offsetHoje += 200
+      if (offsetHoje >= (dH.paging?.total ?? 0)) break
+    }
+    // Agrupar por hora em BRT (UTC-3), convertendo corretamente independente do offset do campo
+    const byHora: Record<string, number> = {}
+    for (const item of allHoje) {
+      const dt = item.money_release_date || ''
+      if (!dt) continue
+      const horaBRT = ((new Date(dt).getUTCHours() - 3 + 24) % 24).toString().padStart(2, '0')
+      byHora[horaBRT] = (byHora[horaBRT] || 0) + (item.net_received_amount || 0)
+    }
+    const liberacoesHoje = Object.entries(byHora)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([hora, val]) => ({ hora: hora + ':00h', val: Math.round((val as number) * 100) / 100 }))
 
     // Buscar saldo MP
     let saldoMP: number | null = null
@@ -111,7 +155,7 @@ Deno.serve(async (req) => {
     // Atualizar updated_at do token
     await dbRun(supaUrl, supaKey, 'PATCH', 'ml_tokens', { updated_at: new Date().toISOString() }, `usuario_id=eq.${userId}`)
 
-    return resp({ success: true, liberacoes: liberacoes.length, saldoMP, atualizado_em: new Date().toISOString() })
+    return resp({ success: true, liberacoes: liberacoes.length, liberacoesHoje, saldoMP, atualizado_em: new Date().toISOString() })
 
   } catch (e) {
     return resp({ error: 'Exceção interna', detail: String(e) })

@@ -1904,12 +1904,21 @@
       recalc();
     }
 
+    // Retorna somente as horas futuras de hoje (para não incluir o que já foi creditado)
+    function getHojeTotal(){
+      const horaAtual = new Date().getHours();
+      const itens = JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]');
+      return itens.filter(i => parseInt(i.hora) >= horaAtual).reduce((s,i) => s + i.val, 0);
+    }
+
     // ===== CÁLCULOS =====
     function getEntrada(data){
-      const conf = liberacoes.filter(l => l.data === data).reduce((s,l) => s + l.val, 0);
+      const hoje = getToday();
+      // liberacoes contém apenas datas a partir de amanhã; para hoje, soma as horas pendentes
+      let conf = liberacoes.filter(l => l.data === data).reduce((s,l) => s + l.val, 0);
+      if(data === hoje) conf += getHojeTotal();
 
       let proj = 0;
-      const hoje = getToday();
       const diasAteData = diasDif(hoje, data);
 
       // D+1 a D+7: usar SOMENTE confirmado ML (sem projeção)
@@ -2890,9 +2899,8 @@
     function renderReceber(){
       const hoje = getToday();
 
-      // Dados de hoje (horas ainda a receber)
-      const hojeItens = JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]');
-      const hojeTotal = hojeItens.reduce((s,i) => s + i.val, 0);
+      // hojeTotal = apenas horas futuras (não creditadas ainda)
+      const hojeTotal = getHojeTotal();
 
       // Resumo stats — excluir hoje de liberacoes (evita double-count com hojeTotal)
       const totalFut = liberacoes.filter(l => l.data > hoje).reduce((s,l) => s + l.val, 0);
@@ -2912,7 +2920,7 @@
         <tr onclick="abrirModalHoje()" style="cursor:pointer;background:rgba(var(--accent-rgb),.07);">
           <td><strong>${ptDate(hoje)}</strong></td>
           <td>${nomeDia(hoje)} <span style="font-size:.75rem;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;">hoje ⏰</span></td>
-          <td style="text-align:right;font-weight:700;color:var(--accent);">+R$ ${fmt(hojeTotal)}</td>
+          <td style="text-align:right;font-weight:700;color:var(--accent);">${fmt(hojeTotal)}</td>
         </tr>` : '';
 
       if(!hojeRow && futuras.length === 0){
@@ -2924,7 +2932,7 @@
         <tr>
           <td>${ptDate(l.data)}</td>
           <td>${nomeDia(l.data)}</td>
-          <td style="text-align:right;font-weight:600;color:var(--success);">+R$ ${fmt(l.val)}</td>
+          <td style="text-align:right;font-weight:600;color:var(--success);">${fmt(l.val)}</td>
         </tr>
       `).join('');
     }
@@ -2949,21 +2957,21 @@
       }
 
       const horaAtual = new Date().getHours();
-      const total = hojeItens.reduce((s,i) => s + i.val, 0);
+      const totalFuturo = hojeItens.filter(i => parseInt(i.hora) >= horaAtual).reduce((s,i) => s + i.val, 0);
       const rows = hojeItens.map(i => {
         const hora = parseInt(i.hora);
         const passou = hora < horaAtual;
         return `<tr>
           <td style="padding:6px 0;color:${passou?'var(--text-muted)':'var(--text)'};">${passou?'✅':'🕐'} ${i.hora}</td>
-          <td style="padding:6px 0;text-align:right;font-weight:600;color:${passou?'var(--text-muted)':'var(--success)'};">R$ ${fmt(i.val)}</td>
+          <td style="padding:6px 0;text-align:right;font-weight:600;color:${passou?'var(--text-muted)':'var(--success)'};">${fmt(i.val)}</td>
         </tr>`;
       }).join('');
       document.getElementById('modal-hoje-body').innerHTML = `
         <p style="margin:0 0 10px;color:var(--text-muted);font-size:.85rem;">🕐 = ainda será creditado hoje &nbsp;·&nbsp; ✅ = já passou</p>
         <table style="width:100%;border-collapse:collapse;">${rows}</table>
         <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-          <span style="color:var(--text-muted);">Total de hoje</span>
-          <strong style="color:var(--success);font-size:1.1rem;">R$ ${fmt(total)}</strong>
+          <span style="color:var(--text-muted);">Ainda a receber hoje</span>
+          <strong style="color:var(--success);font-size:1.1rem;">${fmt(totalFuturo)}</strong>
         </div>`;
       document.getElementById('modal-hoje').style.display = 'flex';
     }
