@@ -2940,10 +2940,8 @@
           salvarCfg();
         }
 
-        const debugInfo = data._debug ? ' [debug: ' + JSON.stringify(data._debug) + ']' : '';
         const msg = '✅ ' + data.liberacoes + ' liberações importadas'
-          + (data.saldoMP ? ' · Saldo MP: R$ ' + fmt(data.saldoMP) : '')
-          + debugInfo;
+          + (data.saldoMP ? ' · Saldo MP: R$ ' + fmt(data.saldoMP) : '');
         if(statusEl){ statusEl.className='ml-status-ok'; statusEl.textContent=msg; }
 
         await verificarConexaoML();
