@@ -2957,7 +2957,7 @@
     async function autoSyncML(){
       if(!usuarioAtual) return;
       const ultimo = parseInt(localStorage.getItem('mk_ultimo_sync_ml') || '0');
-      const THROTTLE_MS = 30 * 60 * 1000; // 30 minutos
+      const THROTTLE_MS = 2 * 60 * 1000; // 2 minutos (evita duplo-sync em F5 rápido)
       if(Date.now() - ultimo < THROTTLE_MS) return;
       const { data } = await supa.from('ml_tokens').select('usuario_id').eq('usuario_id', usuarioAtual.id).maybeSingle();
       if(!data) return;
