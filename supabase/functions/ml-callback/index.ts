@@ -5,36 +5,43 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const ok  = (body: object) => new Response(JSON.stringify(body), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+const err = (msg: string, detail?: string) => new Response(JSON.stringify({ error: msg, detail }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
-    const { code, user_id } = await req.json()
-    if (!code || !user_id) {
-      return new Response(JSON.stringify({ error: 'Parâmetros inválidos' }), { status: 400, headers: CORS })
-    }
+    const body = await req.json().catch(() => null)
+    if (!body?.code || !body?.user_id) return err('Parâmetros inválidos: code e user_id são obrigatórios')
 
-    // Trocar code por access_token + refresh_token
+    const { code, user_id } = body
+
+    const clientId     = Deno.env.get('ML_CLIENT_ID')
+    const clientSecret = Deno.env.get('ML_CLIENT_SECRET')
+    if (!clientId || !clientSecret) return err('Secrets ML não configurados no servidor')
+
+    // Trocar code por tokens
     const tokenRes = await fetch('https://api.mercadolibre.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
-        client_id: Deno.env.get('ML_CLIENT_ID')!,
-        client_secret: Deno.env.get('ML_CLIENT_SECRET')!,
+        client_id: clientId,
+        client_secret: clientSecret,
         code,
         redirect_uri: 'https://jonathannegrine-alt.github.io/caixa360/'
       })
     })
 
     const tokens = await tokenRes.json()
-    if (tokens.error) {
-      return new Response(JSON.stringify({ error: tokens.error, message: tokens.message }), { status: 400, headers: CORS })
-    }
+    console.log('ML token response status:', tokenRes.status, 'error:', tokens.error)
+
+    if (tokens.error) return err(tokens.error, tokens.message)
 
     // Salvar tokens no banco
     const supa = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-    await supa.from('ml_tokens').upsert({
+    const { error: dbErr } = await supa.from('ml_tokens').upsert({
       usuario_id: user_id,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
@@ -43,11 +50,12 @@ Deno.serve(async (req) => {
       updated_at: new Date().toISOString()
     }, { onConflict: 'usuario_id' })
 
-    return new Response(JSON.stringify({ success: true, ml_user_id: tokens.user_id }), {
-      headers: { ...CORS, 'Content-Type': 'application/json' }
-    })
-  } catch (err) {
-    console.error('ml-callback erro:', err)
-    return new Response(JSON.stringify({ error: 'Erro interno', detail: String(err) }), { status: 500, headers: CORS })
+    if (dbErr) return err('Erro ao salvar token no banco', dbErr.message)
+
+    return ok({ success: true, ml_user_id: tokens.user_id })
+
+  } catch (e) {
+    console.error('ml-callback exception:', e)
+    return err('Erro interno', String(e))
   }
 })
