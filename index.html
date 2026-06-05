@@ -1590,6 +1590,9 @@
       document.querySelector('.login-tabs').style.display = 'none';
       document.getElementById('login-sync-msg').textContent = 'Carregando seus dados...';
 
+      // Limpar dados do usuário anterior (localStorage é compartilhado no navegador)
+      limparSessaoLocal();
+
       await carregarDoSupabase();
 
       document.getElementById('tela-login').classList.remove('ativo');
@@ -1609,11 +1612,20 @@
       }
     }
 
+    function limparSessaoLocal(){
+      ['mk_pagamentos','mk_liberacoes','mk_skus','mk_categorias','mk_cfg',
+       'mk_liberacoes_hoje','mk_ultimo_sync_ml'].forEach(k => localStorage.removeItem(k));
+      pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
+      saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30;
+      const mlSt = document.getElementById('ml-status');
+      if(mlSt) mlSt.textContent = '';
+    }
+
     async function sair(){
       if(!confirm('Sair da conta?')) return;
+      limparSessaoLocal();
       await supa.auth.signOut();
       usuarioAtual = null;
-      pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
       document.getElementById('tela-login').classList.add('ativo');
       document.getElementById('user-bar').style.display = 'none';
       document.getElementById('card-minha-conta').style.display = 'none';
@@ -1715,10 +1727,6 @@
         saldoAtual = saldoMP + saldoOutros;
       }
 
-      // Fallback: se não tem nada no Supabase, tenta localStorage
-      if(pagamentos.length === 0 && liberacoes.length === 0){
-        carregar();
-      }
     }
 
     // ===== SUPABASE — SALVAR DADOS =====
