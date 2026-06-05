@@ -2897,8 +2897,12 @@
         const { data, error } = await supa.functions.invoke('ml-callback', {
           body: { code, user_id: usuarioAtual.id }
         });
+        // Extrair erro real (pode estar em data.error ou no body do erro HTTP)
+        const erroML = data?.error || data?.message
+          || (error?.context?.body ? (() => { try{ return JSON.parse(error.context.body).error }catch{return null} })() : null)
+          || error?.message;
         if(error || data?.error){
-          if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ Erro ao conectar: ' + (data?.error || error?.message); }
+          if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ Erro: ' + erroML; }
           return;
         }
         if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='✅ Conectado! Sincronizando dados...'; }

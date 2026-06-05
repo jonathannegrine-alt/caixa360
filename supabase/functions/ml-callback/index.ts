@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from '@supabase/supabase-js'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
       headers: { ...CORS, 'Content-Type': 'application/json' }
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: CORS })
+    console.error('ml-callback erro:', err)
+    return new Response(JSON.stringify({ error: 'Erro interno', detail: String(err) }), { status: 500, headers: CORS })
   }
 })
