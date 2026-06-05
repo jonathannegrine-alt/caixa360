@@ -2898,11 +2898,11 @@
           body: { code, user_id: usuarioAtual.id }
         });
         // Extrair erro real (pode estar em data.error ou no body do erro HTTP)
-        const erroML = data?.error || data?.message
-          || (error?.context?.body ? (() => { try{ return JSON.parse(error.context.body).error }catch{return null} })() : null)
-          || error?.message;
+        const erroML = (data?.error || error?.message || 'Erro desconhecido')
+          + (data?.detail ? ' — ' + data.detail : '')
+          + (data?.status ? ' (HTTP ' + data.status + ')' : '');
         if(error || data?.error){
-          if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ Erro: ' + erroML; }
+          if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ ' + erroML; }
           return;
         }
         if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='✅ Conectado! Sincronizando dados...'; }
