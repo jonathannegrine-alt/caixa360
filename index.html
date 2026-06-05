@@ -1143,7 +1143,24 @@
       <!-- CONFIGURAÇÕES -->
       <div id="view-config" class="view">
         <h1 style="margin-bottom:20px;">Configurações</h1>
-        
+
+        <!-- Mercado Livre -->
+        <div class="card mb-2">
+          <div class="card-header"><div class="card-title">🤝 Mercado Livre</div></div>
+          <div class="card-body">
+            <div id="cfg-ml-status" style="font-size:13px;margin-bottom:14px;color:var(--text-muted);">Verificando conexão...</div>
+            <div class="d-flex gap-1" style="flex-wrap:wrap;">
+              <button class="btn-ml" onclick="conectarML()" style="font-size:13px;padding:9px 18px;">
+                🛒 Conectar / Reconectar
+              </button>
+              <button class="btn-out" id="cfg-btn-desconectar" onclick="desconectarML()" style="display:none;">Desconectar</button>
+            </div>
+            <div style="font-size:11px;color:#999;margin-top:10px;">
+              Clique em "Conectar / Reconectar" sempre que houver erro de acesso ao Mercado Livre.
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header">
             <div class="card-title">Parâmetros Financeiros</div>
@@ -2001,7 +2018,7 @@
       else if(page === 'simulador') renderFormSimulador();
       else if(page === 'skus') renderSKUs();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
-      else if(page === 'config') renderCategorias();
+      else if(page === 'config'){ renderCategorias(); atualizarStatusMLConfig(); }
     }
     
     // ===== RENDERS =====
@@ -3090,12 +3107,34 @@
       }
     }
 
+    async function atualizarStatusMLConfig(){
+      const statusEl = document.getElementById('cfg-ml-status');
+      const btnDesc  = document.getElementById('cfg-btn-desconectar');
+      if(!statusEl) return;
+      if(!usuarioAtual){ statusEl.textContent = 'Faça login para ver o status.'; return; }
+      try {
+        const { data } = await supa.from('ml_tokens').select('ml_user_id,updated_at').eq('usuario_id', usuarioAtual.id).maybeSingle();
+        if(data){
+          const dt = data.updated_at ? new Date(data.updated_at).toLocaleString('pt-BR') : '';
+          statusEl.innerHTML = '<span style="color:var(--success);font-weight:600;">✅ Conectado</span>' + (dt ? ' — última sync: ' + dt : '');
+          if(btnDesc) btnDesc.style.display = 'inline-flex';
+        } else {
+          statusEl.innerHTML = '<span style="color:var(--danger);font-weight:600;">❌ Não conectado</span> — clique em "Conectar / Reconectar" abaixo.';
+          if(btnDesc) btnDesc.style.display = 'none';
+        }
+      } catch(e){
+        statusEl.textContent = 'Erro ao verificar conexão.';
+      }
+    }
+
     async function desconectarML(){
       if(!confirm('Desconectar o Mercado Livre desta conta?')) return;
       await supa.from('ml_tokens').delete().eq('usuario_id', usuarioAtual.id);
       document.getElementById('ml-nao-conectado').style.display = 'block';
       document.getElementById('ml-conectado').style.display = 'none';
-      document.getElementById('ml-status').textContent = '';
+      const st = document.getElementById('ml-status');
+      if(st) st.textContent = '';
+      atualizarStatusMLConfig();
     }
 
     // Receptor legado (PowerShell via servidor local — mantido como fallback)
