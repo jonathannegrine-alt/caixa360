@@ -977,6 +977,15 @@
           </div>
         </div>
 
+        <!-- Card: A receber hoje por hora -->
+        <div id="card-hoje-ml" class="card" style="display:none;margin-bottom:16px;">
+          <div class="card-header">
+            <div class="card-title">⏰ A receber hoje</div>
+            <div id="hoje-ml-total" style="font-weight:700;color:var(--success);font-size:1.1rem;"></div>
+          </div>
+          <div id="hoje-ml-lista" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;"></div>
+        </div>
+
         <!-- Lista / Calendário -->
         <div id="rec-lista-view">
           <div class="card">
@@ -2849,8 +2858,38 @@
     }
     
     // ===== A RECEBER ML =====
+    function renderCardHoje(){
+      const raw = localStorage.getItem('mk_liberacoes_hoje');
+      const card = document.getElementById('card-hoje-ml');
+      if(!card) return;
+      if(!raw){ card.style.display='none'; return; }
+      const itens = JSON.parse(raw);
+      if(!itens || itens.length === 0){ card.style.display='none'; return; }
+
+      const agora = new Date();
+      const horaAtual = agora.getHours();
+      const total = itens.reduce((s,i) => s + i.val, 0);
+
+      document.getElementById('hoje-ml-total').textContent = 'R$ ' + fmt(total);
+
+      const lista = document.getElementById('hoje-ml-lista');
+      lista.innerHTML = itens.map(i => {
+        const hora = parseInt(i.hora);
+        const passou = hora < horaAtual;
+        const cor = passou ? 'var(--text-muted)' : 'var(--success)';
+        const icone = passou ? '✅' : '🕐';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
+          <span style="color:${cor};font-size:.95rem;">${icone} ${i.hora}</span>
+          <span style="font-weight:600;color:${cor};">R$ ${fmt(i.val)}</span>
+        </div>`;
+      }).join('');
+
+      card.style.display = 'block';
+    }
+
     function renderReceber(){
       const hoje = getToday();
+      renderCardHoje();
 
       // Resumo stats
       const total = liberacoes.reduce((s,l) => s + l.val, 0);
@@ -2942,6 +2981,7 @@
         }
 
         localStorage.setItem('mk_ultimo_sync_ml', Date.now().toString());
+        if(data.liberacoesHoje) localStorage.setItem('mk_liberacoes_hoje', JSON.stringify(data.liberacoesHoje));
         const msg = '✅ ' + data.liberacoes + ' liberações importadas'
           + (data.saldoMP ? ' · Saldo MP: R$ ' + fmt(data.saldoMP) : '');
         if(statusEl){ statusEl.className='ml-status-ok'; statusEl.textContent=msg; }
