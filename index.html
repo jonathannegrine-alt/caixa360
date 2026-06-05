@@ -2889,12 +2889,16 @@
 
     function renderReceber(){
       const hoje = getToday();
-      renderCardHoje();
 
-      // Resumo stats
-      const total = liberacoes.reduce((s,l) => s + l.val, 0);
-      const p7 = liberacoes.filter(l => diasDif(hoje, l.data) <= 7 && l.data >= hoje).reduce((s,l) => s + l.val, 0);
-      const p30 = liberacoes.filter(l => diasDif(hoje, l.data) <= 30 && l.data >= hoje).reduce((s,l) => s + l.val, 0);
+      // Dados de hoje (horas ainda a receber)
+      const hojeItens = JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]');
+      const hojeTotal = hojeItens.reduce((s,i) => s + i.val, 0);
+
+      // Resumo stats — total inclui hoje pendente
+      const totalFut = liberacoes.reduce((s,l) => s + l.val, 0);
+      const total = totalFut + hojeTotal;
+      const p7  = liberacoes.filter(l => diasDif(hoje, l.data) <= 7  && l.data > hoje).reduce((s,l) => s + l.val, 0);
+      const p30 = liberacoes.filter(l => diasDif(hoje, l.data) <= 30 && l.data > hoje).reduce((s,l) => s + l.val, 0);
 
       document.getElementById('rec-total').textContent = fmt(total);
       document.getElementById('rec-7d').textContent = fmt(p7);
@@ -2902,20 +2906,66 @@
 
       // Lista
       const tbody = document.getElementById('tbody-receber');
-      const futuras = liberacoes.filter(l => l.data >= hoje).sort((a,b) => a.data.localeCompare(b.data));
+      const futuras = liberacoes.filter(l => l.data > hoje).sort((a,b) => a.data.localeCompare(b.data));
 
-      if(futuras.length === 0){
+      const hojeRow = hojeTotal > 0 ? `
+        <tr onclick="abrirModalHoje()" style="cursor:pointer;background:rgba(var(--accent-rgb),.07);">
+          <td><strong>${ptDate(hoje)}</strong></td>
+          <td>${nomeDia(hoje)} <span style="font-size:.75rem;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;">hoje ⏰</span></td>
+          <td style="text-align:right;font-weight:700;color:var(--accent);">+R$ ${fmt(hojeTotal)}</td>
+        </tr>` : '';
+
+      if(!hojeRow && futuras.length === 0){
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:#999;">Nenhuma liberação importada. Conecte o Mercado Livre ou use a importação manual.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = futuras.map(l => `
+      tbody.innerHTML = hojeRow + futuras.map(l => `
         <tr>
           <td>${ptDate(l.data)}</td>
           <td>${nomeDia(l.data)}</td>
-          <td style="text-align:right;font-weight:600;color:var(--success);">${fmt(l.val)}</td>
+          <td style="text-align:right;font-weight:600;color:var(--success);">+R$ ${fmt(l.val)}</td>
         </tr>
       `).join('');
+    }
+
+    function abrirModalHoje(){
+      const hojeItens = JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]');
+      if(!hojeItens.length){ alert('Nenhum dado de hoje disponível. Clique em "Atualizar dados agora".'); return; }
+
+      if(!document.getElementById('modal-hoje')){
+        const m = document.createElement('div');
+        m.className = 'modal';
+        m.id = 'modal-hoje';
+        m.innerHTML = `<div class="modal-content" style="max-width:380px;">
+          <div class="modal-header">
+            <div class="modal-title">⏰ A receber hoje — por hora</div>
+            <button class="btn-out btn-sm" onclick="fecharModal('modal-hoje')">✕</button>
+          </div>
+          <div class="modal-body" id="modal-hoje-body"></div>
+          <div class="modal-footer"><button class="btn-out" onclick="fecharModal('modal-hoje')">Fechar</button></div>
+        </div>`;
+        document.body.appendChild(m);
+      }
+
+      const horaAtual = new Date().getHours();
+      const total = hojeItens.reduce((s,i) => s + i.val, 0);
+      const rows = hojeItens.map(i => {
+        const hora = parseInt(i.hora);
+        const passou = hora < horaAtual;
+        return `<tr>
+          <td style="padding:6px 0;color:${passou?'var(--text-muted)':'var(--text)'};">${passou?'✅':'🕐'} ${i.hora}</td>
+          <td style="padding:6px 0;text-align:right;font-weight:600;color:${passou?'var(--text-muted)':'var(--success)'};">R$ ${fmt(i.val)}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('modal-hoje-body').innerHTML = `
+        <p style="margin:0 0 10px;color:var(--text-muted);font-size:.85rem;">🕐 = ainda será creditado hoje &nbsp;·&nbsp; ✅ = já passou</p>
+        <table style="width:100%;border-collapse:collapse;">${rows}</table>
+        <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:var(--text-muted);">Total de hoje</span>
+          <strong style="color:var(--success);font-size:1.1rem;">R$ ${fmt(total)}</strong>
+        </div>`;
+      document.getElementById('modal-hoje').style.display = 'flex';
     }
 
     // ===== ML OAUTH — CONEXÃO AUTOMÁTICA =====
@@ -3840,14 +3890,19 @@
 
       for(let i = 0; i < diasAnt; i++) html += '<div class="cal-day outro-mes"></div>';
 
+      const hojeItensRec = JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]');
+      const hojeTotalRec = hojeItensRec.reduce((s,i) => s + i.val, 0);
+
       for(let dia = 1; dia <= ultimoDia.getDate(); dia++){
         const data = dateStr(new Date(ano, mes, dia));
-        const total = liberacoes.filter(l => l.data === data).reduce((s,l) => s+l.val, 0);
         const isHoje = data === hoje;
+        const total = isHoje ? hojeTotalRec : liberacoes.filter(l => l.data === data).reduce((s,l) => s+l.val, 0);
+        const clickAttr = isHoje && hojeTotalRec > 0 ? ' onclick="abrirModalHoje()" style="cursor:pointer;"' : '';
 
-        html += `<div class="cal-day ${isHoje?'hoje':''}">
+        html += `<div class="cal-day ${isHoje?'hoje':''}"${clickAttr}>
           <div class="cal-day-num">${dia}</div>
-          ${total > 0 ? `<div class="cal-valor-entrada">+${fmt(total)}</div>` : ''}
+          ${total > 0 ? `<div class="cal-valor-entrada">${isHoje?'⏰ ':''}+${fmt(total)}</div>` : ''}
+          ${isHoje && hojeTotalRec > 0 ? `<div style="font-size:.6rem;color:var(--accent);margin-top:1px;">ver horas</div>` : ''}
         </div>`;
       }
 
