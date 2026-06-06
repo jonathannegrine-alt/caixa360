@@ -600,6 +600,12 @@
           <input class="login-input" type="email" id="login-email" placeholder="E-mail" onkeydown="if(event.key==='Enter')fazerLogin()">
           <input class="login-input" type="password" id="login-senha" placeholder="Senha (mínimo 6 caracteres)" onkeydown="if(event.key==='Enter')fazerLogin()">
           <div style="font-size:11px;color:#888;margin-top:-8px;" id="senha-dica">Use letras e números. Mínimo 6 caracteres.</div>
+          <div id="campo-termos" style="display:none;margin-top:-4px;">
+            <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#555;cursor:pointer;line-height:1.4;">
+              <input type="checkbox" id="chk-termos" style="margin-top:2px;flex-shrink:0;" onchange="document.getElementById('login-btn').disabled=!this.checked&&loginTab==='cadastrar'">
+              <span>Li e aceito os <a href="#" onclick="abrirTermos();return false;" style="color:var(--primary);">Termos de Uso</a> do Caixa 360. Entendo que o sistema está em fase beta e que a análise final das informações é de minha responsabilidade.</span>
+            </label>
+          </div>
           <button class="login-btn" id="login-btn" onclick="fazerLogin()">Entrar</button>
           <button class="login-link" id="link-esqueceu" onclick="mostrarResetSenha()">Esqueceu a senha?</button>
           <div class="login-msg" id="login-msg"></div>
@@ -633,6 +639,46 @@
       </div>
     </div>
     
+    <!-- MODAL TERMOS DE USO -->
+    <div class="modal-overlay" id="modal-termos">
+      <div class="modal-box" style="max-width:560px;">
+        <div class="modal-header">
+          <div class="modal-title">Termos de Uso — Caixa 360</div>
+          <button class="btn-out btn-sm" onclick="fecharModal('modal-termos')">✕</button>
+        </div>
+        <div class="modal-body" style="max-height:60vh;overflow-y:auto;font-size:13px;line-height:1.7;color:#444;">
+          <p><strong>Versão v0.1-beta · Junho de 2026</strong></p>
+
+          <p><strong>1. Fase de desenvolvimento</strong><br>
+          O Caixa 360 está em fase beta fechada. O sistema pode apresentar instabilidades, ter funcionalidades alteradas ou removidas sem aviso prévio, e passar por manutenções programadas ou não.</p>
+
+          <p><strong>2. Responsabilidade sobre as informações</strong><br>
+          Os cálculos, projeções e análises gerados pelo sistema são estimativas baseadas nos dados fornecidos pelo usuário e pela API do Mercado Livre. Não substituem análise contábil ou consultoria financeira profissional. A decisão final sobre qualquer operação financeira é de responsabilidade exclusiva do usuário.</p>
+
+          <p><strong>3. Armazenamento de dados</strong><br>
+          Os dados inseridos são armazenados no Supabase (supabase.com), plataforma de banco de dados em nuvem com servidores nos Estados Unidos. Ao usar o sistema, você concorda com esse armazenamento.</p>
+
+          <p><strong>4. Acesso pela equipe</strong><br>
+          A equipe de desenvolvimento pode acessar os dados para fins de suporte técnico, correção de erros e melhoria do sistema. Esse acesso não será usado para fins comerciais nem compartilhado com terceiros.</p>
+
+          <p><strong>5. Confidencialidade</strong><br>
+          Seus dados não serão vendidos, compartilhados ou divulgados a terceiros, exceto quando exigido por lei.</p>
+
+          <p><strong>6. Disponibilidade</strong><br>
+          Não há garantia de disponibilidade contínua (SLA). O serviço pode ficar indisponível por motivos técnicos ou de manutenção.</p>
+
+          <p><strong>7. Exclusão de dados</strong><br>
+          Você pode solicitar a exclusão de todos os seus dados a qualquer momento, entrando em contato com a equipe.</p>
+
+          <p><strong>8. Alterações nos termos</strong><br>
+          Estes termos podem ser atualizados. Em caso de alteração relevante, o usuário será notificado no acesso.</p>
+        </div>
+        <div class="modal-footer" id="modal-termos-footer">
+          <button class="btn-out" onclick="fecharModal('modal-termos')">Fechar</button>
+        </div>
+      </div>
+    </div>
+
     <!-- MAIN CONTENT -->
     <div class="main">
       
@@ -1562,9 +1608,23 @@
       document.getElementById('tab-entrar').className = 'login-tab' + (tab==='entrar'?' active':'');
       document.getElementById('tab-cadastrar').className = 'login-tab' + (tab==='cadastrar'?' active':'');
       document.getElementById('campo-nome').style.display = tab==='cadastrar' ? 'block' : 'none';
+      document.getElementById('campo-termos').style.display = tab==='cadastrar' ? 'block' : 'none';
       document.getElementById('login-btn').textContent = tab==='entrar' ? 'Entrar' : 'Criar conta';
       document.getElementById('link-esqueceu').style.display = tab==='entrar' ? 'block' : 'none';
       document.getElementById('login-msg').textContent = '';
+      // Botão desabilitado no cadastro até marcar o checkbox
+      const chk = document.getElementById('chk-termos');
+      document.getElementById('login-btn').disabled = tab==='cadastrar' && !chk.checked;
+    }
+
+    function abrirTermos(comBotaoAceitar){
+      const footer = document.getElementById('modal-termos-footer');
+      if(comBotaoAceitar){
+        footer.innerHTML = '<button class="btn" onclick="aceitarTermosModal()">Aceitar e continuar</button>';
+      } else {
+        footer.innerHTML = '<button class="btn-out" onclick="fecharModal(\'modal-termos\')">Fechar</button>';
+      }
+      document.getElementById('modal-termos').classList.add('open');
     }
 
     async function fazerLogin(){
@@ -1581,6 +1641,9 @@
         res = await supa.auth.signInWithPassword({email, password:senha});
       } else {
         if(!nome){ msg.className='login-msg erro'; msg.textContent='Informe seu nome.'; return; }
+        if(!document.getElementById('chk-termos').checked){
+          msg.className='login-msg erro'; msg.textContent='Aceite os Termos de Uso para criar sua conta.'; return;
+        }
         res = await supa.auth.signUp({email, password:senha, options:{data:{nome}}});
       }
 
@@ -1597,6 +1660,36 @@
       }
 
       await entrarNoApp(res.data.user);
+    }
+
+    async function aceitarTermosModal(){
+      if(!usuarioAtual) return;
+      fecharModal('modal-termos');
+      await supa.from('termos_aceite').insert({
+        usuario_id: usuarioAtual.id,
+        versao_termos: 'v0.1-beta',
+        aceito_em: new Date().toISOString()
+      });
+      // Continuar entrada no app normalmente
+      document.getElementById('login-sync').style.display = 'flex';
+      document.querySelector('.login-form').style.display = 'none';
+      document.querySelector('.login-tabs').style.display = 'none';
+      document.getElementById('login-sync-msg').textContent = 'Carregando seus dados...';
+      limparSessaoLocal();
+      await carregarDoSupabase();
+      document.getElementById('tela-login').classList.remove('ativo');
+      document.getElementById('user-bar').style.display = 'block';
+      document.getElementById('user-bar-email').textContent = usuarioAtual.email;
+      document.getElementById('card-minha-conta').style.display = 'block';
+      const mlCode = new URLSearchParams(window.location.search).get('code');
+      if(mlCode){
+        nav('receber');
+        await handleMLCallback(mlCode);
+      } else {
+        await verificarConexaoML();
+        renderDashboard();
+        autoSyncML();
+      }
     }
 
     function traduzirErroAuth(msg){
@@ -1617,6 +1710,14 @@
       document.querySelector('.login-form').style.display = 'none';
       document.querySelector('.login-tabs').style.display = 'none';
       document.getElementById('login-sync-msg').textContent = 'Carregando seus dados...';
+
+      // Verificar se já aceitou os termos (cobre usuários antigos e casos de bypass)
+      const { data: termosData } = await supa.from('termos_aceite').select('id').eq('usuario_id', user.id).maybeSingle();
+      if(!termosData){
+        document.getElementById('login-sync').style.display = 'none';
+        abrirTermos(true);
+        return;
+      }
 
       // Limpar dados do usuário anterior (localStorage é compartilhado no navegador)
       limparSessaoLocal();
