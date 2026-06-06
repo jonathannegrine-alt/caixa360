@@ -957,7 +957,8 @@
 
             <!-- Estado: conectado -->
             <div id="ml-conectado" style="display:none;">
-              <div id="ml-info" class="ml-status-ok" style="margin-bottom:12px;">✅ Conectado</div>
+              <div id="ml-info" class="ml-status-ok" style="margin-bottom:8px;">✅ Conectado</div>
+              <div id="ml-pipeline-badge" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;"></div>
               <div class="d-flex gap-1" style="flex-wrap:wrap;">
                 <button class="btn" onclick="sincronizarML()">⚡ Atualizar dados agora</button>
                 <button class="btn-out" onclick="desconectarML()">Desconectar</button>
@@ -1158,6 +1159,33 @@
             <div style="font-size:11px;color:#999;margin-top:10px;">
               Você será redirecionado para o Mercado Livre para autorizar o acesso.
             </div>
+          </div>
+        </div>
+
+        <!-- Pipeline Histórico -->
+        <div class="card mb-2">
+          <div class="card-header"><div class="card-title">📈 Pipeline Histórico ML</div></div>
+          <div class="card-body">
+            <div id="pipeline-maturidade" style="margin-bottom:14px;padding:10px 14px;border-radius:8px;background:var(--gray-100);font-size:13px;">—</div>
+
+            <div class="form-group">
+              <label class="form-label">Período para projeção por extrato
+                <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Quantos dias de extrato realizado (dinheiro que já caiu na conta) usar para calcular a média diária da projeção. Os dados são carregados automaticamente todo dia pelo cron. Mais dias = mais estável; menos dias = mais reativo à sazonalidade recente.</span></span>
+              </label>
+              <div class="d-flex gap-1" id="btns-periodo-ml" style="flex-wrap:wrap;margin-top:6px;">
+                <button class="btn-out btn-sm" onclick="setPeriodoML(15)">15 dias</button>
+                <button class="btn-out btn-sm" onclick="setPeriodoML(30)">30 dias</button>
+                <button class="btn-out btn-sm" onclick="setPeriodoML(60)">60 dias</button>
+                <button class="btn-out btn-sm" onclick="setPeriodoML(90)">90 dias (padrão)</button>
+              </div>
+              <div id="periodo-ml-label" class="text-muted" style="font-size:12px;margin-top:6px;">Período ativo: 90 dias</div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+              <button class="btn-out btn-sm" onclick="atualizarHistoricoML()" id="btn-atualizar-hist">🔄 Atualizar histórico agora</button>
+              <span id="hist-status" style="font-size:12px;color:#666;"></span>
+            </div>
+            <div style="font-size:11px;color:#999;margin-top:8px;">O cron atualiza automaticamente às 06h BRT. Use o botão para atualizar fora do horário.</div>
           </div>
         </div>
 
@@ -1616,7 +1644,8 @@
       ['mk_pagamentos','mk_liberacoes','mk_skus','mk_categorias','mk_cfg',
        'mk_liberacoes_hoje','mk_ultimo_sync_ml'].forEach(k => localStorage.removeItem(k));
       pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
-      saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30;
+      extratoHistorico=[]; diasPipeline=0;
+      saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30; periodoHistoricoML=90;
       const mlSt = document.getElementById('ml-status');
       if(mlSt) mlSt.textContent = '';
     }
@@ -1696,12 +1725,15 @@
       if(!usuarioAtual) return;
       const uid = usuarioAtual.id;
 
-      const [rPag, rLib, rSku, rCat, rCfg] = await Promise.all([
+      const dataCorte90 = addDias(getToday(), -90);
+      const [rPag, rLib, rSku, rCat, rCfg, rExt, rSnap] = await Promise.all([
         supa.from('pagamentos').select('*').eq('usuario_id', uid),
         supa.from('liberacoes').select('*').eq('usuario_id', uid),
         supa.from('skus').select('*').eq('usuario_id', uid),
         supa.from('categorias').select('*').eq('usuario_id', uid),
-        supa.from('configuracoes').select('*').eq('usuario_id', uid).single()
+        supa.from('configuracoes').select('*').eq('usuario_id', uid).single(),
+        supa.from('extrato_historico').select('data,val_liquido,qtd_pedidos').eq('usuario_id', uid).gte('data', dataCorte90).order('data', {ascending:false}),
+        supa.from('snapshots_ml').select('data_captura', {count:'exact', head:true}).eq('usuario_id', uid)
       ]);
 
       if(rPag.data) pagamentos = rPag.data.map(p => ({
@@ -1724,8 +1756,13 @@
         if(c.reservaMinima !== undefined) reservaMinima = c.reservaMinima;
         if(c.periodoHistorico !== undefined) periodoHistorico = c.periodoHistorico;
         if(c.modoProjecao !== undefined) modoProjecao = c.modoProjecao;
+        if(c.periodoHistoricoML !== undefined) periodoHistoricoML = c.periodoHistoricoML;
         saldoAtual = saldoMP + saldoOutros;
       }
+
+      if(rExt.data) extratoHistorico = rExt.data.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
+
+      diasPipeline = rSnap.count || 0;
 
     }
 
@@ -1764,7 +1801,7 @@
 
     async function salvarCfgSupabase(){
       if(!usuarioAtual) return;
-      const cfg = {saldoMP, saldoOutros, cfgPct, reservaMinima, periodoHistorico, modoProjecao};
+      const cfg = {saldoMP, saldoOutros, cfgPct, reservaMinima, periodoHistorico, modoProjecao, periodoHistoricoML};
       await supa.from('configuracoes').upsert({usuario_id: usuarioAtual.id, cfg, updated_at: new Date().toISOString()});
     }
 
@@ -1822,6 +1859,9 @@
     let reservaMinima = 0;
     let periodoHistorico = 30;
     let modoProjecao = 'extrato'; // 'extrato' | 'pipeline' | 'hibrido'
+    let extratoHistorico = [];   // [{data, val_liquido, qtd_pedidos}] — creditados reais (released=yes)
+    let diasPipeline = 0;        // dias distintos de snapshot acumulados
+    let periodoHistoricoML = 90; // período usado no cálculo da projeção (15/30/60/90)
     
     // Estado UI
     let planilhaMode = 'confirmado';
@@ -1949,19 +1989,24 @@
       // D+1 a D+7: usar SOMENTE confirmado ML (sem projeção)
       // D+8 em diante: MAX(confirmado, projeção prudencial)
       if(diasAteData >= 8){
-        const limiteHist = addDias(hoje, -periodoHistorico);
-        const libHist = liberacoes.filter(l => l.data >= limiteHist && l.data < hoje);
-        let totalBase = libHist.reduce((s,l) => s + l.val, 0);
+        let totalBase = 0;
+        let diasBase = periodoHistoricoML;
 
-        // Fallback: sem histórico passado, usa liberações futuras como proxy da média diária
-        if(totalBase === 0 && liberacoes.length > 0){
+        // Fonte primária: extrato histórico (released=yes) — creditados reais
+        const limiteExt = addDias(hoje, -periodoHistoricoML);
+        const extFiltrado = extratoHistorico.filter(e => e.data >= limiteExt && e.data < hoje);
+        if(extFiltrado.length > 0){
+          totalBase = extFiltrado.reduce((s,e) => s + e.val_liquido, 0);
+          diasBase = periodoHistoricoML;
+        } else if(liberacoes.length > 0){
+          // Fallback offline: usa liberações futuras como proxy da média diária
           const limFut = addDias(hoje, periodoHistorico);
           const libFut = liberacoes.filter(l => l.data >= hoje && l.data <= limFut);
           totalBase = libFut.reduce((s,l) => s + l.val, 0);
+          diasBase = periodoHistorico;
         }
 
-        // Dividir pelo período (não pelo número de entradas) → média diária correta
-        const media = totalBase / periodoHistorico;
+        const media = totalBase / diasBase;
         const projPrudencial = media * cfgPct;
         // Complemento = MAX(0, projPrudencial - conf) → nunca diminui o confirmado
         proj = Math.max(0, projPrudencial - conf);
@@ -2026,7 +2071,7 @@
       else if(page === 'simulador') renderFormSimulador();
       else if(page === 'skus') renderSKUs();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
-      else if(page === 'config'){ renderCategorias(); atualizarStatusMLConfig(); }
+      else if(page === 'config'){ renderCategorias(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
     }
     
     // ===== RENDERS =====
@@ -3022,7 +3067,6 @@
         const { data, error } = await supa.functions.invoke('ml-callback', {
           body: { code, user_id: usuarioAtual.id }
         });
-        // Extrair erro real (pode estar em data.error ou no body do erro HTTP)
         const erroML = (data?.error || error?.message || 'Erro desconhecido')
           + (data?.detail ? ' — ' + data.detail : '')
           + (data?.status ? ' (HTTP ' + data.status + ')' : '');
@@ -3030,12 +3074,36 @@
           if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ ' + erroML; }
           return;
         }
-        if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='✅ Conectado! Sincronizando dados...'; }
+        if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='✅ Conectado! Buscando histórico (pode levar ~30s)...'; }
+        // Popula extrato histórico na primeira conexão
+        await capturarSnapshotML();
         await sincronizarML();
       } catch(e){
         if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ ' + e.message; }
       }
       window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    async function capturarSnapshotML(){
+      try {
+        const { data: sessao } = await supa.auth.getSession();
+        const jwt = sessao?.session?.access_token;
+        await supa.functions.invoke('ml-snapshot', {
+          headers: jwt ? { Authorization: 'Bearer ' + jwt } : {}
+        });
+        // Recarregar extrato histórico
+        const corte = addDias(getToday(), -90);
+        const { data: ext } = await supa.from('extrato_historico')
+          .select('data,val_liquido,qtd_pedidos')
+          .eq('usuario_id', usuarioAtual.id)
+          .gte('data', corte)
+          .order('data', {ascending:false});
+        if(ext) extratoHistorico = ext.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
+        const { count } = await supa.from('snapshots_ml')
+          .select('data_captura', {count:'exact', head:true})
+          .eq('usuario_id', usuarioAtual.id);
+        diasPipeline = count || 0;
+      } catch(_){}
     }
 
     async function sincronizarML(){
@@ -3135,6 +3203,87 @@
       } catch(e){
         statusEl.textContent = 'Erro ao verificar conexão.';
       }
+    }
+
+    function setPeriodoML(dias){
+      periodoHistoricoML = dias;
+      salvarCfg();
+      recalc();
+      renderPipelineMaturidade();
+    }
+
+    function renderPipelineMaturidade(){
+      const el = document.getElementById('pipeline-maturidade');
+      const label = document.getElementById('periodo-ml-label');
+      const btns = document.getElementById('btns-periodo-ml');
+      if(label) label.textContent = 'Período ativo: ' + periodoHistoricoML + ' dias';
+
+      // Destacar botão ativo
+      if(btns){
+        btns.querySelectorAll('button').forEach(b => {
+          const v = parseInt(b.textContent);
+          b.classList.toggle('btn', v === periodoHistoricoML);
+          b.classList.toggle('btn-out', v !== periodoHistoricoML);
+        });
+      }
+
+      if(!el) return;
+      let badge, texto;
+      if(diasPipeline >= 90){
+        badge = '🟢 Pipeline Maduro';
+        texto = 'Pipeline com ' + diasPipeline + ' dias de histórico. Curva de maturação confiável.';
+      } else if(diasPipeline >= 60){
+        badge = '🟡 Pipeline Base';
+        texto = 'Pipeline com ' + diasPipeline + '/90 dias. Projeção ativa com boa confiança.';
+      } else if(diasPipeline >= 30){
+        badge = '🔵 Pipeline Assistido';
+        texto = 'Pipeline com ' + diasPipeline + '/90 dias. Projeção ativa com fallback no extrato.';
+      } else if(diasPipeline >= 15){
+        badge = '⚪ Modo Híbrido';
+        texto = 'Pipeline com ' + diasPipeline + '/90 dias. Baixa confiança — extrato como base principal.';
+      } else if(diasPipeline > 0){
+        badge = '📊 Iniciando Pipeline';
+        texto = diasPipeline + '/14 dias de snapshot acumulados. Usando extrato realizado como base.';
+      } else {
+        badge = '📊 Sem pipeline ainda';
+        texto = 'Nenhum snapshot ainda. O cron roda às 06h BRT. Projeção usa extrato dos últimos ' + periodoHistoricoML + ' dias.';
+        if(extratoHistorico.length === 0) texto += ' Conecte o Mercado Livre para começar.';
+      }
+      el.innerHTML = '<strong>' + badge + '</strong><br><span style="font-size:12px;color:var(--text-muted);">' + texto + '</span>';
+      if(extratoHistorico.length > 0){
+        el.innerHTML += '<br><span style="font-size:11px;color:var(--text-muted);">Extrato: ' + extratoHistorico.length + ' dias disponíveis (últimos 90 dias)</span>';
+      }
+
+      // Atualizar badge compacto na tela "A receber"
+      const badgeEl = document.getElementById('ml-pipeline-badge');
+      if(badgeEl) badgeEl.textContent = badge_texto(diasPipeline, extratoHistorico.length, periodoHistoricoML);
+    }
+
+    function badge_texto(dias, extDias, periodo){
+      if(dias >= 90) return '📈 Pipeline maduro (' + dias + ' dias) · Projeção: extrato ' + periodo + 'd';
+      if(dias >= 60) return '📈 Pipeline base (' + dias + '/90 dias) · Projeção: extrato ' + periodo + 'd';
+      if(dias >= 30) return '📈 Pipeline assistido (' + dias + '/90 dias) · Projeção: extrato ' + periodo + 'd';
+      if(dias >= 15) return '📊 Modo híbrido (' + dias + '/90 dias) · Projeção: extrato ' + periodo + 'd';
+      if(dias > 0)   return '📊 Iniciando pipeline (' + dias + '/14 dias) · Projeção: extrato ' + periodo + 'd';
+      if(extDias > 0) return '📊 Sem pipeline · Projeção: extrato ' + extDias + ' dias disponíveis';
+      return '📊 Sem dados históricos · Conecte o ML para começar';
+    }
+
+    async function atualizarHistoricoML(){
+      if(!usuarioAtual){ alert('Faça login primeiro.'); return; }
+      const btn = document.getElementById('btn-atualizar-hist');
+      const st = document.getElementById('hist-status');
+      if(btn) btn.disabled = true;
+      if(st){ st.style.color='#666'; st.textContent='⏳ Buscando histórico...'; }
+      try {
+        await capturarSnapshotML();
+        if(st){ st.style.color='var(--success)'; st.textContent='✅ Histórico atualizado! ' + extratoHistorico.length + ' dias carregados.'; }
+        renderPipelineMaturidade();
+        recalc();
+      } catch(e){
+        if(st){ st.style.color='var(--danger)'; st.textContent='❌ ' + e.message; }
+      }
+      if(btn) btn.disabled = false;
     }
 
     async function desconectarML(){
@@ -4089,6 +4238,9 @@
       const valHist = document.getElementById('val-hist');
       if(histEl) histEl.value = periodoHistorico;
       if(valHist) valHist.textContent = periodoHistorico + ' dias';
+
+      // Pipeline ML: atualizar label do período ativo
+      renderPipelineMaturidade();
 
       // Modo projeção
       const modoEl = document.getElementById('modo-extrato');

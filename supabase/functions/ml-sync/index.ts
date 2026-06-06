@@ -68,9 +68,12 @@ Deno.serve(async (req) => {
     }
 
     // Buscar releases do ML com filtro de data
-    const hoje = new Date().toISOString().substring(0, 10)
-    const amanha = new Date(Date.now() + 86400000).toISOString().substring(0, 10)
-    const anoFim = new Date().getFullYear()
+    // Datas calculadas em BRT (UTC-3) para evitar bug de virada de dia (após 21h BRT o UTC já é dia seguinte)
+    const BRT_MS = 3 * 60 * 60 * 1000
+    const nowBRT = new Date(Date.now() - BRT_MS)
+    const hoje = nowBRT.toISOString().substring(0, 10)
+    const amanha = new Date(Date.now() - BRT_MS + 86400000).toISOString().substring(0, 10)
+    const anoFim = nowBRT.getUTCFullYear()
     const endDate = `${anoFim}-12-31T23:59:59.000-03:00`
     const beginDate = `${amanha}T00:00:00.000-03:00`
     const seen = new Set<number>()
