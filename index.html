@@ -2320,7 +2320,9 @@
     }
     
     function simular(){
-      const valor = parseMoney(document.getElementById('sim-valor').value) || 0;
+      const simValorEl = document.getElementById('sim-valor');
+      const valor = parseMoney(simValorEl.value) || 0;
+      if(valor) simValorEl.value = fmtMoney(valor);
       const data = document.getElementById('sim-data').value;
       const resultado = document.getElementById('sim-resultado');
 
@@ -2998,7 +3000,7 @@
           <span style="color:var(--text-muted);">Ainda a receber hoje</span>
           <strong style="color:var(--success);font-size:1.1rem;">${fmt(totalFuturo)}</strong>
         </div>`;
-      document.getElementById('modal-hoje').style.display = 'flex';
+      document.getElementById('modal-hoje').classList.add('open');
     }
 
     // ===== ML OAUTH — CONEXÃO AUTOMÁTICA =====
