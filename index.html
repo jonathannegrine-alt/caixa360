@@ -1997,7 +1997,12 @@
         const extFiltrado = extratoHistorico.filter(e => e.data >= limiteExt && e.data < hoje);
         if(extFiltrado.length > 0){
           totalBase = extFiltrado.reduce((s,e) => s + e.val_liquido, 0);
-          diasBase = periodoHistoricoML;
+          // Usar span real dos dados (a API do ML pode retornar menos que o período configurado)
+          // Ex: configurado 90d mas API só retorna 49d → dividir por 49, não por 90
+          const dataMin = extFiltrado[extFiltrado.length - 1].data; // mais antigo (array desc)
+          const dataMax = extFiltrado[0].data;                      // mais recente
+          const spanReal = diasDif(dataMin, dataMax) + 1;
+          diasBase = Math.min(periodoHistoricoML, Math.max(spanReal, extFiltrado.length));
         } else if(liberacoes.length > 0){
           // Fallback offline: usa liberações futuras como proxy da média diária
           const limFut = addDias(hoje, periodoHistorico);
@@ -3251,7 +3256,11 @@
       }
       el.innerHTML = '<strong>' + badge + '</strong><br><span style="font-size:12px;color:var(--text-muted);">' + texto + '</span>';
       if(extratoHistorico.length > 0){
-        el.innerHTML += '<br><span style="font-size:11px;color:var(--text-muted);">Extrato: ' + extratoHistorico.length + ' dias disponíveis (últimos 90 dias)</span>';
+        const limiteDisp = addDias(getToday(), -periodoHistoricoML);
+        const extDisp = extratoHistorico.filter(e => e.data >= limiteDisp);
+        const aviso = extDisp.length < periodoHistoricoML * 0.8
+          ? ' ⚠️ API do ML limitada a ~' + extDisp.length + ' dias' : '';
+        el.innerHTML += '<br><span style="font-size:11px;color:var(--text-muted);">Extrato: ' + extDisp.length + ' dias disponíveis (período ' + periodoHistoricoML + 'd)' + aviso + '</span>';
       }
 
       // Atualizar badge compacto na tela "A receber"
