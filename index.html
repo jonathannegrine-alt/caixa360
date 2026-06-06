@@ -640,8 +640,8 @@
     </div>
     
     <!-- MODAL TERMOS DE USO -->
-    <div class="modal-overlay" id="modal-termos">
-      <div class="modal-box" style="max-width:560px;">
+    <div class="modal" id="modal-termos" style="z-index:10000;">
+      <div class="modal-content" style="max-width:560px;">
         <div class="modal-header">
           <div class="modal-title">Termos de Uso — Caixa 360</div>
           <button class="btn-out btn-sm" onclick="fecharModal('modal-termos')">✕</button>
@@ -1714,7 +1714,10 @@
       // Verificar se já aceitou os termos (cobre usuários antigos e casos de bypass)
       const { data: termosData } = await supa.from('termos_aceite').select('id').eq('usuario_id', user.id).maybeSingle();
       if(!termosData){
+        // Restaurar tela de login antes de abrir modal (evita tela congelada)
         document.getElementById('login-sync').style.display = 'none';
+        document.querySelector('.login-form').style.display = 'flex';
+        document.querySelector('.login-tabs').style.display = 'flex';
         abrirTermos(true);
         return;
       }
