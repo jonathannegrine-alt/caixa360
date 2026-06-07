@@ -1519,6 +1519,35 @@
           </div>
         </div>
         
+        <!-- Motor de Reposição (P11) -->
+        <div class="card mb-2">
+          <div class="card-header"><div class="card-title">🏭 Motor de Reposição — Regras Globais</div></div>
+          <div class="card-body">
+            <div style="font-size:11px;color:#666;margin-bottom:12px;">Estas são as regras padrão para todos os componentes. Você pode sobrescrevê-las individualmente em cada componente.</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Meta FULL (dias)</label>
+                <input type="number" id="cfg-meta-full" value="30" min="0" max="365" oninput="metaFullDias=+this.value||30;salvar();renderEstoqueIfActive()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Meta galpão (dias)</label>
+                <input type="number" id="cfg-meta-galpao" value="30" min="0" max="365" oninput="metaGalpaoDias=+this.value||30;salvar();renderEstoqueIfActive()">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Dias de segurança</label>
+                <input type="number" id="cfg-dias-seg" value="15" min="0" max="90" oninput="diasSeguranca=+this.value||15;salvar();renderEstoqueIfActive()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Alerta crítico (dias)</label>
+                <input type="number" id="cfg-alerta-critico" value="15" min="0" max="90" oninput="alertaCriticoDias=+this.value||15;salvar();renderEstoqueIfActive()">
+              </div>
+            </div>
+            <div style="font-size:11px;color:#999;">Meta total = FULL + Galpão + Segurança. Ex: 30+30+15 = 75 dias de cobertura.</div>
+          </div>
+        </div>
+
         <!-- Backup -->
         <div class="card">
           <div class="card-header">
@@ -1636,10 +1665,13 @@
             <button class="btn-out btn-sm" onclick="document.getElementById('import-vendas-ml-est').click()">📊 Importar vendas ML</button>
             <button class="btn-out btn-sm" onclick="document.getElementById('import-kit-upseller').click()">🔗 Importar kits</button>
             <button class="btn-out btn-sm" onclick="document.getElementById('import-estoque-upseller').click()">📦 Importar estoque galpão</button>
+            <button class="btn-out btn-sm" onclick="document.getElementById('import-estoque-full-ml').click()">🏬 Importar estoque FULL (ML)</button>
+            <button class="btn-out btn-sm" onclick="baixarTemplateCSVComponentes()">⬇️ Template CSV</button>
             <button class="btn btn-sm" onclick="abrirModalComponente()">+ Componente</button>
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
             <input type="file" id="import-estoque-upseller" accept=".xlsx,.xls,.csv" style="display:none" onchange="onImportEstoqueUpseller(this)">
+            <input type="file" id="import-estoque-full-ml" accept=".xlsx,.xls" style="display:none" onchange="onImportFULLEstoqueML(this)">
           </div>
         </div>
 
@@ -1693,6 +1725,7 @@
                     <th style="padding:8px 6px;text-align:right;">Total</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cobertura</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Ruptura est.</th>
+                    <th style="padding:8px 6px;text-align:center;white-space:nowrap;">Meta</th>
                     <th style="padding:8px 6px;text-align:center;">Status</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Compra sugerida</th>
                     <th style="padding:8px 6px;text-align:right;">Capital</th>
@@ -1870,6 +1903,28 @@
           </div>
         </div>
         <div style="font-size:11px;color:var(--gray-600);margin-top:4px;">💡 Estoque FULL = unidades no fulfilment do ML. Atualize após verificar no painel ML.</div>
+        <div style="border-top:1px solid var(--gray-200);margin:12px 0 10px;"></div>
+        <div style="font-size:11px;font-weight:600;color:var(--gray-700);margin-bottom:8px;">Regras de reposição (deixe vazio para usar padrão global)</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Meta FULL (dias)</label>
+            <input type="number" id="mc-meta-full" placeholder="padrão global" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Meta galpão (dias)</label>
+            <input type="number" id="mc-meta-galpao" placeholder="padrão global" min="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Dias segurança</label>
+            <input type="number" id="mc-seg" placeholder="padrão global" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Alerta crítico (dias)</label>
+            <input type="number" id="mc-alerta" placeholder="padrão global" min="0">
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn-out" onclick="fecharModalComponente()">Cancelar</button>
@@ -2309,11 +2364,11 @@
     function limparSessaoLocal(){
       ['mk_pagamentos','mk_liberacoes','mk_skus','mk_categorias','mk_cfg',
        'mk_liberacoes_hoje','mk_ultimo_sync_ml',
-       'mk_componentes','mk_composicao','mk_vendas_sku','mk_estoque_galpao'].forEach(k => localStorage.removeItem(k));
+       'mk_componentes','mk_composicao','mk_vendas_sku','mk_estoque_galpao','mk_meta_comp','mk_p11_cfg'].forEach(k => localStorage.removeItem(k));
       pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
       extratoHistorico=[]; diasPipeline=0;
       saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30; periodoHistoricoML=90;
-      componentes=[]; composicaoKit=[]; vendasSku=[]; estoqueGalpao=[];
+      componentes=[]; composicaoKit=[]; vendasSku=[]; estoqueGalpao=[]; metaComp={};
       const mlSt = document.getElementById('ml-status');
       if(mlSt) mlSt.textContent = '';
     }
@@ -2432,6 +2487,8 @@
 
       diasPipeline = rSnap.count || 0;
       atualizarRegressao();
+      // P11 — carregar dados de estoque/vendas/composição em paralelo
+      await carregarP11Supabase();
     }
 
     // ===== SUPABASE — SALVAR DADOS =====
@@ -2482,6 +2539,69 @@
         const rows = liberacoes.map(l => ({usuario_id: uid, data: l.data, val: l.val}));
         await supa.from('liberacoes').insert(rows);
       }
+    }
+
+    // ===== SUPABASE — SYNC P11 =====
+    async function salvarP11Supabase(){
+      if(!usuarioAtual) return;
+      const uid = usuarioAtual.id;
+      try {
+        // Componentes
+        const snapComp = componentes.map(c => ({
+          usuario_id: uid, codigo: c.codigo, descricao: c.descricao||'',
+          custo_unitario: c.custo_unitario||0, fornecedor: c.fornecedor||'', lead_time_dias: c.lead_time_dias||0
+        }));
+        await supa.from('sku_componentes').delete().eq('usuario_id', uid);
+        if(snapComp.length > 0) await supa.from('sku_componentes').insert(snapComp);
+
+        // Composição
+        const snapComp2 = composicaoKit.map(c => ({
+          usuario_id: uid, sku_comercial: c.sku_comercial, titulo_comercial: c.titulo_comercial||'',
+          sku_componente: c.sku_componente, qty: c.qty
+        }));
+        await supa.from('sku_composicao').delete().eq('usuario_id', uid);
+        if(snapComp2.length > 0) await supa.from('sku_composicao').insert(snapComp2);
+
+        // Vendas SKU
+        const snapVendas = vendasSku.map(v => ({
+          usuario_id: uid, sku: v.sku, titulo: v.titulo||'',
+          unidades: v.unidades||0, receita: v.receita||0, tarifa_ml: v.tarifa_ml||0,
+          envio: v.envio||0, liquido: v.liquido||0, unidades_ads: v.unidades_ads||0,
+          cancelamentos: v.cancelamentos||0, periodo_dias: v.periodo_dias||30
+        }));
+        await supa.from('vendas_sku').delete().eq('usuario_id', uid);
+        if(snapVendas.length > 0) await supa.from('vendas_sku').insert(snapVendas);
+
+        // Estoque componentes
+        const snapEst = estoqueGalpao.map(e => ({
+          usuario_id: uid, sku: e.sku, descricao: e.descricao||'',
+          qtd_galpao: e.qtd_galpao||0, qtd_full: e.qtd_full||0, qtd_full_pendente: e.qtd_full_pendente||0,
+          em_transito: e.em_transito||0, custo_medio: e.custo_medio||0, data_atualizacao: e.data_atualizacao||''
+        }));
+        await supa.from('estoque_componentes').delete().eq('usuario_id', uid);
+        if(snapEst.length > 0) await supa.from('estoque_componentes').insert(snapEst);
+      } catch(err){ console.error('salvarP11Supabase:', err); }
+    }
+
+    async function carregarP11Supabase(){
+      if(!usuarioAtual) return;
+      const uid = usuarioAtual.id;
+      try {
+        const [rComp, rCompos, rVendas, rEst] = await Promise.all([
+          supa.from('sku_componentes').select('*').eq('usuario_id', uid),
+          supa.from('sku_composicao').select('*').eq('usuario_id', uid),
+          supa.from('vendas_sku').select('*').eq('usuario_id', uid),
+          supa.from('estoque_componentes').select('*').eq('usuario_id', uid)
+        ]);
+        if(rComp.data && rComp.data.length > 0)
+          componentes = rComp.data.map(c => ({codigo:c.codigo, descricao:c.descricao, custo_unitario:c.custo_unitario, fornecedor:c.fornecedor, lead_time_dias:c.lead_time_dias}));
+        if(rCompos.data && rCompos.data.length > 0)
+          composicaoKit = rCompos.data.map(c => ({sku_comercial:c.sku_comercial, titulo_comercial:c.titulo_comercial, sku_componente:c.sku_componente, qty:c.qty}));
+        if(rVendas.data && rVendas.data.length > 0)
+          vendasSku = rVendas.data.map(v => ({sku:v.sku, titulo:v.titulo, unidades:v.unidades, receita:v.receita, tarifa_ml:v.tarifa_ml, envio:v.envio, liquido:v.liquido, unidades_ads:v.unidades_ads, cancelamentos:v.cancelamentos, periodo_dias:v.periodo_dias}));
+        if(rEst.data && rEst.data.length > 0)
+          estoqueGalpao = rEst.data.map(e => ({sku:e.sku, descricao:e.descricao, qtd_galpao:e.qtd_galpao, qtd_full:e.qtd_full, qtd_full_pendente:e.qtd_full_pendente||0, em_transito:e.em_transito, custo_medio:e.custo_medio, data_atualizacao:e.data_atualizacao}));
+      } catch(err){ console.error('carregarP11Supabase:', err); }
     }
 
     // ===== FEEDBACK =====
@@ -2563,10 +2683,14 @@
     let componentes = [];    // [{codigo, descricao, custo_unitario, fornecedor, lead_time_dias}]
     let composicaoKit = [];  // [{sku_comercial, titulo_comercial, sku_componente, qty}]
     let vendasSku = [];      // [{sku, titulo, unidades, receita, tarifa_ml, envio, liquido, unidades_ads, cancelamentos, periodo_dias}]
-    let estoqueGalpao = [];  // [{sku, descricao, qtd_galpao, qtd_full, em_transito, custo_medio, data_atualizacao}]
-    let metaCoberturaDias = 90;
-    let diasSeguranca = 15;
-    let alertaCriticoDias = 15;
+    let estoqueGalpao = [];  // [{sku, descricao, qtd_galpao, qtd_full, qtd_full_pendente, em_transito, custo_medio, data_atualizacao}]
+    // Regras globais (padrão)
+    let metaFullDias = 30;      // meta de dias de cobertura no FULL
+    let metaGalpaoDias = 30;    // meta de dias de cobertura no galpão
+    let diasSeguranca = 15;     // buffer de segurança (atraso fornecedor etc.)
+    let alertaCriticoDias = 15; // abaixo disso → status crítico
+    // Regras por componente (override do padrão) — {[sku]: {meta_full, meta_galpao, seg, alerta}}
+    let metaComp = {};
     let estoqueCurrentTab = 'reposicao';
 
     // Estado UI
@@ -2927,8 +3051,12 @@
       document.getElementById('sidebar-overlay').classList.toggle('open');
     }
 
-    function nav(page){
+    function nav(page, fromPopState){
       localStorage.setItem('mk_last_page', page);
+      // Empurra estado no histórico do browser (exceto quando chamado pelo próprio popstate)
+      if(!fromPopState && usuarioAtual){
+        history.pushState({page}, '', location.pathname + location.search);
+      }
 
       // Fechar sidebar no mobile
       document.querySelector('.sidebar').classList.remove('mob-open');
@@ -3859,7 +3987,10 @@
       localStorage.setItem('mk_composicao', JSON.stringify(composicaoKit));
       localStorage.setItem('mk_vendas_sku', JSON.stringify(vendasSku));
       localStorage.setItem('mk_estoque_galpao', JSON.stringify(estoqueGalpao));
+      localStorage.setItem('mk_meta_comp', JSON.stringify(metaComp));
+      localStorage.setItem('mk_p11_cfg', JSON.stringify({metaFullDias, metaGalpaoDias, diasSeguranca, alertaCriticoDias}));
       salvarCfg();
+      salvarP11Supabase();
       // Sync nuvem (fire-and-forget — localStorage já garantiu os dados)
       salvarSupabase();
       salvarLiberacoesSupabase();
@@ -3893,6 +4024,10 @@
       if(comp) composicaoKit = JSON.parse(comp);
       if(vs) vendasSku = JSON.parse(vs);
       if(eg) estoqueGalpao = JSON.parse(eg);
+      const mc = localStorage.getItem('mk_meta_comp');
+      if(mc) metaComp = JSON.parse(mc);
+      const p11cfg = localStorage.getItem('mk_p11_cfg');
+      if(p11cfg){ const o = JSON.parse(p11cfg); metaFullDias=o.metaFullDias||30; metaGalpaoDias=o.metaGalpaoDias||30; diasSeguranca=o.diasSeguranca||15; alertaCriticoDias=o.alertaCriticoDias||15; }
 
       if(cfg){
         const obj = JSON.parse(cfg);
@@ -5668,6 +5803,24 @@
       if(saldoAtual < reservaMinima) modoOp = 'defesa';
       else if(cfoPerfil.risco === 'agressivo' && cfoPerfil.fase === 'escala') modoOp = 'ataque';
 
+      // Contexto do Motor de Reposição
+      let estoqueCtx = '';
+      if(estoqueGalpao.length > 0 || componentes.length > 0){
+        try {
+          const ranking = calcRankingReposicao();
+          const criticos = ranking.filter(r => r.status === 'critico');
+          const atencao = ranking.filter(r => r.status === 'atencao');
+          const capitalTotal = ranking.filter(r => r.capital_necessario > 0).reduce((s,r) => s + r.capital_necessario, 0);
+          const abaixoMeta = criticos.length + atencao.length;
+          estoqueCtx = `\nMotor de Reposição:
+  Componentes monitorados: ${ranking.length}
+  SKUs críticos (ruptura < ${alertaCriticoDias}d): ${criticos.length}${criticos.length > 0 ? ' — ' + criticos.slice(0,3).map(r=>r.sku).join(', ') : ''}
+  SKUs em atenção: ${atencao.length}
+  SKUs abaixo da meta: ${abaixoMeta}
+  Capital necessário para reposição: ${fmt(capitalTotal)}`;
+        } catch(e){}
+      }
+
       return `[DADOS DO CAIXA 360 - ${ptDate(hoje)}]
 Saldo total: ${fmt(saldoAtual)}
   Mercado Pago: ${fmt(saldoMP)}
@@ -5686,7 +5839,7 @@ Entradas ML:
 
 Pior saldo projetado: ${fmt(critica.saldo)} em ${ptDate(critica.data)} (${critica.dias} dias)
 Tendência: ${tendencia}
-Modo de operação: ${modoOp}
+Modo de operação: ${modoOp}${estoqueCtx}
 
 Perfil do usuário:
   Nível financeiro: ${cfoPerfil.nivel || 'intermediario'}
@@ -5788,6 +5941,16 @@ Perfil do usuário:
       const delayEl = document.getElementById('delay-calc');
       if(delayEl) delayEl.textContent = delayCalc !== null ? delayCalc + ' dias' : '— (sem dados ML)';
 
+      // Motor de Reposição — regras globais
+      const cfgMF = document.getElementById('cfg-meta-full');
+      const cfgMG = document.getElementById('cfg-meta-galpao');
+      const cfgDS = document.getElementById('cfg-dias-seg');
+      const cfgAC = document.getElementById('cfg-alerta-critico');
+      if(cfgMF) cfgMF.value = metaFullDias;
+      if(cfgMG) cfgMG.value = metaGalpaoDias;
+      if(cfgDS) cfgDS.value = diasSeguranca;
+      if(cfgAC) cfgAC.value = alertaCriticoDias;
+
       // Categorias
       atualizarSelectCategorias();
 
@@ -5814,6 +5977,13 @@ Perfil do usuário:
       if(idx >= 0 && idx < tabulaveis.length - 1){
         tabulaveis[idx + 1].focus();
       }
+    });
+
+    // ===== BOTÃO VOLTAR DO BROWSER — intercepta para navegar entre páginas do app =====
+    window.addEventListener('popstate', function(e){
+      if(!usuarioAtual) return; // não logado: deixa o browser agir normalmente
+      const page = (e.state && e.state.page) ? e.state.page : (localStorage.getItem('mk_last_page') || 'dashboard');
+      nav(page, true); // fromPopState=true evita loop de pushState
     });
 
     // ===== SALVAR SALDO ANTES DE FECHAR/F5 =====
@@ -5861,6 +6031,11 @@ Perfil do usuário:
       setEstoqueTab(estoqueCurrentTab || 'reposicao');
     }
 
+    function renderEstoqueIfActive(){
+      const v = document.getElementById('view-estoque');
+      if(v && v.style.display !== 'none') renderEstoque();
+    }
+
     function atualizarStatusBarEstoque(){
       const bar = document.getElementById('estoque-status-bar');
       const txt = document.getElementById('estoque-status-text');
@@ -5906,19 +6081,31 @@ Perfil do usuário:
       }, 0);
     }
 
+    function getMetaComp(sku){
+      const mc = metaComp[sku] || {};
+      return {
+        meta_full:    mc.meta_full    !== undefined ? mc.meta_full    : metaFullDias,
+        meta_galpao:  mc.meta_galpao  !== undefined ? mc.meta_galpao  : metaGalpaoDias,
+        seg:          mc.seg          !== undefined ? mc.seg          : diasSeguranca,
+        alerta:       mc.alerta       !== undefined ? mc.alerta       : alertaCriticoDias
+      };
+    }
+
     function calcRankingReposicao(){
       const consumo = calcConsumoComponentes();
-      const meta = metaCoberturaDias;
-      const seg = diasSeguranca;
       const base = estoqueGalpao.length > 0 ? estoqueGalpao
-        : componentes.map(c => ({ sku: c.codigo, descricao: c.descricao, qtd_galpao: 0, qtd_full: 0, em_transito: 0, custo_medio: c.custo_unitario }));
+        : componentes.map(c => ({ sku: c.codigo, descricao: c.descricao, qtd_galpao: 0, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: c.custo_unitario }));
       return base.map(eg => {
         const c = consumo[eg.sku] || { consumo_diario: 0, consumo30d: 0 };
-        const qtd_total = (eg.qtd_galpao || 0) + (eg.qtd_full || 0);
+        const regras = getMetaComp(eg.sku);
+        const meta_total = regras.meta_full + regras.meta_galpao;
+        // Usar apenas estoque DISPONÍVEL (não conta pendente) para cobertura
+        const qtd_full_disp = eg.qtd_full || 0;
+        const qtd_total = (eg.qtd_galpao || 0) + qtd_full_disp;
         const cobertura = c.consumo_diario > 0 ? qtd_total / c.consumo_diario : Infinity;
         const comp = componentes.find(x => x.codigo === eg.sku);
         const custo = (eg.custo_medio > 0) ? eg.custo_medio : (comp ? comp.custo_unitario : 0);
-        const deficit_dias = Math.max(0, meta + seg - cobertura);
+        const deficit_dias = Math.max(0, meta_total + regras.seg - cobertura);
         const qtd_sugerida = c.consumo_diario > 0 ? Math.ceil(deficit_dias * c.consumo_diario) : 0;
         let data_ruptura = null;
         if(c.consumo_diario > 0 && cobertura < 9999){
@@ -5928,14 +6115,17 @@ Perfil do usuário:
         let status = 'ok';
         if(cobertura !== Infinity && cobertura > 180) status = 'excesso_critico';
         else if(cobertura !== Infinity && cobertura > 120) status = 'excesso_mod';
-        else if(cobertura < alertaCriticoDias) status = 'critico';
-        else if(cobertura < meta) status = 'atencao';
+        else if(cobertura < regras.alerta) status = 'critico';
+        else if(cobertura < meta_total) status = 'atencao';
         return {
           sku: eg.sku, descricao: eg.descricao,
           consumo_diario: c.consumo_diario, consumo30d: c.consumo30d,
-          qtd_galpao: eg.qtd_galpao || 0, qtd_full: eg.qtd_full || 0,
+          qtd_galpao: eg.qtd_galpao || 0,
+          qtd_full: qtd_full_disp,
+          qtd_full_pendente: eg.qtd_full_pendente || 0,
           qtd_total, em_transito: eg.em_transito || 0,
-          cobertura, data_ruptura, meta, seg, status,
+          cobertura, data_ruptura, meta_full: regras.meta_full, meta_galpao: regras.meta_galpao, meta_total,
+          seg: regras.seg, alerta: regras.alerta, status,
           qtd_sugerida, capital_necessario: qtd_sugerida * custo, custo_unitario: custo,
           data_atualizacao: eg.data_atualizacao
         };
@@ -5970,15 +6160,20 @@ Perfil do usuário:
           : '<span class="badge badge-success">🟢 Saudável</span>';
         const cob = r.cobertura === Infinity ? '∞' : Math.floor(r.cobertura) + 'd';
         const rup = r.data_ruptura ? ptDate(r.data_ruptura.toISOString().slice(0,10)) : '—';
+        const fullStr = r.qtd_full > 0
+          ? (r.qtd_full_pendente > 0 ? `${r.qtd_full} <span style="font-size:10px;color:#999;">(+${r.qtd_full_pendente} pend.)</span>` : String(r.qtd_full))
+          : (r.qtd_full_pendente > 0 ? `<span style="color:#999;font-size:10px;">+${r.qtd_full_pendente} pend.</span>` : '—');
+        const metaStr = `${r.meta_full}d+${r.meta_galpao}d`;
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${r.sku}</td>
-          <td style="padding:8px 6px;color:#555;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${r.descricao}">${r.descricao||'—'}</td>
+          <td style="padding:8px 6px;color:#555;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${r.descricao}">${r.descricao||'—'}</td>
           <td style="padding:8px 6px;text-align:right;">${r.consumo_diario > 0 ? r.consumo_diario.toFixed(1) : '—'}</td>
           <td style="padding:8px 6px;text-align:right;">${r.qtd_galpao}</td>
-          <td style="padding:8px 6px;text-align:right;">${r.qtd_full > 0 ? r.qtd_full : '—'}</td>
+          <td style="padding:8px 6px;text-align:right;">${fullStr}</td>
           <td style="padding:8px 6px;text-align:right;font-weight:600;">${r.qtd_total}</td>
           <td style="padding:8px 6px;text-align:right;">${cob}</td>
           <td style="padding:8px 6px;text-align:right;font-size:11px;${r.status==='critico'?'color:var(--danger);font-weight:600;':''}">${rup}</td>
+          <td style="padding:8px 6px;text-align:center;font-size:10px;color:#888;">${metaStr}</td>
           <td style="padding:8px 6px;text-align:center;">${sb}</td>
           <td style="padding:8px 6px;text-align:right;">${r.qtd_sugerida > 0 ? r.qtd_sugerida : '—'}</td>
           <td style="padding:8px 6px;text-align:right;font-weight:600;${r.capital_necessario>0?'color:var(--danger);':''}">${r.capital_necessario > 0 ? fmt(r.capital_necessario) : '—'}</td>
@@ -6276,6 +6471,80 @@ Perfil do usuário:
       return { estoque };
     }
 
+    function parseFULLEstoqueML(data){
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
+      if(rows.length < 1) return {error:'Arquivo vazio'};
+      const today = new Date().toISOString().slice(0,10);
+      const mapa = {};
+      rows.forEach(r => {
+        const sku = r[2] ? String(r[2]).trim() : '';
+        if(!sku) return;
+        const disp = Number(r[12]) || 0;
+        const total = Number(r[17]) || 0;
+        const pend = Math.max(0, total - disp);
+        if(mapa[sku]){
+          mapa[sku].qtd_full += disp;
+          mapa[sku].qtd_full_pendente += pend;
+        } else {
+          mapa[sku] = { sku, qtd_full: disp, qtd_full_pendente: pend };
+        }
+      });
+      return { estoque: Object.values(mapa), data: today };
+    }
+
+    function onImportFULLEstoqueML(input){
+      const file = input.files[0];
+      if(!file) return;
+      input.value = '';
+      const reader = new FileReader();
+      reader.onload = function(e){
+        const result = parseFULLEstoqueML(new Uint8Array(e.target.result));
+        if(result.error){ alert('Erro: ' + result.error); return; }
+        let novos = 0, atualizados = 0;
+        result.estoque.forEach(item => {
+          let eg = estoqueGalpao.find(e => e.sku === item.sku);
+          if(eg){
+            eg.qtd_full = item.qtd_full;
+            eg.qtd_full_pendente = item.qtd_full_pendente;
+            eg.data_atualizacao = result.data;
+            atualizados++;
+          } else {
+            estoqueGalpao.push({
+              sku: item.sku, descricao: item.sku,
+              qtd_galpao: 0,
+              qtd_full: item.qtd_full,
+              qtd_full_pendente: item.qtd_full_pendente,
+              em_transito: 0, custo_medio: 0,
+              data_atualizacao: result.data
+            });
+            novos++;
+          }
+        });
+        salvar();
+        renderEstoque();
+        const sb = document.getElementById('estoque-status-text');
+        const bar = document.getElementById('estoque-status-bar');
+        if(sb && bar){
+          sb.textContent = `FULL ML importado: ${atualizados} atualizados, ${novos} novos — ${result.estoque.length} SKUs — ${result.data}`;
+          bar.style.display = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function baixarTemplateCSVComponentes(){
+      const header = 'codigo,descricao,custo_unitario,fornecedor,lead_time_dias';
+      const exemplo = 'J-2001,Produto Exemplo,45.90,Fornecedor ABC,7';
+      const csv = header + '\n' + exemplo;
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'template_componentes.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
     // ----- CRUD Componentes -----
     let _editCompIdx = -1;
     function abrirModalComponente(idx){
@@ -6288,6 +6557,11 @@ Perfil do usuário:
       document.getElementById('mc-lead-time').value = c.lead_time_dias || '';
       const eg = _editCompIdx >= 0 ? estoqueGalpao.find(e => e.sku === c.codigo) : null;
       document.getElementById('mc-qtd-full').value = eg ? (eg.qtd_full || '') : '';
+      const mc = c.codigo ? (metaComp[c.codigo] || {}) : {};
+      document.getElementById('mc-meta-full').value = mc.meta_full !== undefined ? mc.meta_full : '';
+      document.getElementById('mc-meta-galpao').value = mc.meta_galpao !== undefined ? mc.meta_galpao : '';
+      document.getElementById('mc-seg').value = mc.seg !== undefined ? mc.seg : '';
+      document.getElementById('mc-alerta').value = mc.alerta !== undefined ? mc.alerta : '';
       document.getElementById('modal-componente-title').textContent = _editCompIdx >= 0 ? 'Editar Componente' : 'Novo Componente';
       document.getElementById('mc-codigo').disabled = _editCompIdx >= 0;
       document.getElementById('modal-componente').style.display = 'flex';
@@ -6314,6 +6588,17 @@ Perfil do usuário:
         if(!eg){ eg = { sku: codigo, descricao: c.descricao, qtd_galpao:0, qtd_full:0, em_transito:0, custo_medio:c.custo_unitario, data_atualizacao: new Date().toISOString().slice(0,10) }; estoqueGalpao.push(eg); }
         eg.qtd_full = qtdFull;
       }
+      const mf = document.getElementById('mc-meta-full').value;
+      const mg = document.getElementById('mc-meta-galpao').value;
+      const ms = document.getElementById('mc-seg').value;
+      const ma = document.getElementById('mc-alerta').value;
+      const override = {};
+      if(mf !== '') override.meta_full = parseInt(mf);
+      if(mg !== '') override.meta_galpao = parseInt(mg);
+      if(ms !== '') override.seg = parseInt(ms);
+      if(ma !== '') override.alerta = parseInt(ma);
+      if(Object.keys(override).length > 0){ metaComp[codigo] = {...(metaComp[codigo]||{}), ...override}; }
+      else { delete metaComp[codigo]; }
       salvar(); fecharModalComponente(); renderEstoque();
     }
     function deletarComponente(idx){
