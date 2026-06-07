@@ -553,12 +553,90 @@
     #modal-feedback{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;}
     #modal-feedback.open{display:flex;}
     .feedback-box{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:380px;}
+
+    /* ===== RESPONSIVO MOBILE ===== */
+    .hamburger{display:none;position:fixed;top:10px;left:10px;z-index:10000;background:#fff;border:1px solid var(--gray-200);border-radius:8px;width:40px;height:40px;cursor:pointer;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,0.12);align-items:center;justify-content:center;padding:0;}
+    .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:998;}
+    .sidebar-overlay.open{display:block;}
+
+    @media (max-width:768px){
+      .hamburger{display:flex;}
+      .sidebar{transform:translateX(-220px);transition:transform 0.28s ease;z-index:999;width:220px;}
+      .sidebar.mob-open{transform:translateX(0);}
+      .main{margin-left:0;padding:58px 10px 80px;}
+
+      /* Login */
+      .login-box{padding:28px 18px;margin:0 10px;max-width:100%;}
+      .login-logo-title{font-size:22px;}
+
+      /* Page titles */
+      h1{font-size:18px;}
+
+      /* Cards */
+      .card-header{flex-direction:column;align-items:flex-start;gap:8px;}
+      .form-row{grid-template-columns:1fr;}
+
+      /* Stats */
+      .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px;}
+      .stat-value{font-size:18px;}
+
+      /* Saldo inputs */
+      .saldo-row{flex-direction:column;align-items:flex-start;gap:6px;}
+      .saldo-input{width:100%;font-size:13px;}
+
+      /* Tabelas: scroll horizontal */
+      .card-body{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+      table{min-width:480px;}
+      th,td{padding:8px 6px;font-size:12px;}
+
+      /* Calendário */
+      .cal-day{min-height:60px;padding:4px 3px;}
+      .cal-header{padding:5px 2px;font-size:9px;}
+      .cal-day-num{font-size:10px;}
+      .cal-valor-entrada,.cal-valor-saida,.cal-valor-proj,.cal-saldo,.cal-acum{font-size:9px;}
+      .cal-bar{height:4px;}
+
+      /* Kanban */
+      .kanban-board{grid-template-columns:repeat(2,1fr);gap:8px;padding:8px;}
+      .kanban-card-val{font-size:12px;}
+
+      /* Period buttons e botões wrapping */
+      .period-btns{flex-wrap:wrap;gap:4px;}
+      .d-flex{flex-wrap:wrap;}
+
+      /* Modal */
+      .modal-content{width:96%;max-height:88vh;}
+      .modal-footer{flex-wrap:wrap;}
+
+      /* Feedback */
+      #btn-feedback{bottom:12px;right:12px;width:40px;height:40px;font-size:17px;}
+
+      /* Tooltips: nunca vaza para fora */
+      .tip-box{min-width:140px;max-width:200px;}
+
+      /* Score velocímetro */
+      .score-gauge{width:160px;height:96px;}
+      .score-arc{width:160px;height:80px;}
+      .score-arc svg{width:160px;height:160px;}
+      .score-needle{height:62px;}
+    }
+
+    @media (max-width:480px){
+      .stats-grid{grid-template-columns:1fr;}
+      .kanban-board{grid-template-columns:1fr;}
+      .cal-day{min-height:50px;padding:3px 2px;}
+      .main{padding:56px 8px 72px;}
+    }
   </style>
 </head>
 <body>
   
   <div class="app">
-    
+
+    <!-- HAMBURGER MOBILE -->
+    <button class="hamburger" id="hamburger" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
     <!-- SIDEBAR -->
     <div class="sidebar">
       <div class="logo">
@@ -847,25 +925,44 @@
           <div class="card-header" style="flex-wrap:wrap;gap:8px;">
             <div>Fluxo de Caixa — dia a dia</div>
             <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
-              <div class="period-btns">
-                <button class="period-btn" onclick="setPlanilhaDias(7,this)">7d</button>
-                <button class="period-btn" onclick="setPlanilhaDias(15,this)">15d</button>
-                <button class="period-btn active" id="plan-dias-30" onclick="setPlanilhaDias(30,this)">30d</button>
-                <button class="period-btn" onclick="setPlanilhaDias(60,this)">60d</button>
-                <button class="period-btn" onclick="setPlanilhaDias(90,this)">90d</button>
-                <button class="period-btn" id="plan-btn-custom" onclick="togglePlanilhaCustom()">Personalizado</button>
+              <!-- Toggle lista / calendário -->
+              <div style="border:1px solid var(--gray-200);border-radius:6px;overflow:hidden;display:flex;">
+                <button class="btn-toggle active" id="plan-view-tabela" onclick="setPlanilhaView('tabela')" style="border-radius:0;border:none;">☰ Lista</button>
+                <button class="btn-toggle" id="plan-view-cal" onclick="setPlanilhaView('cal')" style="border-radius:0;border:none;">📅 Calendário</button>
               </div>
-              <div id="plan-custom-range" style="display:none;" class="d-flex gap-1 align-items:center;">
-                <input type="date" id="plan-de" style="font-size:11px;padding:3px 6px;" onchange="renderPlanilha()">
-                <span style="align-self:center;font-size:11px;">até</span>
-                <input type="date" id="plan-ate" style="font-size:11px;padding:3px 6px;" onchange="renderPlanilha()">
+              <div style="width:1px;height:20px;background:var(--gray-200);margin:0 2px;" id="plan-sep"></div>
+              <!-- Controles da tabela -->
+              <div id="plan-controles-tabela" class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
+                <div class="period-btns">
+                  <button class="period-btn" onclick="setPlanilhaDias(7,this)">7d</button>
+                  <button class="period-btn" onclick="setPlanilhaDias(15,this)">15d</button>
+                  <button class="period-btn active" id="plan-dias-30" onclick="setPlanilhaDias(30,this)">30d</button>
+                  <button class="period-btn" onclick="setPlanilhaDias(60,this)">60d</button>
+                  <button class="period-btn" onclick="setPlanilhaDias(90,this)">90d</button>
+                  <button class="period-btn" id="plan-btn-custom" onclick="togglePlanilhaCustom()">Personalizado</button>
+                </div>
+                <div id="plan-custom-range" style="display:none;" class="d-flex gap-1 align-items:center;">
+                  <input type="date" id="plan-de" style="font-size:11px;padding:3px 6px;" onchange="renderPlanilha()">
+                  <span style="align-self:center;font-size:11px;">até</span>
+                  <input type="date" id="plan-ate" style="font-size:11px;padding:3px 6px;" onchange="renderPlanilha()">
+                </div>
+                <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px;"></div>
+                <button class="btn-toggle active" id="plan-toggle-conf" onclick="togglePlanilha('confirmado')">Confirmado</button>
+                <button class="btn-toggle" id="plan-toggle-proj" onclick="togglePlanilha('projetado')">+ Projetado</button>
               </div>
-              <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px;"></div>
-              <button class="btn-toggle active" id="plan-toggle-conf" onclick="togglePlanilha('confirmado')">Confirmado</button>
-              <button class="btn-toggle" id="plan-toggle-proj" onclick="togglePlanilha('projetado')">+ Projetado</button>
+              <!-- Controles do calendário -->
+              <div id="plan-controles-cal" class="d-flex gap-1" style="display:none!important;align-items:center;gap:8px;">
+                <button class="btn-out btn-sm" onclick="navPlanilhaCal(-1)">← Anterior</button>
+                <span id="planilha-cal-label" style="font-weight:600;font-size:13px;min-width:130px;text-align:center;"></span>
+                <button class="btn-out btn-sm" onclick="navPlanilhaCal(1)">Próximo →</button>
+                <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px;"></div>
+                <button class="btn-toggle active" id="plan-cal-toggle-conf" onclick="togglePlanilha('confirmado')">Confirmado</button>
+                <button class="btn-toggle" id="plan-cal-toggle-proj" onclick="togglePlanilha('projetado')">+ Projetado</button>
+              </div>
             </div>
           </div>
-          <div class="card-body" style="overflow-x:auto;">
+          <!-- Vista Tabela -->
+          <div id="planilha-tabela-wrap" class="card-body" style="overflow-x:auto;">
             <table id="table-planilha">
               <thead>
                 <tr>
@@ -882,6 +979,10 @@
               </thead>
               <tbody id="tbody-planilha"></tbody>
             </table>
+          </div>
+          <!-- Vista Calendário -->
+          <div id="planilha-cal-wrap" style="display:none;">
+            <div id="planilha-cal-grid" style="padding:0;"></div>
           </div>
           <div style="padding:8px 16px;font-size:11px;color:#999;border-top:1px solid var(--gray-100);" id="plan-label-periodo"></div>
         </div>
@@ -1711,36 +1812,46 @@
       document.querySelector('.login-tabs').style.display = 'none';
       document.getElementById('login-sync-msg').textContent = 'Carregando seus dados...';
 
-      // Verificar se já aceitou os termos (cobre usuários antigos e casos de bypass)
-      const { data: termosData } = await supa.from('termos_aceite').select('id').eq('usuario_id', user.id).maybeSingle();
-      if(!termosData){
-        // Restaurar tela de login antes de abrir modal (evita tela congelada)
+      try {
+        // Verificar se já aceitou os termos (cobre usuários antigos e casos de bypass)
+        const { data: termosData } = await supa.from('termos_aceite').select('id').eq('usuario_id', user.id).maybeSingle();
+        if(!termosData){
+          // Restaurar tela de login antes de abrir modal (evita tela congelada)
+          document.getElementById('login-sync').style.display = 'none';
+          document.querySelector('.login-form').style.display = 'flex';
+          document.querySelector('.login-tabs').style.display = 'flex';
+          abrirTermos(true);
+          return;
+        }
+
+        // Limpar dados do usuário anterior (localStorage é compartilhado no navegador)
+        limparSessaoLocal();
+
+        await carregarDoSupabase();
+
+        document.getElementById('tela-login').classList.remove('ativo');
+        document.getElementById('user-bar').style.display = 'block';
+        document.getElementById('user-bar-email').textContent = user.email;
+        document.getElementById('card-minha-conta').style.display = 'block';
+
+        // Verificar callback OAuth do ML (?code=...)
+        const mlCode = new URLSearchParams(window.location.search).get('code');
+        if(mlCode){
+          nav('receber');
+          await handleMLCallback(mlCode);
+        } else {
+          await verificarConexaoML();
+          renderDashboard();
+          autoSyncML(); // background, sem await
+        }
+      } catch(err) {
+        console.error('entrarNoApp:', err);
         document.getElementById('login-sync').style.display = 'none';
         document.querySelector('.login-form').style.display = 'flex';
         document.querySelector('.login-tabs').style.display = 'flex';
-        abrirTermos(true);
-        return;
-      }
-
-      // Limpar dados do usuário anterior (localStorage é compartilhado no navegador)
-      limparSessaoLocal();
-
-      await carregarDoSupabase();
-
-      document.getElementById('tela-login').classList.remove('ativo');
-      document.getElementById('user-bar').style.display = 'block';
-      document.getElementById('user-bar-email').textContent = user.email;
-      document.getElementById('card-minha-conta').style.display = 'block';
-
-      // Verificar callback OAuth do ML (?code=...)
-      const mlCode = new URLSearchParams(window.location.search).get('code');
-      if(mlCode){
-        nav('receber');
-        await handleMLCallback(mlCode);
-      } else {
-        await verificarConexaoML();
-        renderDashboard();
-        autoSyncML(); // background, sem await
+        const msg = document.getElementById('login-msg');
+        msg.className = 'login-msg erro';
+        msg.textContent = 'Erro ao carregar. Verifique sua conexão e tente novamente.';
       }
     }
 
@@ -1971,6 +2082,8 @@
     let planilhaMode = 'confirmado';
     let planilhaDias = 30;
     let planilhaCustomMode = false;
+    let planilhaViewMode = 'tabela';
+    let planilhaCal_mes = new Date();
     let calendarioMode = 'confirmado';
     let mesAtual = new Date();
     let tipoSimulador = 'vista';
@@ -2163,18 +2276,27 @@
     }
     
     // ===== NAVEGAÇÃO =====
+    function toggleSidebar(){
+      document.querySelector('.sidebar').classList.toggle('mob-open');
+      document.getElementById('sidebar-overlay').classList.toggle('open');
+    }
+
     function nav(page){
+      // Fechar sidebar no mobile
+      document.querySelector('.sidebar').classList.remove('mob-open');
+      document.getElementById('sidebar-overlay').classList.remove('open');
+
       // Remover active de todos
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      
+
       // Ativar página
       document.getElementById('view-' + page).classList.add('active');
       document.querySelector(`[onclick="nav('${page}')"]`).classList.add('active');
-      
+
       // Renderizar
       if(page === 'dashboard') renderDashboard();
-      else if(page === 'planilha') renderPlanilha();
+      else if(page === 'planilha'){ if(planilhaViewMode==='cal') renderPlanilhaCal(); else renderPlanilha(); }
       else if(page === 'pagar') renderPagar();
       else if(page === 'calendario') renderCalendario();
       else if(page === 'simulador') renderFormSimulador();
@@ -2201,6 +2323,106 @@
       atualizarResumo();
     }
     
+    function setPlanilhaView(mode){
+      planilhaViewMode = mode;
+      document.getElementById('plan-view-tabela').className = 'btn-toggle' + (mode==='tabela' ? ' active' : '');
+      document.getElementById('plan-view-cal').className   = 'btn-toggle' + (mode==='cal'    ? ' active' : '');
+      document.getElementById('planilha-tabela-wrap').style.display = mode === 'tabela' ? '' : 'none';
+      document.getElementById('planilha-cal-wrap').style.display    = mode === 'cal'    ? '' : 'none';
+      document.getElementById('plan-controles-tabela').style.display = mode === 'tabela' ? '' : 'none';
+      document.getElementById('plan-controles-cal').style.display    = mode === 'cal'    ? 'flex' : 'none';
+      document.getElementById('plan-label-periodo').style.display    = mode === 'tabela' ? '' : 'none';
+      if(mode === 'tabela') renderPlanilha();
+      else renderPlanilhaCal();
+    }
+
+    function renderPlanilhaCal(){
+      const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+      const ano = planilhaCal_mes.getFullYear();
+      const mes = planilhaCal_mes.getMonth();
+      const labelEl = document.getElementById('planilha-cal-label');
+      if(labelEl) labelEl.textContent = meses[mes] + ' ' + ano;
+
+      // Sincronizar toggles do cal com planilhaMode
+      const tc = document.getElementById('plan-cal-toggle-conf');
+      const tp = document.getElementById('plan-cal-toggle-proj');
+      if(tc) tc.className = 'btn-toggle' + (planilhaMode==='confirmado' ? ' active' : '');
+      if(tp) tp.className = 'btn-toggle' + (planilhaMode==='projetado'  ? ' active' : '');
+
+      const primeiroDia = new Date(ano, mes, 1);
+      const ultimoDia   = new Date(ano, mes + 1, 0);
+      const diasNoMes   = ultimoDia.getDate();
+      const diasAnteriores = primeiroDia.getDay();
+      const hoje = getToday();
+      const primeiroDiaMes = dateStr(new Date(ano, mes, 1));
+      const showProj = planilhaMode === 'projetado';
+
+      // Calcular saldo acumulado até início do mês (mesma lógica de renderCalendario)
+      let saldoAcum = saldoAtual;
+      const dHoje    = parseDate(hoje);
+      const dPrimeiro = new Date(ano, mes, 1);
+      if(dPrimeiro > dHoje){
+        let d = hoje;
+        while(d < primeiroDiaMes){
+          const e = getEntrada(d);
+          saldoAcum += (showProj ? e.total : e.conf) - getPag(d);
+          d = addDias(d, 1);
+        }
+      } else if(dPrimeiro <= dHoje && dHoje <= dateStr(ultimoDia)){
+        let d = primeiroDiaMes;
+        while(d < hoje){
+          const e = getEntrada(d);
+          saldoAcum -= (showProj ? e.total : e.conf) - getPag(d);
+          d = addDias(d, 1);
+        }
+      }
+
+      let html = '<div class="cal-grid">';
+      ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d => html += `<div class="cal-header">${d}</div>`);
+
+      // Dias do mês anterior
+      const diasMesAnt = new Date(ano, mes, 0).getDate();
+      for(let i = diasAnteriores - 1; i >= 0; i--)
+        html += `<div class="cal-day outro-mes"><div class="cal-day-num">${diasMesAnt - i}</div></div>`;
+
+      for(let dia = 1; dia <= diasNoMes; dia++){
+        const data   = dateStr(new Date(ano, mes, dia));
+        const isHoje = data === hoje;
+        const e      = getEntrada(data);
+        const entrada  = showProj ? e.total : e.conf;
+        const pag      = getPag(data);
+        const saldoDia = entrada - pag;
+        saldoAcum += saldoDia;
+
+        const riscoLeve  = reservaMinima > 0 && saldoAcum < reservaMinima && saldoAcum >= 0;
+        const riscoForte = saldoAcum < 0;
+        const classeRisco = riscoForte ? ' risco-forte' : riscoLeve ? ' risco-leve' : '';
+        const corAcum = riscoForte ? 'var(--danger)' : riscoLeve ? '#e65c00' : 'var(--success)';
+
+        html += `<div class="cal-day${isHoje ? ' hoje' : ''}${classeRisco}">
+          <div class="cal-day-num">${dia}</div>
+          ${entrada > 0 ? `<div class="cal-valor-entrada">+${fmt(entrada)}</div>` : ''}
+          ${pag > 0     ? `<div class="cal-valor-saida">-${fmt(pag)}</div>`     : ''}
+          ${(entrada > 0 || pag > 0) ? `<div class="cal-saldo ${saldoDia >= 0 ? 'text-success' : 'text-danger'}">${fmt(saldoDia)}</div>` : ''}
+          <div class="cal-acum" style="color:${corAcum};">≡ ${fmt(saldoAcum)}</div>
+        </div>`;
+      }
+
+      // Completar grade (35 ou 42 células)
+      const totalDias = diasAnteriores + diasNoMes;
+      const restante  = totalDias <= 35 ? 35 - totalDias : 42 - totalDias;
+      for(let dia = 1; dia <= restante; dia++)
+        html += `<div class="cal-day outro-mes"><div class="cal-day-num">${dia}</div></div>`;
+
+      html += '</div>';
+      document.getElementById('planilha-cal-grid').innerHTML = html;
+    }
+
+    function navPlanilhaCal(dir){
+      planilhaCal_mes = new Date(planilhaCal_mes.getFullYear(), planilhaCal_mes.getMonth() + dir, 1);
+      renderPlanilhaCal();
+    }
+
     function setPlanilhaDias(dias, btn){
       planilhaDias = dias;
       planilhaCustomMode = false;
@@ -2926,7 +3148,8 @@
     // ===== CONTROLES =====
     function togglePlanilha(mode){
       planilhaMode = mode;
-      renderPlanilha();
+      if(planilhaViewMode === 'cal') renderPlanilhaCal();
+      else renderPlanilha();
     }
     
     function recalc(){
