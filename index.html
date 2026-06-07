@@ -563,7 +563,10 @@
       .hamburger{display:flex;}
       .sidebar{transform:translateX(-220px);transition:transform 0.28s ease;z-index:999;width:220px;}
       .sidebar.mob-open{transform:translateX(0);}
-      .main{margin-left:0;padding:58px 10px 80px;}
+
+      /* Conter overflow no nível da página sem quebrar scroll de tabelas */
+      .main{margin-left:0;padding:58px 10px 80px;overflow-x:hidden;max-width:100vw;}
+      .card-body{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
 
       /* Login */
       .login-box{padding:28px 18px;margin:0 10px;max-width:100%;}
@@ -572,9 +575,24 @@
       /* Page titles */
       h1{font-size:18px;}
 
-      /* Cards */
-      .card-header{flex-direction:column;align-items:flex-start;gap:8px;}
+      /* Cards — headers empilham verticalmente */
+      .card-header{flex-direction:column;align-items:flex-start;gap:8px;overflow:visible;}
+      .card-header > *{max-width:100%;flex-wrap:wrap;}
       .form-row{grid-template-columns:1fr;}
+
+      /* Forçar wrapping em TODOS os flex da view (cabeçalhos de página com botões) */
+      .view > div{flex-wrap:wrap;}
+      .view > div > .d-flex{flex-wrap:wrap;max-width:100%;}
+      .d-flex{flex-wrap:wrap;}
+      .gap-1{gap:6px;}
+
+      /* Botões menores no mobile */
+      .btn{font-size:12px;padding:7px 12px;}
+      .btn-out{font-size:12px;padding:7px 12px;}
+      .btn-sm{font-size:11px;padding:5px 8px;}
+      .btn-toggle{font-size:11px;padding:5px 10px;}
+      .period-btn{font-size:11px;padding:4px 8px;}
+      .period-btns{flex-wrap:wrap;gap:4px;}
 
       /* Stats */
       .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px;}
@@ -584,8 +602,7 @@
       .saldo-row{flex-direction:column;align-items:flex-start;gap:6px;}
       .saldo-input{width:100%;font-size:13px;}
 
-      /* Tabelas: scroll horizontal */
-      .card-body{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+      /* Tabelas */
       table{min-width:480px;}
       th,td{padding:8px 6px;font-size:12px;}
 
@@ -600,10 +617,6 @@
       .kanban-board{grid-template-columns:repeat(2,1fr);gap:8px;padding:8px;}
       .kanban-card-val{font-size:12px;}
 
-      /* Period buttons e botões wrapping */
-      .period-btns{flex-wrap:wrap;gap:4px;}
-      .d-flex{flex-wrap:wrap;}
-
       /* Modal */
       .modal-content{width:96%;max-height:88vh;}
       .modal-footer{flex-wrap:wrap;}
@@ -611,7 +624,7 @@
       /* Feedback */
       #btn-feedback{bottom:12px;right:12px;width:40px;height:40px;font-size:17px;}
 
-      /* Tooltips: nunca vaza para fora */
+      /* Tooltips */
       .tip-box{min-width:140px;max-width:200px;}
 
       /* Score velocímetro */
@@ -619,6 +632,21 @@
       .score-arc{width:160px;height:80px;}
       .score-arc svg{width:160px;height:160px;}
       .score-needle{height:62px;}
+
+      /* Páginas com muitos botões no cabeçalho — empilhar ações */
+      #view-pagar > div:first-child,
+      #view-receber > div:first-child,
+      #view-skus > div:first-child{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:10px;
+      }
+      #view-pagar > div:first-child .d-flex,
+      #view-receber > div:first-child .d-flex,
+      #view-skus > div:first-child .d-flex{
+        width:100%;
+        flex-wrap:wrap;
+      }
     }
 
     @media (max-width:480px){
@@ -626,6 +654,8 @@
       .kanban-board{grid-template-columns:1fr;}
       .cal-day{min-height:50px;padding:3px 2px;}
       .main{padding:56px 8px 72px;}
+      /* Botões ainda menores em telas muito pequenas */
+      .btn,.btn-out{padding:6px 10px;font-size:11px;}
     }
   </style>
 </head>
