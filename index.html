@@ -891,12 +891,12 @@
             <div class="saldo-row">
               <div class="saldo-field">
                 <span class="saldo-label">Mercado Pago</span>
-                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()" oninput="onMoneyInput(this)">
+                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="if(this.value.trim()!==''){saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
               </div>
               <span style="font-size:18px;color:#ccc;">+</span>
               <div class="saldo-field">
                 <span class="saldo-label">Outros bancos</span>
-                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()" oninput="onMoneyInput(this)">
+                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="if(this.value.trim()!==''){saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
               </div>
               <span style="font-size:18px;color:#ccc;">=</span>
               <div class="saldo-field">
@@ -2001,7 +2001,7 @@
           await handleMLCallback(mlCode);
         } else {
           await verificarConexaoML();
-          renderDashboard();
+          init(); // popula inputs de saldo + renderDashboard
           autoSyncML(); // background, sem await
         }
       } catch(err) {
