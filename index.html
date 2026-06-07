@@ -5492,6 +5492,27 @@ Perfil do usuário:
       }
     });
 
+    // ===== SALVAR SALDO ANTES DE FECHAR/F5 =====
+    // onblur não dispara quando o usuário pressiona F5 diretamente
+    window.addEventListener('beforeunload', function(){
+      if(!usuarioAtual) return;
+      const mpEl = document.getElementById('saldo-mp');
+      const outrosEl = document.getElementById('saldo-inicial');
+      let changed = false;
+      if(mpEl && mpEl.value.trim() !== ''){
+        const v = parseMoney(mpEl.value);
+        if(v !== saldoMP){ saldoMP = v; changed = true; }
+      }
+      if(outrosEl && outrosEl.value.trim() !== ''){
+        const v = parseMoney(outrosEl.value);
+        if(v !== saldoOutros){ saldoOutros = v; changed = true; }
+      }
+      if(changed){
+        saldoAtual = saldoMP + saldoOutros;
+        salvarCfg(); // localStorage é síncrono — garante o save antes do unload
+      }
+    });
+
     // ===== PWA — SERVICE WORKER =====
     if('serviceWorker' in navigator){
       navigator.serviceWorker.register('service-worker.js').catch(()=>{});
