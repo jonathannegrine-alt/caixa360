@@ -4060,95 +4060,170 @@
       if(rows.length < 2) return {count:0, error:'Arquivo vazio'};
 
       const header = rows[0].map(h => String(h||'').toLowerCase());
-      const colData = header.findIndex(h => h.includes('venc'));
-      const colForn = header.findIndex(h => h.includes('forn'));
-      const colDesc = header.findIndex(h => h.includes('hist') || h.includes('desc'));
-      const colVal  = header.findIndex(h => h.includes('valor') && !h.includes('saldo'));
-      const colPago = header.findIndex(h => h.includes('pago'));
+      const colData    = header.findIndex(h => h.includes('venc'));
+      const colForn    = header.findIndex(h => h.includes('forn'));
+      const colHist    = header.findIndex(h => h.includes('hist') || h.includes('desc'));
+      const colVal     = header.findIndex(h => h.includes('valor') && !h.includes('saldo'));
+      const colPago    = header.findIndex(h => h.includes('pago'));
+      const colEmissao = header.findIndex(h => h.includes('emiss'));
 
       if(colData < 0 || colVal < 0) return {count:0, error:'Colunas Vencimento/Valor não encontradas'};
 
-      // Agrupar por base da descrição (sem "Parcela X/Y")
+      function parseDataBR(s){
+        if(!s) return '';
+        s = String(s).trim();
+        if(/\d{2}\/\d{2}\/\d{4}/.test(s)){
+          const[d,m,y] = s.split('/');
+          return y+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0');
+        }
+        if(/\d{4}-\d{2}-\d{2}/.test(s)) return s;
+        return '';
+      }
+
+      function calcCat(dl){
+        if(dl.includes('imposto') || dl.includes('das ') || dl.includes('simples')) return 'Imposto';
+        if(dl.includes('pro-labore') || dl.includes('pró labore') || dl.includes('pro labore')) return 'Pró-labore';
+        if(dl.includes('salario') || dl.includes('salário')) return 'Salário';
+        if(dl.includes('aluguel') || dl.includes('galpão') || dl.includes('galpao')) return 'Aluguel';
+        if(dl.includes('juros')) return 'Capital de Giro - Juros';
+        if(dl.includes('capital de giro') || dl.includes('amortiza')) return 'Capital de Giro - Amortização';
+        if(dl.includes('ads') || dl.includes('marketing') || dl.includes('fatura mercado livre')) return 'ADS/Marketing';
+        return 'Fornecedor';
+      }
+
+      // --- Parse todas as linhas do XLS ---
       const grupos = {};
+      const novas = [];
 
       for(let i = 1; i < rows.length; i++){
         const row = rows[i];
         if(!row || !row[colData]) continue;
 
-        const dataStr = String(row[colData]).trim();
+        const dataVenc = parseDataBR(String(row[colData]));
+        if(!dataVenc) continue;
         let valor = parseFloat(String(row[colVal]||'0').replace(',','.'));
-        if(!dataStr || isNaN(valor) || valor <= 0) continue;
+        if(isNaN(valor) || valor <= 0) continue;
 
-        // Converter data
-        let dataFinal = '';
-        if(/\d{2}\/\d{2}\/\d{4}/.test(dataStr)){
-          const[d,m,y] = dataStr.split('/');
-          dataFinal = y+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0');
-        } else if(/\d{4}-\d{2}-\d{2}/.test(dataStr)){
-          dataFinal = dataStr;
-        }
-        if(!dataFinal) continue;
+        const histRaw  = colHist    >= 0 ? String(row[colHist]   ||'').trim() : 'Importado Tiny';
+        const forn     = colForn    >= 0 ? String(row[colForn]   ||'').trim() : '';
+        const emissao  = colEmissao >= 0 ? parseDataBR(String(row[colEmissao]||'').trim()) : '';
+        const pagoRaw  = colPago    >= 0 && row[colPago] > 0;
 
-        const descRaw  = colDesc >= 0 ? String(row[colDesc]||'').trim() : 'Importado Tiny';
-        const forn     = colForn >= 0 ? String(row[colForn]||'').trim() : '';
-        const pago     = colPago >= 0 && row[colPago] > 0;
+        // Chave única: histórico completo (inclui "Parcela N/T") + fornecedor + data emissão
+        const tinyKey = histRaw + '||' + forn + '||' + emissao;
 
-        // Detectar parcela: "Parcela (2/12)" ou "parcela 2/2"
-        const matchParc = descRaw.match(/[Pp]arcela[\s]+\(?([\d]+)\/([\d]+)\)?/);
-        let tipo = 'unico', parcela = '', grupoId = null, descBase = descRaw;
+        // Detectar parcela
+        const matchParc = histRaw.match(/[Pp]arcela[\s]+\(?([\d]+)\/([\d]+)\)?/);
+        let tipo = 'unico', parcela = '', grupoId = null;
+        let descBase = histRaw;
 
         if(matchParc){
-          const num = parseInt(matchParc[1]);
-          const total = parseInt(matchParc[2]);
-          parcela = num + '/' + total;
-          tipo = 'parcelado';
-          // Base da descrição sem " - Parcela (X/Y)" ou "(parcela X/X)"
-          descBase = descRaw
+          parcela  = matchParc[1] + '/' + matchParc[2];
+          tipo     = 'parcelado';
+          descBase = histRaw
             .replace(/\s*-\s*[Pp]arcela\s*\([\d]+\/[\d]+\)/g, '')
             .replace(/\s*\([Pp]arcela\s+[\d]+\/[\d]+\)/g, '')
             .trim();
-
-          // Chave do grupo: descBase + forn
           const chave = descBase + '||' + forn;
           if(!grupos[chave]) grupos[chave] = 'g_tiny_' + Object.keys(grupos).length;
           grupoId = grupos[chave];
         }
 
-        // Definir categoria automaticamente pela descrição
-        let cat = 'Fornecedor';
-        const dl = descBase.toLowerCase();
-        if(dl.includes('imposto') || dl.includes('das ') || dl.includes('simples')) cat = 'Imposto';
-        else if(dl.includes('pro-labore') || dl.includes('pró labore') || dl.includes('pro labore')) cat = 'Pró-labore';
-        else if(dl.includes('salario') || dl.includes('salário')) cat = 'Salário';
-        else if(dl.includes('aluguel') || dl.includes('galpão') || dl.includes('galpao')) cat = 'Aluguel';
-        else if(dl.includes('juros')) cat = 'Capital de Giro - Juros';
-        else if(dl.includes('capital de giro') || dl.includes('amortiza')) cat = 'Capital de Giro - Amortização';
-        else if(dl.includes('ads') || dl.includes('marketing') || dl.includes('fatura mercado livre')) cat = 'ADS/Marketing';
-
-        pagamentos.push({
-          desc: descBase || descRaw,
-          forn, val: valor, data: dataFinal,
-          cat, pago, tipo, parcela, grupoId
-        });
+        novas.push({ tinyKey, dataVenc, valor, histRaw, descBase, forn, emissao, pagoRaw, tipo, parcela, grupoId,
+          cat: calcCat(descBase.toLowerCase()) });
       }
 
-      return {count: rows.length - 1};
+      if(novas.length === 0) return {count:0, error:'Nenhuma linha válida encontrada'};
+
+      // --- Mapear entradas Tiny existentes por tiny_key ---
+      // Migração automática: entradas sem tiny_key que coincidem com o XLS recebem a tag
+      const keysXLS = new Set(novas.map(n => n.tinyKey));
+
+      pagamentos.forEach((p, i) => {
+        if(p.fonte !== 'tiny' && !p.tiny_key){
+          // Tentar identificar se veio de Tiny: mesma desc base + forn + emissão
+          // não é possível recuperar emissão sem o campo, então apenas marca se já tinha grupoId g_tiny_
+          if(p.grupoId && String(p.grupoId).startsWith('g_tiny_')){
+            // Reconstruir key provável para migração
+            const candidatos = novas.filter(n =>
+              n.descBase === p.desc && n.forn === p.forn && n.parcela === p.parcela
+            );
+            if(candidatos.length === 1){
+              pagamentos[i].fonte    = 'tiny';
+              pagamentos[i].tiny_key = candidatos[0].tinyKey;
+            }
+          }
+        }
+      });
+
+      // Mapa de existentes Tiny por key → índice
+      const existentes = {};
+      const idxTiny = [];
+      pagamentos.forEach((p, i) => {
+        if(p.fonte === 'tiny' && p.tiny_key){
+          existentes[p.tiny_key] = i;
+          idxTiny.push(i);
+        }
+      });
+
+      // --- Aplicar sync ---
+      const keysEncontradas = new Set();
+      let adicionados = 0, atualizados = 0;
+
+      novas.forEach(n => {
+        keysEncontradas.add(n.tinyKey);
+        if(n.tinyKey in existentes){
+          // Atualizar apenas vencimento e valor; preservar pago, cat e outros campos manuais
+          const idx = existentes[n.tinyKey];
+          pagamentos[idx].data    = n.dataVenc;
+          pagamentos[idx].val     = n.valor;
+          pagamentos[idx].parcela = n.parcela;
+          pagamentos[idx].grupoId = n.grupoId;
+          atualizados++;
+        } else {
+          pagamentos.push({
+            desc: n.descBase || n.histRaw,
+            forn: n.forn, val: n.valor, data: n.dataVenc,
+            cat: n.cat, pago: n.pagoRaw, tipo: n.tipo,
+            parcela: n.parcela, grupoId: n.grupoId,
+            fonte: 'tiny', tiny_key: n.tinyKey
+          });
+          adicionados++;
+        }
+      });
+
+      // Entradas Tiny que desapareceram do relatório → foram pagas
+      let marcadasPagas = 0;
+      idxTiny.forEach(i => {
+        const p = pagamentos[i];
+        if(!p.pago && p.tiny_key && !keysEncontradas.has(p.tiny_key)){
+          pagamentos[i].pago = true;
+          marcadasPagas++;
+        }
+      });
+
+      return { count: adicionados + atualizados, added: adicionados, updated: atualizados, markedPaid: marcadasPagas };
     }
 
     function importarTinyXLS(){
       const file = document.getElementById('tiny-xls').files[0];
       if(!file) return;
+      const statusEl = document.getElementById('tiny-status');
       const reader = new FileReader();
       reader.onload = e => {
         try {
           const res = parseTinyXLS(new Uint8Array(e.target.result));
-          if(res.error){ document.getElementById('tiny-status').textContent = '❌ ' + res.error; return; }
+          if(res.error){ statusEl.textContent = '❌ ' + res.error; statusEl.style.color = 'var(--danger)'; return; }
           salvar(); renderPagar(); recalc();
-          document.getElementById('tiny-status').textContent = '✅ ' + res.count + ' lançamentos importados!';
-          document.getElementById('tiny-status').style.color = 'var(--success)';
+          const partes = [];
+          if(res.added   > 0) partes.push(res.added   + ' adicionados');
+          if(res.updated > 0) partes.push(res.updated + ' atualizados');
+          if(res.markedPaid > 0) partes.push(res.markedPaid + ' marcados como pagos');
+          statusEl.textContent = '✅ Sync concluído: ' + (partes.length ? partes.join(' · ') : 'nada alterado');
+          statusEl.style.color = 'var(--success)';
         } catch(err){
-          document.getElementById('tiny-status').textContent = '❌ Erro: ' + err.message;
-          document.getElementById('tiny-status').style.color = 'var(--danger)';
+          statusEl.textContent = '❌ Erro: ' + err.message;
+          statusEl.style.color = 'var(--danger)';
         }
       };
       reader.readAsArrayBuffer(file);
@@ -4163,7 +4238,11 @@
           const res = parseTinyXLS(new Uint8Array(e.target.result));
           if(res.error){ alert('Erro: ' + res.error); return; }
           salvar(); renderPagar(); recalc();
-          alert('✅ ' + res.count + ' lançamentos importados do Tiny!');
+          const partes = [];
+          if(res.added   > 0) partes.push(res.added   + ' adicionados');
+          if(res.updated > 0) partes.push(res.updated + ' atualizados');
+          if(res.markedPaid > 0) partes.push(res.markedPaid + ' marcados como pagos');
+          alert('✅ Sync Tiny concluído: ' + (partes.length ? partes.join(' · ') : 'nada alterado'));
         } catch(err){
           alert('❌ Erro: ' + err.message);
         }
