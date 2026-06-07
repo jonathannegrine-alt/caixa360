@@ -813,6 +813,7 @@
             </div>
             <div class="score-value" id="score-value">—</div>
             <div class="score-label">Score Financeiro</div>
+            <div id="dash-modo-proj" style="font-size:11px;margin-top:6px;color:var(--gray-600);"></div>
           </div>
         </div>
         
@@ -1233,7 +1234,7 @@
                   <label class="form-label">Valor (R$)
                     <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Valor total da compra. Deixe vazio para o sistema calcular o máximo que pode pagar na data escolhida.</span></span>
                   </label>
-                  <input type="text" id="sim-valor" class="money-input" placeholder="Deixe vazio para calcular" onblur="if(this.value)this.value=fmtMoney(parseMoney(this.value))" onkeydown="if(event.key==='Enter')simular()">
+                  <input type="text" id="sim-valor" class="money-input" placeholder="Deixe vazio para calcular" oninput="onMoneyInput(this)" onblur="if(this.value)this.value=fmtMoney(parseMoney(this.value))" onkeydown="if(event.key==='Enter')simular()">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Data de Pagamento
@@ -1482,6 +1483,17 @@
         </div>
 
         <!-- Minha Conta -->
+        <!-- Feedbacks enviados -->
+        <div class="card mb-2" id="card-feedbacks" style="display:none;">
+          <div class="card-header">
+            <div class="card-title">💬 Feedbacks Enviados</div>
+            <button class="btn-out btn-sm" onclick="carregarFeedbacks()">🔄 Atualizar</button>
+          </div>
+          <div id="lista-feedbacks" class="card-body" style="padding:0;max-height:320px;overflow-y:auto;">
+            <div style="padding:20px;text-align:center;color:#999;">Clique em Atualizar para carregar</div>
+          </div>
+        </div>
+
         <div class="card" id="card-minha-conta" style="display:none;">
           <div class="card-header">
             <div class="card-title">🔐 Minha Conta</div>
@@ -1812,6 +1824,7 @@
       document.getElementById('user-bar').style.display = 'block';
       document.getElementById('user-bar-email').textContent = usuarioAtual.email;
       document.getElementById('card-minha-conta').style.display = 'block';
+      document.getElementById('card-feedbacks').style.display = 'block';
       const mlCode = new URLSearchParams(window.location.search).get('code');
       if(mlCode){
         nav('receber');
@@ -1863,6 +1876,7 @@
         document.getElementById('user-bar').style.display = 'block';
         document.getElementById('user-bar-email').textContent = user.email;
         document.getElementById('card-minha-conta').style.display = 'block';
+        document.getElementById('card-feedbacks').style.display = 'block';
 
         // Verificar callback OAuth do ML (?code=...)
         const mlCode = new URLSearchParams(window.location.search).get('code');
@@ -2008,7 +2022,7 @@
       if(rExt.data) extratoHistorico = rExt.data.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
 
       diasPipeline = rSnap.count || 0;
-
+      atualizarRegressao();
     }
 
     // ===== SUPABASE — SALVAR DADOS =====
@@ -2077,6 +2091,29 @@
       alert('Feedback enviado! Obrigado.');
     }
 
+    async function carregarFeedbacks(){
+      if(!usuarioAtual) return;
+      const el = document.getElementById('lista-feedbacks');
+      el.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">Carregando...</div>';
+      const { data } = await supa.from('feedbacks')
+        .select('mensagem,pagina,created_at')
+        .eq('usuario_id', usuarioAtual.id)
+        .order('created_at', {ascending:false})
+        .limit(50);
+      if(!data || data.length === 0){
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">Nenhum feedback enviado ainda.</div>';
+        return;
+      }
+      el.innerHTML = data.map(f => {
+        const dt = new Date(f.created_at);
+        const dtStr = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+        return `<div style="padding:12px 16px;border-bottom:1px solid var(--gray-100);">
+          <div style="font-size:11px;color:#999;margin-bottom:4px;">${dtStr}${f.pagina ? ' · ' + f.pagina.trim() : ''}</div>
+          <div style="font-size:13px;">${f.mensagem}</div>
+        </div>`;
+      }).join('');
+    }
+
     // ===== LOG DE ERROS =====
     window.onerror = function(msg, url, line, col, err){
       if(usuarioAtual){
@@ -2108,6 +2145,10 @@
     let diasPipeline = 0;        // dias distintos de snapshot acumulados
     let periodoHistoricoML = 90; // período usado no cálculo da projeção (15/30/60/90)
     
+    // P1 — Regressão linear
+    let regressaoAtual = null;       // {a, b, xUltimo, dataUltimo} ou null
+    let modoProjecaoAtivo = 'media'; // 'media' | 'tendencia'
+
     // Estado UI
     let planilhaMode = 'confirmado';
     let planilhaDias = 30;
@@ -2258,7 +2299,18 @@
           diasBase = periodoHistorico;
         }
 
-        const media = totalBase / diasBase;
+        let media;
+        if(regressaoAtual && regressaoAtual.b > 0){
+          // P1: projetar com regressão linear — valor esperado para a data alvo
+          const xAlvo = regressaoAtual.xUltimo + diasDif(regressaoAtual.dataUltimo, data) + 1;
+          const projecaoTendencia = Math.max(0, regressaoAtual.a + regressaoAtual.b * xAlvo);
+          const mediaSimples = totalBase / diasBase;
+          // Sanidade: tendência não pode ser <30% nem >300% da média simples
+          media = (projecaoTendencia >= mediaSimples * 0.3 && projecaoTendencia <= mediaSimples * 3)
+            ? projecaoTendencia : mediaSimples;
+        } else {
+          media = totalBase / diasBase;
+        }
         const projPrudencial = media * cfgPct;
         // Complemento = MAX(0, projPrudencial - conf) → nunca diminui o confirmado
         proj = Math.max(0, projPrudencial - conf);
@@ -2305,6 +2357,38 @@
       return pior;
     }
     
+    // ===== P1 — REGRESSÃO LINEAR =====
+    function atualizarRegressao(){
+      const hoje = getToday();
+      const limiteExt = addDias(hoje, -periodoHistoricoML);
+      const ext = extratoHistorico.filter(e => e.data >= limiteExt && e.data < hoje);
+
+      if(ext.length < 14){ regressaoAtual = null; modoProjecaoAtivo = 'media'; return; }
+
+      // Ordenar cronologicamente (array vem desc do Supabase)
+      const dados = [...ext].sort((a,b) => a.data.localeCompare(b.data));
+      const n = dados.length;
+      const dataBase = dados[0].data;
+
+      let sumX=0, sumY=0, sumXY=0, sumX2=0;
+      dados.forEach(d => {
+        const x = diasDif(dataBase, d.data);
+        const y = d.val_liquido;
+        sumX+=x; sumY+=y; sumXY+=x*y; sumX2+=x*x;
+      });
+
+      const denom = n*sumX2 - sumX*sumX;
+      if(denom === 0){ regressaoAtual = null; modoProjecaoAtivo = 'media'; return; }
+
+      const b = (n*sumXY - sumX*sumY) / denom;  // inclinação (R$/dia)
+      const a = (sumY - b*sumX) / n;             // intercepto
+      const dataUltimo = dados[n-1].data;
+      const xUltimo = diasDif(dataBase, dataUltimo);
+
+      regressaoAtual = { a, b, xUltimo, dataUltimo };
+      modoProjecaoAtivo = b >= 0 ? 'tendencia' : 'media';
+    }
+
     // ===== NAVEGAÇÃO =====
     function toggleSidebar(){
       document.querySelector('.sidebar').classList.toggle('mob-open');
@@ -2349,6 +2433,19 @@
       document.getElementById('stat-pior').textContent = fmt(calcPiorSaldo());
       document.getElementById('stat-saldo').textContent = fmt(saldoAtual);
       document.getElementById('stat-cobertura').textContent = cobertura + ' dias';
+
+      // Indicador de modo de projeção
+      const modoEl = document.getElementById('dash-modo-proj');
+      if(modoEl){
+        if(modoProjecaoAtivo === 'tendencia' && regressaoAtual){
+          const sinal = regressaoAtual.b >= 0 ? '↗' : '↘';
+          modoEl.textContent = `Projeção: Tendência ${sinal} (R$${regressaoAtual.b >= 0 ? '+' : ''}${regressaoAtual.b.toFixed(0)}/dia)`;
+          modoEl.style.color = regressaoAtual.b >= 0 ? 'var(--success)' : 'var(--warning)';
+        } else {
+          modoEl.textContent = 'Projeção: Média simples';
+          modoEl.style.color = 'var(--gray-600)';
+        }
+      }
 
       atualizarResumo();
     }
@@ -3183,11 +3280,12 @@
     }
     
     function recalc(){
+      atualizarRegressao();
       if(document.getElementById('view-dashboard').classList.contains('active')){
         renderDashboard();
       }
       if(document.getElementById('view-planilha').classList.contains('active')){
-        renderPlanilha();
+        if(planilhaViewMode === 'cal') renderPlanilhaCal(); else renderPlanilha();
       }
     }
     
@@ -3379,7 +3477,8 @@
         const m = document.createElement('div');
         m.className = 'modal';
         m.id = 'modal-hoje';
-        m.innerHTML = `<div class="modal-content" style="max-width:380px;">
+        // stopPropagation no modal-content evita que cliques dentro subam para o pai (calendário/lista)
+        m.innerHTML = `<div class="modal-content" style="max-width:380px;" onclick="event.stopPropagation()">
           <div class="modal-header">
             <div class="modal-title">⏰ A receber hoje — por hora</div>
             <button class="btn-out btn-sm" onclick="fecharModal('modal-hoje')">✕</button>
@@ -3387,6 +3486,8 @@
           <div class="modal-body" id="modal-hoje-body"></div>
           <div class="modal-footer"><button class="btn-out" onclick="fecharModal('modal-hoje')">Fechar</button></div>
         </div>`;
+        // Fechar ao clicar no backdrop
+        m.addEventListener('click', e => { if(e.target === m) fecharModal('modal-hoje'); });
         document.body.appendChild(m);
       }
 
@@ -4540,6 +4641,19 @@
     }
 
     // ===== UTILS MONETÁRIOS =====
+    function onMoneyInput(el){
+      const old = el.value;
+      const pos = el.selectionStart;
+      let v = old.replace(/[^\d,]/g, '');
+      const parts = v.split(',');
+      let intPart = (parts[0] || '').replace(/^0+/, '') || '';
+      intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      const result = parts.length > 1 ? intPart + ',' + parts[1].substring(0, 2) : intPart;
+      el.value = result;
+      const diff = result.length - old.length;
+      el.setSelectionRange(Math.max(0, pos + diff), Math.max(0, pos + diff));
+    }
+
     function parseMoney(str){
       if(!str) return 0;
       // Aceita "1.234,56" ou "1234.56" ou "1234,56"
