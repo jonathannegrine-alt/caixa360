@@ -1983,17 +1983,25 @@
           return;
         }
 
-        // Resetar variáveis JS mas NÃO apagar localStorage (é o fallback se Supabase falhar)
+        // Salvar localStorage como backup ANTES de qualquer reset ou load do Supabase
+        const _lsPag = JSON.parse(localStorage.getItem('mk_pagamentos') || '[]');
+        const _lsLib = JSON.parse(localStorage.getItem('mk_liberacoes') || '[]');
+        const _lsCfg = JSON.parse(localStorage.getItem('mk_cfg') || '{}');
+
+        // Resetar variáveis JS
         pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
         extratoHistorico=[]; diasPipeline=0;
         saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30; periodoHistoricoML=90;
 
         await carregarDoSupabase();
 
-        // Se Supabase não retornou nada (erro ou conta nova), usar localStorage como fallback
-        if(pagamentos.length === 0 && liberacoes.length === 0){
-          carregar();
-        }
+        // Merge: se Supabase retornou vazio, restaurar do backup local
+        if(pagamentos.length === 0 && _lsPag.length > 0) pagamentos = _lsPag;
+        if(liberacoes.length === 0 && _lsLib.length > 0) liberacoes = _lsLib;
+        // Para saldo: Supabase pode estar desatualizado (save async não concluiu antes do F5)
+        // Preferir o valor local se Supabase retornou zero e local tinha algo
+        if(saldoMP === 0 && _lsCfg.saldoMP > 0){ saldoMP = _lsCfg.saldoMP; saldoAtual = saldoMP + saldoOutros; }
+        if(saldoOutros === 0 && _lsCfg.saldoOutros > 0){ saldoOutros = _lsCfg.saldoOutros; saldoAtual = saldoMP + saldoOutros; }
 
         document.getElementById('tela-login').classList.remove('ativo');
         document.getElementById('user-bar').style.display = 'block';
@@ -2146,16 +2154,6 @@
 
       diasPipeline = rSnap.count || 0;
       atualizarRegressao();
-
-      // Cachear no localStorage para proteger contra falha futura do Supabase
-      localStorage.setItem('mk_pagamentos', JSON.stringify(pagamentos));
-      localStorage.setItem('mk_liberacoes', JSON.stringify(liberacoes));
-      localStorage.setItem('mk_skus', JSON.stringify(skus));
-      localStorage.setItem('mk_categorias', JSON.stringify(categorias));
-      localStorage.setItem('mk_cfg', JSON.stringify({
-        cfgDelay, cfgPct, reservaMinima, periodoHistorico,
-        saldoAtual, saldoMP, saldoOutros, modoProjecao, periodoHistoricoML
-      }));
     }
 
     // ===== SUPABASE — SALVAR DADOS =====
