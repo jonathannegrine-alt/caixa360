@@ -732,6 +732,7 @@
         <li class="nav-item" onclick="nav('skus')">📦 SKUs / Custos</li>
         <li class="nav-item" onclick="nav('estoque')">🏭 Estoque</li>
         <li class="nav-item" onclick="nav('resultado')">📈 Resultado</li>
+        <li class="nav-item" onclick="nav('patrimonio')">🏛️ Saúde Patrimonial</li>
         <li class="nav-item" onclick="nav('config')">⚙️ Configurações</li>
       </ul>
       <div class="user-bar" id="user-bar" style="display:none;">
@@ -1164,7 +1165,15 @@
               </label>
               <span id="pagar-sel-count" style="font-size:12px;color:#666;"></span>
             </div>
-            <div class="d-flex gap-1">
+            <div class="d-flex gap-1" style="align-items:center;">
+              <select id="pagar-sort" onchange="renderPagar()" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;background:#fff;">
+                <option value="data">↕ Data</option>
+                <option value="valor_desc">↓ Maior valor</option>
+                <option value="valor_asc">↑ Menor valor</option>
+                <option value="forn">↕ Fornecedor</option>
+                <option value="desc">↕ Descrição</option>
+                <option value="status">↕ Status</option>
+              </select>
               <button class="btn-out btn-sm" onclick="marcarSelecionadosPagos()">✓ Marcar pagos</button>
               <button class="btn-del btn-sm" onclick="deletarSelecionadosPagar()">🗑️ Deletar</button>
               <span style="align-self:center;font-size:13px;font-weight:600;color:var(--danger);">Total: <span id="total-filtrado">R$ 0,00</span></span>
@@ -1652,6 +1661,161 @@
             </div>
             <div class="card-body" style="padding:0;" id="comp-body">
               <div style="text-align:center;color:#999;padding:30px;">Carregando...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SAÚDE PATRIMONIAL (P12) -->
+      <div id="view-patrimonio" class="view">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+          <h1>🏛️ Saúde Patrimonial</h1>
+          <button class="btn-out btn-sm" onclick="salvarSnapshotPatrimonio()">📸 Snapshot manual</button>
+        </div>
+
+        <!-- Alertas -->
+        <div id="pat-alertas" style="margin-bottom:16px;"></div>
+
+        <!-- Score de Solvência -->
+        <div class="card mb-2">
+          <div class="card-body" style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+            <div style="text-align:center;min-width:120px;">
+              <div id="pat-score-icon" style="font-size:40px;">—</div>
+              <div id="pat-score-label" style="font-weight:700;font-size:15px;margin-top:4px;">—</div>
+              <div style="font-size:11px;color:#999;margin-top:2px;">Solvência Operacional</div>
+            </div>
+            <div style="flex:1;min-width:200px;">
+              <div style="font-size:12px;color:#666;margin-bottom:8px;">Índice de Cobertura da Dívida</div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div style="flex:1;height:10px;background:var(--gray-200);border-radius:5px;overflow:hidden;">
+                  <div id="pat-cob-bar" style="height:100%;background:var(--success);border-radius:5px;transition:.4s;width:0%;"></div>
+                </div>
+                <div id="pat-cob-val" style="font-size:18px;font-weight:700;min-width:50px;">—</div>
+              </div>
+              <div style="font-size:10px;color:#999;margin-top:4px;">
+                &lt;1,0 Crítico · 1,0–1,5 Atenção · 1,5–2,0 Regular · &gt;2,0 Saudável
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;min-width:280px;">
+              <div style="text-align:center;padding:10px;background:var(--gray-100);border-radius:8px;">
+                <div style="font-size:11px;color:#666;">Ativos Totais</div>
+                <div id="pat-ativos" style="font-size:16px;font-weight:700;color:var(--success);">—</div>
+              </div>
+              <div style="text-align:center;padding:10px;background:var(--gray-100);border-radius:8px;">
+                <div style="font-size:11px;color:#666;">Passivos Totais</div>
+                <div id="pat-passivos" style="font-size:16px;font-weight:700;color:var(--danger);">—</div>
+              </div>
+              <div style="text-align:center;padding:10px;background:var(--gray-100);border-radius:8px;">
+                <div style="font-size:11px;color:#666;">Patrimônio Oper.</div>
+                <div id="pat-patrimonio" style="font-size:16px;font-weight:700;">—</div>
+              </div>
+              <div style="text-align:center;padding:10px;background:var(--gray-100);border-radius:8px;">
+                <div style="font-size:11px;color:#666;">Endiv. Líquido</div>
+                <div id="pat-endiv" style="font-size:16px;font-weight:700;">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recebíveis (informativo) -->
+        <div class="card mb-2">
+          <div class="card-header"><div class="card-title">Recebíveis ML</div></div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                  <span style="font-size:12px;font-weight:600;">Confirmados (entram nos cálculos)</span>
+                  <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Recebíveis confirmados representam valores já reconhecidos pelo Mercado Livre. São usados nos cálculos patrimoniais por representar ativos com alta certeza de recebimento. Projeções representam expectativas futuras e não entram nos cálculos de solvência por prudência.</span></span>
+                </div>
+                <div id="pat-rec-conf" style="font-size:22px;font-weight:700;color:var(--success);">—</div>
+                <div style="margin-top:6px;">
+                  <select id="pat-rec-periodo" onchange="renderPatrimonio()" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;">
+                    <option value="all">Todos</option>
+                    <option value="7">7 dias</option>
+                    <option value="15">15 dias</option>
+                    <option value="30">30 dias</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:600;color:#999;margin-bottom:4px;">Projetados (apenas informativo)
+                  <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Os recebíveis projetados representam estimativas futuras e podem sofrer alterações. Por prudência, a Saúde Patrimonial utiliza apenas recebíveis confirmados nos cálculos de solvência.</span></span>
+                </div>
+                <div id="pat-rec-proj" style="font-size:22px;font-weight:700;color:#999;">—</div>
+                <div style="font-size:11px;color:#bbb;margin-top:6px;">Não entra nos cálculos</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Composição dos Ativos e Passivos -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;" class="responsive-grid-2">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Composição dos Ativos</div></div>
+            <div class="card-body" style="padding:0;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <tbody id="pat-tbody-ativos"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Composição dos Passivos</div></div>
+            <div class="card-body" style="padding:0;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <tbody id="pat-tbody-passivos"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 Cenários de Liquidação -->
+        <div class="card mb-2">
+          <div class="card-header">
+            <div class="card-title">Cenários de Liquidação</div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+              <span>Markup:</span>
+              <input type="number" id="pat-markup" value="20" min="0" max="200" step="1" oninput="renderPatrimonio()" style="width:60px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:4px;">
+              <span>%</span>
+              <span style="margin-left:8px;">Desconto liq.:</span>
+              <input type="number" id="pat-desconto" value="10" min="0" max="50" step="1" oninput="renderPatrimonio()" style="width:60px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:4px;">
+              <span>%</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;" class="responsive-grid-3">
+              <div style="text-align:center;padding:16px;border-radius:8px;background:var(--gray-100);">
+                <div style="font-size:11px;color:#666;margin-bottom:4px;">Cenário Conservador</div>
+                <div style="font-size:10px;color:#999;margin-bottom:8px;">Estoque a custo</div>
+                <div id="pat-cen-cons" style="font-size:18px;font-weight:700;">—</div>
+              </div>
+              <div style="text-align:center;padding:16px;border-radius:8px;background:rgba(var(--primary-rgb),.07);">
+                <div style="font-size:11px;color:#666;margin-bottom:4px;">Cenário Realista</div>
+                <div id="pat-cen-real-label" style="font-size:10px;color:#999;margin-bottom:8px;">Markup: 20%</div>
+                <div id="pat-cen-real" style="font-size:18px;font-weight:700;color:var(--primary);">—</div>
+              </div>
+              <div style="text-align:center;padding:16px;border-radius:8px;background:#fff8f0;">
+                <div style="font-size:11px;color:#666;margin-bottom:4px;">Cenário Estressado</div>
+                <div id="pat-cen-est-label" style="font-size:10px;color:#999;margin-bottom:8px;">Desconto: 10%</div>
+                <div id="pat-cen-est" style="font-size:18px;font-weight:700;color:var(--warning);">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Estoque manual (quando P11 não tem dados) -->
+        <div id="pat-estoque-manual-card" class="card mb-2" style="display:none;">
+          <div class="card-header"><div class="card-title">Estoque a Custo (manual)</div></div>
+          <div class="card-body">
+            <div style="font-size:11px;color:#666;margin-bottom:10px;">Nenhum dado do Motor de Reposição encontrado. Informe o valor de estoque manualmente:</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Estoque FULL a custo (R$)</label>
+                <input type="text" id="pat-est-full-manual" class="money-input" placeholder="0,00" onblur="salvarCfgPatrimonio();renderPatrimonio()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Estoque Galpão a custo (R$)</label>
+                <input type="text" id="pat-est-galp-manual" class="money-input" placeholder="0,00" onblur="salvarCfgPatrimonio();renderPatrimonio()">
+              </div>
             </div>
           </div>
         </div>
@@ -2480,6 +2644,7 @@
         if(c.periodoHistorico !== undefined) periodoHistorico = c.periodoHistorico;
         if(c.modoProjecao !== undefined) modoProjecao = c.modoProjecao;
         if(c.periodoHistoricoML !== undefined) periodoHistoricoML = c.periodoHistoricoML;
+        if(c.patCfg) patCfg = {...patCfg, ...c.patCfg};
         saldoAtual = saldoMP + saldoOutros;
       }
 
@@ -2748,6 +2913,58 @@
       }
     }
     
+    // ===== TABLE SORTING =====
+    let _sortState = {};
+    function parseSortNum(s){
+      const c = s.replace(/[R$\s]/g,'').replace(/\./g,'').replace(',','.');
+      const n = parseFloat(c);
+      return isNaN(n) ? null : n;
+    }
+    function sortTableByCol(tbodyId, colIdx){
+      const tbody = document.getElementById(tbodyId);
+      if(!tbody) return;
+      const st = _sortState[tbodyId] || {col:-1, dir:'asc'};
+      const dir = (st.col === colIdx && st.dir === 'asc') ? 'desc' : 'asc';
+      _sortState[tbodyId] = {col:colIdx, dir};
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a,b) => {
+        const at = a.cells[colIdx] ? a.cells[colIdx].textContent.trim() : '';
+        const bt = b.cells[colIdx] ? b.cells[colIdx].textContent.trim() : '';
+        const an = parseSortNum(at), bn = parseSortNum(bt);
+        let cmp = (an !== null && bn !== null) ? an - bn : at.localeCompare(bt, 'pt-BR');
+        return dir === 'asc' ? cmp : -cmp;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+      const ths = tbody.closest('table')?.querySelectorAll('thead th');
+      if(ths) ths.forEach((th,i) => {
+        const arr = th.querySelector('.sort-arrow');
+        if(!arr) return;
+        if(i === colIdx){ arr.textContent = dir === 'asc' ? ' ▲' : ' ▼'; arr.style.opacity='1'; }
+        else { arr.textContent = ' ⇅'; arr.style.opacity='0.35'; }
+      });
+    }
+    function makeSortable(tbodyId, skipCols){
+      const skip = new Set(skipCols || []);
+      const tbody = document.getElementById(tbodyId);
+      if(!tbody) return;
+      const table = tbody.closest('table');
+      if(!table) return;
+      const ths = table.querySelectorAll('thead th');
+      ths.forEach((th,i) => {
+        if(skip.has(i)) return;
+        th.style.cursor = 'pointer';
+        th.style.userSelect = 'none';
+        if(!th.querySelector('.sort-arrow')){
+          const sp = document.createElement('span');
+          sp.className = 'sort-arrow';
+          sp.style.cssText = 'font-size:9px;opacity:0.35;';
+          sp.textContent = ' ⇅';
+          th.appendChild(sp);
+        }
+        th.onclick = () => sortTableByCol(tbodyId, i);
+      });
+    }
+
     // ===== UTILS =====
     function getToday(){
       const d = new Date();
@@ -3081,6 +3298,7 @@
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config'){ renderCategorias(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
       else if(page === 'resultado'){ setResultadoTab('dre'); }
+      else if(page === 'patrimonio'){ renderPatrimonio(); }
     }
     
     // ===== RENDERS =====
@@ -3286,6 +3504,7 @@
       }
 
       tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px;color:#999;">Nenhum dado no período</td></tr>';
+      makeSortable('tbody-planilha', [8]);
 
       const labelEl = document.getElementById('plan-label-periodo');
       if(labelEl) labelEl.textContent = 'Período: ' + ptDate(dataIni) + ' até ' + ptDate(dataFim);
@@ -3345,7 +3564,13 @@
       const hoje = getToday();
 
       const filtrados = getPagamentosFiltrados();
-      filtrados.sort((a,b) => a.data.localeCompare(b.data));
+      const sortOpt = document.getElementById('pagar-sort')?.value || 'data';
+      if(sortOpt === 'data') filtrados.sort((a,b) => a.data.localeCompare(b.data));
+      else if(sortOpt === 'valor_desc') filtrados.sort((a,b) => b.val - a.val);
+      else if(sortOpt === 'valor_asc') filtrados.sort((a,b) => a.val - b.val);
+      else if(sortOpt === 'forn') filtrados.sort((a,b) => (a.forn||'').localeCompare(b.forn||'','pt-BR'));
+      else if(sortOpt === 'desc') filtrados.sort((a,b) => (a.desc||'').localeCompare(b.desc||'','pt-BR'));
+      else if(sortOpt === 'status') filtrados.sort((a,b) => (a.pago?1:0) - (b.pago?1:0) || a.data.localeCompare(b.data));
 
       // Total do filtro (sem seleção)
       const totalFiltro = filtrados.filter(p => !p.pago).reduce((s,p) => s + p.val, 0);
@@ -3691,6 +3916,7 @@
       });
 
       tbody.innerHTML = html;
+      makeSortable('tbody-skus', [3]);
       // Resetar checkbox "selecionar todos" ao re-renderizar
       const selAll = document.getElementById('sku-sel-all');
       if(selAll) selAll.checked = false;
@@ -4175,6 +4401,7 @@
           <td style="text-align:right;font-weight:600;color:var(--success);">${fmt(l.val)}</td>
         </tr>
       `).join('');
+      makeSortable('tbody-receber');
     }
 
     function abrirModalHoje(){
@@ -5664,6 +5891,187 @@
       el.innerHTML = html;
     }
 
+    // ===== P12 — SAÚDE PATRIMONIAL =====
+    let patCfg = { markup: 0.20, desconto: 0.10, estoque_full_manual: 0, estoque_galp_manual: 0 };
+
+    function calcPatrimonio(){
+      const hoje = getToday();
+      const periodoEl = document.getElementById('pat-rec-periodo');
+      const periodo = periodoEl ? periodoEl.value : 'all';
+      const libFiltradas = periodo === 'all'
+        ? liberacoes.filter(l => l.data >= hoje)
+        : liberacoes.filter(l => l.data >= hoje && diasDif(hoje, l.data) <= parseInt(periodo));
+      const recConf = libFiltradas.reduce((s,l) => s + l.val, 0);
+
+      // Projetado (informativo)
+      let recProj = 0;
+      for(let i=1;i<=30;i++){
+        const d = addDias(hoje, i);
+        const e = getEntrada(d);
+        recProj += e.proj || 0;
+      }
+
+      // Estoque a custo (P11 automático ou manual)
+      let estFull = 0, estGalpao = 0;
+      const temP11 = estoqueGalpao.length > 0 && componentes.length > 0;
+      if(temP11){
+        componentes.forEach(c => {
+          const eg = estoqueGalpao.find(e => e.sku === c.codigo);
+          if(!eg) return;
+          estFull += (eg.qtd_full || 0) * (c.custo_unitario || 0);
+          estGalpao += (eg.qtd_galpao || 0) * (c.custo_unitario || 0);
+        });
+      } else {
+        estFull = patCfg.estoque_full_manual || 0;
+        estGalpao = patCfg.estoque_galp_manual || 0;
+      }
+      const estCusto = estFull + estGalpao;
+
+      // Ativos
+      const caixaAtual = saldoAtual;
+      const ativos = caixaAtual + recConf + estCusto;
+
+      // Passivos
+      const passivos = pagamentos.filter(p => !p.pago).reduce((s,p) => s + p.val, 0);
+
+      // Indicadores
+      const patrimonio = ativos - passivos;
+      const indiceCobertura = passivos > 0 ? ativos / passivos : Infinity;
+      const endivLiquido = passivos - caixaAtual - recConf;
+
+      // Cenários
+      const markup = patCfg.markup;
+      const desconto = patCfg.desconto;
+      const cenCons = caixaAtual + recConf + estCusto - passivos;
+      const cenReal = caixaAtual + recConf + estCusto * (1 + markup) - passivos;
+      const cenEst  = caixaAtual + recConf + estCusto * (1 - desconto) - passivos;
+
+      return { caixaAtual, recConf, recProj, estFull, estGalpao, estCusto, ativos, passivos, patrimonio, indiceCobertura, endivLiquido, cenCons, cenReal, cenEst, temP11 };
+    }
+
+    function renderPatrimonio(){
+      const d = calcPatrimonio();
+      const markup = parseFloat(document.getElementById('pat-markup')?.value || 20);
+      const desconto = parseFloat(document.getElementById('pat-desconto')?.value || 10);
+      patCfg.markup = markup / 100;
+      patCfg.desconto = desconto / 100;
+
+      // Score
+      const ic = d.indiceCobertura;
+      let scoreIcon, scoreLabel, scoreColor;
+      if(ic < 1){ scoreIcon='🔴'; scoreLabel='Crítico'; scoreColor='var(--danger)'; }
+      else if(ic < 1.5){ scoreIcon='🟡'; scoreLabel='Atenção'; scoreColor='var(--warning)'; }
+      else if(ic < 2){ scoreIcon='🟠'; scoreLabel='Regular'; scoreColor='#f97316'; }
+      else { scoreIcon='🟢'; scoreLabel='Saudável'; scoreColor='var(--success)'; }
+
+      const el = id => document.getElementById(id);
+      if(el('pat-score-icon')) el('pat-score-icon').textContent = scoreIcon;
+      if(el('pat-score-label')){ el('pat-score-label').textContent = scoreLabel; el('pat-score-label').style.color = scoreColor; }
+      if(el('pat-cob-val')) el('pat-cob-val').textContent = ic === Infinity ? '∞' : ic.toFixed(2)+'×';
+      if(el('pat-cob-bar')){ const pct = Math.min(100, ic/3*100); el('pat-cob-bar').style.width = pct+'%'; el('pat-cob-bar').style.background = scoreColor; }
+
+      if(el('pat-ativos')) el('pat-ativos').textContent = fmt(d.ativos);
+      if(el('pat-passivos')) el('pat-passivos').textContent = fmt(d.passivos);
+      if(el('pat-patrimonio')){ el('pat-patrimonio').textContent = (d.patrimonio>=0?'+':'')+fmt(d.patrimonio); el('pat-patrimonio').style.color = d.patrimonio>=0?'var(--success)':'var(--danger)'; }
+      if(el('pat-endiv')){ el('pat-endiv').textContent = (d.endivLiquido<=0?'Coberto':'') || fmt(d.endivLiquido); el('pat-endiv').style.color = d.endivLiquido<=0?'var(--success)':'var(--danger)'; }
+
+      if(el('pat-rec-conf')) el('pat-rec-conf').textContent = fmt(d.recConf);
+      if(el('pat-rec-proj')) el('pat-rec-proj').textContent = fmt(d.recProj);
+
+      // Tabela Ativos
+      const tbA = el('pat-tbody-ativos');
+      if(tbA) tbA.innerHTML = [
+        ['Caixa Atual (MP + Bancos)', d.caixaAtual, false],
+        ['Recebíveis Confirmados ML', d.recConf, false],
+        ['Estoque FULL a Custo', d.estFull, false],
+        ['Estoque Galpão a Custo', d.estGalpao, false],
+        ['<strong>Total de Ativos</strong>', d.ativos, true],
+      ].map(([label, val, bold]) => `<tr style="border-bottom:1px solid var(--gray-100);">
+        <td style="padding:8px 12px;font-size:12px;${bold?'font-weight:700;':''}">${label}</td>
+        <td style="padding:8px 12px;text-align:right;font-size:12px;${bold?'font-weight:700;':''}color:var(--success);">${fmt(val)}</td>
+      </tr>`).join('');
+
+      // Tabela Passivos
+      const tbP = el('pat-tbody-passivos');
+      if(tbP) tbP.innerHTML = [
+        ['Contas a Pagar em Aberto', d.passivos, false],
+        ['<strong>Total de Passivos</strong>', d.passivos, true],
+      ].map(([label, val, bold]) => `<tr style="border-bottom:1px solid var(--gray-100);">
+        <td style="padding:8px 12px;font-size:12px;${bold?'font-weight:700;':''}">${label}</td>
+        <td style="padding:8px 12px;text-align:right;font-size:12px;${bold?'font-weight:700;':''}color:var(--danger);">${fmt(val)}</td>
+      </tr>`).join('');
+
+      // Cenários
+      const fmtCen = v => `<span style="color:${v>=0?'var(--success)':'var(--danger)'};font-weight:700;">${v>=0?'+':''}${fmt(v)}</span>`;
+      if(el('pat-cen-cons')) el('pat-cen-cons').innerHTML = fmtCen(d.cenCons);
+      if(el('pat-cen-real')){ el('pat-cen-real').innerHTML = fmtCen(d.cenReal); }
+      if(el('pat-cen-real-label')) el('pat-cen-real-label').textContent = `Markup: ${markup}%`;
+      if(el('pat-cen-est')){ el('pat-cen-est').innerHTML = fmtCen(d.cenEst); }
+      if(el('pat-cen-est-label')) el('pat-cen-est-label').textContent = `Desconto: ${desconto}%`;
+
+      // Card manual (só aparece se P11 não tem dados)
+      if(el('pat-estoque-manual-card')) el('pat-estoque-manual-card').style.display = d.temP11 ? 'none' : '';
+
+      // Alertas
+      renderAlertasPatrimonio(d, ic);
+    }
+
+    function renderAlertasPatrimonio(d, ic){
+      const el = document.getElementById('pat-alertas');
+      if(!el) return;
+      const alertas = [];
+      if(d.cenCons < 0){
+        alertas.push({ tipo:'danger', msg:'🔴 Crítico: mesmo vendendo o estoque a custo, os ativos não cobrem as dívidas.' });
+      }
+      if(d.estCusto > 0 && d.ativos > 0 && d.estCusto / d.ativos > 0.70){
+        alertas.push({ tipo:'warning', msg:'⚠️ Atenção: grande parte da sua solvência depende da venda do estoque ('+Math.round(d.estCusto/d.ativos*100)+'% dos ativos).' });
+      }
+      if(saldoAtual < reservaMinima && ic >= 2){
+        alertas.push({ tipo:'info', msg:'ℹ️ Caixa pressionado, mas operação patrimonialmente saudável. O problema é liquidez, não solvência.' });
+      }
+      if(saldoAtual >= reservaMinima && ic < 1.5){
+        alertas.push({ tipo:'warning', msg:'⚠️ Caixa atual parece confortável, mas a cobertura patrimonial está baixa. Evite novas dívidas sem recompor margem de segurança.' });
+      }
+      el.innerHTML = alertas.map(a => {
+        const bg = a.tipo==='danger'?'#fef2f2;border-color:var(--danger)':a.tipo==='warning'?'#fffbeb;border-color:var(--warning)':'#eff6ff;border-color:var(--primary)';
+        return `<div style="padding:10px 14px;border-radius:8px;border:1px solid;border-left:4px solid;background:${bg};margin-bottom:8px;font-size:13px;">${a.msg}</div>`;
+      }).join('');
+    }
+
+    function salvarCfgPatrimonio(){
+      const manual_full = parseMoney(document.getElementById('pat-est-full-manual')?.value || '0');
+      const manual_galp = parseMoney(document.getElementById('pat-est-galp-manual')?.value || '0');
+      patCfg.estoque_full_manual = manual_full;
+      patCfg.estoque_galp_manual = manual_galp;
+      const cfg = JSON.parse(localStorage.getItem('mk_config') || '{}');
+      cfg.patCfg = patCfg;
+      localStorage.setItem('mk_config', JSON.stringify(cfg));
+    }
+
+    async function salvarSnapshotPatrimonio(){
+      if(!usuarioAtual) return;
+      const d = calcPatrimonio();
+      const hoje = getToday();
+      const snap = {
+        usuario_id: usuarioAtual.id,
+        data_referencia: hoje,
+        ativos_total: d.ativos,
+        passivos_total: d.passivos,
+        patrimonio: d.patrimonio,
+        indice_cobertura: d.indiceCobertura === Infinity ? 999 : d.indiceCobertura,
+        caixa: d.caixaAtual,
+        recebiveis: d.recConf,
+        estoque_custo: d.estCusto
+      };
+      try {
+        await fetch(`${SUPA_URL}/rest/v1/patrimonio_snapshots`, {
+          method: 'POST',
+          headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + (await supabase.auth.getSession()).data.session?.access_token, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(snap)
+        });
+      } catch(e){}
+    }
+
     // ===== CFO CONSELHEIRO =====
     let cfoHistorico = []; // [{role:'user'|'assistant', content:'...'}]
     let cfoOnboardingFeito = false;
@@ -5821,6 +6229,23 @@
         } catch(e){}
       }
 
+      // Contexto P12 — Saúde Patrimonial
+      let patrimonioCtx = '';
+      try {
+        const dp = calcPatrimonio();
+        const ic = dp.indiceCobertura;
+        const statusSolv = ic < 1 ? 'critico' : ic < 1.5 ? 'atencao' : ic < 2 ? 'regular' : 'saudavel';
+        patrimonioCtx = `\nSaúde Patrimonial:
+  Ativos totais: ${fmt(dp.ativos)}
+  Passivos totais: ${fmt(dp.passivos)}
+  Patrimônio operacional: ${fmt(dp.patrimonio)}
+  Índice de cobertura da dívida: ${ic === Infinity ? '∞' : ic.toFixed(2)}×
+  Endividamento líquido: ${fmt(dp.endivLiquido)}
+  Estoque a custo: ${fmt(dp.estCusto)}
+  Liquidação conservadora: ${fmt(dp.cenCons)}
+  Status de solvência: ${statusSolv}`;
+      } catch(e){}
+
       return `[DADOS DO CAIXA 360 - ${ptDate(hoje)}]
 Saldo total: ${fmt(saldoAtual)}
   Mercado Pago: ${fmt(saldoMP)}
@@ -5839,7 +6264,7 @@ Entradas ML:
 
 Pior saldo projetado: ${fmt(critica.saldo)} em ${ptDate(critica.data)} (${critica.dias} dias)
 Tendência: ${tendencia}
-Modo de operação: ${modoOp}${estoqueCtx}
+Modo de operação: ${modoOp}${estoqueCtx}${patrimonioCtx}
 
 Perfil do usuário:
   Nível financeiro: ${cfoPerfil.nivel || 'intermediario'}
@@ -6180,6 +6605,7 @@ Perfil do usuário:
         </tr>`;
       });
       tbody.innerHTML = html;
+      makeSortable('tbody-reposicao', [9,10,11]);
     }
 
     function renderExcessoTab(){
@@ -6213,6 +6639,7 @@ Perfil do usuário:
         </tr>`;
       });
       tbody.innerHTML = html;
+      makeSortable('tbody-excesso', [6]);
     }
 
     function renderRentabilidadeTab(){
@@ -6249,6 +6676,7 @@ Perfil do usuário:
         </tr>`;
       });
       tbody.innerHTML = html;
+      makeSortable('tbody-rentabilidade');
     }
 
     function renderCancelamentosTab(){
@@ -6274,6 +6702,7 @@ Perfil do usuário:
         </tr>`;
       });
       tbody.innerHTML = html;
+      makeSortable('tbody-cancelamentos', [5]);
     }
 
     function renderADSTab(){
@@ -6300,6 +6729,7 @@ Perfil do usuário:
         </tr>`;
       });
       tbody.innerHTML = html;
+      makeSortable('tbody-ads', [6]);
     }
 
     function renderComposicoesTab(){
