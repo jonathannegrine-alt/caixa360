@@ -1983,10 +1983,17 @@
           return;
         }
 
-        // Limpar dados do usuário anterior (localStorage é compartilhado no navegador)
-        limparSessaoLocal();
+        // Resetar variáveis JS mas NÃO apagar localStorage (é o fallback se Supabase falhar)
+        pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
+        extratoHistorico=[]; diasPipeline=0;
+        saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30; periodoHistoricoML=90;
 
         await carregarDoSupabase();
+
+        // Se Supabase não retornou nada (erro ou conta nova), usar localStorage como fallback
+        if(pagamentos.length === 0 && liberacoes.length === 0){
+          carregar();
+        }
 
         document.getElementById('tela-login').classList.remove('ativo');
         document.getElementById('user-bar').style.display = 'block';
@@ -2139,6 +2146,16 @@
 
       diasPipeline = rSnap.count || 0;
       atualizarRegressao();
+
+      // Cachear no localStorage para proteger contra falha futura do Supabase
+      localStorage.setItem('mk_pagamentos', JSON.stringify(pagamentos));
+      localStorage.setItem('mk_liberacoes', JSON.stringify(liberacoes));
+      localStorage.setItem('mk_skus', JSON.stringify(skus));
+      localStorage.setItem('mk_categorias', JSON.stringify(categorias));
+      localStorage.setItem('mk_cfg', JSON.stringify({
+        cfgDelay, cfgPct, reservaMinima, periodoHistorico,
+        saldoAtual, saldoMP, saldoOutros, modoProjecao, periodoHistoricoML
+      }));
     }
 
     // ===== SUPABASE — SALVAR DADOS =====
@@ -2146,32 +2163,33 @@
       if(!usuarioAtual) return;
       const uid = usuarioAtual.id;
 
-      // Pagamentos: full replace (garante que deletados somem do servidor)
-      await supa.from('pagamentos').delete().eq('usuario_id', uid);
-      if(pagamentos.length > 0){
-        await supa.from('pagamentos').insert(pagamentos.map(p => ({
-          usuario_id: uid,
-          descricao: p.desc, forn: p.forn||'', val: p.val, data: p.data,
-          cat: p.cat||'', pago: p.pago||false, tipo: p.tipo||'unico',
-          grupo_id: p.grupo_id||null, parcela: p.parcela||null, valor_pago: p.valorPago||null
-        })));
+      // Captura snapshot antes de qualquer await (evita race condition com limparSessaoLocal)
+      const snapPag = pagamentos.map(p => ({
+        usuario_id: uid,
+        descricao: p.desc, forn: p.forn||'', val: p.val, data: p.data,
+        cat: p.cat||'', pago: p.pago||false, tipo: p.tipo||'unico',
+        grupo_id: p.grupo_id||p.grupoId||null, parcela: p.parcela||null, valor_pago: p.valorPago||null
+      }));
+      const snapCat = categorias.map(c => ({usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false}));
+      const snapSku = skus.map(s => ({usuario_id: uid, sku: s.sku, custo: s.custo, imposto: s.imposto}));
+
+      // Pagamentos: delete + insert em lotes de 200
+      const { error: ePagDel } = await supa.from('pagamentos').delete().eq('usuario_id', uid);
+      if(ePagDel){ console.error('salvarSupabase pagamentos delete:', ePagDel); return; }
+      if(snapPag.length > 0){
+        for(let i = 0; i < snapPag.length; i += 200){
+          const { error: ePagIns } = await supa.from('pagamentos').insert(snapPag.slice(i, i+200));
+          if(ePagIns){ console.error('salvarSupabase pagamentos insert lote', i, ePagIns); return; }
+        }
       }
 
-      // Categorias: full replace
-      await supa.from('categorias').delete().eq('usuario_id', uid);
-      if(categorias.length > 0){
-        await supa.from('categorias').insert(categorias.map(c => ({
-          usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false
-        })));
-      }
+      // Categorias
+      const { error: eCatDel } = await supa.from('categorias').delete().eq('usuario_id', uid);
+      if(!eCatDel && snapCat.length > 0) await supa.from('categorias').insert(snapCat);
 
-      // SKUs: full replace
-      await supa.from('skus').delete().eq('usuario_id', uid);
-      if(skus.length > 0){
-        await supa.from('skus').insert(skus.map(s => ({
-          usuario_id: uid, sku: s.sku, custo: s.custo, imposto: s.imposto
-        })));
-      }
+      // SKUs
+      const { error: eSkuDel } = await supa.from('skus').delete().eq('usuario_id', uid);
+      if(!eSkuDel && snapSku.length > 0) await supa.from('skus').insert(snapSku);
     }
 
     async function salvarCfgSupabase(){
