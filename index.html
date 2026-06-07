@@ -730,6 +730,7 @@
         <li class="nav-item" onclick="nav('receber')">💵 A receber ML</li>
         <li class="nav-item" onclick="nav('simulador')">🎯 Simulador</li>
         <li class="nav-item" onclick="nav('skus')">📦 SKUs / Custos</li>
+        <li class="nav-item" onclick="nav('estoque')">🏭 Estoque</li>
         <li class="nav-item" onclick="nav('resultado')">📈 Resultado</li>
         <li class="nav-item" onclick="nav('config')">⚙️ Configurações</li>
       </ul>
@@ -1627,8 +1628,283 @@
         </div>
       </div>
 
+      <!-- ESTOQUE / MOTOR DE REPOSIÇÃO -->
+      <div id="view-estoque" class="view">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+          <h1>Motor de Reposição</h1>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;">
+            <button class="btn-out btn-sm" onclick="document.getElementById('import-vendas-ml-est').click()">📊 Importar vendas ML</button>
+            <button class="btn-out btn-sm" onclick="document.getElementById('import-kit-upseller').click()">🔗 Importar kits</button>
+            <button class="btn-out btn-sm" onclick="document.getElementById('import-estoque-upseller').click()">📦 Importar estoque galpão</button>
+            <button class="btn btn-sm" onclick="abrirModalComponente()">+ Componente</button>
+            <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
+            <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
+            <input type="file" id="import-estoque-upseller" accept=".xlsx,.xls,.csv" style="display:none" onchange="onImportEstoqueUpseller(this)">
+          </div>
+        </div>
+
+        <!-- Status bar -->
+        <div id="estoque-status-bar" style="display:none;margin-bottom:10px;" class="card">
+          <div class="card-body" style="padding:8px 14px;">
+            <div id="estoque-status-text" style="font-size:11px;color:var(--gray-600);"></div>
+          </div>
+        </div>
+
+        <!-- Alerta de capital -->
+        <div id="estoque-alerta-capital" style="display:none;margin-bottom:12px;border:1px solid var(--warning);border-left:4px solid var(--warning);border-radius:8px;background:#fffbeb;padding:12px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-weight:600;color:#92400e;">⚠️ Reposição necessária: <span id="estoque-capital-total"></span></div>
+              <div style="font-size:11px;color:#78350f;margin-top:2px;">Para cobrir todos os SKUs críticos e em atenção.</div>
+            </div>
+            <button class="btn-out btn-sm" onclick="nav('simulador')">Verificar no simulador →</button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="resultado-tabs" style="margin-bottom:16px;">
+          <div class="resultado-tab active" id="estoque-tab-reposicao" onclick="setEstoqueTab('reposicao')">📋 Reposição</div>
+          <div class="resultado-tab" id="estoque-tab-excesso" onclick="setEstoqueTab('excesso')">🚫 Excesso</div>
+          <div class="resultado-tab" id="estoque-tab-rentabilidade" onclick="setEstoqueTab('rentabilidade')">💰 Rentabilidade</div>
+          <div class="resultado-tab" id="estoque-tab-cancelamentos" onclick="setEstoqueTab('cancelamentos')">↩️ Cancelamentos</div>
+          <div class="resultado-tab" id="estoque-tab-ads" onclick="setEstoqueTab('ads')">📣 ADS</div>
+          <div class="resultado-tab" id="estoque-tab-composicoes" onclick="setEstoqueTab('composicoes')">🔗 Composições</div>
+        </div>
+
+        <!-- Tab: Reposição -->
+        <div id="estoque-view-reposicao">
+          <div id="estoque-reposicao-vazio" class="card" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">📦</div>
+              <div style="font-weight:600;margin-bottom:6px;">Sem dados de estoque</div>
+              <div style="font-size:12px;">Importe o estoque do galpão (Upseller) e as vendas ML para calcular a reposição.</div>
+            </div>
+          </div>
+          <div class="card" id="estoque-reposicao-card" style="display:none;">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Descrição</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Consumo/dia</th>
+                    <th style="padding:8px 6px;text-align:right;">Galpão</th>
+                    <th style="padding:8px 6px;text-align:right;">FULL</th>
+                    <th style="padding:8px 6px;text-align:right;">Total</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cobertura</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Ruptura est.</th>
+                    <th style="padding:8px 6px;text-align:center;">Status</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Compra sugerida</th>
+                    <th style="padding:8px 6px;text-align:right;">Capital</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-reposicao"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Excesso -->
+        <div id="estoque-view-excesso" style="display:none;">
+          <div id="excesso-vazio" class="card" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">✅</div>
+              <div style="font-weight:600;">Nenhum SKU em excesso</div>
+              <div style="font-size:12px;margin-top:4px;">Todos os componentes estão dentro da meta de cobertura.</div>
+            </div>
+          </div>
+          <div class="card" id="excesso-card" style="display:none;">
+            <div class="card-header">
+              <div class="card-title">🚫 O que NÃO devo comprar — capital parado</div>
+            </div>
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Descrição</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Consumo/dia</th>
+                    <th style="padding:8px 6px;text-align:right;">Estoque</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cobertura</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Capital parado</th>
+                    <th style="padding:8px 6px;text-align:center;">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-excesso"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Rentabilidade -->
+        <div id="estoque-view-rentabilidade" style="display:none;">
+          <div id="estoque-rent-vazio" class="card" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">💰</div>
+              <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas</div>
+              <div style="font-size:12px;">Importe o relatório de vendas ML para ver a rentabilidade por SKU.</div>
+            </div>
+          </div>
+          <div class="card" id="estoque-rent-card" style="display:none;">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Título</th>
+                    <th style="padding:8px 6px;text-align:right;">Unidades</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Receita bruta</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Tarifa ML</th>
+                    <th style="padding:8px 6px;text-align:right;">Envio</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Líquido ML</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Custo produto</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Margem R$</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Margem %</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-rentabilidade"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Cancelamentos -->
+        <div id="estoque-view-cancelamentos" style="display:none;">
+          <div class="card">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Título</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Vendas efetivas</th>
+                    <th style="padding:8px 6px;text-align:right;">Cancelamentos</th>
+                    <th style="padding:8px 6px;text-align:right;">Taxa %</th>
+                    <th style="padding:8px 6px;text-align:left;">Alerta</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-cancelamentos"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: ADS -->
+        <div id="estoque-view-ads" style="display:none;">
+          <div class="card">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Título</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Total unid.</th>
+                    <th style="padding:8px 6px;text-align:right;">Orgânico</th>
+                    <th style="padding:8px 6px;text-align:right;">ADS</th>
+                    <th style="padding:8px 6px;text-align:right;">% ADS</th>
+                    <th style="padding:8px 6px;text-align:left;">Alerta</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-ads"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Composições -->
+        <div id="estoque-view-composicoes" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="font-size:12px;color:var(--gray-600);" id="composicoes-info"></div>
+            <button class="btn-out btn-sm" onclick="abrirModalComposicao(null)">+ Nova composição</button>
+          </div>
+          <div id="composicoes-vazio" class="card" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">🔗</div>
+              <div style="font-weight:600;margin-bottom:6px;">Nenhuma composição cadastrada</div>
+              <div style="font-size:12px;">Importe do Upseller ou adicione manualmente o mapeamento de kits para componentes.</div>
+            </div>
+          </div>
+          <div id="composicoes-lista"></div>
+        </div>
+
+      </div>
+
     </div>
 
+  </div>
+
+  <!-- MODAL COMPONENTE -->
+  <div class="modal" id="modal-componente">
+    <div class="modal-content" style="max-width:440px;">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-componente-title">Novo Componente</div>
+        <button class="btn-out btn-sm" onclick="fecharModalComponente()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Código (SKU) *</label>
+          <input type="text" id="mc-codigo" placeholder="Ex: J-2011" style="text-transform:uppercase;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição</label>
+          <input type="text" id="mc-descricao" placeholder="Ex: Bananeira 18 Folhas 85cm">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Custo unitário (R$)</label>
+            <input type="number" id="mc-custo" placeholder="0,00" step="0.01" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Lead time (dias)</label>
+            <input type="number" id="mc-lead-time" placeholder="Ex: 30" min="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Fornecedor</label>
+            <input type="text" id="mc-fornecedor" placeholder="Nome do fornecedor">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estoque FULL (ML)</label>
+            <input type="number" id="mc-qtd-full" placeholder="0" min="0" step="1">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--gray-600);margin-top:4px;">💡 Estoque FULL = unidades no fulfilment do ML. Atualize após verificar no painel ML.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-out" onclick="fecharModalComponente()">Cancelar</button>
+        <button class="btn" onclick="salvarComponente()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL COMPOSIÇÃO -->
+  <div class="modal" id="modal-composicao">
+    <div class="modal-content" style="max-width:520px;">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-composicao-title">Nova Composição de Kit</div>
+        <button class="btn-out btn-sm" onclick="fecharModalComposicao()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label class="form-label">SKU Comercial (anúncio ML) *</label>
+            <input type="text" id="mcomp-kit-sku" placeholder="Ex: J-2021-BANANA-CINZA-CASCA" style="text-transform:uppercase;">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Título do anúncio (opcional)</label>
+          <input type="text" id="mcomp-titulo" placeholder="Ex: Vaso Completo Bananeira...">
+        </div>
+        <div style="margin-top:12px;margin-bottom:6px;font-weight:600;font-size:12px;">Componentes:</div>
+        <div id="mcomp-linhas"></div>
+        <div style="font-size:11px;color:var(--gray-600);margin-top:8px;">💡 Cada linha = um componente físico que compõe este anúncio. Se o componente não existe, crie-o primeiro em "+ Componente".</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-out" onclick="fecharModalComposicao()">Cancelar</button>
+        <button class="btn" onclick="salvarComposicaoManual()">Salvar composição</button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL LANÇAMENTO -->
@@ -2032,10 +2308,12 @@
 
     function limparSessaoLocal(){
       ['mk_pagamentos','mk_liberacoes','mk_skus','mk_categorias','mk_cfg',
-       'mk_liberacoes_hoje','mk_ultimo_sync_ml'].forEach(k => localStorage.removeItem(k));
+       'mk_liberacoes_hoje','mk_ultimo_sync_ml',
+       'mk_componentes','mk_composicao','mk_vendas_sku','mk_estoque_galpao'].forEach(k => localStorage.removeItem(k));
       pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
       extratoHistorico=[]; diasPipeline=0;
       saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30; periodoHistoricoML=90;
+      componentes=[]; composicaoKit=[]; vendasSku=[]; estoqueGalpao=[];
       const mlSt = document.getElementById('ml-status');
       if(mlSt) mlSt.textContent = '';
     }
@@ -2280,6 +2558,16 @@
     // P1 — Regressão linear
     let regressaoAtual = null;       // {a, b, xUltimo, dataUltimo} ou null
     let modoProjecaoAtivo = 'media'; // 'media' | 'tendencia'
+
+    // P11 — Motor de Reposição
+    let componentes = [];    // [{codigo, descricao, custo_unitario, fornecedor, lead_time_dias}]
+    let composicaoKit = [];  // [{sku_comercial, titulo_comercial, sku_componente, qty}]
+    let vendasSku = [];      // [{sku, titulo, unidades, receita, tarifa_ml, envio, liquido, unidades_ads, cancelamentos, periodo_dias}]
+    let estoqueGalpao = [];  // [{sku, descricao, qtd_galpao, qtd_full, em_transito, custo_medio, data_atualizacao}]
+    let metaCoberturaDias = 90;
+    let diasSeguranca = 15;
+    let alertaCriticoDias = 15;
+    let estoqueCurrentTab = 'reposicao';
 
     // Estado UI
     let planilhaMode = 'confirmado';
@@ -2661,6 +2949,7 @@
       else if(page === 'calendario') renderCalendario();
       else if(page === 'simulador') renderFormSimulador();
       else if(page === 'skus') renderSKUs();
+      else if(page === 'estoque') renderEstoque();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config'){ renderCategorias(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
       else if(page === 'resultado'){ setResultadoTab('dre'); }
@@ -3566,6 +3855,10 @@
       localStorage.setItem('mk_liberacoes', JSON.stringify(liberacoes));
       localStorage.setItem('mk_categorias', JSON.stringify(categorias));
       localStorage.setItem('mk_skus', JSON.stringify(skus));
+      localStorage.setItem('mk_componentes', JSON.stringify(componentes));
+      localStorage.setItem('mk_composicao', JSON.stringify(composicaoKit));
+      localStorage.setItem('mk_vendas_sku', JSON.stringify(vendasSku));
+      localStorage.setItem('mk_estoque_galpao', JSON.stringify(estoqueGalpao));
       salvarCfg();
       // Sync nuvem (fire-and-forget — localStorage já garantiu os dados)
       salvarSupabase();
@@ -3591,6 +3884,15 @@
       if(l) liberacoes = JSON.parse(l);
       if(c) categorias = JSON.parse(c);
       if(s) skus = JSON.parse(s);
+
+      const comp = localStorage.getItem('mk_composicao');
+      const compon = localStorage.getItem('mk_componentes');
+      const vs = localStorage.getItem('mk_vendas_sku');
+      const eg = localStorage.getItem('mk_estoque_galpao');
+      if(compon) componentes = JSON.parse(compon);
+      if(comp) composicaoKit = JSON.parse(comp);
+      if(vs) vendasSku = JSON.parse(vs);
+      if(eg) estoqueGalpao = JSON.parse(eg);
 
       if(cfg){
         const obj = JSON.parse(cfg);
@@ -5534,6 +5836,564 @@ Perfil do usuário:
         salvarCfg(); // localStorage é síncrono — garante o save antes do unload
       }
     });
+
+    // ===== P11 — MOTOR DE REPOSIÇÃO =====
+
+    function setEstoqueTab(tab){
+      estoqueCurrentTab = tab;
+      const tabs = ['reposicao','excesso','rentabilidade','cancelamentos','ads','composicoes'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('estoque-tab-' + t);
+        const view = document.getElementById('estoque-view-' + t);
+        if(btn) btn.classList.toggle('active', t === tab);
+        if(view) view.style.display = t === tab ? '' : 'none';
+      });
+      if(tab === 'reposicao') renderReposicaoTab();
+      else if(tab === 'excesso') renderExcessoTab();
+      else if(tab === 'rentabilidade') renderRentabilidadeTab();
+      else if(tab === 'cancelamentos') renderCancelamentosTab();
+      else if(tab === 'ads') renderADSTab();
+      else if(tab === 'composicoes') renderComposicoesTab();
+    }
+
+    function renderEstoque(){
+      atualizarStatusBarEstoque();
+      setEstoqueTab(estoqueCurrentTab || 'reposicao');
+    }
+
+    function atualizarStatusBarEstoque(){
+      const bar = document.getElementById('estoque-status-bar');
+      const txt = document.getElementById('estoque-status-text');
+      if(!bar || !txt) return;
+      const partes = [];
+      if(vendasSku.length > 0) partes.push(`📊 ${vendasSku.length} SKUs de vendas`);
+      if(estoqueGalpao.length > 0){
+        const dt = estoqueGalpao[0] && estoqueGalpao[0].data_atualizacao;
+        const dias = dt ? Math.floor((new Date() - new Date(dt)) / 86400000) : null;
+        const al = (dias !== null && dias > 7) ? ` ⚠️ ${dias}d atrás` : '';
+        partes.push(`📦 ${estoqueGalpao.length} componentes no galpão${al}`);
+      }
+      if(composicaoKit.length > 0){
+        const k = [...new Set(composicaoKit.map(c => c.sku_comercial))].length;
+        partes.push(`🔗 ${k} kits mapeados`);
+      }
+      bar.style.display = partes.length ? '' : 'none';
+      txt.textContent = partes.join('  ·  ');
+    }
+
+    // ----- Cálculo -----
+    function calcConsumoComponentes(){
+      const consumo = {};
+      const dias = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
+      vendasSku.forEach(v => {
+        composicaoKit.filter(c => c.sku_comercial === v.sku).forEach(c => {
+          consumo[c.sku_componente] = (consumo[c.sku_componente] || 0) + v.unidades * c.qty;
+        });
+      });
+      const result = {};
+      Object.keys(consumo).forEach(sku => {
+        result[sku] = { consumo30d: consumo[sku], consumo_diario: consumo[sku] / dias };
+      });
+      return result;
+    }
+
+    function calcCustoComposicao(sku_comercial){
+      return composicaoKit.filter(c => c.sku_comercial === sku_comercial).reduce((s, c) => {
+        const eg = estoqueGalpao.find(e => e.sku === c.sku_componente);
+        const comp = componentes.find(x => x.codigo === c.sku_componente);
+        const cu = (eg && eg.custo_medio > 0) ? eg.custo_medio : (comp ? comp.custo_unitario : 0);
+        return s + cu * c.qty;
+      }, 0);
+    }
+
+    function calcRankingReposicao(){
+      const consumo = calcConsumoComponentes();
+      const meta = metaCoberturaDias;
+      const seg = diasSeguranca;
+      const base = estoqueGalpao.length > 0 ? estoqueGalpao
+        : componentes.map(c => ({ sku: c.codigo, descricao: c.descricao, qtd_galpao: 0, qtd_full: 0, em_transito: 0, custo_medio: c.custo_unitario }));
+      return base.map(eg => {
+        const c = consumo[eg.sku] || { consumo_diario: 0, consumo30d: 0 };
+        const qtd_total = (eg.qtd_galpao || 0) + (eg.qtd_full || 0);
+        const cobertura = c.consumo_diario > 0 ? qtd_total / c.consumo_diario : Infinity;
+        const comp = componentes.find(x => x.codigo === eg.sku);
+        const custo = (eg.custo_medio > 0) ? eg.custo_medio : (comp ? comp.custo_unitario : 0);
+        const deficit_dias = Math.max(0, meta + seg - cobertura);
+        const qtd_sugerida = c.consumo_diario > 0 ? Math.ceil(deficit_dias * c.consumo_diario) : 0;
+        let data_ruptura = null;
+        if(c.consumo_diario > 0 && cobertura < 9999){
+          const d = new Date(); d.setDate(d.getDate() + Math.floor(cobertura));
+          data_ruptura = d;
+        }
+        let status = 'ok';
+        if(cobertura !== Infinity && cobertura > 180) status = 'excesso_critico';
+        else if(cobertura !== Infinity && cobertura > 120) status = 'excesso_mod';
+        else if(cobertura < alertaCriticoDias) status = 'critico';
+        else if(cobertura < meta) status = 'atencao';
+        return {
+          sku: eg.sku, descricao: eg.descricao,
+          consumo_diario: c.consumo_diario, consumo30d: c.consumo30d,
+          qtd_galpao: eg.qtd_galpao || 0, qtd_full: eg.qtd_full || 0,
+          qtd_total, em_transito: eg.em_transito || 0,
+          cobertura, data_ruptura, meta, seg, status,
+          qtd_sugerida, capital_necessario: qtd_sugerida * custo, custo_unitario: custo,
+          data_atualizacao: eg.data_atualizacao
+        };
+      }).sort((a, b) => a.cobertura - b.cobertura);
+    }
+
+    // ----- Renders -----
+    function renderReposicaoTab(){
+      const tbody = document.getElementById('tbody-reposicao');
+      const vazioEl = document.getElementById('estoque-reposicao-vazio');
+      const cardEl = document.getElementById('estoque-reposicao-card');
+      if(!tbody) return;
+      const ranking = calcRankingReposicao().filter(r => !['excesso_critico','excesso_mod'].includes(r.status));
+      const capitalTotal = ranking.filter(r => r.capital_necessario > 0).reduce((s,r) => s + r.capital_necessario, 0);
+      const alertaEl = document.getElementById('estoque-alerta-capital');
+      const capEl = document.getElementById('estoque-capital-total');
+      if(alertaEl){ alertaEl.style.display = capitalTotal > 0 ? '' : 'none'; }
+      if(capEl) capEl.textContent = fmt(capitalTotal);
+      if(ranking.length === 0){
+        if(vazioEl) vazioEl.style.display = '';
+        if(cardEl) cardEl.style.display = 'none';
+        return;
+      }
+      if(vazioEl) vazioEl.style.display = 'none';
+      if(cardEl) cardEl.style.display = '';
+      let html = '';
+      ranking.forEach(r => {
+        const sb = r.status === 'critico'
+          ? '<span class="badge badge-danger">🔴 Crítico</span>'
+          : r.status === 'atencao'
+          ? '<span class="badge badge-warning">🟡 Atenção</span>'
+          : '<span class="badge badge-success">🟢 Saudável</span>';
+        const cob = r.cobertura === Infinity ? '∞' : Math.floor(r.cobertura) + 'd';
+        const rup = r.data_ruptura ? ptDate(r.data_ruptura.toISOString().slice(0,10)) : '—';
+        html += `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${r.sku}</td>
+          <td style="padding:8px 6px;color:#555;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${r.descricao}">${r.descricao||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;">${r.consumo_diario > 0 ? r.consumo_diario.toFixed(1) : '—'}</td>
+          <td style="padding:8px 6px;text-align:right;">${r.qtd_galpao}</td>
+          <td style="padding:8px 6px;text-align:right;">${r.qtd_full > 0 ? r.qtd_full : '—'}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;">${r.qtd_total}</td>
+          <td style="padding:8px 6px;text-align:right;">${cob}</td>
+          <td style="padding:8px 6px;text-align:right;font-size:11px;${r.status==='critico'?'color:var(--danger);font-weight:600;':''}">${rup}</td>
+          <td style="padding:8px 6px;text-align:center;">${sb}</td>
+          <td style="padding:8px 6px;text-align:right;">${r.qtd_sugerida > 0 ? r.qtd_sugerida : '—'}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;${r.capital_necessario>0?'color:var(--danger);':''}">${r.capital_necessario > 0 ? fmt(r.capital_necessario) : '—'}</td>
+        </tr>`;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function renderExcessoTab(){
+      const tbody = document.getElementById('tbody-excesso');
+      const vazioEl = document.getElementById('excesso-vazio');
+      const cardEl = document.getElementById('excesso-card');
+      if(!tbody) return;
+      const ranking = calcRankingReposicao().filter(r => ['excesso_critico','excesso_mod'].includes(r.status))
+        .sort((a,b) => b.cobertura - a.cobertura);
+      if(ranking.length === 0){
+        if(vazioEl) vazioEl.style.display = '';
+        if(cardEl) cardEl.style.display = 'none';
+        return;
+      }
+      if(vazioEl) vazioEl.style.display = 'none';
+      if(cardEl) cardEl.style.display = '';
+      let html = '';
+      ranking.forEach(r => {
+        const sb = r.status === 'excesso_critico'
+          ? '<span class="badge badge-danger">🔴 Excesso crítico</span>'
+          : '<span class="badge badge-warning">🟡 Excesso moderado</span>';
+        const capitalParado = r.qtd_total * r.custo_unitario;
+        html += `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;">${r.sku}</td>
+          <td style="padding:8px 6px;color:#555;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${r.descricao}">${r.descricao||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;">${r.consumo_diario > 0 ? r.consumo_diario.toFixed(1) : '—'}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;">${r.qtd_total}</td>
+          <td style="padding:8px 6px;text-align:right;">${Math.floor(r.cobertura)}d</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;color:var(--warning);">${capitalParado > 0 ? fmt(capitalParado) : '—'}</td>
+          <td style="padding:8px 6px;text-align:center;">${sb}</td>
+        </tr>`;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function renderRentabilidadeTab(){
+      const tbody = document.getElementById('tbody-rentabilidade');
+      const vazioEl = document.getElementById('estoque-rent-vazio');
+      const cardEl = document.getElementById('estoque-rent-card');
+      if(!tbody) return;
+      if(vendasSku.length === 0){
+        if(vazioEl) vazioEl.style.display = '';
+        if(cardEl) cardEl.style.display = 'none';
+        return;
+      }
+      if(vazioEl) vazioEl.style.display = 'none';
+      if(cardEl) cardEl.style.display = '';
+      const sorted = [...vendasSku].sort((a,b) => b.receita - a.receita);
+      let html = '';
+      sorted.forEach(v => {
+        const custoUn = calcCustoComposicao(v.sku);
+        const custoTotal = custoUn * v.unidades;
+        const margem = v.liquido - custoTotal;
+        const margemPct = v.receita > 0 ? (margem / v.receita * 100) : 0;
+        const semCusto = custoUn === 0;
+        html += `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:8px 6px;font-family:monospace;font-size:11px;font-weight:600;">${v.sku}</td>
+          <td style="padding:8px 6px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;" title="${v.titulo}">${v.titulo||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;">${v.unidades}</td>
+          <td style="padding:8px 6px;text-align:right;">${fmt(v.receita)}</td>
+          <td style="padding:8px 6px;text-align:right;color:var(--danger);">${fmt(v.tarifa_ml)}</td>
+          <td style="padding:8px 6px;text-align:right;color:var(--danger);">${fmt(v.envio)}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;">${fmt(v.liquido)}</td>
+          <td style="padding:8px 6px;text-align:right;color:var(--danger);">${semCusto ? '<span style="color:#999;">sem composição</span>' : fmt(-custoTotal)}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;color:${semCusto?'#999':margem>=0?'var(--success)':'var(--danger)'};">${semCusto ? '—' : fmt(margem)}</td>
+          <td style="padding:8px 6px;text-align:right;${!semCusto&&margemPct<10?'color:var(--danger);font-weight:600;':''}">${semCusto ? '—' : margemPct.toFixed(1)+'%'+(margemPct<10?' ⚠️':'')}</td>
+        </tr>`;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function renderCancelamentosTab(){
+      const tbody = document.getElementById('tbody-cancelamentos');
+      if(!tbody) return;
+      if(vendasSku.length === 0){
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#999;">Importe o relatório de vendas ML para ver cancelamentos</td></tr>';
+        return;
+      }
+      const sorted = [...vendasSku].sort((a,b) => b.cancelamentos - a.cancelamentos);
+      let html = '';
+      sorted.forEach(v => {
+        const total = v.unidades + v.cancelamentos;
+        const taxa = total > 0 ? (v.cancelamentos / total * 100) : 0;
+        const alerta = taxa > 5 ? '⚠️ Revisar qualidade/descrição' : taxa > 2 ? '🟡 Monitorar' : '';
+        html += `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:8px 6px;font-family:monospace;font-size:11px;">${v.sku}</td>
+          <td style="padding:8px 6px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${v.titulo}">${v.titulo||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;">${v.unidades}</td>
+          <td style="padding:8px 6px;text-align:right;">${v.cancelamentos}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;${taxa>5?'color:var(--danger);':taxa>2?'color:var(--warning);':''}">${taxa.toFixed(1)}%</td>
+          <td style="padding:8px 6px;font-size:11px;">${alerta}</td>
+        </tr>`;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function renderADSTab(){
+      const tbody = document.getElementById('tbody-ads');
+      if(!tbody) return;
+      if(vendasSku.length === 0){
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">Importe o relatório de vendas ML para ver análise de ADS</td></tr>';
+        return;
+      }
+      const sorted = [...vendasSku].sort((a,b) => b.unidades_ads - a.unidades_ads);
+      let html = '';
+      sorted.forEach(v => {
+        const pctAds = v.unidades > 0 ? (v.unidades_ads / v.unidades * 100) : 0;
+        const organico = v.unidades - v.unidades_ads;
+        const alerta = pctAds > 60 ? '⚠️ Alta dependência de ADS' : pctAds > 40 ? '🟡 ADS significativo' : '';
+        html += `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:8px 6px;font-family:monospace;font-size:11px;">${v.sku}</td>
+          <td style="padding:8px 6px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${v.titulo}">${v.titulo||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;">${v.unidades}</td>
+          <td style="padding:8px 6px;text-align:right;color:var(--success);">${organico}</td>
+          <td style="padding:8px 6px;text-align:right;${v.unidades_ads>0?'color:var(--warning);':''}">${v.unidades_ads}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;${pctAds>60?'color:var(--danger);':pctAds>40?'color:var(--warning);':''}">${pctAds.toFixed(1)}%</td>
+          <td style="padding:8px 6px;font-size:11px;">${alerta}</td>
+        </tr>`;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function renderComposicoesTab(){
+      const el = document.getElementById('composicoes-lista');
+      const vazioEl = document.getElementById('composicoes-vazio');
+      const infoEl = document.getElementById('composicoes-info');
+      if(!el) return;
+      const kitsUnicos = [...new Set(composicaoKit.map(c => c.sku_comercial))].sort();
+      if(infoEl) infoEl.textContent = kitsUnicos.length > 0 ? `${kitsUnicos.length} kits · ${composicaoKit.length} mapeamentos` : '';
+      if(kitsUnicos.length === 0){
+        if(vazioEl) vazioEl.style.display = '';
+        el.innerHTML = '';
+        return;
+      }
+      if(vazioEl) vazioEl.style.display = 'none';
+      let html = '';
+      kitsUnicos.forEach(kitSku => {
+        const comps = composicaoKit.filter(c => c.sku_comercial === kitSku);
+        const titulo = comps[0] ? comps[0].titulo_comercial : '';
+        const tags = comps.map(c => `<span style="background:var(--gray-100);border-radius:4px;padding:2px 8px;font-size:11px;font-family:monospace;">${c.sku_componente} ×${c.qty}</span>`).join('');
+        html += `<div class="card mb-2">
+          <div class="card-body" style="padding:12px 15px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+              <div>
+                <div style="font-family:monospace;font-weight:600;font-size:12px;">${kitSku}</div>
+                <div style="font-size:11px;color:#666;">${titulo}</div>
+              </div>
+              <div class="d-flex gap-1">
+                <button class="btn-out btn-sm" onclick="abrirModalComposicao('${kitSku}')">✏️</button>
+                <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${kitSku}')">🗑️</button>
+              </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">${tags}</div>
+          </div>
+        </div>`;
+      });
+      el.innerHTML = html;
+    }
+
+    // ----- Import handlers -----
+    function onImportVendasML(input){
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const result = parseVendasMLXLS(e.target.result);
+          if(result.error){ alert('Erro: ' + result.error); return; }
+          vendasSku = result.vendas;
+          salvar(); renderEstoque();
+          alert(`✅ ${result.vendas.length} SKUs importados — ${result.totalUnidades.toLocaleString('pt-BR')} unidades vendidas.`);
+        } catch(err){ alert('Erro ao processar: ' + err.message); }
+        input.value = '';
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function onImportKitUpseller(input){
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const result = parseKitUpseller(e.target.result);
+          if(result.error){ alert('Erro: ' + result.error); return; }
+          const novosKitSkus = [...new Set(result.composicao.map(c => c.sku_comercial))];
+          composicaoKit = composicaoKit.filter(c => !novosKitSkus.includes(c.sku_comercial));
+          composicaoKit.push(...result.composicao);
+          salvar(); renderEstoque();
+          alert(`✅ ${result.kits} kits importados · ${result.composicao.length} mapeamentos.`);
+        } catch(err){ alert('Erro ao processar: ' + err.message); }
+        input.value = '';
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function onImportEstoqueUpseller(input){
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const result = parseEstoqueUpseller(e.target.result);
+          if(result.error){ alert('Erro: ' + result.error); return; }
+          estoqueGalpao = result.estoque;
+          let novos = 0;
+          result.estoque.forEach(eg => {
+            const idx = componentes.findIndex(c => c.codigo === eg.sku);
+            if(idx < 0){
+              componentes.push({ codigo: eg.sku, descricao: eg.descricao, custo_unitario: eg.custo_medio||0, fornecedor:'', lead_time_dias:0 });
+              novos++;
+            } else {
+              if(eg.custo_medio > 0) componentes[idx].custo_unitario = eg.custo_medio;
+              if(eg.descricao && !componentes[idx].descricao) componentes[idx].descricao = eg.descricao;
+            }
+          });
+          salvar(); renderEstoque();
+          alert(`✅ ${result.estoque.length} componentes importados.${novos > 0 ? ' ' + novos + ' novos criados.' : ''}`);
+        } catch(err){ alert('Erro ao processar: ' + err.message); }
+        input.value = '';
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // ----- Parsers -----
+    function parseVendasMLXLS(data){
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
+      if(rows.length < 7) return {error:'Arquivo sem dados suficientes'};
+      const dataRows = rows.slice(6).filter(r => r[22] && String(r[22]).trim() !== '');
+      if(dataRows.length === 0) return {error:'Nenhuma linha com SKU encontrada (esperado col 23 = SKU)'};
+      const agg = {};
+      dataRows.forEach(r => {
+        const sku = String(r[22]).trim();
+        const cancelado = r[17] && parseFloat(r[17]) < 0;
+        if(!agg[sku]) agg[sku] = { sku, titulo: String(r[26]||'').trim(), unidades:0, receita:0, tarifa_ml:0, envio:0, liquido:0, unidades_ads:0, cancelamentos:0, periodo_dias:30 };
+        if(cancelado){
+          agg[sku].cancelamentos++;
+        } else {
+          agg[sku].unidades += Number(r[6])||0;
+          agg[sku].receita  += Number(r[7])||0;
+          agg[sku].tarifa_ml+= Number(r[10])||0;
+          agg[sku].envio    += Number(r[12])||0;
+          agg[sku].liquido  += Number(r[18])||0;
+          if(r[21] && String(r[21]).trim() === 'Sim') agg[sku].unidades_ads++;
+        }
+      });
+      const vendas = Object.values(agg);
+      return { vendas, totalUnidades: vendas.reduce((s,v) => s+v.unidades,0), dias: 30 };
+    }
+
+    function parseKitUpseller(data){
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
+      if(rows.length < 2) return {error:'Arquivo vazio'};
+      const composicao = [];
+      rows.slice(1).forEach(r => {
+        const kitSku = r[0] ? String(r[0]).trim() : '';
+        const titulo  = r[1] ? String(r[1]).trim() : '';
+        const compSku = r[7] ? String(r[7]).trim() : '';
+        const qty     = parseFloat(r[8]) || 1;
+        if(!kitSku || !compSku) return;
+        composicao.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: compSku, qty });
+      });
+      return { composicao, kits: [...new Set(composicao.map(c => c.sku_comercial))].length };
+    }
+
+    function parseEstoqueUpseller(data){
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
+      if(rows.length < 2) return {error:'Arquivo vazio'};
+      const today = new Date().toISOString().slice(0,10);
+      const estoque = [];
+      rows.slice(1).forEach(r => {
+        const sku = r[0] ? String(r[0]).trim() : '';
+        if(!sku) return;
+        estoque.push({
+          sku, descricao: r[1] ? String(r[1]).trim() : '',
+          qtd_galpao: Number(r[8]) || 0,
+          qtd_full: 0,
+          em_transito: Number(r[5]) || 0,
+          custo_medio: Number(r[10]) || 0,
+          data_atualizacao: today
+        });
+      });
+      return { estoque };
+    }
+
+    // ----- CRUD Componentes -----
+    let _editCompIdx = -1;
+    function abrirModalComponente(idx){
+      _editCompIdx = idx !== undefined && idx >= 0 ? idx : -1;
+      const c = _editCompIdx >= 0 ? componentes[_editCompIdx] : {};
+      document.getElementById('mc-codigo').value = c.codigo || '';
+      document.getElementById('mc-descricao').value = c.descricao || '';
+      document.getElementById('mc-custo').value = c.custo_unitario || '';
+      document.getElementById('mc-fornecedor').value = c.fornecedor || '';
+      document.getElementById('mc-lead-time').value = c.lead_time_dias || '';
+      const eg = _editCompIdx >= 0 ? estoqueGalpao.find(e => e.sku === c.codigo) : null;
+      document.getElementById('mc-qtd-full').value = eg ? (eg.qtd_full || '') : '';
+      document.getElementById('modal-componente-title').textContent = _editCompIdx >= 0 ? 'Editar Componente' : 'Novo Componente';
+      document.getElementById('mc-codigo').disabled = _editCompIdx >= 0;
+      document.getElementById('modal-componente').style.display = 'flex';
+    }
+    function fecharModalComponente(){ document.getElementById('modal-componente').style.display = 'none'; }
+    function salvarComponente(){
+      const codigo = document.getElementById('mc-codigo').value.trim().toUpperCase();
+      if(!codigo){ alert('Informe o código'); return; }
+      const c = {
+        codigo,
+        descricao: document.getElementById('mc-descricao').value.trim(),
+        custo_unitario: parseFloat(document.getElementById('mc-custo').value) || 0,
+        fornecedor: document.getElementById('mc-fornecedor').value.trim(),
+        lead_time_dias: parseInt(document.getElementById('mc-lead-time').value) || 0
+      };
+      if(_editCompIdx >= 0){ componentes[_editCompIdx] = {...componentes[_editCompIdx], ...c}; }
+      else {
+        if(componentes.find(x => x.codigo === codigo)){ alert('Componente já existe'); return; }
+        componentes.push(c);
+      }
+      const qtdFull = parseFloat(document.getElementById('mc-qtd-full').value);
+      if(!isNaN(qtdFull)){
+        let eg = estoqueGalpao.find(e => e.sku === codigo);
+        if(!eg){ eg = { sku: codigo, descricao: c.descricao, qtd_galpao:0, qtd_full:0, em_transito:0, custo_medio:c.custo_unitario, data_atualizacao: new Date().toISOString().slice(0,10) }; estoqueGalpao.push(eg); }
+        eg.qtd_full = qtdFull;
+      }
+      salvar(); fecharModalComponente(); renderEstoque();
+    }
+    function deletarComponente(idx){
+      if(!confirm('Excluir ' + componentes[idx].codigo + '?')) return;
+      const codigo = componentes[idx].codigo;
+      componentes.splice(idx, 1);
+      estoqueGalpao = estoqueGalpao.filter(e => e.sku !== codigo);
+      composicaoKit = composicaoKit.filter(c => c.sku_componente !== codigo);
+      salvar(); renderEstoque();
+    }
+
+    // ----- CRUD Composições -----
+    let _editComposicaoKit = null;
+    function abrirModalComposicao(kitSku){
+      _editComposicaoKit = kitSku || null;
+      const comps = kitSku ? composicaoKit.filter(c => c.sku_comercial === kitSku) : [];
+      document.getElementById('mcomp-kit-sku').value = kitSku || '';
+      document.getElementById('mcomp-kit-sku').disabled = !!kitSku;
+      document.getElementById('mcomp-titulo').value = comps.length > 0 ? (comps[0].titulo_comercial || '') : '';
+      document.getElementById('modal-composicao-title').textContent = kitSku ? 'Editar Composição' : 'Nova Composição';
+      renderLinhasComposicao(comps.length > 0 ? comps : [{}]);
+      document.getElementById('modal-composicao').style.display = 'flex';
+    }
+    function fecharModalComposicao(){ document.getElementById('modal-composicao').style.display = 'none'; }
+    function renderLinhasComposicao(comps){
+      const container = document.getElementById('mcomp-linhas');
+      const opts = componentes.map(c => `<option value="${c.codigo}">${c.codigo}${c.descricao?' — '+c.descricao:''}</option>`).join('');
+      let html = '';
+      comps.forEach((c, i) => {
+        html += `<div class="d-flex gap-1 mb-1" id="mcomp-linha-${i}">
+          <select style="flex:2;" class="mcomp-comp-sku"><option value="">Selecionar componente...</option>${opts}</select>
+          <input type="number" class="mcomp-qty" placeholder="Qtd" style="width:70px;" step="0.5" min="0.5" value="${c.qty||1}">
+          <button class="btn-out btn-sm" onclick="adicionarLinhaComposicao()" title="Adicionar linha">+</button>
+          <button class="btn-out btn-sm" style="color:var(--danger);" onclick="removerLinhaComposicao(${i})" title="Remover linha">−</button>
+        </div>`;
+      });
+      container.innerHTML = html;
+      comps.forEach((c, i) => {
+        const sel = container.querySelectorAll('.mcomp-comp-sku')[i];
+        if(sel && c.sku_componente) sel.value = c.sku_componente;
+      });
+    }
+    function adicionarLinhaComposicao(){
+      const container = document.getElementById('mcomp-linhas');
+      const i = container.children.length;
+      const opts = componentes.map(c => `<option value="${c.codigo}">${c.codigo}${c.descricao?' — '+c.descricao:''}</option>`).join('');
+      const div = document.createElement('div');
+      div.className = 'd-flex gap-1 mb-1'; div.id = 'mcomp-linha-' + i;
+      div.innerHTML = `<select style="flex:2;" class="mcomp-comp-sku"><option value="">Selecionar...</option>${opts}</select>
+        <input type="number" class="mcomp-qty" placeholder="Qtd" style="width:70px;" step="0.5" min="0.5" value="1">
+        <button class="btn-out btn-sm" onclick="adicionarLinhaComposicao()">+</button>
+        <button class="btn-out btn-sm" style="color:var(--danger);" onclick="removerLinhaComposicao(${i})">−</button>`;
+      container.appendChild(div);
+    }
+    function removerLinhaComposicao(i){
+      const el = document.getElementById('mcomp-linha-' + i);
+      if(el && document.getElementById('mcomp-linhas').children.length > 1) el.remove();
+    }
+    function salvarComposicaoManual(){
+      const kitSku = document.getElementById('mcomp-kit-sku').value.trim().toUpperCase();
+      const titulo = document.getElementById('mcomp-titulo').value.trim();
+      if(!kitSku){ alert('Informe o SKU do kit'); return; }
+      const skuEls = document.querySelectorAll('.mcomp-comp-sku');
+      const qtyEls = document.querySelectorAll('.mcomp-qty');
+      const novas = [];
+      skuEls.forEach((sel, i) => {
+        const compSku = sel.value.trim();
+        const qty = parseFloat(qtyEls[i] ? qtyEls[i].value : 1) || 1;
+        if(compSku) novas.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: compSku, qty });
+      });
+      if(novas.length === 0){ alert('Adicione ao menos um componente'); return; }
+      composicaoKit = composicaoKit.filter(c => c.sku_comercial !== kitSku);
+      composicaoKit.push(...novas);
+      salvar(); fecharModalComposicao(); renderEstoque();
+    }
+    function deletarComposicaoKit(kitSku){
+      if(!confirm('Remover composição de ' + kitSku + '?')) return;
+      composicaoKit = composicaoKit.filter(c => c.sku_comercial !== kitSku);
+      salvar(); renderComposicoesTab();
+    }
 
     // ===== PWA — SERVICE WORKER =====
     if('serviceWorker' in navigator){
