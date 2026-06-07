@@ -2640,6 +2640,8 @@
     }
 
     function nav(page){
+      localStorage.setItem('mk_last_page', page);
+
       // Fechar sidebar no mobile
       document.querySelector('.sidebar').classList.remove('mob-open');
       document.getElementById('sidebar-overlay').classList.remove('open');
@@ -5466,8 +5468,9 @@ Perfil do usuário:
       // Categorias
       atualizarSelectCategorias();
 
-      // Renderizar dashboard
-      renderDashboard();
+      // Restaurar última página visitada (ou dashboard como padrão)
+      const lastPage = localStorage.getItem('mk_last_page') || 'dashboard';
+      nav(lastPage);
     }
     
     // ===== ENTER = TAB em inputs (exceto textarea e botões) =====
