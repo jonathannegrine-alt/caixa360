@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Caixa 360</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Caixa 360">
 
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.js"></script>
@@ -548,8 +553,10 @@
     .user-bar-sair:hover{text-decoration:underline;}
 
     /* ===== BOTÃO FEEDBACK ===== */
-    #btn-feedback{position:fixed;bottom:20px;right:20px;background:var(--primary);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,0.4);z-index:500;display:none;}
+    #btn-feedback{position:fixed;bottom:82px;right:20px;background:#6b7280;color:#fff;border:none;border-radius:50%;width:40px;height:40px;font-size:18px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.2);z-index:500;display:none;}
     #btn-feedback.ativo{display:flex;align-items:center;justify-content:center;}
+    #btn-cfo{display:none;}
+    #btn-cfo.ativo{display:flex;}
     #modal-feedback{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;}
     #modal-feedback.open{display:flex;}
     .feedback-box{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:380px;}
@@ -654,9 +661,50 @@
       .kanban-board{grid-template-columns:1fr;}
       .cal-day{min-height:50px;padding:3px 2px;}
       .main{padding:56px 8px 72px;}
-      /* Botões ainda menores em telas muito pequenas */
       .btn,.btn-out{padding:6px 10px;font-size:11px;}
     }
+
+    /* ===== ALERTAS BANNER ===== */
+    .alerta-banner{border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:flex-start;gap:10px;font-size:13px;}
+    .alerta-banner.danger{background:#fef2f2;border-left:3px solid #dc2626;color:#7f1d1d;}
+    .alerta-banner.warning{background:#fefce8;border-left:3px solid #ca8a04;color:#713f12;}
+    .alerta-banner.ok{background:#f0fdf4;border-left:3px solid #16a34a;color:#14532d;}
+    .alerta-banner strong{font-weight:700;}
+
+    /* ===== CFO CHAT ===== */
+    .cfo-modal{position:fixed;bottom:80px;right:20px;width:380px;max-height:560px;background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.18);display:none;flex-direction:column;z-index:9000;border:1px solid var(--gray-200);}
+    .cfo-modal.open{display:flex;}
+    .cfo-header{background:var(--primary);color:#fff;padding:14px 16px;border-radius:16px 16px 0 0;display:flex;justify-content:space-between;align-items:center;}
+    .cfo-header-title{font-weight:700;font-size:14px;}
+    .cfo-header-sub{font-size:11px;opacity:.8;margin-top:2px;}
+    .cfo-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:200px;}
+    .cfo-msg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.5;}
+    .cfo-msg.user{background:var(--primary);color:#fff;align-self:flex-end;border-radius:12px 12px 2px 12px;}
+    .cfo-msg.bot{background:var(--gray-100);color:#1a1a1a;align-self:flex-start;border-radius:12px 12px 12px 2px;}
+    .cfo-msg.bot.loading{color:#999;font-style:italic;}
+    .cfo-input-row{padding:10px 12px;border-top:1px solid var(--gray-200);display:flex;gap:8px;}
+    .cfo-input{flex:1;border:1px solid var(--gray-200);border-radius:8px;padding:8px 12px;font-size:13px;resize:none;outline:none;max-height:80px;}
+    .cfo-input:focus{border-color:var(--primary);}
+    .cfo-btn-enviar{background:var(--primary);color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;white-space:nowrap;}
+    .cfo-btn-flutuante{position:fixed;bottom:20px;right:20px;background:var(--primary);color:#fff;border:none;border-radius:50%;width:52px;height:52px;font-size:22px;cursor:pointer;box-shadow:0 4px 16px rgba(37,99,235,.4);z-index:8999;display:flex;align-items:center;justify-content:center;}
+    .cfo-onboarding{padding:16px;display:flex;flex-direction:column;gap:8px;}
+    .cfo-onboarding-opt{padding:10px 14px;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;font-size:13px;transition:all 0.15s;}
+    .cfo-onboarding-opt:hover{background:var(--gray-50);border-color:var(--primary);}
+
+    /* ===== RESULTADO (DRE + COMPARATIVO) ===== */
+    .resultado-tabs{display:flex;border-bottom:2px solid var(--gray-200);margin-bottom:20px;}
+    .resultado-tab{padding:10px 20px;cursor:pointer;font-size:13px;font-weight:600;color:var(--gray-600);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.2s;}
+    .resultado-tab.active{color:var(--primary);border-bottom-color:var(--primary);}
+    .dre-linha{display:grid;grid-template-columns:1fr auto;padding:8px 0;border-bottom:1px solid var(--gray-100);font-size:13px;}
+    .dre-linha.header{font-weight:700;color:var(--gray-900);background:var(--gray-50);padding:10px 12px;border-radius:6px;margin-bottom:4px;}
+    .dre-linha.subtotal{font-weight:600;border-top:2px solid var(--gray-200);margin-top:4px;padding-top:10px;}
+    .dre-linha.total{font-weight:700;font-size:15px;background:var(--gray-50);padding:12px;border-radius:6px;}
+    .dre-cat{padding-left:16px;color:var(--gray-600);}
+    .comp-table{width:100%;border-collapse:collapse;}
+    .comp-table th{background:var(--gray-50);padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--gray-600);border-bottom:2px solid var(--gray-200);}
+    .comp-table td{padding:9px 12px;border-bottom:1px solid var(--gray-100);font-size:13px;}
+    .comp-table tr:hover td{background:var(--gray-50);}
+    @media(max-width:768px){.cfo-modal{width:calc(100vw - 32px);right:16px;bottom:70px;}}
   </style>
 </head>
 <body>
@@ -682,6 +730,7 @@
         <li class="nav-item" onclick="nav('receber')">💵 A receber ML</li>
         <li class="nav-item" onclick="nav('simulador')">🎯 Simulador</li>
         <li class="nav-item" onclick="nav('skus')">📦 SKUs / Custos</li>
+        <li class="nav-item" onclick="nav('resultado')">📈 Resultado</li>
         <li class="nav-item" onclick="nav('config')">⚙️ Configurações</li>
       </ul>
       <div class="user-bar" id="user-bar" style="display:none;">
@@ -734,6 +783,25 @@
 
     <!-- BOTÃO FEEDBACK -->
     <button id="btn-feedback" class="ativo" onclick="abrirFeedback()" title="Enviar feedback">💬</button>
+
+    <!-- CFO CONSELHEIRO — botão flutuante -->
+    <button class="cfo-btn-flutuante ativo" id="btn-cfo" onclick="toggleCFO()" title="CFO Conselheiro">🤖</button>
+
+    <!-- CFO CONSELHEIRO — modal chat -->
+    <div class="cfo-modal" id="cfo-modal">
+      <div class="cfo-header">
+        <div>
+          <div class="cfo-header-title">CFO Conselheiro</div>
+          <div class="cfo-header-sub">Seu diretor financeiro virtual</div>
+        </div>
+        <button onclick="toggleCFO()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      <div class="cfo-msgs" id="cfo-msgs"></div>
+      <div class="cfo-input-row">
+        <textarea class="cfo-input" id="cfo-input" placeholder="Pergunte algo sobre seu caixa..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarMsgCFO();}"></textarea>
+        <button class="cfo-btn-enviar" onclick="enviarMsgCFO()">Enviar</button>
+      </div>
+    </div>
 
     <!-- MODAL FEEDBACK -->
     <div id="modal-feedback">
@@ -870,6 +938,9 @@
           </div>
         </div>
         
+        <!-- Alertas Sprint 2 -->
+        <div id="dash-alertas"></div>
+
         <!-- Resumo período -->
         <div class="card">
           <div class="card-header">
@@ -1520,11 +1591,46 @@
         </div>
 
       </div>
-      
+
+      <!-- RESULTADO (DRE + COMPARATIVO) -->
+      <div id="view-resultado" class="view">
+        <h1 style="margin-bottom:20px;">Resultado Financeiro</h1>
+        <div class="resultado-tabs">
+          <div class="resultado-tab active" id="res-tab-dre" onclick="setResultadoTab('dre')">DRE Simplificado</div>
+          <div class="resultado-tab" id="res-tab-comp" onclick="setResultadoTab('comparativo')">Comparativo Mensal</div>
+        </div>
+        <div id="res-dre-view">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">DRE — Demonstrativo de Resultado</div>
+              <select id="dre-periodo" onchange="renderDRE()" style="font-size:12px;padding:4px 8px;">
+                <option value="30">Últimos 30 dias</option>
+                <option value="60">Últimos 60 dias</option>
+                <option value="90">Últimos 90 dias</option>
+              </select>
+            </div>
+            <div class="card-body" id="dre-body">
+              <div style="text-align:center;color:#999;padding:30px;">Carregando...</div>
+            </div>
+          </div>
+        </div>
+        <div id="res-comp-view" style="display:none;">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Comparativo Mensal</div>
+              <span style="font-size:11px;color:#999;">Baseado no extrato histórico + contas a pagar</span>
+            </div>
+            <div class="card-body" style="padding:0;" id="comp-body">
+              <div style="text-align:center;color:#999;padding:30px;">Carregando...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
-    
+
   </div>
-  
+
   <!-- MODAL LANÇAMENTO -->
   <div class="modal" id="modal-lanc">
     <div class="modal-content">
@@ -2539,6 +2645,7 @@
       else if(page === 'skus') renderSKUs();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config'){ renderCategorias(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
+      else if(page === 'resultado'){ setResultadoTab('dre'); }
     }
     
     // ===== RENDERS =====
@@ -2557,6 +2664,7 @@
       document.getElementById('stat-cobertura').textContent = cobertura + ' dias';
 
       renderCentroDecisao();
+      renderAlertasDashboard();
 
       // Indicador de modo de projeção
       const modoEl = document.getElementById('dash-modo-proj');
@@ -4816,6 +4924,411 @@
       fecharModal('modal-importar');
     }
 
+    // ===== SPRINT 2 — ALERTAS INTERNOS =====
+    function renderAlertasDashboard(){
+      const el = document.getElementById('dash-alertas');
+      if(!el) return;
+      const hoje = getToday();
+      const alertas = [];
+
+      // 1. Contas em atraso
+      const atrasadas = pagamentos.filter(p => !p.pago && p.data < hoje);
+      if(atrasadas.length > 0){
+        const total = atrasadas.reduce((s,p) => s + p.val, 0);
+        alertas.push({tipo:'danger', icone:'🔴', msg:`<strong>${atrasadas.length} conta(s) em atraso</strong> — ${fmt(total)} não pago(s). Regularize para evitar juros e problemas com fornecedores.`});
+      }
+
+      // 2. Saldo abaixo da reserva mínima
+      if(reservaMinima > 0 && saldoAtual < reservaMinima){
+        alertas.push({tipo:'danger', icone:'⚠️', msg:`<strong>Saldo abaixo da reserva mínima.</strong> Atual: ${fmt(saldoAtual)} · Reserva: ${fmt(reservaMinima)}. Evite novos compromissos.`});
+      }
+
+      // 3. Gap de cobertura nos próximos 7 dias
+      const cob = calcCobertura7d();
+      if(cob.apagar > 0 && cob.entrada < cob.apagar * 0.6){
+        const gap = cob.apagar - cob.entrada;
+        alertas.push({tipo:'warning', icone:'📉', msg:`<strong>Próximos 7 dias:</strong> ${fmt(cob.apagar)} a pagar, apenas ${fmt(cob.entrada)} confirmado. Gap de ${fmt(gap)} — o saldo atual precisa cobrir a diferença.`});
+      }
+
+      // 4. Pior saldo projeta negativo
+      const critica = calcDataCritica(30);
+      if(critica.saldo < 0){
+        alertas.push({tipo:'danger', icone:'🚨', msg:`<strong>Alerta crítico:</strong> saldo projetado negativo de ${fmt(Math.abs(critica.saldo))} em ${ptDate(critica.data)} (${critica.dias} dias). Revise saídas urgentemente.`});
+      } else if(reservaMinima > 0 && critica.saldo < reservaMinima){
+        alertas.push({tipo:'warning', icone:'⚠️', msg:`<strong>Reserva em risco:</strong> saldo mínimo projetado de ${fmt(critica.saldo)} em ${ptDate(critica.data)} — abaixo da reserva mínima.`});
+      }
+
+      if(alertas.length === 0){
+        el.innerHTML = '';
+        return;
+      }
+      el.innerHTML = alertas.map(a =>
+        `<div class="alerta-banner ${a.tipo}"><span style="font-size:16px;flex-shrink:0;">${a.icone}</span><div>${a.msg}</div></div>`
+      ).join('');
+    }
+
+    // ===== P5 — DRE SIMPLIFICADO =====
+    function setResultadoTab(tab){
+      document.getElementById('res-dre-view').style.display  = tab === 'dre'         ? '' : 'none';
+      document.getElementById('res-comp-view').style.display = tab === 'comparativo' ? '' : 'none';
+      document.getElementById('res-tab-dre').className  = 'resultado-tab' + (tab === 'dre'         ? ' active' : '');
+      document.getElementById('res-tab-comp').className = 'resultado-tab' + (tab === 'comparativo' ? ' active' : '');
+      if(tab === 'dre') renderDRE();
+      else renderComparativo();
+    }
+
+    function renderDRE(){
+      const el = document.getElementById('dre-body');
+      if(!el) return;
+      const dias = parseInt(document.getElementById('dre-periodo')?.value || 30);
+      const hoje = getToday();
+      const limite = addDias(hoje, -dias);
+
+      // Receita: extrato histórico (creditados reais)
+      const extFiltrado = extratoHistorico.filter(e => e.data >= limite && e.data <= hoje);
+      const receitaTotal = extFiltrado.reduce((s,e) => s + (e.val_liquido || 0), 0);
+
+      // Despesas: pagamentos marcados como pagos com impactaDRE=true
+      const pagFiltrados = pagamentos.filter(p => p.pago && p.data >= limite && p.data <= hoje);
+      const catsDRE = new Set(categorias.filter(c => c.impactaDRE).map(c => c.nome));
+      const despesasDRE = pagFiltrados.filter(p => catsDRE.has(p.cat));
+      const despesasNaoDRE = pagFiltrados.filter(p => !catsDRE.has(p.cat));
+
+      // Agrupar despesas por categoria
+      const porCat = {};
+      despesasDRE.forEach(p => { porCat[p.cat] = (porCat[p.cat] || 0) + (p.valorPago || p.val); });
+
+      const totalDespesas = Object.values(porCat).reduce((s,v) => s + v, 0);
+      const resultado = receitaTotal - totalDespesas;
+      const margem = receitaTotal > 0 ? (resultado / receitaTotal * 100) : 0;
+
+      if(extFiltrado.length === 0 && pagFiltrados.length === 0){
+        el.innerHTML = '<div style="text-align:center;padding:30px;color:#999;">Sem dados suficientes para o período.<br><small>Conecte o ML e aguarde o extrato histórico acumular.</small></div>';
+        return;
+      }
+
+      let html = `<div style="max-width:560px;">`;
+
+      // Receita
+      html += `<div class="dre-linha header">Receita</div>`;
+      if(extFiltrado.length > 0){
+        html += `<div class="dre-linha"><span>Recebimentos ML (${extFiltrado.length} dias)</span><span style="color:var(--success);font-weight:600;">${fmt(receitaTotal)}</span></div>`;
+      } else {
+        html += `<div class="dre-linha dre-cat"><span>Sem extrato histórico no período</span><span>—</span></div>`;
+      }
+      html += `<div class="dre-linha subtotal"><span><strong>Total Receita</strong></span><span style="color:var(--success);font-weight:700;">${fmt(receitaTotal)}</span></div>`;
+
+      // Despesas
+      html += `<div class="dre-linha header" style="margin-top:16px;">Despesas (impactam DRE)</div>`;
+      if(Object.keys(porCat).length > 0){
+        Object.entries(porCat).sort((a,b) => b[1]-a[1]).forEach(([cat,val]) => {
+          html += `<div class="dre-linha dre-cat"><span>${cat}</span><span style="color:var(--danger);">(${fmt(val)})</span></div>`;
+        });
+      } else {
+        html += `<div class="dre-linha dre-cat"><span>Nenhuma despesa paga com impacto no DRE</span><span>—</span></div>`;
+      }
+      html += `<div class="dre-linha subtotal"><span><strong>Total Despesas</strong></span><span style="color:var(--danger);font-weight:700;">(${fmt(totalDespesas)})</span></div>`;
+
+      // Resultado
+      const corRes = resultado >= 0 ? 'var(--success)' : 'var(--danger)';
+      html += `<div class="dre-linha total" style="margin-top:12px;"><span>Resultado do Período</span><span style="color:${corRes};font-size:18px;">${resultado >= 0 ? '+' : ''}${fmt(resultado)}</span></div>`;
+      html += `<div style="margin-top:8px;display:flex;gap:20px;font-size:12px;color:#666;">
+        <span>Margem: <strong style="color:${corRes};">${margem.toFixed(1)}%</strong></span>
+        <span>Período: ${ptDate(limite)} a ${ptDate(hoje)}</span>
+        ${despesasNaoDRE.length > 0 ? `<span style="color:#999;">${despesasNaoDRE.length} pagamento(s) não impactam DRE</span>` : ''}
+      </div>`;
+
+      html += `</div>`;
+      el.innerHTML = html;
+    }
+
+    // ===== P6 — COMPARATIVO MENSAL =====
+    function renderComparativo(){
+      const el = document.getElementById('comp-body');
+      if(!el) return;
+
+      // Agrupar extrato histórico por mês
+      const receitaPorMes = {};
+      extratoHistorico.forEach(e => {
+        const mes = e.data.substring(0, 7); // YYYY-MM
+        receitaPorMes[mes] = (receitaPorMes[mes] || 0) + (e.val_liquido || 0);
+      });
+
+      // Agrupar despesas pagas por mês (apenas impactaDRE)
+      const catsDRE = new Set(categorias.filter(c => c.impactaDRE).map(c => c.nome));
+      const despesaPorMes = {};
+      pagamentos.filter(p => p.pago && catsDRE.has(p.cat)).forEach(p => {
+        const mes = p.data.substring(0, 7);
+        despesaPorMes[mes] = (despesaPorMes[mes] || 0) + (p.valorPago || p.val);
+      });
+
+      // Unir todos os meses
+      const meses = [...new Set([...Object.keys(receitaPorMes), ...Object.keys(despesaPorMes)])].sort().reverse().slice(0, 12);
+
+      if(meses.length === 0){
+        el.innerHTML = '<div style="text-align:center;padding:30px;color:#999;">Sem dados suficientes.<br><small>Conecte o ML e aguarde o extrato histórico acumular.</small></div>';
+        return;
+      }
+
+      const nomeMes = m => {
+        const [y, mo] = m.split('-');
+        const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+        return nomes[parseInt(mo)-1] + '/' + y.slice(2);
+      };
+
+      let html = `<table class="comp-table">
+        <thead><tr>
+          <th>Mês</th>
+          <th style="text-align:right;">Receita ML</th>
+          <th style="text-align:right;">Despesas DRE</th>
+          <th style="text-align:right;">Resultado</th>
+          <th style="text-align:right;">Margem</th>
+        </tr></thead><tbody>`;
+
+      let antReceit = null;
+      meses.forEach(mes => {
+        const rec = receitaPorMes[mes] || 0;
+        const desp = despesaPorMes[mes] || 0;
+        const res = rec - desp;
+        const margem = rec > 0 ? (res / rec * 100) : 0;
+        const corRes = res >= 0 ? 'var(--success)' : 'var(--danger)';
+        const varMes = antReceit !== null && antReceit > 0 ? ((rec - antReceit) / antReceit * 100) : null;
+        const varStr = varMes !== null ? `<span style="font-size:11px;color:${varMes>=0?'var(--success)':'var(--danger)'};">${varMes>=0?'▲':'▼'}${Math.abs(varMes).toFixed(0)}%</span>` : '';
+        antReceit = rec;
+
+        html += `<tr>
+          <td style="font-weight:600;">${nomeMes(mes)}</td>
+          <td style="text-align:right;color:var(--success);">${rec > 0 ? fmt(rec) : '—'} ${varStr}</td>
+          <td style="text-align:right;color:var(--danger);">${desp > 0 ? '('+fmt(desp)+')' : '—'}</td>
+          <td style="text-align:right;font-weight:600;color:${corRes};">${rec>0||desp>0 ? (res>=0?'+':'')+fmt(res) : '—'}</td>
+          <td style="text-align:right;color:${corRes};">${rec > 0 ? margem.toFixed(1)+'%' : '—'}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    // ===== CFO CONSELHEIRO =====
+    let cfoHistorico = []; // [{role:'user'|'assistant', content:'...'}]
+    let cfoOnboardingFeito = false;
+    let cfoPerfil = {};
+    let cfoAberto = false;
+
+    function toggleCFO(){
+      cfoAberto = !cfoAberto;
+      const modal = document.getElementById('cfo-modal');
+      if(cfoAberto){
+        modal.classList.add('open');
+        if(cfoHistorico.length === 0) iniciarCFO();
+      } else {
+        modal.classList.remove('open');
+      }
+    }
+
+    function iniciarCFO(){
+      // Verificar se perfil já foi salvo
+      const perfilSalvo = localStorage.getItem('mk_cfo_perfil');
+      if(perfilSalvo){
+        try { cfoPerfil = JSON.parse(perfilSalvo); cfoOnboardingFeito = true; } catch(e){}
+      }
+      if(cfoOnboardingFeito){
+        adicionarMsgCFO('bot', 'Oi! Antes de olhar os números com você — o que você está pensando em fazer agora?');
+      } else {
+        iniciarOnboardingCFO();
+      }
+    }
+
+    function iniciarOnboardingCFO(){
+      const el = document.getElementById('cfo-msgs');
+      el.innerHTML = '';
+      cfoHistorico = [];
+      const perguntas = [
+        { chave:'nivel', texto:'Como você descreveria sua experiência com finanças?', opcoes:[
+          {val:'iniciante',label:'Sou iniciante, aprendo enquanto uso'},
+          {val:'intermediario',label:'Tenho conhecimento básico'},
+          {val:'avancado',label:'Tenho boa experiência financeira'}
+        ]},
+        { chave:'risco', texto:'Qual é sua postura em relação ao risco financeiro?', opcoes:[
+          {val:'conservador',label:'Prefiro segurança, mesmo crescendo mais devagar'},
+          {val:'moderado',label:'Aceito algum risco para crescer'},
+          {val:'agressivo',label:'Aceito risco alto para crescer rápido'}
+        ]},
+        { chave:'fase', texto:'Em que fase está sua operação agora?', opcoes:[
+          {val:'sobrevivencia',label:'Estou tentando me estabilizar'},
+          {val:'crescimento',label:'Estou crescendo com cuidado'},
+          {val:'escala',label:'Estou escalando agressivamente'},
+          {val:'estabilizacao',label:'Estou consolidando o que construí'}
+        ]},
+        { chave:'resposta', texto:'Como prefere receber os conselhos?', opcoes:[
+          {val:'curta',label:'Curto e direto — só me diz o que fazer'},
+          {val:'explicativa',label:'Quero entender o raciocínio'},
+          {val:'diretiva',label:'Orientação clara sem muita explicação'}
+        ]},
+        { chave:'objetivo', texto:'Qual é sua principal prioridade agora?', opcoes:[
+          {val:'preservar_caixa',label:'Preservar caixa e reduzir risco'},
+          {val:'repor_estoque',label:'Repor estoque e manter as vendas'},
+          {val:'crescer',label:'Crescer o máximo possível'},
+          {val:'organizar',label:'Organizar as finanças'},
+          {val:'reduzir_divida',label:'Reduzir dívidas'}
+        ]}
+      ];
+      cfoPerfil = {};
+      let etapa = 0;
+
+      function mostrarPergunta(i){
+        if(i >= perguntas.length){
+          finalizarOnboardingCFO();
+          return;
+        }
+        const p = perguntas[i];
+        adicionarMsgCFO('bot', p.texto);
+        const opts = document.createElement('div');
+        opts.className = 'cfo-onboarding';
+        p.opcoes.forEach(op => {
+          const btn = document.createElement('div');
+          btn.className = 'cfo-onboarding-opt';
+          btn.textContent = op.label;
+          btn.onclick = () => {
+            cfoPerfil[p.chave] = op.val;
+            adicionarMsgCFO('user', op.label);
+            opts.remove();
+            mostrarPergunta(i + 1);
+          };
+          opts.appendChild(btn);
+        });
+        document.getElementById('cfo-msgs').appendChild(opts);
+        document.getElementById('cfo-msgs').scrollTop = 9999;
+      }
+
+      mostrarPergunta(0);
+    }
+
+    function finalizarOnboardingCFO(){
+      cfoOnboardingFeito = true;
+      localStorage.setItem('mk_cfo_perfil', JSON.stringify(cfoPerfil));
+      adicionarMsgCFO('bot', 'Ótimo! Perfil salvo. Oi! Antes de olhar os números com você — o que você está pensando em fazer agora?');
+    }
+
+    function adicionarMsgCFO(role, texto){
+      const el = document.getElementById('cfo-msgs');
+      const div = document.createElement('div');
+      div.className = 'cfo-msg ' + role;
+      div.innerHTML = texto;
+      el.appendChild(div);
+      el.scrollTop = 9999;
+      if(role !== 'bot' || texto !== '__loading__'){
+        cfoHistorico.push({role: role === 'user' ? 'user' : 'assistant', content: texto});
+      }
+      return div;
+    }
+
+    function montarContextoCFO(){
+      const hoje = getToday();
+      const cob7 = calcCobertura7d();
+      const critica = calcDataCritica(30);
+      let apagarTotal7 = 0, apagarTotal15 = 0, apagarTotal30 = 0;
+      for(let i=0;i<30;i++){
+        const d = addDias(hoje,i);
+        const v = getPag(d);
+        if(i<7) apagarTotal7+=v;
+        if(i<15) apagarTotal15+=v;
+        apagarTotal30+=v;
+      }
+      let confTotal7=0, confTotal30=0;
+      for(let i=0;i<30;i++){
+        const d=addDias(hoje,i);
+        const e=getEntrada(d);
+        if(i<7) confTotal7+=e.conf;
+        confTotal30+=e.total;
+      }
+      const tendencia = regressaoAtual ? (regressaoAtual.b > 0 ? 'positiva' : 'negativa') : 'indefinida';
+
+      let modoOp = 'equilibrio';
+      if(saldoAtual < reservaMinima) modoOp = 'defesa';
+      else if(cfoPerfil.risco === 'agressivo' && cfoPerfil.fase === 'escala') modoOp = 'ataque';
+
+      return `[DADOS DO CAIXA 360 - ${ptDate(hoje)}]
+Saldo total: ${fmt(saldoAtual)}
+  Mercado Pago: ${fmt(saldoMP)}
+  Outros bancos: ${fmt(saldoOutros)}
+Reserva mínima: ${fmt(reservaMinima)}
+Margem acima da reserva: ${fmt(Math.max(0, saldoAtual - reservaMinima))}
+
+Contas a pagar:
+  7 dias: ${fmt(apagarTotal7)}
+  15 dias: ${fmt(apagarTotal15)}
+  30 dias: ${fmt(apagarTotal30)}
+
+Entradas ML:
+  Confirmadas 7 dias: ${fmt(confTotal7)}
+  Projeção 30 dias: ${fmt(confTotal30)}
+
+Pior saldo projetado: ${fmt(critica.saldo)} em ${ptDate(critica.data)} (${critica.dias} dias)
+Tendência: ${tendencia}
+Modo de operação: ${modoOp}
+
+Perfil do usuário:
+  Nível financeiro: ${cfoPerfil.nivel || 'intermediario'}
+  Perfil de risco: ${cfoPerfil.risco || 'moderado'}
+  Fase da operação: ${cfoPerfil.fase || 'crescimento'}
+  Objetivo atual: ${cfoPerfil.objetivo || 'crescer'}
+  Preferência de resposta: ${cfoPerfil.resposta || 'curta'}
+[FIM DOS DADOS]`;
+    }
+
+    async function enviarMsgCFO(){
+      const input = document.getElementById('cfo-input');
+      const texto = input.value.trim();
+      if(!texto || !usuarioAtual) return;
+      input.value = '';
+      input.style.height = 'auto';
+
+      adicionarMsgCFO('user', texto);
+
+      // Indicador de loading
+      const loadingEl = document.getElementById('cfo-msgs').lastElementChild;
+      const loadDiv = document.createElement('div');
+      loadDiv.className = 'cfo-msg bot loading';
+      loadDiv.textContent = 'Analisando seus dados...';
+      document.getElementById('cfo-msgs').appendChild(loadDiv);
+      document.getElementById('cfo-msgs').scrollTop = 9999;
+
+      try {
+        const { data: { session } } = await supa.auth.getSession();
+        if(!session) throw new Error('Sem sessão');
+
+        const contexto = montarContextoCFO();
+        const msgs = [
+          {role:'user', content: contexto + '\n\n' + texto}
+        ];
+        // Adicionar histórico recente (últimas 6 trocas)
+        if(cfoHistorico.length > 1){
+          const hist = cfoHistorico.slice(-12).filter(m => m.content !== '__loading__');
+          msgs.splice(0, 0, ...hist.slice(0, -1).map(m => ({role:m.role, content:m.content})));
+          msgs[msgs.length-1] = {role:'user', content: contexto + '\n\n' + texto};
+        }
+
+        const resp = await fetch(`${SUPA_URL}/functions/v1/cfo-chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + session.access_token
+          },
+          body: JSON.stringify({ messages: msgs, perfil: cfoPerfil })
+        });
+
+        if(!resp.ok) throw new Error('Erro ' + resp.status);
+        const result = await resp.json();
+        loadDiv.remove();
+        adicionarMsgCFO('bot', result.content || 'Sem resposta.');
+      } catch(err) {
+        loadDiv.remove();
+        adicionarMsgCFO('bot', 'Erro ao conectar com o CFO. Verifique sua conexão e tente novamente.');
+        console.error('CFO error:', err);
+      }
+    }
+
     // ===== INIT =====
     function init(){
       // Saldos
@@ -4862,6 +5375,11 @@
       renderDashboard();
     }
     
+    // ===== PWA — SERVICE WORKER =====
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+    }
+
     // ===== START =====
     // Verifica se já existe sessão ativa (usuário já logado)
     supa.auth.getSession().then(({data}) => {
