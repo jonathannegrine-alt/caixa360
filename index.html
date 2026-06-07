@@ -891,12 +891,12 @@
             <div class="saldo-row">
               <div class="saldo-field">
                 <span class="saldo-label">Mercado Pago</span>
-                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()">
+                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()" oninput="onMoneyInput(this)">
               </div>
               <span style="font-size:18px;color:#ccc;">+</span>
               <div class="saldo-field">
                 <span class="saldo-label">Outros bancos</span>
-                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()">
+                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()" oninput="onMoneyInput(this)">
               </div>
               <span style="font-size:18px;color:#ccc;">=</span>
               <div class="saldo-field">
@@ -5375,6 +5375,26 @@ Perfil do usuário:
       renderDashboard();
     }
     
+    // ===== ENTER = TAB em inputs (exceto textarea e botões) =====
+    document.addEventListener('keydown', function(e){
+      if(e.key !== 'Enter') return;
+      const el = e.target;
+      const tag = el.tagName;
+      if(tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+      if(tag === 'INPUT' && (el.type === 'submit' || el.type === 'button' || el.type === 'checkbox' || el.type === 'radio')) return;
+      e.preventDefault();
+      // Disparar blur para garantir save (onblur dos inputs de saldo, etc.)
+      el.blur();
+      // Mover foco para próximo elemento tabulável
+      const tabulaveis = Array.from(document.querySelectorAll(
+        'input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter(x => x.offsetParent !== null); // apenas visíveis
+      const idx = tabulaveis.indexOf(el);
+      if(idx >= 0 && idx < tabulaveis.length - 1){
+        tabulaveis[idx + 1].focus();
+      }
+    });
+
     // ===== PWA — SERVICE WORKER =====
     if('serviceWorker' in navigator){
       navigator.serviceWorker.register('service-worker.js').catch(()=>{});
