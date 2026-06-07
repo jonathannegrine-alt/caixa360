@@ -1610,7 +1610,11 @@
                 <tr>
                   <th>Nome</th>
                   <th style="text-align:center;">Impacta DRE</th>
-                  <th style="text-align:center;width:80px;">Ações</th>
+                  <th style="text-align:center;">
+                    Tipo Passivo
+                    <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><strong>Dívida real:</strong> existiria mesmo encerrando o negócio (fornecedor, imposto, empréstimo).<br><strong>Custo operacional:</strong> para de acumular se encerrar (aluguel, contador, pró-labore). Só dívidas reais entram no cálculo de Saúde Patrimonial.</span></span>
+                  </th>
+                  <th style="text-align:center;width:60px;">Ações</th>
                 </tr>
               </thead>
               <tbody id="tbody-categorias"></tbody>
@@ -1729,8 +1733,9 @@
                 <div id="pat-ativos" style="font-size:16px;font-weight:700;color:var(--success);">—</div>
               </div>
               <div style="text-align:center;padding:10px;background:var(--gray-100);border-radius:8px;">
-                <div style="font-size:11px;color:#666;">Passivos Totais</div>
+                <div style="font-size:11px;color:#666;">Dívidas Reais</div>
                 <div id="pat-passivos" style="font-size:16px;font-weight:700;color:var(--danger);">—</div>
+                <div id="pat-passivos-op" style="font-size:10px;color:#999;margin-top:2px;display:none;"></div>
               </div>
               <div style="text-align:center;padding:10px;background:var(--gray-100);border-radius:8px;">
                 <div style="font-size:11px;color:#666;">Patrimônio Oper.</div>
@@ -2662,14 +2667,15 @@
       if(rPag.data) pagamentos = rPag.data.map(p => ({
         id:p.id, desc:p.descricao, forn:p.forn, val:p.val, data:p.data,
         cat:p.cat, pago:p.pago, tipo:p.tipo, grupo_id:p.grupo_id,
-        parcela:p.parcela, valorPago:p.valor_pago
+        parcela:p.parcela, valorPago:p.valor_pago,
+        tiny_key:p.tiny_key||null, fonte:p.fonte||null
       }));
 
       if(rLib.data) liberacoes = rLib.data.map(l => ({data:l.data, val:l.val}));
 
       if(rSku.data) skus = rSku.data.map(s => ({id:s.id, sku:s.sku, custo:s.custo, imposto:s.imposto}));
 
-      if(rCat.data) categorias = rCat.data.map(c => ({id:c.id, nome:c.nome, impactaDRE:c.impacta_dre}));
+      if(rCat.data) categorias = rCat.data.map(c => ({id:c.id, nome:c.nome, impactaDRE:c.impacta_dre, tipoPassivo:c.tipo_passivo||'divida'}));
 
       if(rCfg.data && rCfg.data.cfg){
         const c = rCfg.data.cfg;
@@ -2702,9 +2708,10 @@
         usuario_id: uid,
         descricao: p.desc, forn: p.forn||'', val: p.val, data: p.data,
         cat: p.cat||'', pago: p.pago||false, tipo: p.tipo||'unico',
-        grupo_id: p.grupo_id||p.grupoId||null, parcela: p.parcela||null, valor_pago: p.valorPago||null
+        grupo_id: p.grupo_id||p.grupoId||null, parcela: p.parcela||null, valor_pago: p.valorPago||null,
+        tiny_key: p.tiny_key||null, fonte: p.fonte||null
       }));
-      const snapCat = categorias.map(c => ({usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false}));
+      const snapCat = categorias.map(c => ({usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida'}));
       const snapSku = skus.map(s => ({usuario_id: uid, sku: s.sku, custo: s.custo, imposto: s.imposto}));
 
       // Pagamentos: delete + insert em lotes de 200
@@ -2911,15 +2918,15 @@
     function carregarDadosExemplo(){
       // Categorias padrão
       categorias = [
-        {nome:'Fornecedor',impactaDRE:true},
-        {nome:'Imposto',impactaDRE:true},
-        {nome:'Pró-labore',impactaDRE:true},
-        {nome:'Salário',impactaDRE:true},
-        {nome:'Aluguel',impactaDRE:true},
-        {nome:'ADS/Marketing',impactaDRE:true},
-        {nome:'Capital de Giro - Amortização',impactaDRE:false},
-        {nome:'Capital de Giro - Juros',impactaDRE:true},
-        {nome:'Outro',impactaDRE:true}
+        {nome:'Fornecedor',               impactaDRE:true,  tipoPassivo:'divida'},
+        {nome:'Imposto',                  impactaDRE:true,  tipoPassivo:'divida'},
+        {nome:'Pró-labore',               impactaDRE:true,  tipoPassivo:'operacional'},
+        {nome:'Salário',                  impactaDRE:true,  tipoPassivo:'operacional'},
+        {nome:'Aluguel',                  impactaDRE:true,  tipoPassivo:'operacional'},
+        {nome:'ADS/Marketing',            impactaDRE:true,  tipoPassivo:'operacional'},
+        {nome:'Capital de Giro - Amortização', impactaDRE:false, tipoPassivo:'divida'},
+        {nome:'Capital de Giro - Juros',  impactaDRE:true,  tipoPassivo:'divida'},
+        {nome:'Outro',                    impactaDRE:true,  tipoPassivo:'divida'}
       ];
       
       // Liberações ML exemplo (próximos 15 dias)
@@ -4749,17 +4756,25 @@
     // ===== CATEGORIAS =====
     function renderCategorias(){
       const tbody = document.getElementById('tbody-categorias');
-      tbody.innerHTML = categorias.map((c, i) => `
+      tbody.innerHTML = categorias.map((c, i) => {
+        const tp = c.tipoPassivo || 'divida';
+        return `
         <tr>
-          <td>${c.nome}</td>
+          <td style="font-size:13px;">${c.nome}</td>
           <td style="text-align:center;">
             <input type="checkbox" ${c.impactaDRE ? 'checked' : ''} onchange="categorias[${i}].impactaDRE=this.checked;salvar()">
           </td>
           <td style="text-align:center;">
+            <select onchange="categorias[${i}].tipoPassivo=this.value;salvar()" style="font-size:11px;padding:3px 5px;border:1px solid var(--gray-200);border-radius:5px;background:#fff;">
+              <option value="divida" ${tp==='divida'?'selected':''}>💳 Dívida</option>
+              <option value="operacional" ${tp==='operacional'?'selected':''}>🔄 Operacional</option>
+            </select>
+          </td>
+          <td style="text-align:center;">
             <button class="btn-del btn-sm" onclick="removerCategoria(${i})">✕</button>
           </td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     }
 
     function adicionarCategoria(){
@@ -4769,7 +4784,7 @@
         alert('Categoria já existe');
         return;
       }
-      categorias.push({nome: nome.trim(), impactaDRE: true});
+      categorias.push({nome: nome.trim(), impactaDRE: true, tipoPassivo: 'divida'});
       salvar();
       renderCategorias();
       // Atualizar select de filtro e modal
@@ -5972,8 +5987,21 @@
       const caixaAtual = saldoAtual;
       const ativos = caixaAtual + recConf + estCusto;
 
-      // Passivos
-      const passivos = pagamentos.filter(p => !p.pago).reduce((s,p) => s + p.val, 0);
+      // Passivos — separar dívidas reais de custos operacionais
+      const catsDivida = new Set(
+        categorias.filter(c => !c.tipoPassivo || c.tipoPassivo === 'divida').map(c => c.nome)
+      );
+      const catsOp = new Set(
+        categorias.filter(c => c.tipoPassivo === 'operacional').map(c => c.nome)
+      );
+      const pagsAbertos = pagamentos.filter(p => !p.pago);
+      const passivosDivida = pagsAbertos
+        .filter(p => catsDivida.has(p.cat) || !p.cat)
+        .reduce((s,p) => s + p.val, 0);
+      const passivosOp = pagsAbertos
+        .filter(p => catsOp.has(p.cat))
+        .reduce((s,p) => s + p.val, 0);
+      const passivos = passivosDivida; // cálculos patrimoniais usam só dívidas reais
 
       // Indicadores
       const patrimonio = ativos - passivos;
@@ -5987,7 +6015,7 @@
       const cenReal = caixaAtual + recConf + estCusto * (1 + markup) - passivos;
       const cenEst  = caixaAtual + recConf + estCusto * (1 - desconto) - passivos;
 
-      return { caixaAtual, recConf, recProj, estFull, estGalpao, estCusto, ativos, passivos, patrimonio, indiceCobertura, endivLiquido, cenCons, cenReal, cenEst, temP11 };
+      return { caixaAtual, recConf, recProj, estFull, estGalpao, estCusto, ativos, passivos, passivosDivida, passivosOp, patrimonio, indiceCobertura, endivLiquido, cenCons, cenReal, cenEst, temP11 };
     }
 
     function renderPatrimonio(){
@@ -6012,7 +6040,15 @@
       if(el('pat-cob-bar')){ const pct = Math.min(100, ic/3*100); el('pat-cob-bar').style.width = pct+'%'; el('pat-cob-bar').style.background = scoreColor; }
 
       if(el('pat-ativos')) el('pat-ativos').textContent = fmt(d.ativos);
-      if(el('pat-passivos')) el('pat-passivos').textContent = fmt(d.passivos);
+      if(el('pat-passivos')) el('pat-passivos').textContent = fmt(d.passivosDivida);
+      if(el('pat-passivos-op')){
+        if(d.passivosOp > 0){
+          el('pat-passivos-op').textContent = `+${fmt(d.passivosOp)} operac.`;
+          el('pat-passivos-op').style.display = '';
+        } else {
+          el('pat-passivos-op').style.display = 'none';
+        }
+      }
       if(el('pat-patrimonio')){ el('pat-patrimonio').textContent = (d.patrimonio>=0?'+':'')+fmt(d.patrimonio); el('pat-patrimonio').style.color = d.patrimonio>=0?'var(--success)':'var(--danger)'; }
       if(el('pat-endiv')){ el('pat-endiv').textContent = (d.endivLiquido<=0?'Coberto':'') || fmt(d.endivLiquido); el('pat-endiv').style.color = d.endivLiquido<=0?'var(--success)':'var(--danger)'; }
 
@@ -6034,13 +6070,16 @@
 
       // Tabela Passivos
       const tbP = el('pat-tbody-passivos');
-      if(tbP) tbP.innerHTML = [
-        ['Contas a Pagar em Aberto', d.passivos, false],
-        ['<strong>Total de Passivos</strong>', d.passivos, true],
-      ].map(([label, val, bold]) => `<tr style="border-bottom:1px solid var(--gray-100);">
-        <td style="padding:8px 12px;font-size:12px;${bold?'font-weight:700;':''}">${label}</td>
-        <td style="padding:8px 12px;text-align:right;font-size:12px;${bold?'font-weight:700;':''}color:var(--danger);">${fmt(val)}</td>
-      </tr>`).join('');
+      if(tbP){
+        const rowsP = [];
+        if(d.passivosDivida > 0) rowsP.push(['Dívidas reais (fornecedor, imposto, empréstimo)', d.passivosDivida, false, 'var(--danger)']);
+        if(d.passivosOp > 0) rowsP.push(['Custos operacionais em aberto <span style="font-size:10px;color:#999;">(não contam na liquidação)</span>', d.passivosOp, false, '#999']);
+        rowsP.push([`<strong>Total Dívidas Reais</strong>`, d.passivosDivida, true, 'var(--danger)']);
+        tbP.innerHTML = rowsP.map(([label, val, bold, color]) => `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:8px 12px;font-size:12px;${bold?'font-weight:700;':''}">${label}</td>
+          <td style="padding:8px 12px;text-align:right;font-size:12px;${bold?'font-weight:700;':''}color:${color};">${fmt(val)}</td>
+        </tr>`).join('');
+      }
 
       // Cenários
       const fmtCen = v => `<span style="color:${v>=0?'var(--success)':'var(--danger)'};font-weight:700;">${v>=0?'+':''}${fmt(v)}</span>`;
@@ -6278,7 +6317,8 @@
         const statusSolv = ic < 1 ? 'critico' : ic < 1.5 ? 'atencao' : ic < 2 ? 'regular' : 'saudavel';
         patrimonioCtx = `\nSaúde Patrimonial:
   Ativos totais: ${fmt(dp.ativos)}
-  Passivos totais: ${fmt(dp.passivos)}
+  Dívidas reais (passivos liquidação): ${fmt(dp.passivosDivida)}
+  Custos operacionais em aberto (não contam na liquidação): ${fmt(dp.passivosOp)}
   Patrimônio operacional: ${fmt(dp.patrimonio)}
   Índice de cobertura da dívida: ${ic === Infinity ? '∞' : ic.toFixed(2)}×
   Endividamento líquido: ${fmt(dp.endivLiquido)}
