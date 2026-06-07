@@ -2514,6 +2514,8 @@
         const _lsPag    = JSON.parse(localStorage.getItem('mk_pagamentos')    || '[]');
         const _lsLib    = JSON.parse(localStorage.getItem('mk_liberacoes')    || '[]');
         const _lsCfg    = JSON.parse(localStorage.getItem('mk_cfg')           || '{}');
+        const _lsSku    = JSON.parse(localStorage.getItem('mk_skus')          || '[]');
+        const _lsCat    = JSON.parse(localStorage.getItem('mk_categorias')    || '[]');
         const _lsComp   = JSON.parse(localStorage.getItem('mk_componentes')   || '[]');
         const _lsCompos = JSON.parse(localStorage.getItem('mk_composicao')    || '[]');
         const _lsVendas = JSON.parse(localStorage.getItem('mk_vendas_sku')    || '[]');
@@ -2530,6 +2532,8 @@
         // Merge: se Supabase retornou vazio, restaurar do backup local
         if(pagamentos.length   === 0 && _lsPag.length    > 0) pagamentos    = _lsPag;
         if(liberacoes.length   === 0 && _lsLib.length    > 0) liberacoes    = _lsLib;
+        if(skus.length         === 0 && _lsSku.length    > 0) skus          = _lsSku;
+        if(categorias.length   === 0 && _lsCat.length    > 0) categorias    = _lsCat;
         if(componentes.length  === 0 && _lsComp.length   > 0) componentes   = _lsComp;
         if(composicaoKit.length=== 0 && _lsCompos.length > 0) composicaoKit = _lsCompos;
         if(vendasSku.length    === 0 && _lsVendas.length > 0) vendasSku     = _lsVendas;
