@@ -3245,23 +3245,24 @@
       const tbody = document.getElementById('tbody-skus');
       const busca = document.getElementById('filtro-sku').value.toLowerCase();
       const vazio = document.getElementById('skus-vazio');
-      
+
       let filtrados = skus.filter(s => !busca || s.sku.toLowerCase().includes(busca));
-      
+
       if(filtrados.length === 0){
         tbody.innerHTML = '';
         vazio.style.display = 'block';
+        document.getElementById('sku-sel-count').textContent = '';
         return;
       }
-      
+
       vazio.style.display = 'none';
-      
+
       let html = '';
-      filtrados.forEach((s, i) => {
+      filtrados.forEach((s) => {
         const idx = skus.indexOf(s);
         const total = s.custo + (s.custo * s.imposto / 100);
-        
         html += `<tr>
+          <td style="text-align:center;"><input type="checkbox" class="sku-cb" data-idx="${idx}" onchange="atualizarContSKUSel()"></td>
           <td style="font-family:monospace;font-weight:600;">${s.sku}</td>
           <td>${fmt(s.custo)}</td>
           <td>${s.imposto.toFixed(2)}%</td>
@@ -3271,10 +3272,14 @@
           </td>
         </tr>`;
       });
-      
+
       tbody.innerHTML = html;
+      // Resetar checkbox "selecionar todos" ao re-renderizar
+      const selAll = document.getElementById('sku-sel-all');
+      if(selAll) selAll.checked = false;
+      document.getElementById('sku-sel-count').textContent = '';
     }
-    
+
     function abrirModalSKU(){
       editandoIdxSKU = null;
       document.getElementById('modal-sku-title').textContent = 'Novo SKU';
@@ -3391,12 +3396,28 @@
             const line = lines[i].trim();
             if(!line || line.startsWith('#')) continue;
             
-            const parts = line.split(';');
+            // Suporta separador ; ou , (alguns relatórios usam vírgula como separador de coluna)
+            const sep = line.includes(';') ? ';' : ',';
+            const parts = line.split(sep);
             if(parts.length < 2) continue;
-            
+
             const sku = parts[0].trim();
-            const custo = parseFloat(parts[1].replace(',','.'));
-            const imposto = parts[2] ? parseFloat(parts[2].replace(',','.')) : 6.18;
+            // Normaliza decimal: aceita vírgula ou ponto
+            const normNum = s => s ? s.trim().replace(/\./g,'').replace(',','.') : '';
+            // Se já usa ponto decimal e não tem vírgula, preserva como está
+            const normDec = s => {
+              if(!s) return '';
+              s = s.trim();
+              // Se tem vírgula: pode ser separador decimal (BR) ou separador de milhar (EN)
+              // Heurística: se tem ponto E vírgula → ponto=milhar, vírgula=decimal → remove ponto, troca vírgula
+              if(s.includes('.') && s.includes(',')) return s.replace(/\./g,'').replace(',','.');
+              // Só vírgula → decimal BR
+              if(s.includes(',')) return s.replace(',','.');
+              // Só ponto → pode ser decimal EN (ex: 15.50) — usa direto
+              return s;
+            };
+            const custo = parseFloat(normDec(parts[1]));
+            const imposto = parts[2] ? parseFloat(normDec(parts[2])) : 6.18;
             
             if(!sku || isNaN(custo)) continue;
             
