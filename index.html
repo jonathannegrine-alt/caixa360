@@ -6750,8 +6750,10 @@ Perfil do usuário:
 
     function calcRankingReposicao(){
       const consumo = calcConsumoComponentes();
-      const base = estoqueGalpao.length > 0 ? estoqueGalpao
+      const kitSkus = new Set(composicaoKit.map(c => c.sku_comercial));
+      const baseAll = estoqueGalpao.length > 0 ? estoqueGalpao
         : componentes.map(c => ({ sku: c.codigo, descricao: c.descricao, qtd_galpao: 0, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: c.custo_unitario }));
+      const base = baseAll.filter(eg => !kitSkus.has(eg.sku));
       return base.map(eg => {
         const c = consumo[eg.sku] || { consumo_diario: 0, consumo30d: 0 };
         const regras = getMetaComp(eg.sku);
@@ -6940,11 +6942,14 @@ Perfil do usuário:
         ...vendasSku.filter(v => !skusKit.has(v.sku) && codigosComp.has(v.sku)).map(v => v.sku)
       ]);
 
-      // Se não há composição mapeada, fallback: mostrar todos vendasSku não-kit
+      // Se não há composição mapeada, fallback: mostrar SKUs que estão em estoqueGalpao/componentes
       const rows = [];
       if(composicaoKit.length === 0){
-        // Sem composição: mostrar todos os SKUs do relatório ML, ordenados por unidades
-        vendasSku.forEach(v => {
+        // Sem composição: filtrar por codigosComp (físicos cadastrados); se nenhum cadastrado, mostra tudo
+        const fonte = codigosComp.size > 0
+          ? vendasSku.filter(v => codigosComp.has(v.sku))
+          : vendasSku;
+        fonte.forEach(v => {
           const giro = v.unidades / periodo;
           const est = estoqueGalpao.find(e => e.sku === v.sku);
           const qtd = est ? (est.qtd_galpao||0) + (est.qtd_full||0) : null;
