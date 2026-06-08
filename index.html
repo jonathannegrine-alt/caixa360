@@ -6902,9 +6902,7 @@ Perfil do usuário:
       }
       if(vazioEl) vazioEl.style.display = 'none';
       if(cardEl) cardEl.style.display = '';
-      const { isolados, kitSkus } = getSkusIsolados();
-      const fonte = isolados.size > 0 ? vendasSku.filter(v => isolados.has(v.sku)) : vendasSku.filter(v => !kitSkus.has(v.sku));
-      const sorted = [...fonte].sort((a,b) => b.receita - a.receita);
+      const sorted = [...vendasSku].sort((a,b) => b.receita - a.receita);
       let html = '';
       sorted.forEach(v => {
         const custoUn = calcCustoComposicao(v.sku);
@@ -7052,9 +7050,7 @@ Perfil do usuário:
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#999;">Importe o relatório de vendas ML para ver cancelamentos</td></tr>';
         return;
       }
-      const { isolados: isoladosC, kitSkus: kitSkusC } = getSkusIsolados();
-      const fonteC = isoladosC.size > 0 ? vendasSku.filter(v => isoladosC.has(v.sku)) : vendasSku.filter(v => !kitSkusC.has(v.sku));
-      const sorted = [...fonteC].sort((a,b) => b.cancelamentos - a.cancelamentos);
+      const sorted = [...vendasSku].sort((a,b) => b.cancelamentos - a.cancelamentos);
       let html = '';
       sorted.forEach(v => {
         const total = v.unidades + v.cancelamentos;
@@ -7080,9 +7076,7 @@ Perfil do usuário:
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">Importe o relatório de vendas ML para ver análise de ADS</td></tr>';
         return;
       }
-      const { isolados: isoladosA, kitSkus: kitSkusA } = getSkusIsolados();
-      const fonteA = isoladosA.size > 0 ? vendasSku.filter(v => isoladosA.has(v.sku)) : vendasSku.filter(v => !kitSkusA.has(v.sku));
-      const sorted = [...fonteA].sort((a,b) => b.unidades_ads - a.unidades_ads);
+      const sorted = [...vendasSku].sort((a,b) => b.unidades_ads - a.unidades_ads);
       let html = '';
       sorted.forEach(v => {
         const pctAds = v.unidades > 0 ? (v.unidades_ads / v.unidades * 100) : 0;
