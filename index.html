@@ -1937,6 +1937,18 @@
           </div>
         </div>
 
+        <!-- Alerta SKUs sem cadastro -->
+        <div id="alerta-skus-nao-cadastrados" style="display:none;margin-bottom:12px;border:1px solid #f59e0b;border-left:4px solid #f59e0b;border-radius:8px;background:#fffbeb;padding:12px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div style="flex:1;">
+              <div style="font-weight:600;color:#92400e;margin-bottom:4px;">⚠️ SKUs no relatório de vendas sem cadastro em SKUs/Custos</div>
+              <div id="alerta-skus-lista" style="font-size:11px;color:#78350f;font-family:monospace;line-height:1.8;"></div>
+              <div style="font-size:11px;color:#92400e;margin-top:6px;">Cadastre esses SKUs na aba <b>SKUs / Custos</b> para que apareçam corretamente no Motor de Reposição.</div>
+            </div>
+            <button class="btn-out btn-sm" onclick="document.getElementById('alerta-skus-nao-cadastrados').style.display='none'" style="flex-shrink:0;">✕</button>
+          </div>
+        </div>
+
         <!-- Alerta de capital -->
         <div id="estoque-alerta-capital" style="display:none;margin-bottom:12px;border:1px solid var(--warning);border-left:4px solid var(--warning);border-radius:8px;background:#fffbeb;padding:12px 16px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -6829,10 +6841,11 @@ Perfil do usuário:
       // SKUs que são kits comerciais mapeados
       const skusKit = new Set(composicaoKit.map(c => c.sku_comercial));
 
-      // Isolados: estoqueGalpao (Upseller = só isolados) + componentes[], ambos sem kits comerciais
+      // Isolados: estoqueGalpao + componentes[] + skus[] cadastrados, todos sem kits comerciais
       const codigosComp = new Set([
         ...estoqueGalpao.filter(e => !skusKit.has(e.sku)).map(e => e.sku),
-        ...componentes.filter(c => !skusKit.has(c.codigo)).map(c => c.codigo)
+        ...componentes.filter(c => !skusKit.has(c.codigo)).map(c => c.codigo),
+        ...skus.filter(s => !skusKit.has(s.sku)).map(s => s.sku),
       ]);
 
       // 1. Consumo via kits: cada venda de kit distribui para seus componentes
@@ -6896,8 +6909,14 @@ Perfil do usuário:
       const egFiltrado = isolados.size > 0
         ? estoqueGalpao.filter(eg => isolados.has(eg.sku))
         : estoqueGalpao.filter(eg => !kitSkus.has(eg.sku));
+      // Fallback: skus[] cadastrados (sem kits), enriquecidos com descricao de componentes/estoqueGalpao
       const base = egFiltrado.length > 0 ? egFiltrado
-        : componentes.map(c => ({ sku: c.codigo, descricao: c.descricao, qtd_galpao: 0, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: c.custo_unitario }));
+        : skus.filter(s => !kitSkus.has(s.sku)).map(s => {
+            const desc = s.titulo
+              || (componentes.find(c => c.codigo === s.sku)||{}).descricao
+              || (estoqueGalpao.find(e => e.sku === s.sku)||{}).descricao || '';
+            return { sku: s.sku, descricao: desc, qtd_galpao: 0, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: s.custo };
+          });
       return base.map(eg => {
         const c = consumo[eg.sku] || { consumo_diario: 0, consumo30d: 0 };
         const regras = getMetaComp(eg.sku);
@@ -6937,6 +6956,7 @@ Perfil do usuário:
 
     // ----- Renders -----
     function renderReposicaoTab(){
+      verificarSkusNaoCadastrados();
       const tbody = document.getElementById('tbody-reposicao');
       const vazioEl = document.getElementById('estoque-reposicao-vazio');
       const cardEl = document.getElementById('estoque-reposicao-card');
@@ -7347,6 +7367,28 @@ Perfil do usuário:
       salvar(); renderComposicoesTab();
       const selAll = document.getElementById('kits-sel-all');
       if(selAll) selAll.checked = false;
+    }
+
+    // ----- Aviso de SKUs sem cadastro -----
+    function verificarSkusNaoCadastrados(){
+      const alertEl = document.getElementById('alerta-skus-nao-cadastrados');
+      const listaEl = document.getElementById('alerta-skus-lista');
+      if(!alertEl || !listaEl) return;
+      if(vendasSku.length === 0){ alertEl.style.display = 'none'; return; }
+      const skusKit = new Set(composicaoKit.map(c => c.sku_comercial));
+      const skusCadastrados = new Set([
+        ...skus.map(s => s.sku),
+        ...componentes.map(c => c.codigo),
+        ...estoqueGalpao.map(e => e.sku),
+      ]);
+      // Verifica só SKUs isolados (não kits) que estão nas vendas mas sem cadastro
+      const faltando = vendasSku
+        .filter(v => !skusKit.has(v.sku) && !skusCadastrados.has(v.sku))
+        .map(v => v.sku)
+        .sort();
+      if(faltando.length === 0){ alertEl.style.display = 'none'; return; }
+      listaEl.textContent = faltando.join('  ·  ');
+      alertEl.style.display = '';
     }
 
     // ----- Limpar dados de planilhas -----
