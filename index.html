@@ -6684,6 +6684,17 @@ Perfil do usuário:
     }
 
     // ----- Cálculo -----
+    // Retorna Set dos SKU isolados (físicos/componentes).
+    // Fonte: estoqueGalpao (Upseller = somente isolados) + componentes[], excluindo sku_comercial de composicaoKit.
+    // Se ambos vazios: retorna Set vazio (caller filtra somente por !skusKit).
+    function getSkusIsolados(){
+      const kitSkus = new Set(composicaoKit.map(c => c.sku_comercial));
+      const s = new Set();
+      estoqueGalpao.forEach(e => { if(!kitSkus.has(e.sku)) s.add(e.sku); });
+      componentes.forEach(c => { if(!kitSkus.has(c.codigo)) s.add(c.codigo); });
+      return { isolados: s, kitSkus };
+    }
+
     function calcConsumoComponentes(){
       const consumo = {};
       const dias = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
@@ -6750,9 +6761,11 @@ Perfil do usuário:
 
     function calcRankingReposicao(){
       const consumo = calcConsumoComponentes();
-      const kitSkus = new Set(composicaoKit.map(c => c.sku_comercial));
-      // Base: estoqueGalpao (Upseller = só isolados) excluindo qualquer kit comercial mapeado
-      const egFiltrado = estoqueGalpao.filter(eg => !kitSkus.has(eg.sku));
+      const { isolados, kitSkus } = getSkusIsolados();
+      // Base: estoqueGalpao filtrado para isolados apenas (Upseller = só isolados)
+      const egFiltrado = isolados.size > 0
+        ? estoqueGalpao.filter(eg => isolados.has(eg.sku))
+        : estoqueGalpao.filter(eg => !kitSkus.has(eg.sku));
       const base = egFiltrado.length > 0 ? egFiltrado
         : componentes.map(c => ({ sku: c.codigo, descricao: c.descricao, qtd_galpao: 0, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: c.custo_unitario }));
       return base.map(eg => {
@@ -6889,7 +6902,9 @@ Perfil do usuário:
       }
       if(vazioEl) vazioEl.style.display = 'none';
       if(cardEl) cardEl.style.display = '';
-      const sorted = [...vendasSku].sort((a,b) => b.receita - a.receita);
+      const { isolados, kitSkus } = getSkusIsolados();
+      const fonte = isolados.size > 0 ? vendasSku.filter(v => isolados.has(v.sku)) : vendasSku.filter(v => !kitSkus.has(v.sku));
+      const sorted = [...fonte].sort((a,b) => b.receita - a.receita);
       let html = '';
       sorted.forEach(v => {
         const custoUn = calcCustoComposicao(v.sku);
@@ -6929,17 +6944,14 @@ Perfil do usuário:
 
       const periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
       const consumo = calcConsumoComponentes();
-      const skusKit = new Set(composicaoKit.map(c => c.sku_comercial));
-      const codigosComp = new Set([
-        ...estoqueGalpao.filter(e => !skusKit.has(e.sku)).map(e => e.sku),
-        ...componentes.filter(c => !skusKit.has(c.codigo)).map(c => c.codigo)
-      ]);
+      const { isolados, kitSkus: skusKit } = getSkusIsolados();
+      const codigosComp = isolados; // mesma fonte
 
-      // Somente isolados: consumo já calculado (via kits + direto) + isolados que venderam mas não têm composição
-      // Nunca incluir kit comerciais (skusKit), mesmo que apareçam via estrutura hierárquica
+      // Somente isolados: consumo calculado (via kits + direto) + isolados com vendas diretas
+      // Nunca incluir sku_comercial de kit, mesmo por caminhos indiretos
       const skusExibir = new Set([
         ...Object.keys(consumo).filter(sku => !skusKit.has(sku)),
-        ...vendasSku.filter(v => !skusKit.has(v.sku) && codigosComp.has(v.sku)).map(v => v.sku)
+        ...vendasSku.filter(v => !skusKit.has(v.sku) && (isolados.size === 0 || isolados.has(v.sku))).map(v => v.sku)
       ]);
 
       // Se não há composição mapeada, fallback: mostrar SKUs que estão em estoqueGalpao/componentes
@@ -7040,7 +7052,9 @@ Perfil do usuário:
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#999;">Importe o relatório de vendas ML para ver cancelamentos</td></tr>';
         return;
       }
-      const sorted = [...vendasSku].sort((a,b) => b.cancelamentos - a.cancelamentos);
+      const { isolados: isoladosC, kitSkus: kitSkusC } = getSkusIsolados();
+      const fonteC = isoladosC.size > 0 ? vendasSku.filter(v => isoladosC.has(v.sku)) : vendasSku.filter(v => !kitSkusC.has(v.sku));
+      const sorted = [...fonteC].sort((a,b) => b.cancelamentos - a.cancelamentos);
       let html = '';
       sorted.forEach(v => {
         const total = v.unidades + v.cancelamentos;
@@ -7066,7 +7080,9 @@ Perfil do usuário:
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:#999;">Importe o relatório de vendas ML para ver análise de ADS</td></tr>';
         return;
       }
-      const sorted = [...vendasSku].sort((a,b) => b.unidades_ads - a.unidades_ads);
+      const { isolados: isoladosA, kitSkus: kitSkusA } = getSkusIsolados();
+      const fonteA = isoladosA.size > 0 ? vendasSku.filter(v => isoladosA.has(v.sku)) : vendasSku.filter(v => !kitSkusA.has(v.sku));
+      const sorted = [...fonteA].sort((a,b) => b.unidades_ads - a.unidades_ads);
       let html = '';
       sorted.forEach(v => {
         const pctAds = v.unidades > 0 ? (v.unidades_ads / v.unidades * 100) : 0;
