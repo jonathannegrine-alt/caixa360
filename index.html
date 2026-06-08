@@ -1937,7 +1937,8 @@
           <div class="resultado-tab" id="estoque-tab-rentabilidade" onclick="setEstoqueTab('rentabilidade')">💰 Rentabilidade</div>
           <div class="resultado-tab" id="estoque-tab-cancelamentos" onclick="setEstoqueTab('cancelamentos')">↩️ Cancelamentos</div>
           <div class="resultado-tab" id="estoque-tab-ads" onclick="setEstoqueTab('ads')">📣 ADS</div>
-          <div class="resultado-tab" id="estoque-tab-vendas" onclick="setEstoqueTab('vendas')">📦 Vendas SKU</div>
+          <div class="resultado-tab" id="estoque-tab-vendas" onclick="setEstoqueTab('vendas')">📦 Vendas ML</div>
+          <div class="resultado-tab" id="estoque-tab-skuunit" onclick="setEstoqueTab('skuunit')">🔩 SKU Unitário</div>
         </div>
 
         <!-- Tab: Reposição -->
@@ -2081,7 +2082,7 @@
           </div>
         </div>
 
-        <!-- Tab: Vendas SKU -->
+        <!-- Tab: Vendas ML (raw do relatório ML, todos SKUs) -->
         <div id="estoque-view-vendas" style="display:none;">
           <div class="card" id="estoque-vendas-vazio" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
@@ -2092,7 +2093,7 @@
           </div>
           <div class="card" id="estoque-vendas-card" style="display:none;">
             <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-              <div class="card-title">📦 Vendas por SKU — últimos 30 dias <span style="font-size:11px;font-weight:400;color:#999;">(dados do relatório ML)</span></div>
+              <div class="card-title">📦 Vendas ML — todos os SKUs <span style="font-size:11px;font-weight:400;color:#999;">(kits e unitários como aparecem no ML)</span></div>
               <button class="btn-out btn-sm" onclick="exportarVendasSkuCSV()">⬇ Exportar CSV</button>
             </div>
             <div class="card-body" style="padding:0;overflow-x:auto;">
@@ -2115,6 +2116,39 @@
           </div>
         </div>
 
+        <!-- Tab: SKU Unitário (consolidado por componente físico) -->
+        <div id="estoque-view-skuunit" style="display:none;">
+          <div class="card" id="estoque-skuunit-vazio" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">🔩</div>
+              <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas ou estoque</div>
+              <div style="font-size:12px;">Importe o relatório ML e o estoque do Upseller para ver o consolidado por SKU físico.</div>
+            </div>
+          </div>
+          <div class="card" id="estoque-skuunit-card" style="display:none;">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div class="card-title">🔩 Vendas por SKU Unitário <span style="font-size:11px;font-weight:400;color:#999;">(demanda real = direto + via kits)</span></div>
+              <button class="btn-out btn-sm" onclick="exportarSkuUnitarioCSV()">⬇ Exportar CSV</button>
+            </div>
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Descrição</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Total 30d</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Direto</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Via kits</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Unid./dia</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Estoque</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cobertura</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-skuunit"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
       </div>
 
@@ -6638,7 +6672,7 @@ Perfil do usuário:
 
     function setEstoqueTab(tab){
       estoqueCurrentTab = tab;
-      const tabs = ['reposicao','excesso','rentabilidade','cancelamentos','ads','vendas'];
+      const tabs = ['reposicao','excesso','rentabilidade','cancelamentos','ads','vendas','skuunit'];
       tabs.forEach(t => {
         const btn = document.getElementById('estoque-tab-' + t);
         const view = document.getElementById('estoque-view-' + t);
@@ -6651,6 +6685,7 @@ Perfil do usuário:
       else if(tab === 'cancelamentos') renderCancelamentosTab();
       else if(tab === 'ads') renderADSTab();
       else if(tab === 'vendas') renderVendasSkuTab();
+      else if(tab === 'skuunit') renderSkuUnitarioTab();
     }
 
     function renderEstoque(){
@@ -6940,55 +6975,83 @@ Perfil do usuário:
       if(vazioEl) vazioEl.style.display = 'none';
       if(cardEl)  cardEl.style.display  = '';
 
+      const sorted = [...vendasSku].sort((a,b) => b.unidades - a.unidades);
+      const periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
+      let html = '';
+      sorted.forEach(v => {
+        const giro = (v.unidades / periodo).toFixed(1);
+        const pctAds = v.unidades > 0 ? Math.round(v.unidades_ads / v.unidades * 100) : 0;
+        const adsStr = v.unidades_ads > 0 ? `${v.unidades_ads} <span style="font-size:10px;color:#999;">(${pctAds}%)</span>` : '—';
+        const cancStr = v.cancelamentos > 0 ? `<span style="color:var(--warning);">${v.cancelamentos}</span>` : '—';
+        const est = estoqueGalpao.find(e => e.sku === v.sku);
+        const qtd = est ? (est.qtd_galpao||0) + (est.qtd_full||0) : null;
+        let estStr = '—', cobStr = '—';
+        if(qtd !== null){
+          estStr = String(qtd);
+          const giroNum = v.unidades / periodo;
+          if(giroNum > 0){
+            const dias = Math.floor(qtd / giroNum);
+            const cor = dias < 15 ? 'var(--danger)' : dias < 30 ? 'var(--warning)' : 'var(--success)';
+            cobStr = `<span style="color:${cor};font-weight:600;">${dias}d</span>`;
+          }
+        }
+        html += `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${v.sku}</td>
+          <td style="padding:8px 6px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#555;" title="${v.titulo}">${v.titulo||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:700;">${v.unidades}</td>
+          <td style="padding:8px 6px;text-align:right;">${giro}</td>
+          <td style="padding:8px 6px;text-align:right;">${adsStr}</td>
+          <td style="padding:8px 6px;text-align:right;">${cancStr}</td>
+          <td style="padding:8px 6px;text-align:right;">${estStr}</td>
+          <td style="padding:8px 6px;text-align:right;">${cobStr}</td>
+        </tr>`;
+      });
+      tbody.innerHTML = html;
+      makeSortable('tbody-vendas-sku');
+    }
+
+    function renderSkuUnitarioTab(){
+      const vazioEl = document.getElementById('estoque-skuunit-vazio');
+      const cardEl  = document.getElementById('estoque-skuunit-card');
+      const tbody   = document.getElementById('tbody-skuunit');
+      if(!tbody) return;
+      const { isolados, kitSkus } = getSkusIsolados();
+      const temDados = vendasSku.length > 0 || isolados.size > 0;
+      if(!temDados){
+        if(vazioEl) vazioEl.style.display = '';
+        if(cardEl)  cardEl.style.display  = 'none';
+        return;
+      }
+      if(vazioEl) vazioEl.style.display = 'none';
+      if(cardEl)  cardEl.style.display  = '';
+
       const periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
       const consumo = calcConsumoComponentes();
-      const { isolados, kitSkus: skusKit } = getSkusIsolados();
-      const codigosComp = isolados; // mesma fonte
 
-      // Somente isolados: consumo calculado (via kits + direto) + isolados com vendas diretas
-      // Nunca incluir sku_comercial de kit, mesmo por caminhos indiretos
+      // Todos os SKUs físicos com qualquer consumo
       const skusExibir = new Set([
-        ...Object.keys(consumo).filter(sku => !skusKit.has(sku)),
-        ...vendasSku.filter(v => !skusKit.has(v.sku) && (isolados.size === 0 || isolados.has(v.sku))).map(v => v.sku)
+        ...Object.keys(consumo).filter(sku => !kitSkus.has(sku)),
+        ...vendasSku.filter(v => !kitSkus.has(v.sku) && (isolados.size === 0 || isolados.has(v.sku))).map(v => v.sku)
       ]);
 
-      // Se não há composição mapeada, fallback: mostrar SKUs que estão em estoqueGalpao/componentes
       const rows = [];
-      if(composicaoKit.length === 0){
-        // Sem composição: filtrar por codigosComp (físicos cadastrados); se nenhum cadastrado, mostra tudo
-        const fonte = codigosComp.size > 0
-          ? vendasSku.filter(v => codigosComp.has(v.sku))
-          : vendasSku;
-        fonte.forEach(v => {
-          const giro = v.unidades / periodo;
-          const est = estoqueGalpao.find(e => e.sku === v.sku);
-          const qtd = est ? (est.qtd_galpao||0) + (est.qtd_full||0) : null;
-          rows.push({ sku: v.sku, titulo: v.titulo||'', total30d: v.unidades, direto: v.unidades, kits: 0, giro, qtd, ads: v.unidades_ads||0, canc: v.cancelamentos||0 });
-        });
-      } else {
-        skusExibir.forEach(sku => {
-          const c = consumo[sku] || { consumo30d: 0, consumo_diario: 0 };
-          const vendaDireta = vendasSku.find(v => v.sku === sku);
-          const direto = vendaDireta ? vendaDireta.unidades : 0;
-          const kits = c.consumo30d - direto;
-          const titulo = vendaDireta ? (vendaDireta.titulo||'') : (componentes.find(x=>x.codigo===sku)||{}).descricao||'';
-          const est = estoqueGalpao.find(e => e.sku === sku);
-          const qtd = est ? (est.qtd_galpao||0) + (est.qtd_full||0) : null;
-          const ads = vendaDireta ? (vendaDireta.unidades_ads||0) : 0;
-          const canc = vendaDireta ? (vendaDireta.cancelamentos||0) : 0;
-          rows.push({ sku, titulo, total30d: c.consumo30d, direto, kits: Math.max(0,kits), giro: c.consumo_diario, qtd, ads, canc });
-        });
-      }
-
+      skusExibir.forEach(sku => {
+        const c = consumo[sku] || { consumo30d: 0, consumo_diario: 0 };
+        const vendaDireta = vendasSku.find(v => v.sku === sku);
+        const direto = vendaDireta ? vendaDireta.unidades : 0;
+        const viaKits = Math.max(0, c.consumo30d - direto);
+        const descricao = (componentes.find(x => x.codigo === sku) || {}).descricao
+          || (vendaDireta && vendaDireta.titulo) || '';
+        const est = estoqueGalpao.find(e => e.sku === sku);
+        const qtd = est ? (est.qtd_galpao||0) + (est.qtd_full||0) : null;
+        rows.push({ sku, descricao, total30d: c.consumo30d, direto, viaKits, giro: c.consumo_diario, qtd });
+      });
       rows.sort((a,b) => b.total30d - a.total30d);
 
       let html = '';
       rows.forEach(r => {
         const giroStr = r.giro > 0 ? r.giro.toFixed(1) : '—';
-        const kitStr = r.kits > 0 ? `<span style="font-size:10px;color:#999;">(+${r.kits} via kits)</span>` : '';
-        const pctAds = r.total30d > 0 ? Math.round(r.ads / r.total30d * 100) : 0;
-        const adsStr = r.ads > 0 ? `${r.ads} <span style="font-size:10px;color:#999;">(${pctAds}%)</span>` : '—';
-        const cancStr = r.canc > 0 ? `<span style="color:var(--warning);">${r.canc}</span>` : '—';
+        const kitStr = r.viaKits > 0 ? `<span style="font-size:10px;color:var(--primary);">+${r.viaKits}</span>` : '—';
         let estStr = '—', cobStr = '—';
         if(r.qtd !== null){
           estStr = String(r.qtd);
@@ -7000,17 +7063,44 @@ Perfil do usuário:
         }
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${r.sku}</td>
-          <td style="padding:8px 6px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#555;" title="${r.titulo}">${r.titulo||'—'}</td>
-          <td style="padding:8px 6px;text-align:right;font-weight:700;">${r.total30d} ${kitStr}</td>
+          <td style="padding:8px 6px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#555;" title="${r.descricao}">${r.descricao||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:700;">${r.total30d}</td>
+          <td style="padding:8px 6px;text-align:right;color:#555;">${r.direto > 0 ? r.direto : '—'}</td>
+          <td style="padding:8px 6px;text-align:right;">${kitStr}</td>
           <td style="padding:8px 6px;text-align:right;">${giroStr}</td>
-          <td style="padding:8px 6px;text-align:right;">${adsStr}</td>
-          <td style="padding:8px 6px;text-align:right;">${cancStr}</td>
           <td style="padding:8px 6px;text-align:right;">${estStr}</td>
           <td style="padding:8px 6px;text-align:right;">${cobStr}</td>
         </tr>`;
       });
       tbody.innerHTML = html;
-      makeSortable('tbody-vendas-sku');
+      makeSortable('tbody-skuunit');
+    }
+
+    function exportarSkuUnitarioCSV(){
+      const consumo = calcConsumoComponentes();
+      const { isolados, kitSkus } = getSkusIsolados();
+      const periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
+      const skusExibir = new Set([
+        ...Object.keys(consumo).filter(sku => !kitSkus.has(sku)),
+        ...vendasSku.filter(v => !kitSkus.has(v.sku) && (isolados.size === 0 || isolados.has(v.sku))).map(v => v.sku)
+      ]);
+      const rows = [['SKU','Descricao','Total_30d','Direto','Via_Kits','Unid_dia','Estoque','Cobertura_dias']];
+      [...skusExibir].sort().forEach(sku => {
+        const c = consumo[sku] || { consumo30d: 0, consumo_diario: 0 };
+        const v = vendasSku.find(x => x.sku === sku);
+        const direto = v ? v.unidades : 0;
+        const viaKits = Math.max(0, c.consumo30d - direto);
+        const desc = (componentes.find(x => x.codigo === sku) || {}).descricao || (v && v.titulo) || '';
+        const est = estoqueGalpao.find(e => e.sku === sku);
+        const qtd = est ? (est.qtd_galpao||0) + (est.qtd_full||0) : '';
+        const cob = (qtd !== '' && c.consumo_diario > 0) ? Math.floor(qtd / c.consumo_diario) : '';
+        rows.push([sku, desc, c.consumo30d, direto, viaKits, c.consumo_diario.toFixed(1), qtd, cob]);
+      });
+      const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const url = URL.createObjectURL(new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'}));
+      const a = document.createElement('a'); a.href = url;
+      a.download = `sku_unitario_${dateStr(getToday())}.csv`;
+      a.click(); URL.revokeObjectURL(url);
     }
 
     function exportarVendasSkuCSV(){
