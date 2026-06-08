@@ -516,6 +516,10 @@
     .period-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);}
     .period-btn:hover:not(.active){border-color:var(--primary);color:var(--primary);}
 
+    /* ===== RESIZE DE COLUNAS ===== */
+    .col-rsz{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;user-select:none;z-index:5;}
+    .col-rsz:hover,.col-rsz.rsz-active{background:rgba(99,102,241,0.45);border-radius:2px;}
+
     /* ===== TELA DE LOGIN ===== */
     #tela-login{display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);z-index:9999;align-items:center;justify-content:center;}
     #tela-login.ativo{display:flex;}
@@ -1411,7 +1415,7 @@
         </div>
 
         <div class="resultado-tabs" style="margin-bottom:16px;">
-          <div class="resultado-tab active" id="sku-tab-lista" onclick="setSkuTab('lista')">📋 Lista</div>
+          <div class="resultado-tab active" id="sku-tab-lista" onclick="setSkuTab('lista')">📋 SKU</div>
           <div class="resultado-tab" id="sku-tab-composicoes" onclick="setSkuTab('composicoes')">📦 Kits</div>
         </div>
 
@@ -1431,19 +1435,20 @@
           <div class="card">
             <div class="card-body" style="overflow-x:auto;padding:0;">
               <table>
-                <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;">
+                <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;align-items:center;">
                   <button class="btn-out btn-sm" onclick="deletarSKUsSelecionados()">🗑️ Deletar selecionados</button>
-                  <button class="btn-out btn-sm" onclick="abrirModalImpostoLote()">🔄 Imposto selecionados</button>
-                  <span id="sku-sel-count" style="align-self:center;font-size:12px;color:#666;"></span>
+                  <button class="btn-out btn-sm" onclick="abrirModalLoteSKU()">✏️ Editar custo/imposto</button>
+                  <span id="sku-sel-count" style="font-size:12px;color:#666;margin-left:4px;"></span>
                 </div>
                 <thead>
                   <tr>
                     <th style="width:40px;"><input type="checkbox" id="sku-sel-all" onchange="toggleTodosSKUs(this.checked)"></th>
                     <th>SKU</th>
+                    <th>Título</th>
                     <th>Custo (R$)</th>
                     <th>Imposto (%)</th>
                     <th>Custo Total (R$)</th>
-                    <th style="width:80px;text-align:center;">Ações</th>
+                    <th style="width:60px;text-align:center;">Ações</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-skus"></tbody>
@@ -2418,12 +2423,18 @@
           <input type="text" id="sku-codigo">
         </div>
         <div class="form-group">
-          <label class="form-label">Custo (R$)</label>
-          <input type="number" id="sku-custo" step="0.01">
+          <label class="form-label">Título / Descrição (opcional)</label>
+          <input type="text" id="sku-titulo" placeholder="Ex: Vaso de Barro Pequeno">
         </div>
-        <div class="form-group">
-          <label class="form-label">Imposto (%)</label>
-          <input type="number" id="sku-imposto" step="0.01" value="6.18">
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Custo (R$)</label>
+            <input type="number" id="sku-custo" step="0.01">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Imposto (%)</label>
+            <input type="number" id="sku-imposto" step="0.01" value="6.18">
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -2466,21 +2477,34 @@
     </div>
   </div>
 
-  <!-- MODAL IMPOSTO LOTE -->
+  <!-- MODAL EDITAR LOTE SKU -->
   <div class="modal" id="modal-imposto-lote">
-    <div class="modal-content" style="max-width:400px;">
+    <div class="modal-content" style="max-width:420px;">
       <div class="modal-header">
-        <div class="modal-title">Atualizar Imposto em Lote</div>
+        <div class="modal-title">✏️ Editar Custo / Imposto em Lote</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-imposto-lote')">✕</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label">Novo % de Imposto</label>
-          <input type="number" id="imposto-lote" step="0.01" value="6.18">
+        <div style="font-size:12px;color:#666;margin-bottom:12px;">Deixe em branco os campos que não quer alterar.</div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Novo Custo (R$)</label>
+            <input type="number" id="custo-lote" step="0.01" placeholder="Deixe vazio para manter">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Novo Imposto (%)</label>
+            <input type="number" id="imposto-lote" step="0.01" placeholder="Deixe vazio para manter">
+          </div>
         </div>
         <div class="form-group">
-          <label><input type="checkbox" id="imposto-todos" checked> Aplicar a todos os SKUs</label>
+          <label class="form-label">Aplicar a:</label>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="radio" name="lote-alvo" value="selecionados" id="lote-alvo-sel" checked> SKUs selecionados na tabela</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="radio" name="lote-alvo" value="filtrados"> SKUs visíveis (filtro atual)</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="radio" name="lote-alvo" value="todos"> Todos os SKUs</label>
+          </div>
         </div>
+        <div id="lote-preview" style="font-size:12px;color:var(--primary);margin-top:8px;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn" onclick="aplicarImpostoLote()">Aplicar</button>
@@ -3149,6 +3173,7 @@
         }
         th.onclick = () => sortTableByCol(tbodyId, i);
       });
+      makeResizableCols(table);
     }
 
     // ===== UTILS =====
@@ -4081,7 +4106,7 @@
       const busca = document.getElementById('filtro-sku').value.toLowerCase();
       const vazio = document.getElementById('skus-vazio');
 
-      let filtrados = skus.filter(s => !busca || s.sku.toLowerCase().includes(busca));
+      let filtrados = skus.filter(s => !busca || s.sku.toLowerCase().includes(busca) || (s.titulo||'').toLowerCase().includes(busca));
 
       if(filtrados.length === 0){
         tbody.innerHTML = '';
@@ -4096,9 +4121,16 @@
       filtrados.forEach((s) => {
         const idx = skus.indexOf(s);
         const total = s.custo + (s.custo * s.imposto / 100);
+        // Título: próprio > vendasSku > componentes > estoqueGalpao
+        const titulo = s.titulo
+          || (vendasSku.find(v => v.sku === s.sku)||{}).titulo
+          || (componentes.find(c => c.codigo === s.sku)||{}).descricao
+          || (estoqueGalpao.find(e => e.sku === s.sku)||{}).descricao
+          || '';
         html += `<tr>
           <td style="text-align:center;"><input type="checkbox" class="sku-cb" data-idx="${idx}" onchange="atualizarContSKUSel()"></td>
-          <td style="font-family:monospace;font-weight:600;">${s.sku}</td>
+          <td style="font-family:monospace;font-weight:600;white-space:nowrap;">${s.sku}</td>
+          <td style="font-size:12px;color:#555;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${titulo}">${titulo||'—'}</td>
           <td>${fmt(s.custo)}</td>
           <td>${s.imposto.toFixed(2)}%</td>
           <td>${fmt(total)}</td>
@@ -4110,10 +4142,10 @@
 
       tbody.innerHTML = html;
       makeSortable('tbody-skus', [3]);
-      // Resetar checkbox "selecionar todos" ao re-renderizar
       const selAll = document.getElementById('sku-sel-all');
       if(selAll) selAll.checked = false;
       document.getElementById('sku-sel-count').textContent = '';
+      makeResizableCols(tbody.closest('table'));
     }
 
     let skuCurrentTab = 'lista';
@@ -4137,35 +4169,33 @@
       editandoIdxSKU = null;
       document.getElementById('modal-sku-title').textContent = 'Novo SKU';
       document.getElementById('btn-del-sku').style.display = 'none';
-      
       document.getElementById('sku-codigo').value = '';
+      document.getElementById('sku-titulo').value = '';
       document.getElementById('sku-custo').value = '';
       document.getElementById('sku-imposto').value = '6.18';
-      
       document.getElementById('modal-sku').classList.add('open');
     }
-    
+
     function editarSKU(idx){
       editandoIdxSKU = idx;
       const s = skus[idx];
-      
       document.getElementById('modal-sku-title').textContent = 'Editar SKU';
       document.getElementById('btn-del-sku').style.display = 'block';
-      
       document.getElementById('sku-codigo').value = s.sku;
+      document.getElementById('sku-titulo').value = s.titulo || '';
       document.getElementById('sku-custo').value = s.custo;
       document.getElementById('sku-imposto').value = s.imposto;
-      
       document.getElementById('modal-sku').classList.add('open');
     }
-    
+
     function salvarSKU(){
       const sku = {
         sku: document.getElementById('sku-codigo').value.trim(),
+        titulo: document.getElementById('sku-titulo').value.trim(),
         custo: parseFloat(document.getElementById('sku-custo').value) || 0,
         imposto: parseFloat(document.getElementById('sku-imposto').value) || 6.18
       };
-      
+
       if(!sku.sku || !sku.custo){
         alert('Preencha SKU e Custo');
         return;
@@ -4190,42 +4220,59 @@
       renderSKUs();
     }
     
-    function abrirModalImpostoLote(){
+    function abrirModalImpostoLote(){ abrirModalLoteSKU(); }
+    function abrirModalLoteSKU(){
+      document.getElementById('custo-lote').value = '';
+      document.getElementById('imposto-lote').value = '';
+      const sel = getSKUsSelecionados();
+      const selRadio = document.getElementById('lote-alvo-sel');
+      if(selRadio) selRadio.checked = true;
+      const prev = document.getElementById('lote-preview');
+      if(prev) prev.textContent = sel.length > 0 ? `${sel.length} SKU(s) selecionado(s)` : 'Nenhum SKU selecionado — escolha "Filtrados" ou "Todos"';
       document.getElementById('modal-imposto-lote').classList.add('open');
     }
-    
+
     function aplicarImpostoLote(){
-      const novoImposto = parseFloat(document.getElementById('imposto-lote').value);
-      const todos = document.getElementById('imposto-todos').checked;
-      
-      if(todos){
-        skus.forEach(s => s.imposto = novoImposto);
-      } else {
+      const novoCusto = document.getElementById('custo-lote').value !== '' ? parseFloat(document.getElementById('custo-lote').value) : null;
+      const novoImposto = document.getElementById('imposto-lote').value !== '' ? parseFloat(document.getElementById('imposto-lote').value) : null;
+      if(novoCusto === null && novoImposto === null){ alert('Preencha ao menos Custo ou Imposto'); return; }
+      const alvo = document.querySelector('input[name="lote-alvo"]:checked')?.value || 'todos';
+      let alvos = [];
+      if(alvo === 'selecionados'){
+        const idxs = getSKUsSelecionados();
+        if(idxs.length === 0){ alert('Nenhum SKU selecionado na tabela. Marque os checkboxes primeiro.'); return; }
+        alvos = idxs.map(i => skus[i]).filter(Boolean);
+      } else if(alvo === 'filtrados'){
         const busca = document.getElementById('filtro-sku').value.toLowerCase();
-        skus.filter(s => !busca || s.sku.toLowerCase().includes(busca))
-          .forEach(s => s.imposto = novoImposto);
+        alvos = skus.filter(s => !busca || s.sku.toLowerCase().includes(busca) || (s.titulo||'').toLowerCase().includes(busca));
+      } else {
+        alvos = skus;
       }
-      
+      alvos.forEach(s => {
+        if(novoCusto !== null) s.custo = novoCusto;
+        if(novoImposto !== null) s.imposto = novoImposto;
+      });
       salvar();
       fecharModal('modal-imposto-lote');
       renderSKUs();
-      alert('Imposto atualizado!');
+      alert(`✅ ${alvos.length} SKU(s) atualizados.`);
     }
     
     function exportarSKUs(){
-      let csv = 'sku;custo;imposto\n';
-      
+      let csv = 'sku;titulo;custo;imposto\n';
+
       if(skus.length === 0){
-        csv += 'SKU-EXEMPLO-001;15,50;6,18\n';
-        csv += 'SKU-EXEMPLO-002;28,90;6,18\n';
-        csv += 'SKU-EXEMPLO-003;42,00;6,18\n';
+        csv += 'SKU-EXEMPLO-001;Produto Exemplo A;15,50;6,18\n';
+        csv += 'SKU-EXEMPLO-002;Produto Exemplo B;28,90;6,18\n';
+        csv += 'SKU-EXEMPLO-003;;42,00;6,18\n';
         csv += '\n# INSTRUÇÕES:\n';
         csv += '# - sku: código do produto\n';
+        csv += '# - titulo: nome/descrição (opcional)\n';
         csv += '# - custo: custo em reais (use vírgula)\n';
         csv += '# - imposto: % de imposto (padrão 6.18)\n';
         csv += '# - Apague exemplos e preencha com seus SKUs\n';
       } else {
-        csv += skus.map(s => `${s.sku};${s.custo.toFixed(2).replace('.',',')};${s.imposto.toFixed(2).replace('.',',')}`).join('\n');
+        csv += skus.map(s => `${s.sku};${s.titulo||''};${s.custo.toFixed(2).replace('.',',')};${s.imposto.toFixed(2).replace('.',',')}`).join('\n');
       }
       
       const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
@@ -4255,30 +4302,31 @@
             if(parts.length < 2) continue;
 
             const sku = parts[0].trim();
-            // Normaliza decimal: aceita vírgula ou ponto
-            const normNum = s => s ? s.trim().replace(/\./g,'').replace(',','.') : '';
-            // Se já usa ponto decimal e não tem vírgula, preserva como está
+            // Detecta se linha tem campo titulo (4 colunas: sku;titulo;custo;imposto) ou 3 (sku;custo;imposto)
             const normDec = s => {
               if(!s) return '';
               s = s.trim();
-              // Se tem vírgula: pode ser separador decimal (BR) ou separador de milhar (EN)
-              // Heurística: se tem ponto E vírgula → ponto=milhar, vírgula=decimal → remove ponto, troca vírgula
               if(s.includes('.') && s.includes(',')) return s.replace(/\./g,'').replace(',','.');
-              // Só vírgula → decimal BR
               if(s.includes(',')) return s.replace(',','.');
-              // Só ponto → pode ser decimal EN (ex: 15.50) — usa direto
               return s;
             };
-            const custo = parseFloat(normDec(parts[1]));
-            const imposto = parts[2] ? parseFloat(normDec(parts[2])) : 6.18;
-            
+            let titulo = '', custo, imposto;
+            if(parts.length >= 4){
+              titulo = parts[1].trim();
+              custo = parseFloat(normDec(parts[2]));
+              imposto = parts[3] ? parseFloat(normDec(parts[3])) : 6.18;
+            } else {
+              custo = parseFloat(normDec(parts[1]));
+              imposto = parts[2] ? parseFloat(normDec(parts[2])) : 6.18;
+            }
+
             if(!sku || isNaN(custo)) continue;
-            
+
             const idx = skus.findIndex(s => s.sku === sku);
             if(idx >= 0){
-              skus[idx] = {sku, custo, imposto};
+              skus[idx] = {sku, titulo, custo, imposto};
             } else {
-              skus.push({sku, custo, imposto});
+              skus.push({sku, titulo, custo, imposto});
             }
             count++;
           }
@@ -5563,6 +5611,33 @@
       } catch(err){
         alert('Erro no JSON: ' + err.message);
       }
+    }
+
+    // ===== RESIZE DE COLUNAS =====
+    function makeResizableCols(table){
+      if(!table) return;
+      const ths = table.querySelectorAll('thead th');
+      ths.forEach(th => {
+        if(th.querySelector('.col-rsz')) return;
+        th.style.position = 'relative';
+        const h = document.createElement('div');
+        h.className = 'col-rsz';
+        h.addEventListener('mousedown', ev => {
+          ev.preventDefault(); ev.stopPropagation();
+          h.classList.add('rsz-active');
+          const x0 = ev.clientX;
+          const w0 = th.getBoundingClientRect().width;
+          const onMove = e => { th.style.width = Math.max(40, w0 + e.clientX - x0) + 'px'; };
+          const onUp = () => {
+            h.classList.remove('rsz-active');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+        th.appendChild(h);
+      });
     }
 
     // ===== SKUs - SELEÇÃO MÚLTIPLA =====
@@ -7225,7 +7300,11 @@ Perfil do usuário:
       kitsUnicos.forEach(kitSku => {
         const comps = composicaoKit.filter(c => c.sku_comercial === kitSku);
         const titulo = comps[0] ? comps[0].titulo_comercial : '';
-        const custoKit = comps[0] && comps[0].custo_kit > 0 ? `<span style="font-size:11px;color:var(--success);">Custo: ${fmt(comps[0].custo_kit)}</span>` : '';
+        const custoKit = comps[0] ? (comps[0].custo_kit || 0) : 0;
+        const custoCalc = calcCustoComposicao(kitSku);
+        const custoLabel = custoKit > 0
+          ? `<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">R$ ${fmt(custoKit)}</span>`
+          : (custoCalc > 0 ? `<span style="background:#f1f5f9;color:#475569;border-radius:4px;padding:2px 8px;font-size:11px;">≈ ${fmt(custoCalc)} <span style="font-weight:400;font-size:10px;">(soma componentes)</span></span>` : `<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:2px 8px;font-size:11px;">Sem custo</span>`);
         const tags = comps.map(c => `<span style="background:var(--gray-100);border-radius:4px;padding:2px 8px;font-size:11px;font-family:monospace;">${c.sku_componente} ×${c.qty}</span>`).join('');
         const skuEsc = kitSku.replace(/'/g, "\\'");
         html += `<div class="card mb-2" id="kit-card-${kitSku.replace(/[^a-zA-Z0-9]/g,'-')}">
@@ -7235,7 +7314,7 @@ Perfil do usuário:
                 <input type="checkbox" class="kit-sel-cb" data-sku="${kitSku}" onchange="atualizarContadorKitsSel()" style="margin:0;">
                 <div>
                   <div style="font-family:monospace;font-weight:600;font-size:12px;">${kitSku}</div>
-                  <div style="font-size:11px;color:#666;">${titulo} ${custoKit}</div>
+                  <div style="font-size:11px;color:#666;margin-top:2px;">${titulo}</div>
                 </div>
               </div>
               <div class="d-flex gap-1">
@@ -7243,7 +7322,7 @@ Perfil do usuário:
                 <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${skuEsc}')">🗑️</button>
               </div>
             </div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;">${tags}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;">${tags}<span style="margin-left:auto;">${custoLabel}</span></div>
           </div>
         </div>`;
       });
