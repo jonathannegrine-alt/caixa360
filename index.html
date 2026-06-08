@@ -6684,6 +6684,19 @@ Perfil do usuário:
     }
 
     // ----- Cálculo -----
+    // Retorna Set de SKUs físicos/isolados: estão em componentes[] OU são sku_componente em composicaoKit.
+    // Fallback: se nenhum cadastrado, usa estoqueGalpao menos os kit comerciais.
+    function getCodigosComponentes(skusKit){
+      const s = new Set([
+        ...componentes.map(c => c.codigo),
+        ...composicaoKit.map(c => c.sku_componente)
+      ]);
+      if(s.size === 0){
+        estoqueGalpao.forEach(e => { if(!skusKit.has(e.sku)) s.add(e.sku); });
+      }
+      return s;
+    }
+
     function calcConsumoComponentes(){
       const consumo = {};
       const dias = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
@@ -6691,11 +6704,8 @@ Perfil do usuário:
       // SKUs que são kits (têm composição mapeada)
       const skusKit = new Set(composicaoKit.map(c => c.sku_comercial));
 
-      // Códigos de componentes físicos rastreados
-      const codigosComp = new Set([
-        ...estoqueGalpao.map(e => e.sku),
-        ...componentes.map(c => c.codigo)
-      ]);
+      // Apenas componentes físicos reais (não inclui kits do estoqueGalpao)
+      const codigosComp = getCodigosComponentes(skusKit);
 
       // 1. Consumo via kits: cada venda de kit distribui para seus componentes
       vendasSku.forEach(v => {
@@ -6751,9 +6761,11 @@ Perfil do usuário:
     function calcRankingReposicao(){
       const consumo = calcConsumoComponentes();
       const kitSkus = new Set(composicaoKit.map(c => c.sku_comercial));
-      const baseAll = estoqueGalpao.length > 0 ? estoqueGalpao
+      const codigosIsolados = getCodigosComponentes(kitSkus);
+      // Base: apenas SKUs físicos/componentes — exclui kits comerciais do estoqueGalpao
+      const egFiltrado = estoqueGalpao.filter(eg => codigosIsolados.has(eg.sku));
+      const base = egFiltrado.length > 0 ? egFiltrado
         : componentes.map(c => ({ sku: c.codigo, descricao: c.descricao, qtd_galpao: 0, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: c.custo_unitario }));
-      const base = baseAll.filter(eg => !kitSkus.has(eg.sku));
       return base.map(eg => {
         const c = consumo[eg.sku] || { consumo_diario: 0, consumo30d: 0 };
         const regras = getMetaComp(eg.sku);
@@ -6929,10 +6941,7 @@ Perfil do usuário:
       const periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
       const consumo = calcConsumoComponentes();
       const skusKit = new Set(composicaoKit.map(c => c.sku_comercial));
-      const codigosComp = new Set([
-        ...estoqueGalpao.map(e => e.sku),
-        ...componentes.map(c => c.codigo)
-      ]);
+      const codigosComp = getCodigosComponentes(skusKit);
 
       // Montar linhas: somente SKUs isolados (não são kits)
       // Para cada componente com consumo, mostrar demanda total (direto + via kits)
