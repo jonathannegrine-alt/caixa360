@@ -1922,6 +1922,7 @@
             <button class="btn-out btn-sm" onclick="document.getElementById('import-estoque-full-ml').click()">🏬 Importar estoque FULL (ML)</button>
             <button class="btn-out btn-sm" onclick="baixarTemplateCSVComponentes()">⬇️ Template CSV</button>
             <button class="btn btn-sm" onclick="abrirModalComponente()" title="Cadastra um SKU físico base (peça, componente ou produto unitário). Depois você pode combiná-los em composições de kit.">+ SKU Base</button>
+            <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="limparDadosPlanilhas()">🗑 Limpar planilhas</button>
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
             <input type="file" id="import-estoque-upseller" accept=".xlsx,.xls,.csv" style="display:none" onchange="onImportEstoqueUpseller(this)">
@@ -7346,6 +7347,21 @@ Perfil do usuário:
       salvar(); renderComposicoesTab();
       const selAll = document.getElementById('kits-sel-all');
       if(selAll) selAll.checked = false;
+    }
+
+    // ----- Limpar dados de planilhas -----
+    function limparDadosPlanilhas(){
+      const linhas = [
+        vendasSku.length > 0 ? `• Vendas ML: ${vendasSku.length} SKUs` : null,
+        estoqueGalpao.length > 0 ? `• Estoque Galpão (Upseller): ${estoqueGalpao.length} itens` : null,
+      ].filter(Boolean);
+      if(linhas.length === 0){ alert('Nenhuma planilha carregada no momento.'); return; }
+      if(!confirm('Apagar os seguintes dados importados via planilha?\n\n' + linhas.join('\n') + '\n\nOs kits e SKUs cadastrados manualmente NÃO serão apagados.')) return;
+      vendasSku = [];
+      estoqueGalpao = [];
+      salvar();
+      renderEstoque();
+      alert('✅ Dados das planilhas removidos.');
     }
 
     // ----- Import handlers -----
