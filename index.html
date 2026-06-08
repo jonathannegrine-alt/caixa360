@@ -1278,7 +1278,10 @@
         <div id="card-hoje-ml" class="card" style="display:none;margin-bottom:16px;">
           <div class="card-header">
             <div class="card-title">⏰ A receber hoje</div>
-            <div id="hoje-ml-total" style="font-weight:700;color:var(--success);font-size:1.1rem;"></div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div id="hoje-ml-total" style="font-weight:700;color:var(--success);font-size:1.1rem;"></div>
+              <button class="btn-out btn-sm" onclick="document.getElementById('card-hoje-ml').style.display='none'">✕</button>
+            </div>
           </div>
           <div id="hoje-ml-lista" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;"></div>
         </div>
@@ -1352,7 +1355,7 @@
                   <label class="form-label">Valor (R$)
                     <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Valor total da compra. Deixe vazio para o sistema calcular o máximo que pode pagar na data escolhida.</span></span>
                   </label>
-                  <input type="text" id="sim-valor" class="money-input" placeholder="Deixe vazio para calcular" oninput="onMoneyInput(this)" onblur="if(this.value)this.value=fmtMoney(parseMoney(this.value))" onkeydown="if(event.key==='Enter')simular()">
+                  <input type="text" id="sim-valor" class="money-input" placeholder="Deixe vazio para calcular" onblur="if(this.value)this.value=fmtMoney(parseMoney(this.value))" onkeydown="if(event.key==='Enter')simular()">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Data de Pagamento
@@ -1388,52 +1391,79 @@
       
       <!-- SKUS -->
       <div id="view-skus" class="view">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
           <h1>SKUs / Custos</h1>
-          <div class="d-flex gap-1">
+          <div class="d-flex gap-1" id="sku-header-btns-lista">
             <button class="btn" onclick="abrirModalSKU()">+ Novo SKU</button>
             <button class="btn-out" onclick="document.getElementById('import-skus-csv').click()">📤 Importar CSV</button>
             <button class="btn-out" onclick="exportarSKUs()">📥 Exportar CSV</button>
             <input type="file" id="import-skus-csv" accept=".csv" style="display:none" onchange="importarSKUs()">
           </div>
+          <div class="d-flex gap-1" id="sku-header-btns-composicoes" style="display:none!important;">
+            <button class="btn-out btn-sm" onclick="abrirModalComposicao(null)">+ Nova composição</button>
+          </div>
         </div>
-        
-        <!-- Busca e ações -->
-        <div class="card mb-2">
-          <div class="card-body">
-            <div class="d-flex gap-1">
-              <input type="text" id="filtro-sku" placeholder="🔍 Buscar SKU..." style="flex:1;" oninput="renderSKUs()">
-              <button class="btn-out" onclick="abrirModalImpostoLote()">🔄 Atualizar imposto em lote</button>
+
+        <div class="resultado-tabs" style="margin-bottom:16px;">
+          <div class="resultado-tab active" id="sku-tab-lista" onclick="setSkuTab('lista')">📋 Lista</div>
+          <div class="resultado-tab" id="sku-tab-composicoes" onclick="setSkuTab('composicoes')">🔗 Composições</div>
+        </div>
+
+        <!-- Tab: Lista -->
+        <div id="sku-view-lista">
+          <!-- Busca e ações -->
+          <div class="card mb-2">
+            <div class="card-body">
+              <div class="d-flex gap-1">
+                <input type="text" id="filtro-sku" placeholder="🔍 Buscar SKU..." style="flex:1;" oninput="renderSKUs()">
+                <button class="btn-out" onclick="abrirModalImpostoLote()">🔄 Atualizar imposto em lote</button>
+              </div>
             </div>
           </div>
-        </div>
-        
-        <!-- Tabela -->
-        <div class="card">
-          <div class="card-body" style="overflow-x:auto;padding:0;">
-            <table>
-              <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;">
-                <button class="btn-out btn-sm" onclick="deletarSKUsSelecionados()">🗑️ Deletar selecionados</button>
-                <button class="btn-out btn-sm" onclick="abrirModalImpostoLote()">🔄 Imposto selecionados</button>
-                <span id="sku-sel-count" style="align-self:center;font-size:12px;color:#666;"></span>
-              </div>
-              <thead>
-                <tr>
-                  <th style="width:40px;"><input type="checkbox" id="sku-sel-all" onchange="toggleTodosSKUs(this.checked)"></th>
-                  <th>SKU</th>
-                  <th>Custo (R$)</th>
-                  <th>Imposto (%)</th>
-                  <th>Custo Total (R$)</th>
-                  <th style="width:80px;text-align:center;">Ações</th>
-                </tr>
-              </thead>
-              <tbody id="tbody-skus"></tbody>
-            </table>
+
+          <!-- Tabela -->
+          <div class="card">
+            <div class="card-body" style="overflow-x:auto;padding:0;">
+              <table>
+                <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;">
+                  <button class="btn-out btn-sm" onclick="deletarSKUsSelecionados()">🗑️ Deletar selecionados</button>
+                  <button class="btn-out btn-sm" onclick="abrirModalImpostoLote()">🔄 Imposto selecionados</button>
+                  <span id="sku-sel-count" style="align-self:center;font-size:12px;color:#666;"></span>
+                </div>
+                <thead>
+                  <tr>
+                    <th style="width:40px;"><input type="checkbox" id="sku-sel-all" onchange="toggleTodosSKUs(this.checked)"></th>
+                    <th>SKU</th>
+                    <th>Custo (R$)</th>
+                    <th>Imposto (%)</th>
+                    <th>Custo Total (R$)</th>
+                    <th style="width:80px;text-align:center;">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-skus"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="skus-vazio" class="alert alert-info" style="display:none;margin-top:20px;">
+            Nenhum SKU cadastrado. Importe um CSV ou adicione manualmente.
           </div>
         </div>
-        
-        <div id="skus-vazio" class="alert alert-info" style="display:none;margin-top:20px;">
-          Nenhum SKU cadastrado. Importe um CSV ou adicione manualmente.
+
+        <!-- Tab: Composições -->
+        <div id="sku-view-composicoes" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="font-size:12px;color:var(--gray-600);" id="composicoes-info"></div>
+            <button class="btn-out btn-sm" onclick="abrirModalComposicao(null)">+ Nova composição</button>
+          </div>
+          <div id="composicoes-vazio" class="card" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">🔗</div>
+              <div style="font-weight:600;margin-bottom:6px;">Nenhuma composição cadastrada</div>
+              <div style="font-size:12px;">Adicione manualmente o mapeamento de kits para componentes.</div>
+            </div>
+          </div>
+          <div id="composicoes-lista"></div>
         </div>
       </div>
       
@@ -1494,7 +1524,7 @@
             <!-- Modo de Projeção -->
             <div class="form-group">
               <label class="form-label">Modo de Projeção
-                <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Define como o sistema estima entradas futuras. "Extrato Realizado" usa a média dos últimos N dias de recebimentos. Os outros modos requerem integração com Supabase (fase futura).</span></span>
+                <span class="tip tip-up"><span class="tip-icon">?</span><span class="tip-box">Define como o sistema estima entradas futuras. "Extrato Realizado" usa a média dos últimos N dias de recebimentos. Os outros modos requerem integração com Supabase (fase futura).</span></span>
               </label>
               <div class="d-flex gap-1" style="flex-direction:column;gap:6px;">
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
@@ -1657,6 +1687,17 @@
               <button class="btn" onclick="trocarSenha()">Salvar nova senha</button>
               <div id="msg-trocar-senha" style="font-size:12px;margin-top:8px;min-height:16px;"></div>
             </div>
+          </div>
+        </div>
+
+        <!-- Apagar dados -->
+        <div class="card mb-2" style="border:1px solid var(--danger);margin-top:12px;">
+          <div class="card-header" style="background:rgba(239,68,68,0.05);">
+            <div class="card-title" style="color:var(--danger);">⚠️ Zona de Perigo</div>
+          </div>
+          <div class="card-body">
+            <p style="font-size:13px;color:var(--gray-700);margin:0 0 12px;">Apagar todos os dados remove permanentemente todos os registros (pagamentos, recebíveis, SKUs, categorias e configurações) do armazenamento local e do servidor.</p>
+            <button class="btn" style="background:var(--danger);border-color:var(--danger);" onclick="confirmarApagarTudo()">🗑 Apagar todos os dados</button>
           </div>
         </div>
 
@@ -1863,7 +1904,7 @@
             <button class="btn-out btn-sm" onclick="document.getElementById('import-estoque-upseller').click()">📦 Importar estoque galpão</button>
             <button class="btn-out btn-sm" onclick="document.getElementById('import-estoque-full-ml').click()">🏬 Importar estoque FULL (ML)</button>
             <button class="btn-out btn-sm" onclick="baixarTemplateCSVComponentes()">⬇️ Template CSV</button>
-            <button class="btn btn-sm" onclick="abrirModalComponente()">+ Componente</button>
+            <button class="btn btn-sm" onclick="abrirModalComponente()" title="Cadastra um SKU físico base (peça, componente ou produto unitário). Depois você pode combiná-los em composições de kit.">+ SKU Base</button>
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
             <input type="file" id="import-estoque-upseller" accept=".xlsx,.xls,.csv" style="display:none" onchange="onImportEstoqueUpseller(this)">
@@ -1897,7 +1938,6 @@
           <div class="resultado-tab" id="estoque-tab-cancelamentos" onclick="setEstoqueTab('cancelamentos')">↩️ Cancelamentos</div>
           <div class="resultado-tab" id="estoque-tab-ads" onclick="setEstoqueTab('ads')">📣 ADS</div>
           <div class="resultado-tab" id="estoque-tab-vendas" onclick="setEstoqueTab('vendas')">📦 Vendas SKU</div>
-          <div class="resultado-tab" id="estoque-tab-composicoes" onclick="setEstoqueTab('composicoes')">🔗 Composições</div>
         </div>
 
         <!-- Tab: Reposição -->
@@ -2075,21 +2115,6 @@
           </div>
         </div>
 
-        <!-- Tab: Composições -->
-        <div id="estoque-view-composicoes" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <div style="font-size:12px;color:var(--gray-600);" id="composicoes-info"></div>
-            <button class="btn-out btn-sm" onclick="abrirModalComposicao(null)">+ Nova composição</button>
-          </div>
-          <div id="composicoes-vazio" class="card" style="display:none;">
-            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">🔗</div>
-              <div style="font-weight:600;margin-bottom:6px;">Nenhuma composição cadastrada</div>
-              <div style="font-size:12px;">Importe do Upseller ou adicione manualmente o mapeamento de kits para componentes.</div>
-            </div>
-          </div>
-          <div id="composicoes-lista"></div>
-        </div>
 
       </div>
 
@@ -2184,7 +2209,7 @@
         </div>
         <div style="margin-top:12px;margin-bottom:6px;font-weight:600;font-size:12px;">Componentes:</div>
         <div id="mcomp-linhas"></div>
-        <div style="font-size:11px;color:var(--gray-600);margin-top:8px;">💡 Cada linha = um componente físico que compõe este anúncio. Se o componente não existe, crie-o primeiro em "+ Componente".</div>
+        <div style="font-size:11px;color:var(--gray-600);margin-top:8px;">💡 Cada linha = um componente físico que compõe este anúncio. Se o componente não existe, crie-o primeiro em "+ SKU Base".</div>
       </div>
       <div class="modal-footer">
         <button class="btn-out" onclick="fecharModalComposicao()">Cancelar</button>
@@ -2687,6 +2712,35 @@
       }
     }
 
+    async function confirmarApagarTudo(){
+      const ok = confirm('⚠️ ATENÇÃO: Esta ação é IRREVERSÍVEL.\n\nTodos os dados serão apagados permanentemente:\n• Contas a pagar\n• Recebíveis importados\n• SKUs e categorias\n• Configurações\n\nTem certeza absoluta?');
+      if(!ok) return;
+      const ok2 = confirm('Última confirmação: apagar TUDO e começar do zero?');
+      if(!ok2) return;
+      // Limpa localStorage
+      ['mk_pagamentos','mk_liberacoes','mk_skus','mk_categorias','mk_config'].forEach(k => localStorage.removeItem(k));
+      // Limpa dados P11 do Motor de Reposição
+      ['mk_componentes','mk_estoque_galpao','mk_composicao_kit','mk_vendas_sku'].forEach(k => localStorage.removeItem(k));
+      // Limpa Supabase se logado
+      if(usuarioAtual){
+        const uid = usuarioAtual.id;
+        await Promise.all([
+          supa.from('pagamentos').delete().eq('usuario_id', uid),
+          supa.from('liberacoes').delete().eq('usuario_id', uid),
+          supa.from('skus').delete().eq('usuario_id', uid),
+          supa.from('categorias').delete().eq('usuario_id', uid),
+          supa.from('configuracoes').delete().eq('usuario_id', uid),
+          supa.from('extrato_historico').delete().eq('usuario_id', uid),
+        ]);
+      }
+      // Reseta variáveis
+      pagamentos = []; liberacoes = []; skus = []; categorias = [];
+      componentes = []; estoqueGalpao = []; composicaoKit = []; vendasSku = [];
+      saldoMP = 0; saldoOutros = 0; cfgDelay = 7; cfgPct = 0.75; reservaMinima = 0; periodoHistorico = 90;
+      alert('✅ Todos os dados foram apagados.');
+      nav('dashboard');
+    }
+
     // ===== SUPABASE — CARREGAR DADOS =====
     async function carregarDoSupabase(){
       if(!usuarioAtual) return;
@@ -3169,9 +3223,14 @@
     function calcMediaGastoDia(){
       const hoje = getToday();
       const limite = addDias(hoje, -30);
-      const pagos = pagamentos.filter(p => p.pago && p.data >= limite);
-      const totalPago = pagos.reduce((s,p) => s + (p.valorPago || p.val), 0);
-      return totalPago / 30;
+      const pagos = pagamentos.filter(p => p.pago && p.data >= limite && p.data <= hoje);
+      if(pagos.length > 0){
+        return pagos.reduce((s,p) => s + (p.valorPago || p.val), 0) / 30;
+      }
+      // Fallback: usar pendentes dos próximos 30 dias como proxy
+      const limite30 = addDias(hoje, 30);
+      const pendentes = pagamentos.filter(p => !p.pago && p.data >= hoje && p.data <= limite30);
+      return pendentes.reduce((s,p) => s + p.val, 0) / 30;
     }
 
     function calcScore(){
@@ -3375,7 +3434,7 @@
       else if(page === 'pagar') renderPagar();
       else if(page === 'calendario') renderCalendario();
       else if(page === 'simulador') renderFormSimulador();
-      else if(page === 'skus') renderSKUs();
+      else if(page === 'skus') setSkuTab(skuCurrentTab || 'lista');
       else if(page === 'estoque') renderEstoque();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config'){ renderCategorias(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
@@ -3406,7 +3465,9 @@
       if(modoEl){
         if(modoProjecaoAtivo === 'tendencia' && regressaoAtual){
           const sinal = regressaoAtual.b >= 0 ? '↗' : '↘';
-          modoEl.textContent = `Projeção: Tendência ${sinal} (R$${regressaoAtual.b >= 0 ? '+' : ''}${regressaoAtual.b.toFixed(0)}/dia)`;
+          const dias = periodoHistorico || 90;
+          const tooltip = `Regressão linear sobre os últimos ${dias} dias de recebimentos. A tendência indica variação média de R$${regressaoAtual.b >= 0 ? '+' : ''}${regressaoAtual.b.toFixed(0)}/dia. Configurável em: Configurações → Modo de Projeção.`;
+          modoEl.innerHTML = `Projeção: Tendência ${sinal} (R$${regressaoAtual.b >= 0 ? '+' : ''}${regressaoAtual.b.toFixed(0)}/dia) <span class="tip tip-up" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">${tooltip}</span></span>`;
           modoEl.style.color = regressaoAtual.b >= 0 ? 'var(--success)' : 'var(--warning)';
         } else {
           modoEl.textContent = 'Projeção: Média simples';
@@ -4003,6 +4064,23 @@
       const selAll = document.getElementById('sku-sel-all');
       if(selAll) selAll.checked = false;
       document.getElementById('sku-sel-count').textContent = '';
+    }
+
+    let skuCurrentTab = 'lista';
+    function setSkuTab(tab){
+      skuCurrentTab = tab;
+      ['lista','composicoes'].forEach(t => {
+        const btn = document.getElementById('sku-tab-' + t);
+        const view = document.getElementById('sku-view-' + t);
+        if(btn) btn.classList.toggle('active', t === tab);
+        if(view) view.style.display = t === tab ? '' : 'none';
+      });
+      const btnLista = document.getElementById('sku-header-btns-lista');
+      const btnComp = document.getElementById('sku-header-btns-composicoes');
+      if(btnLista) btnLista.style.display = tab === 'lista' ? '' : 'none';
+      if(btnComp) btnComp.style.display = tab === 'composicoes' ? '' : 'none';
+      if(tab === 'lista') renderSKUs();
+      else if(tab === 'composicoes') renderComposicoesTab();
     }
 
     function abrirModalSKU(){
@@ -5761,8 +5839,12 @@
 
     function parseMoney(str){
       if(!str) return 0;
-      // Aceita "1.234,56" ou "1234.56" ou "1234,56"
+      // Aceita "1.234,56" ou "1.234" (milhar) ou "1234" ou "1234,56"
       const s = String(str).trim().replace(/[R$\s]/g,'');
+      // Ponto como separador de milhar: "30.000" ou "1.234.567"
+      if(s.includes('.') && !s.includes(',') && /^\d{1,3}(\.\d{3})+$/.test(s)){
+        return parseFloat(s.replace(/\./g,'')) || 0;
+      }
       if(s.includes(',') && s.includes('.')){
         // Formato pt-BR: 1.234,56
         return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0;
@@ -6556,7 +6638,7 @@ Perfil do usuário:
 
     function setEstoqueTab(tab){
       estoqueCurrentTab = tab;
-      const tabs = ['reposicao','excesso','rentabilidade','cancelamentos','ads','vendas','composicoes'];
+      const tabs = ['reposicao','excesso','rentabilidade','cancelamentos','ads','vendas'];
       tabs.forEach(t => {
         const btn = document.getElementById('estoque-tab-' + t);
         const view = document.getElementById('estoque-view-' + t);
@@ -6569,7 +6651,6 @@ Perfil do usuário:
       else if(tab === 'cancelamentos') renderCancelamentosTab();
       else if(tab === 'ads') renderADSTab();
       else if(tab === 'vendas') renderVendasSkuTab();
-      else if(tab === 'composicoes') renderComposicoesTab();
     }
 
     function renderEstoque(){
@@ -6638,12 +6719,23 @@ Perfil do usuário:
     }
 
     function calcCustoComposicao(sku_comercial){
-      return composicaoKit.filter(c => c.sku_comercial === sku_comercial).reduce((s, c) => {
-        const eg = estoqueGalpao.find(e => e.sku === c.sku_componente);
-        const comp = componentes.find(x => x.codigo === c.sku_componente);
-        const cu = (eg && eg.custo_medio > 0) ? eg.custo_medio : (comp ? comp.custo_unitario : 0);
-        return s + cu * c.qty;
-      }, 0);
+      const comps = composicaoKit.filter(c => c.sku_comercial === sku_comercial);
+      if(comps.length > 0){
+        return comps.reduce((s, c) => {
+          const eg = estoqueGalpao.find(e => e.sku === c.sku_componente);
+          const comp = componentes.find(x => x.codigo === c.sku_componente);
+          const cu = (eg && eg.custo_medio > 0) ? eg.custo_medio : (comp ? comp.custo_unitario : 0);
+          return s + cu * c.qty;
+        }, 0);
+      }
+      // SKU isolado sem composição: buscar custo direto
+      const skuEntry = skus.find(s => s.sku === sku_comercial);
+      if(skuEntry && skuEntry.custo > 0) return skuEntry.custo;
+      const eg = estoqueGalpao.find(e => e.sku === sku_comercial);
+      if(eg && eg.custo_medio > 0) return eg.custo_medio;
+      const comp = componentes.find(c => c.codigo === sku_comercial);
+      if(comp && comp.custo_unitario > 0) return comp.custo_unitario;
+      return 0;
     }
 
     function getMetaComp(sku){
