@@ -1400,13 +1400,19 @@
             <input type="file" id="import-skus-csv" accept=".csv" style="display:none" onchange="importarSKUs()">
           </div>
           <div class="d-flex gap-1" id="sku-header-btns-composicoes" style="display:none!important;">
-            <button class="btn-out btn-sm" onclick="abrirModalComposicao(null)">+ Nova composição</button>
+            <button class="btn-out btn-sm" onclick="baixarTemplateSKUUn()">⬇ Template SKU/un</button>
+            <button class="btn-out btn-sm" onclick="baixarTemplateKit()">⬇ Template Kit</button>
+            <button class="btn-out btn-sm" onclick="document.getElementById('import-csv-skuun').click()">📤 Importar SKU/un</button>
+            <button class="btn-out btn-sm" onclick="document.getElementById('import-csv-kit').click()">📤 Importar Kits</button>
+            <input type="file" id="import-csv-skuun" accept=".csv" style="display:none" onchange="importarCSVSKUUn(this)">
+            <input type="file" id="import-csv-kit" accept=".csv" style="display:none" onchange="importarCSVKit(this)">
+            <button class="btn btn-sm" onclick="abrirModalComposicao(null)">+ Novo Kit</button>
           </div>
         </div>
 
         <div class="resultado-tabs" style="margin-bottom:16px;">
           <div class="resultado-tab active" id="sku-tab-lista" onclick="setSkuTab('lista')">📋 Lista</div>
-          <div class="resultado-tab" id="sku-tab-composicoes" onclick="setSkuTab('composicoes')">🔗 Composições</div>
+          <div class="resultado-tab" id="sku-tab-composicoes" onclick="setSkuTab('composicoes')">📦 Kits</div>
         </div>
 
         <!-- Tab: Lista -->
@@ -1452,15 +1458,21 @@
 
         <!-- Tab: Composições -->
         <div id="sku-view-composicoes" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                <input type="checkbox" id="kits-sel-all" onchange="toggleTodosKits(this.checked)"> Selecionar todos
+              </label>
+              <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarKitsSelecionados()">🗑 Deletar selecionados</button>
+              <span id="kits-sel-count" style="font-size:12px;color:#666;"></span>
+            </div>
             <div style="font-size:12px;color:var(--gray-600);" id="composicoes-info"></div>
-            <button class="btn-out btn-sm" onclick="abrirModalComposicao(null)">+ Nova composição</button>
           </div>
           <div id="composicoes-vazio" class="card" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">🔗</div>
-              <div style="font-weight:600;margin-bottom:6px;">Nenhuma composição cadastrada</div>
-              <div style="font-size:12px;">Adicione manualmente o mapeamento de kits para componentes.</div>
+              <div style="font-size:32px;margin-bottom:10px;">📦</div>
+              <div style="font-weight:600;margin-bottom:6px;">Nenhum kit cadastrado</div>
+              <div style="font-size:12px;">Importe via template CSV ou do Upseller, ou adicione manualmente.</div>
             </div>
           </div>
           <div id="composicoes-lista"></div>
@@ -2223,18 +2235,22 @@
     </div>
   </div>
 
-  <!-- MODAL COMPOSIÇÃO -->
+  <!-- MODAL KIT -->
   <div class="modal" id="modal-composicao">
     <div class="modal-content" style="max-width:520px;">
       <div class="modal-header">
-        <div class="modal-title" id="modal-composicao-title">Nova Composição de Kit</div>
+        <div class="modal-title" id="modal-composicao-title">Novo Kit</div>
         <button class="btn-out btn-sm" onclick="fecharModalComposicao()">✕</button>
       </div>
       <div class="modal-body">
         <div class="form-row">
           <div class="form-group" style="flex:2;">
-            <label class="form-label">SKU Comercial (anúncio ML) *</label>
+            <label class="form-label">SKU do Kit (anúncio ML) *</label>
             <input type="text" id="mcomp-kit-sku" placeholder="Ex: J-2021-BANANA-CINZA-CASCA" style="text-transform:uppercase;">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Custo do kit (R$)</label>
+            <input type="number" id="mcomp-custo-kit" placeholder="0,00" step="0.01" min="0">
           </div>
         </div>
         <div class="form-group">
@@ -2243,11 +2259,11 @@
         </div>
         <div style="margin-top:12px;margin-bottom:6px;font-weight:600;font-size:12px;">Componentes:</div>
         <div id="mcomp-linhas"></div>
-        <div style="font-size:11px;color:var(--gray-600);margin-top:8px;">💡 Cada linha = um componente físico que compõe este anúncio. Se o componente não existe, crie-o primeiro em "+ SKU Base".</div>
+        <div style="font-size:11px;color:var(--gray-600);margin-top:8px;">💡 Cada linha = um SKU unitário que compõe este kit. Se ainda não existe, crie-o primeiro em "+ SKU Base".</div>
       </div>
       <div class="modal-footer">
         <button class="btn-out" onclick="fecharModalComposicao()">Cancelar</button>
-        <button class="btn" onclick="salvarComposicaoManual()">Salvar composição</button>
+        <button class="btn" onclick="salvarComposicaoManual()">Salvar Kit</button>
       </div>
     </div>
   </div>
@@ -6767,6 +6783,9 @@ Perfil do usuário:
     function calcCustoComposicao(sku_comercial){
       const comps = composicaoKit.filter(c => c.sku_comercial === sku_comercial);
       if(comps.length > 0){
+        // Se custo_kit preenchido diretamente, usa ele (prevalece sobre soma de componentes)
+        const custoKit = comps[0].custo_kit || 0;
+        if(custoKit > 0) return custoKit;
         return comps.reduce((s, c) => {
           const eg = estoqueGalpao.find(e => e.sku === c.sku_componente);
           const comp = componentes.find(x => x.codigo === c.sku_componente);
@@ -7193,6 +7212,9 @@ Perfil do usuário:
       if(!el) return;
       const kitsUnicos = [...new Set(composicaoKit.map(c => c.sku_comercial))].sort();
       if(infoEl) infoEl.textContent = kitsUnicos.length > 0 ? `${kitsUnicos.length} kits · ${composicaoKit.length} mapeamentos` : '';
+      const selAll = document.getElementById('kits-sel-all');
+      if(selAll) selAll.checked = false;
+      atualizarContadorKitsSel();
       if(kitsUnicos.length === 0){
         if(vazioEl) vazioEl.style.display = '';
         el.innerHTML = '';
@@ -7203,17 +7225,22 @@ Perfil do usuário:
       kitsUnicos.forEach(kitSku => {
         const comps = composicaoKit.filter(c => c.sku_comercial === kitSku);
         const titulo = comps[0] ? comps[0].titulo_comercial : '';
+        const custoKit = comps[0] && comps[0].custo_kit > 0 ? `<span style="font-size:11px;color:var(--success);">Custo: ${fmt(comps[0].custo_kit)}</span>` : '';
         const tags = comps.map(c => `<span style="background:var(--gray-100);border-radius:4px;padding:2px 8px;font-size:11px;font-family:monospace;">${c.sku_componente} ×${c.qty}</span>`).join('');
-        html += `<div class="card mb-2">
+        const skuEsc = kitSku.replace(/'/g, "\\'");
+        html += `<div class="card mb-2" id="kit-card-${kitSku.replace(/[^a-zA-Z0-9]/g,'-')}">
           <div class="card-body" style="padding:12px 15px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-              <div>
-                <div style="font-family:monospace;font-weight:600;font-size:12px;">${kitSku}</div>
-                <div style="font-size:11px;color:#666;">${titulo}</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" class="kit-sel-cb" data-sku="${kitSku}" onchange="atualizarContadorKitsSel()" style="margin:0;">
+                <div>
+                  <div style="font-family:monospace;font-weight:600;font-size:12px;">${kitSku}</div>
+                  <div style="font-size:11px;color:#666;">${titulo} ${custoKit}</div>
+                </div>
               </div>
               <div class="d-flex gap-1">
-                <button class="btn-out btn-sm" onclick="abrirModalComposicao('${kitSku}')">✏️</button>
-                <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${kitSku}')">🗑️</button>
+                <button class="btn-out btn-sm" onclick="abrirModalComposicao('${skuEsc}')">✏️</button>
+                <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${skuEsc}')">🗑️</button>
               </div>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">${tags}</div>
@@ -7221,6 +7248,25 @@ Perfil do usuário:
         </div>`;
       });
       el.innerHTML = html;
+    }
+    function atualizarContadorKitsSel(){
+      const selecionados = document.querySelectorAll('.kit-sel-cb:checked').length;
+      const total = document.querySelectorAll('.kit-sel-cb').length;
+      const el = document.getElementById('kits-sel-count');
+      if(el) el.textContent = selecionados > 0 ? `${selecionados} de ${total} selecionados` : '';
+    }
+    function toggleTodosKits(checked){
+      document.querySelectorAll('.kit-sel-cb').forEach(cb => cb.checked = checked);
+      atualizarContadorKitsSel();
+    }
+    function deletarKitsSelecionados(){
+      const selecionados = [...document.querySelectorAll('.kit-sel-cb:checked')].map(cb => cb.dataset.sku);
+      if(selecionados.length === 0){ alert('Nenhum kit selecionado.'); return; }
+      if(!confirm(`Remover ${selecionados.length} kit(s) selecionado(s)?`)) return;
+      composicaoKit = composicaoKit.filter(c => !selecionados.includes(c.sku_comercial));
+      salvar(); renderComposicoesTab();
+      const selAll = document.getElementById('kits-sel-all');
+      if(selAll) selAll.checked = false;
     }
 
     // ----- Import handlers -----
@@ -7494,7 +7540,7 @@ Perfil do usuário:
       salvar(); renderEstoque();
     }
 
-    // ----- CRUD Composições -----
+    // ----- CRUD Kits -----
     let _editComposicaoKit = null;
     function abrirModalComposicao(kitSku){
       _editComposicaoKit = kitSku || null;
@@ -7502,7 +7548,8 @@ Perfil do usuário:
       document.getElementById('mcomp-kit-sku').value = kitSku || '';
       document.getElementById('mcomp-kit-sku').disabled = !!kitSku;
       document.getElementById('mcomp-titulo').value = comps.length > 0 ? (comps[0].titulo_comercial || '') : '';
-      document.getElementById('modal-composicao-title').textContent = kitSku ? 'Editar Composição' : 'Nova Composição';
+      document.getElementById('mcomp-custo-kit').value = comps.length > 0 && comps[0].custo_kit > 0 ? comps[0].custo_kit : '';
+      document.getElementById('modal-composicao-title').textContent = kitSku ? 'Editar Kit' : 'Novo Kit';
       renderLinhasComposicao(comps.length > 0 ? comps : [{}]);
       document.getElementById('modal-composicao').style.display = 'flex';
     }
@@ -7544,6 +7591,7 @@ Perfil do usuário:
     function salvarComposicaoManual(){
       const kitSku = document.getElementById('mcomp-kit-sku').value.trim().toUpperCase();
       const titulo = document.getElementById('mcomp-titulo').value.trim();
+      const custoKit = parseFloat(document.getElementById('mcomp-custo-kit').value) || 0;
       if(!kitSku){ alert('Informe o SKU do kit'); return; }
       const skuEls = document.querySelectorAll('.mcomp-comp-sku');
       const qtyEls = document.querySelectorAll('.mcomp-qty');
@@ -7551,7 +7599,7 @@ Perfil do usuário:
       skuEls.forEach((sel, i) => {
         const compSku = sel.value.trim();
         const qty = parseFloat(qtyEls[i] ? qtyEls[i].value : 1) || 1;
-        if(compSku) novas.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: compSku, qty });
+        if(compSku) novas.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: compSku, qty, custo_kit: custoKit });
       });
       if(novas.length === 0){ alert('Adicione ao menos um componente'); return; }
       composicaoKit = composicaoKit.filter(c => c.sku_comercial !== kitSku);
@@ -7559,9 +7607,101 @@ Perfil do usuário:
       salvar(); fecharModalComposicao(); renderEstoque();
     }
     function deletarComposicaoKit(kitSku){
-      if(!confirm('Remover composição de ' + kitSku + '?')) return;
+      if(!confirm('Remover kit ' + kitSku + '?')) return;
       composicaoKit = composicaoKit.filter(c => c.sku_comercial !== kitSku);
       salvar(); renderComposicoesTab();
+    }
+
+    // ----- Templates CSV -----
+    function baixarTemplateSKUUn(){
+      const header = 'SKU,Descricao,Custo_unitario,Imposto_pct,Lead_time_dias,Fornecedor';
+      const exemplo = 'J-2001,Vaso de Barro Pequeno,12.50,0,7,Fornecedor ABC';
+      const blob = new Blob([header + '\n' + exemplo + '\n'], {type:'text/csv;charset=utf-8;'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'template_sku_un.csv'; a.click();
+    }
+    function baixarTemplateKit(){
+      const header = 'SKU_kit,Titulo_kit,Custo_kit,SKU_componente,Quantidade';
+      const ex1 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2001,1';
+      const ex2 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2005,2';
+      const blob = new Blob([header + '\n' + ex1 + '\n' + ex2 + '\n'], {type:'text/csv;charset=utf-8;'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'template_kit.csv'; a.click();
+    }
+
+    // ----- Importar CSV templates -----
+    function importarCSVSKUUn(input){
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('SKU,'));
+          let adicionados = 0, atualizados = 0;
+          lines.forEach(line => {
+            const cols = line.split(',');
+            if(cols.length < 2) return;
+            const sku = (cols[0]||'').trim().toUpperCase();
+            const desc = (cols[1]||'').trim();
+            const custo = parseFloat(cols[2])||0;
+            const imposto = parseFloat(cols[3])||0;
+            const lead = parseInt(cols[4])||0;
+            const forn = (cols[5]||'').trim();
+            if(!sku) return;
+            const idx = componentes.findIndex(c => c.codigo === sku);
+            if(idx >= 0){
+              componentes[idx].descricao = desc || componentes[idx].descricao;
+              componentes[idx].custo_unitario = custo > 0 ? custo : componentes[idx].custo_unitario;
+              componentes[idx].lead_time_dias = lead > 0 ? lead : componentes[idx].lead_time_dias;
+              componentes[idx].fornecedor = forn || componentes[idx].fornecedor;
+              atualizados++;
+            } else {
+              componentes.push({ codigo: sku, descricao: desc, custo_unitario: custo, imposto_pct: imposto, lead_time_dias: lead, fornecedor: forn });
+              adicionados++;
+            }
+          });
+          salvar(); renderEstoque();
+          alert(`✅ SKU/un importados: ${adicionados} novos · ${atualizados} atualizados.`);
+        } catch(err){ alert('Erro ao processar CSV: ' + err.message); }
+        input.value = '';
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+    function importarCSVKit(input){
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('SKU_kit,'));
+          const novosMap = {};
+          lines.forEach(line => {
+            const cols = line.split(',');
+            if(cols.length < 4) return;
+            const kitSku = (cols[0]||'').trim().toUpperCase();
+            const titulo = (cols[1]||'').trim();
+            const custoKit = parseFloat(cols[2])||0;
+            const compSku = (cols[3]||'').trim().toUpperCase();
+            const qty = parseFloat(cols[4])||1;
+            if(!kitSku || !compSku) return;
+            if(!novosMap[kitSku]) novosMap[kitSku] = { titulo, custoKit, comps: [] };
+            novosMap[kitSku].comps.push({ sku_componente: compSku, qty });
+          });
+          const kitSkus = Object.keys(novosMap);
+          if(kitSkus.length === 0){ alert('Nenhum kit encontrado no arquivo.'); return; }
+          composicaoKit = composicaoKit.filter(c => !kitSkus.includes(c.sku_comercial));
+          kitSkus.forEach(kitSku => {
+            const { titulo, custoKit, comps } = novosMap[kitSku];
+            comps.forEach(c => {
+              composicaoKit.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: c.sku_componente, qty: c.qty, custo_kit: custoKit });
+            });
+          });
+          salvar(); renderEstoque();
+          alert(`✅ ${kitSkus.length} kits importados.`);
+        } catch(err){ alert('Erro ao processar CSV: ' + err.message); }
+        input.value = '';
+      };
+      reader.readAsText(file, 'UTF-8');
     }
 
     // ===== PWA — SERVICE WORKER =====
