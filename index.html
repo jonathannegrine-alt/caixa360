@@ -1359,7 +1359,7 @@
                   <label class="form-label">Valor (R$)
                     <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Valor total da compra. Deixe vazio para o sistema calcular o máximo que pode pagar na data escolhida.</span></span>
                   </label>
-                  <input type="text" id="sim-valor" class="money-input" placeholder="Deixe vazio para calcular" onblur="if(this.value)this.value=fmtMoney(parseMoney(this.value))" onkeydown="if(event.key==='Enter')simular()">
+                  <input type="text" id="sim-valor" class="money-input" placeholder="Deixe vazio para calcular" oninput="onMoneyInput(this)" onblur="if(this.value)this.value=fmtMoney(parseMoney(this.value))" onkeydown="if(event.key==='Enter')simular()">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Data de Pagamento
@@ -4755,25 +4755,26 @@
     }
 
     async function capturarSnapshotML(){
-      try {
-        const { data: sessao } = await supa.auth.getSession();
-        const jwt = sessao?.session?.access_token;
-        await supa.functions.invoke('ml-snapshot', {
-          headers: jwt ? { Authorization: 'Bearer ' + jwt } : {}
-        });
-        // Recarregar extrato histórico
-        const corte = addDias(getToday(), -90);
-        const { data: ext } = await supa.from('extrato_historico')
-          .select('data,val_liquido,qtd_pedidos')
-          .eq('usuario_id', usuarioAtual.id)
-          .gte('data', corte)
-          .order('data', {ascending:false});
-        if(ext) extratoHistorico = ext.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
-        const { count } = await supa.from('snapshots_ml')
-          .select('data_captura', {count:'exact', head:true})
-          .eq('usuario_id', usuarioAtual.id);
-        diasPipeline = count || 0;
-      } catch(_){}
+      const { data: sessao } = await supa.auth.getSession();
+      const jwt = sessao?.session?.access_token;
+      const { data: fnData, error: fnErr } = await supa.functions.invoke('ml-snapshot', {
+        headers: jwt ? { Authorization: 'Bearer ' + jwt } : {}
+      });
+      if(fnErr) throw new Error('Snapshot ML: ' + fnErr.message);
+      if(fnData?.snapshot_erro) console.warn('Snapshot insert erro:', fnData.snapshot_erro);
+      // Recarregar extrato histórico e contagem de snapshots
+      const corte = addDias(getToday(), -90);
+      const { data: ext } = await supa.from('extrato_historico')
+        .select('data,val_liquido,qtd_pedidos')
+        .eq('usuario_id', usuarioAtual.id)
+        .gte('data', corte)
+        .order('data', {ascending:false});
+      if(ext) extratoHistorico = ext.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
+      const { count } = await supa.from('snapshots_ml')
+        .select('data_captura', {count:'exact', head:true})
+        .eq('usuario_id', usuarioAtual.id);
+      diasPipeline = count || 0;
+      return fnData;
     }
 
     async function sincronizarML(){
@@ -4950,8 +4951,9 @@
       if(btn) btn.disabled = true;
       if(st){ st.style.color='#666'; st.textContent='⏳ Buscando histórico...'; }
       try {
-        await capturarSnapshotML();
-        if(st){ st.style.color='var(--success)'; st.textContent='✅ Histórico atualizado! ' + extratoHistorico.length + ' dias carregados.'; }
+        const fnData = await capturarSnapshotML();
+        const snap = fnData?.snapshot_datas ?? '?';
+        if(st){ st.style.color='var(--success)'; st.textContent='✅ Extrato: ' + extratoHistorico.length + ' dias · Pipeline: ' + diasPipeline + ' entradas capturadas (' + snap + ' do ML).'; }
         renderPipelineMaturidade();
         recalc();
       } catch(e){
