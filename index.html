@@ -3525,7 +3525,7 @@
       else if(page === 'skus') setSkuTab(skuCurrentTab || 'lista');
       else if(page === 'estoque') renderEstoque();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
-      else if(page === 'config'){ renderCategorias(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
+      else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
       else if(page === 'resultado'){ setResultadoTab('dre'); }
       else if(page === 'patrimonio'){ renderPatrimonio(); }
     }
@@ -5685,11 +5685,13 @@
     // ===== SIMULADOR - PLANILHA DE DIAS =====
     // Dados da planilha simulador (editáveis)
     let simPlanilhaDados = [];
+    let simDias = 30;
+    let simModoProj = 'total';
 
     function renderPlanilhaSimulador(valorExtra, dataPag){
       const hoje = getToday();
       simPlanilhaDados = [];
-      for(let i = 0; i < 30; i++){
+      for(let i = 0; i < simDias; i++){
         const data = addDias(hoje, i);
         const e = getEntrada(data);
         const compra = data === dataPag ? (valorExtra || 0) : 0;
@@ -5703,17 +5705,33 @@
       let saldoSim  = saldoAtual;
       const th = 'padding:7px 8px;background:#f9fafb;border:1px solid #e5e5e5;font-size:11px;white-space:nowrap;';
       const td = 'padding:5px 8px;border:1px solid #e5e5e5;font-size:12px;';
+      const btnBase = 'padding:4px 10px;font-size:12px;border:none;cursor:pointer;';
+      const btnOn  = btnBase + 'background:var(--primary);color:#fff;';
+      const btnOff = btnBase + 'background:#fff;color:#444;';
+      const grpStyle = 'display:flex;border:1px solid #e5e5e5;border-radius:6px;overflow:hidden;';
       let html = `<div style="margin-top:15px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <strong style="font-size:13px;">Fluxo 30 dias — edite "Compra simulada" em qualquer linha</strong>
-          <button class="btn-out btn-sm" onclick="recalcularSimulador()">↺ Recalcular</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+          <strong style="font-size:13px;">Fluxo ${simDias} dias — edite "Compra simulada" em qualquer linha</strong>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:12px;color:#666;">Fator: <strong>${Math.round(cfgPct*100)}%</strong></span>
+            <div style="${grpStyle}">
+              <button onclick="simModoProj='total';recalcularSimulador()" style="${simModoProj==='total'?btnOn:btnOff}">+Projetado</button>
+              <button onclick="simModoProj='conf';recalcularSimulador()" style="${simModoProj==='conf'?btnOn:btnOff}">Confirmado</button>
+            </div>
+            <div style="${grpStyle}">
+              <button onclick="simDias=30;recalcularSimulador()" style="${simDias===30?btnOn:btnOff}">30d</button>
+              <button onclick="simDias=60;recalcularSimulador()" style="${simDias===60?btnOn:btnOff}">60d</button>
+              <button onclick="simDias=90;recalcularSimulador()" style="${simDias===90?btnOn:btnOff}">90d</button>
+            </div>
+            <button class="btn-out btn-sm" onclick="recalcularSimulador()">↺ Recalcular</button>
+          </div>
         </div>
         <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
         <table style="width:100%;border-collapse:collapse;">
           <thead style="position:sticky;top:0;z-index:5;"><tr>
             <th style="${th}">Data</th>
             <th style="${th}">Conf. ML</th>
-            <th style="${th}">Proj. compl.</th>
+            <th style="${th};${simModoProj==='conf'?'color:#bbb;':''}">Proj. compl.</th>
             <th style="${th}">A pagar</th>
             <th style="${th}">Compra simulada <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Valor que você está simulando pagar neste dia. Edite para testar diferentes cenários.</span></span></th>
             <th style="${th}">Saldo real acum. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Saldo acumulado sem considerar a compra simulada — o que o caixa terá de qualquer forma.</span></span></th>
@@ -5722,8 +5740,9 @@
           </tr></thead><tbody>`;
 
       simPlanilhaDados.forEach((d, i) => {
-        saldoReal += d.conf + d.proj - d.pag;
-        saldoSim  += d.conf + d.proj - d.pag - d.compra;
+        const entrada = simModoProj === 'conf' ? d.conf : (d.conf + d.proj);
+        saldoReal += entrada - d.pag;
+        saldoSim  += entrada - d.pag - d.compra;
         const corLinha = saldoSim < reservaMinima ? 'background:#fff5f5;' : '';
         const status = saldoSim < reservaMinima
           ? '<span style="color:var(--danger);font-size:11px;">⚠️ risco</span>'
@@ -5731,7 +5750,7 @@
         html += `<tr style="${corLinha}">
           <td style="${td}">${ptDate(d.data)}</td>
           <td style="${td};color:var(--success);">${d.conf>0?fmt(d.conf):'—'}</td>
-          <td style="${td};color:#0891b2;">${d.proj>0?fmt(d.proj):'—'}</td>
+          <td style="${td};color:${simModoProj==='conf'?'#ccc':'#0891b2'};">${d.proj>0?(simModoProj==='conf'?'—':fmt(d.proj)):'—'}</td>
           <td style="${td};color:var(--danger);">${d.pag>0?fmt(d.pag):'—'}</td>
           <td style="${td};padding:2px 4px;">
             <input type="text" value="${d.compra>0?fmtMoney(d.compra):''}"
@@ -5750,10 +5769,23 @@
 
     function recalcularSimulador(){
       const res = document.getElementById('sim-resultado');
-      if(res && simPlanilhaDados.length > 0){
-        const badge = res.querySelector('.alert');
-        res.innerHTML = (badge ? badge.outerHTML : '') + gerarHTMLPlanilhaSimulador();
+      if(!res || simPlanilhaDados.length === 0) return;
+
+      // Preservar compras editadas pelo usuário
+      const compraEdits = {};
+      simPlanilhaDados.forEach(d => { if(d.compra > 0) compraEdits[d.data] = d.compra; });
+
+      // Recomputar todos os dias com getEntrada() fresco (respeita cfgPct atual e simDias)
+      const hoje = getToday();
+      simPlanilhaDados = [];
+      for(let i = 0; i < simDias; i++){
+        const data = addDias(hoje, i);
+        const e = getEntrada(data);
+        simPlanilhaDados.push({data, conf:e.conf, proj:e.proj, pag:getPag(data), compra: compraEdits[data] || 0});
       }
+
+      const badge = res.querySelector('.alert');
+      res.innerHTML = (badge ? badge.outerHTML : '') + gerarHTMLPlanilhaSimulador();
     }
 
 
@@ -6670,7 +6702,7 @@ Perfil do usuário:
     }
 
     // ===== INIT =====
-    function init(){
+    function renderConfig(){
       // Saldos
       const mpEl = document.getElementById('saldo-mp');
       const outrosEl = document.getElementById('saldo-inicial');
@@ -6696,9 +6728,6 @@ Perfil do usuário:
       if(histEl) histEl.value = periodoHistorico;
       if(valHist) valHist.textContent = periodoHistorico + ' dias';
 
-      // Pipeline ML: atualizar label do período ativo
-      renderPipelineMaturidade();
-
       // Modo projeção
       const modoEl = document.getElementById('modo-extrato');
       if(modoEl && modoProjecao === 'extrato') modoEl.checked = true;
@@ -6720,6 +6749,10 @@ Perfil do usuário:
 
       // Categorias
       atualizarSelectCategorias();
+    }
+
+    function init(){
+      renderConfig();
 
       // Restaurar última página visitada (ou dashboard como padrão)
       const lastPage = localStorage.getItem('mk_last_page') || 'dashboard';
