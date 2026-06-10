@@ -2841,7 +2841,7 @@
         supa.from('categorias').select('*').eq('usuario_id', uid),
         supa.from('configuracoes').select('*').eq('usuario_id', uid).single(),
         supa.from('extrato_historico').select('data,val_liquido,qtd_pedidos').eq('usuario_id', uid).gte('data', dataCorte90).order('data', {ascending:false}),
-        supa.rpc('count_pipeline_dias', { uid })
+        supa.from('snapshots_ml').select('data_captura').eq('usuario_id', uid).limit(9999)
       ]);
 
       if(rPag.data) pagamentos = rPag.data.map(p => ({
@@ -2872,7 +2872,7 @@
 
       if(rExt.data) extratoHistorico = rExt.data.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
 
-      diasPipeline = rSnap.data || 0;
+      diasPipeline = new Set((rSnap.data || []).map(r => r.data_captura)).size;
       atualizarRegressao();
       // P11 — carregar dados de estoque/vendas/composição em paralelo
       await carregarP11Supabase();
@@ -4770,8 +4770,8 @@
         .gte('data', corte)
         .order('data', {ascending:false});
       if(ext) extratoHistorico = ext.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
-      const { data: pipelineCount } = await supa.rpc('count_pipeline_dias', { uid: usuarioAtual.id });
-      diasPipeline = pipelineCount || 0;
+      const { data: snapRows } = await supa.from('snapshots_ml').select('data_captura').eq('usuario_id', usuarioAtual.id).limit(9999);
+      diasPipeline = new Set((snapRows || []).map(r => r.data_captura)).size;
       return fnData;
     }
 
