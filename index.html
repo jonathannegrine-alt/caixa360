@@ -1267,6 +1267,20 @@
 
             <div id="ml-status" class="ml-status-info" style="margin-top:10px;min-height:18px;"></div>
 
+            <!-- Conflito de conta ML -->
+            <div id="ml-conflict-msg" style="display:none;margin-top:12px;padding:14px;background:#fff8e1;border:1px solid #f59e0b;border-radius:8px;">
+              <div style="font-weight:700;color:#92400e;margin-bottom:8px;">⚠️ Conta ML diferente detectada</div>
+              <div style="font-size:13px;color:#444;margin-bottom:12px;">
+                Conta já conectada: <strong id="ml-conflict-old"></strong><br>
+                Nova conta autorizada: <strong id="ml-conflict-new"></strong><br><br>
+                Deseja substituir a conta conectada? Esta ação irá sincronizar dados da nova conta.
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn" onclick="confirmarTrocaML()" style="background:var(--danger);">Sim, trocar conta</button>
+                <button class="btn-out" onclick="cancelarTrocaML()">Cancelar — manter conta atual</button>
+              </div>
+            </div>
+
             <!-- Fallback JSON -->
             <details style="margin-top:16px;">
               <summary style="font-size:11px;color:#999;cursor:pointer;">Importar via JSON (alternativa manual)</summary>
@@ -4737,21 +4751,59 @@
         const { data, error } = await supa.functions.invoke('ml-callback', {
           body: { code, user_id: usuarioAtual.id }
         });
-        const erroML = (data?.error || error?.message || 'Erro desconhecido')
-          + (data?.detail ? ' — ' + data.detail : '')
-          + (data?.status ? ' (HTTP ' + data.status + ')' : '');
         if(error || data?.error){
+          const erroML = (data?.error || error?.message || 'Erro desconhecido')
+            + (data?.detail ? ' — ' + data.detail : '');
           if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ ' + erroML; }
+          window.history.replaceState({}, '', window.location.pathname);
           return;
         }
-        if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='✅ Conectado! Buscando histórico (pode levar ~30s)...'; }
-        // Popula extrato histórico na primeira conexão
-        await capturarSnapshotML();
-        await sincronizarML();
+        // Conflito de conta ML — pedir confirmação antes de trocar
+        if(data?.conflict){
+          window.history.replaceState({}, '', window.location.pathname);
+          const msgEl = document.getElementById('ml-conflict-msg');
+          const oldId = document.getElementById('ml-conflict-old');
+          const newId = document.getElementById('ml-conflict-new');
+          if(msgEl) msgEl.style.display = 'block';
+          if(oldId) oldId.textContent = data.existing_ml_user_id;
+          if(newId) newId.textContent = data.new_ml_user_id;
+          if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='⚠️ Conta ML diferente detectada — veja o aviso abaixo.'; }
+          return;
+        }
+        await _finalizarConexaoML(statusEl);
       } catch(e){
         if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ ' + e.message; }
       }
       window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    async function _finalizarConexaoML(statusEl){
+      if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='✅ Conectado! Buscando histórico (pode levar ~30s)...'; }
+      await capturarSnapshotML();
+      await sincronizarML();
+    }
+
+    async function confirmarTrocaML(){
+      const statusEl = document.getElementById('ml-status');
+      const msgEl = document.getElementById('ml-conflict-msg');
+      if(msgEl) msgEl.style.display = 'none';
+      if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='⏳ Aplicando nova conta ML...'; }
+      const { data, error } = await supa.functions.invoke('ml-callback', {
+        body: { user_id: usuarioAtual.id, confirm: true }
+      });
+      if(error || data?.error){
+        if(statusEl){ statusEl.className='ml-status-err'; statusEl.textContent='❌ Erro ao confirmar: ' + (data?.error || error?.message); }
+        return;
+      }
+      await _finalizarConexaoML(statusEl);
+    }
+
+    async function cancelarTrocaML(){
+      const msgEl = document.getElementById('ml-conflict-msg');
+      if(msgEl) msgEl.style.display = 'none';
+      await supa.functions.invoke('ml-callback', { body: { user_id: usuarioAtual.id, cancel: true } });
+      const statusEl = document.getElementById('ml-status');
+      if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='ℹ️ Troca cancelada. Conta anterior mantida.'; }
     }
 
     async function capturarSnapshotML(){
