@@ -2293,6 +2293,47 @@
     </div>
   </div>
 
+  <!-- MODAL BAIXA DE PAGAMENTO -->
+  <div class="modal" id="modal-baixa">
+    <div class="modal-content" style="max-width:460px;">
+      <div class="modal-header">
+        <div class="modal-title" id="baixa-title">Confirmar pagamento</div>
+        <button class="btn-out btn-sm" onclick="fecharModal('modal-baixa')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="baixa-lista" style="max-height:160px;overflow-y:auto;margin-bottom:14px;border:1px solid #e5e7eb;border-radius:6px;padding:8px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">Data do pagamento</label>
+            <input type="date" id="baixa-data" class="form-input">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">Valor original</label>
+            <div id="baixa-val-orig" style="padding:8px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;font-weight:600;"></div>
+          </div>
+        </div>
+        <div id="baixa-campos-extras" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">Desconto (−)</label>
+            <input type="text" id="baixa-desconto" class="form-input" placeholder="R$ 0,00" oninput="onBaixaDescontoInput(this)">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">Juros / multa (+)</label>
+            <input type="text" id="baixa-juros" class="form-input" placeholder="R$ 0,00" oninput="onBaixaJurosInput(this)">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:10px;">
+          <label class="form-label" style="font-weight:700;">Valor total pago</label>
+          <input type="text" id="baixa-valor-pago" class="form-input" style="font-size:15px;font-weight:700;" oninput="onBaixaValorPagoInput(this)">
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:flex-end;gap:8px;">
+        <button class="btn-out" onclick="fecharModal('modal-baixa')">Cancelar</button>
+        <button class="btn" onclick="confirmarBaixa()">✓ Confirmar pagamento</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL LANÇAMENTO -->
   <div class="modal" id="modal-lanc">
     <div class="modal-content">
@@ -2858,6 +2899,7 @@
         id:p.id, desc:p.descricao, forn:p.forn, val:p.val, data:p.data,
         cat:p.cat, pago:p.pago, tipo:p.tipo, grupo_id:p.grupo_id,
         parcela:p.parcela, valorPago:p.valor_pago,
+        dataPaga:p.data_paga||null, desconto:p.desconto||0, juros:p.juros||0,
         tiny_key:p.tiny_key||null, fonte:p.fonte||null
       }));
 
@@ -2899,6 +2941,7 @@
         descricao: p.desc, forn: p.forn||'', val: p.val, data: p.data,
         cat: p.cat||'', pago: p.pago||false, tipo: p.tipo||'unico',
         grupo_id: p.grupo_id||p.grupoId||null, parcela: p.parcela||null, valor_pago: p.valorPago||null,
+        data_paga: p.dataPaga||null, desconto: p.desconto||0, juros: p.juros||0,
         tiny_key: p.tiny_key||null, fonte: p.fonte||null
       }));
       const snapCat = categorias.map(c => ({usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida'}));
@@ -3810,13 +3853,15 @@
       return pagamentos.filter(p => {
         if(busca && !p.desc.toLowerCase().includes(busca) &&
            !(p.forn || '').toLowerCase().includes(busca)) return false;
-        if(periodo === 'dia' && p.data !== hoje) return false;
+        // Para pagas, usa dataPaga se disponível, senão data de vencimento
+        const dataRef = isPagas ? (p.dataPaga || p.data) : p.data;
+        if(periodo === 'dia' && dataRef !== hoje) return false;
         if(periodo === 'semana'){
-          if(isPagas){ if(Math.abs(diasDif(hoje, p.data)) > 7)  return false; }
+          if(isPagas){ if(Math.abs(diasDif(hoje, dataRef)) > 7)  return false; }
           else        { if(p.data < hoje || diasDif(hoje, p.data) > 7)  return false; }
         }
         if(periodo === 'mes'){
-          if(isPagas){ if(Math.abs(diasDif(hoje, p.data)) > 30) return false; }
+          if(isPagas){ if(Math.abs(diasDif(hoje, dataRef)) > 30) return false; }
           else        { if(p.data < hoje || diasDif(hoje, p.data) > 30) return false; }
         }
         if(periodo === 'custom'){
@@ -3863,6 +3908,10 @@
             ? '<span class="badge badge-danger">Atrasado</span>'
             : '<span class="badge badge-warning">Em aberto</span>';
 
+        const btnBaixa = !p.pago
+          ? `<button class="btn-out btn-sm" style="font-size:11px;padding:3px 8px;margin-top:4px;" onclick="event.stopPropagation();abrirModalBaixa([${idx}])">✓ Baixar</button>`
+          : `<div style="font-size:11px;color:#999;margin-top:2px;">${p.dataPaga ? ptDate(p.dataPaga) : ''}${p.desconto > 0 ? ' · desc '+fmt(p.desconto) : ''}${p.juros > 0 ? ' · juros '+fmt(p.juros) : ''}</div>`;
+
         html += `<div class="entry" onclick="editarLanc(${idx})">
           <input type="checkbox" class="cb-pagar" data-idx="${idx}" data-val="${p.val}" onclick="event.stopPropagation();atualizarContPagar()">
           <div class="entry-main">
@@ -3870,8 +3919,9 @@
             <div class="entry-meta">${ptDate(p.data)} • ${p.forn || 'Sem fornecedor'} • ${p.cat}</div>
           </div>
           <div style="text-align:right;">
-            <div class="entry-value">${fmt(p.val)}</div>
+            <div class="entry-value">${p.valorPago != null && p.pago ? fmt(p.valorPago) : fmt(p.val)}</div>
             ${badge}
+            ${btnBaixa}
           </div>
         </div>`;
       });
@@ -6028,7 +6078,109 @@
     function marcarSelecionadosPagos(){
       const idxs = getIdxsSelecionadosPagar();
       if(!idxs.length){ alert('Selecione ao menos 1 lançamento'); return; }
-      idxs.forEach(i => { pagamentos[i].pago = true; pagamentos[i].dataPaga = getToday(); });
+      abrirModalBaixa(idxs);
+    }
+
+    let _baixaIdxs = [];
+
+    function abrirModalBaixa(idxs){
+      _baixaIdxs = idxs.filter(i => !pagamentos[i].pago);
+      if(!_baixaIdxs.length){ alert('Nenhuma conta em aberto selecionada.'); return; }
+
+      const isSingle = _baixaIdxs.length === 1;
+      const total = _baixaIdxs.reduce((s, i) => s + pagamentos[i].val, 0);
+
+      document.getElementById('baixa-title').textContent = isSingle
+        ? 'Confirmar pagamento'
+        : `Confirmar ${_baixaIdxs.length} pagamentos`;
+
+      // Lista de itens
+      const listaEl = document.getElementById('baixa-lista');
+      listaEl.innerHTML = _baixaIdxs.map(i => {
+        const p = pagamentos[i];
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 4px;border-bottom:1px solid #f0f0f0;font-size:13px;">
+          <span style="color:#333;">${p.desc}${p.parcela?' ('+p.parcela+')':''}<span style="color:#999;font-size:11px;margin-left:6px;">${ptDate(p.data)}</span></span>
+          <span style="font-weight:600;">${fmt(p.val)}</span>
+        </div>`;
+      }).join('') + (isSingle ? '' : `<div style="display:flex;justify-content:space-between;padding:6px 4px;font-size:13px;font-weight:700;border-top:2px solid #e5e7eb;margin-top:2px;"><span>Total</span><span>${fmt(total)}</span></div>`);
+
+      document.getElementById('baixa-data').value = getToday();
+      document.getElementById('baixa-val-orig').textContent = fmt(total);
+      document.getElementById('baixa-desconto').value = '';
+      document.getElementById('baixa-juros').value = '';
+      document.getElementById('baixa-valor-pago').value = fmt(total);
+
+      // Desconto/juros só faz sentido mostrar para lote também, mas campos ficam visíveis sempre
+      document.getElementById('baixa-campos-extras').style.display = 'grid';
+
+      abrirModal('modal-baixa');
+    }
+
+    function _parseBaixaMoneyInput(el){
+      const raw = el.value.replace(/[^\d,]/g,'').replace(',','.');
+      return parseFloat(raw) || 0;
+    }
+
+    function onBaixaValorPagoInput(el){
+      const total = _baixaIdxs.reduce((s, i) => s + pagamentos[i].val, 0);
+      const pago  = _parseBaixaMoneyInput(el);
+      const diff  = pago - total;
+      if(diff < 0){
+        document.getElementById('baixa-desconto').value = fmt(Math.abs(diff));
+        document.getElementById('baixa-juros').value = '';
+      } else if(diff > 0){
+        document.getElementById('baixa-juros').value = fmt(diff);
+        document.getElementById('baixa-desconto').value = '';
+      } else {
+        document.getElementById('baixa-desconto').value = '';
+        document.getElementById('baixa-juros').value = '';
+      }
+    }
+
+    function onBaixaDescontoInput(el){
+      const total    = _baixaIdxs.reduce((s, i) => s + pagamentos[i].val, 0);
+      const desconto = _parseBaixaMoneyInput(el);
+      const juros    = _parseBaixaMoneyInput(document.getElementById('baixa-juros'));
+      document.getElementById('baixa-valor-pago').value = fmt(Math.max(0, total - desconto + juros));
+    }
+
+    function onBaixaJurosInput(el){
+      const total    = _baixaIdxs.reduce((s, i) => s + pagamentos[i].val, 0);
+      const desconto = _parseBaixaMoneyInput(document.getElementById('baixa-desconto'));
+      const juros    = _parseBaixaMoneyInput(el);
+      document.getElementById('baixa-valor-pago').value = fmt(Math.max(0, total - desconto + juros));
+    }
+
+    function confirmarBaixa(){
+      const dataPaga = document.getElementById('baixa-data').value;
+      if(!dataPaga){ alert('Informe a data do pagamento.'); return; }
+
+      const total      = _baixaIdxs.reduce((s, i) => s + pagamentos[i].val, 0);
+      const totalPago  = _parseBaixaMoneyInput(document.getElementById('baixa-valor-pago'));
+      const descTotal  = _parseBaixaMoneyInput(document.getElementById('baixa-desconto'));
+      const jurosTotal = _parseBaixaMoneyInput(document.getElementById('baixa-juros'));
+
+      if(_baixaIdxs.length === 1){
+        const i = _baixaIdxs[0];
+        pagamentos[i].pago      = true;
+        pagamentos[i].dataPaga  = dataPaga;
+        pagamentos[i].valorPago = totalPago;
+        pagamentos[i].desconto  = descTotal;
+        pagamentos[i].juros     = jurosTotal;
+      } else {
+        // Distribuir proporcionalmente
+        _baixaIdxs.forEach(i => {
+          const p      = pagamentos[i];
+          const peso   = total > 0 ? p.val / total : 1 / _baixaIdxs.length;
+          p.pago      = true;
+          p.dataPaga  = dataPaga;
+          p.desconto  = Math.round(descTotal  * peso * 100) / 100;
+          p.juros     = Math.round(jurosTotal * peso * 100) / 100;
+          p.valorPago = Math.round((p.val - p.desconto + p.juros) * 100) / 100;
+        });
+      }
+
+      fecharModal('modal-baixa');
       salvar(); renderPagar(); recalc();
     }
 
