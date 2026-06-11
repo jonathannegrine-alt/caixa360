@@ -1718,6 +1718,12 @@
               <button class="btn" onclick="trocarSenha()">Salvar nova senha</button>
               <div id="msg-trocar-senha" style="font-size:12px;margin-top:8px;min-height:16px;"></div>
             </div>
+            <div class="form-group" style="max-width:380px;margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;">
+              <label class="form-label">Sincronização com a nuvem</label>
+              <p style="font-size:12px;color:#666;margin:0 0 10px;">Envia todos os dados locais (pagamentos, SKUs, categorias) para o servidor. Use se dados não aparecem em outros dispositivos.</p>
+              <button class="btn btn-out" onclick="forceSyncNuvem(this)">☁️ Sincronizar agora</button>
+              <div id="msg-sync-nuvem" style="font-size:12px;margin-top:8px;min-height:16px;"></div>
+            </div>
           </div>
         </div>
 
@@ -2897,7 +2903,7 @@
 
     // ===== SUPABASE — SALVAR DADOS =====
     async function salvarSupabase(){
-      if(!usuarioAtual) return;
+      if(!usuarioAtual) return {ok:false, error:'sem sessão'};
       const uid = usuarioAtual.id;
 
       // Captura snapshot antes de qualquer await (evita race condition com limparSessaoLocal)
@@ -2913,21 +2919,45 @@
 
       // Pagamentos: delete + insert em lotes de 200
       const { error: ePagDel } = await supa.from('pagamentos').delete().eq('usuario_id', uid);
-      if(ePagDel){ console.error('salvarSupabase pagamentos delete:', ePagDel); return; }
+      if(ePagDel){ console.error('salvarSupabase pagamentos delete:', ePagDel); return {ok:false, error:'delete pagamentos: ' + ePagDel.message}; }
       if(snapPag.length > 0){
         for(let i = 0; i < snapPag.length; i += 200){
           const { error: ePagIns } = await supa.from('pagamentos').insert(snapPag.slice(i, i+200));
-          if(ePagIns){ console.error('salvarSupabase pagamentos insert lote', i, ePagIns); return; }
+          if(ePagIns){ console.error('salvarSupabase pagamentos insert lote', i, ePagIns); return {ok:false, error:'insert pagamentos lote ' + i + ': ' + ePagIns.message}; }
         }
       }
 
       // Categorias
       const { error: eCatDel } = await supa.from('categorias').delete().eq('usuario_id', uid);
-      if(!eCatDel && snapCat.length > 0) await supa.from('categorias').insert(snapCat);
+      if(!eCatDel && snapCat.length > 0){
+        const { error: eCatIns } = await supa.from('categorias').insert(snapCat);
+        if(eCatIns){ console.error('salvarSupabase categorias insert:', eCatIns); return {ok:false, error:'insert categorias: ' + eCatIns.message}; }
+      }
 
       // SKUs
       const { error: eSkuDel } = await supa.from('skus').delete().eq('usuario_id', uid);
-      if(!eSkuDel && snapSku.length > 0) await supa.from('skus').insert(snapSku);
+      if(!eSkuDel && snapSku.length > 0){
+        const { error: eSkuIns } = await supa.from('skus').insert(snapSku);
+        if(eSkuIns){ console.error('salvarSupabase skus insert:', eSkuIns); return {ok:false, error:'insert skus: ' + eSkuIns.message}; }
+      }
+
+      return {ok:true, pagamentos: snapPag.length, categorias: snapCat.length, skus: snapSku.length};
+    }
+
+    async function forceSyncNuvem(btn){
+      const msg = document.getElementById('msg-sync-nuvem');
+      btn.disabled = true;
+      msg.style.color = '#666';
+      msg.textContent = 'Sincronizando...';
+      const r = await salvarSupabase();
+      btn.disabled = false;
+      if(r?.ok){
+        msg.style.color = 'var(--success)';
+        msg.textContent = `Concluído: ${r.pagamentos} pagamentos · ${r.skus} SKUs · ${r.categorias} categorias`;
+      } else {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = 'Erro: ' + (r?.error || 'desconhecido');
+      }
     }
 
     async function salvarCfgSupabase(){
