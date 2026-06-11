@@ -2691,10 +2691,11 @@
         await carregarDoSupabase();
 
         // Merge: se Supabase retornou vazio, restaurar do backup local
-        if(pagamentos.length   === 0 && _lsPag.length    > 0) pagamentos    = _lsPag;
-        if(liberacoes.length   === 0 && _lsLib.length    > 0) liberacoes    = _lsLib;
-        if(skus.length         === 0 && _lsSku.length    > 0) skus          = _lsSku;
-        if(categorias.length   === 0 && _lsCat.length    > 0) categorias    = _lsCat;
+        let _syncNeeded = false;
+        if(pagamentos.length   === 0 && _lsPag.length    > 0){ pagamentos    = _lsPag;    _syncNeeded = true; }
+        if(liberacoes.length   === 0 && _lsLib.length    > 0){ liberacoes    = _lsLib;    _syncNeeded = true; }
+        if(skus.length         === 0 && _lsSku.length    > 0){ skus          = _lsSku;    _syncNeeded = true; }
+        if(categorias.length   === 0 && _lsCat.length    > 0){ categorias    = _lsCat;    _syncNeeded = true; }
         if(componentes.length  === 0 && _lsComp.length   > 0) componentes   = _lsComp;
         if(composicaoKit.length=== 0 && _lsCompos.length > 0) composicaoKit = _lsCompos;
         if(vendasSku.length    === 0 && _lsVendas.length > 0) vendasSku     = _lsVendas;
@@ -2703,6 +2704,8 @@
         if(saldoMP === 0 && _lsCfg.saldoMP > 0){ saldoMP = _lsCfg.saldoMP; saldoAtual = saldoMP + saldoOutros; }
         if(saldoOutros === 0 && _lsCfg.saldoOutros > 0){ saldoOutros = _lsCfg.saldoOutros; saldoAtual = saldoMP + saldoOutros; }
         if(_lsCfg.patCfg) patCfg = {...patCfg, ..._lsCfg.patCfg};
+        // Dados restaurados do localStorage → sincronizar imediatamente para nuvem
+        if(_syncNeeded) salvarSupabase();
 
         document.getElementById('tela-login').classList.remove('ativo');
         document.getElementById('user-bar').style.display = 'block';
