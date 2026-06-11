@@ -3806,12 +3806,19 @@
         else labelEl.textContent = '';
       }
 
+      const isPagas = status === 'pagas';
       return pagamentos.filter(p => {
         if(busca && !p.desc.toLowerCase().includes(busca) &&
            !(p.forn || '').toLowerCase().includes(busca)) return false;
         if(periodo === 'dia' && p.data !== hoje) return false;
-        if(periodo === 'semana' && (p.data < hoje || diasDif(hoje, p.data) > 7)) return false;
-        if(periodo === 'mes' && (p.data < hoje || diasDif(hoje, p.data) > 30)) return false;
+        if(periodo === 'semana'){
+          if(isPagas){ if(p.data > hoje || diasDif(p.data, hoje) > 7)  return false; }
+          else        { if(p.data < hoje || diasDif(hoje, p.data) > 7)  return false; }
+        }
+        if(periodo === 'mes'){
+          if(isPagas){ if(p.data > hoje || diasDif(p.data, hoje) > 30) return false; }
+          else        { if(p.data < hoje || diasDif(hoje, p.data) > 30) return false; }
+        }
         if(periodo === 'custom'){
           if(customDe && p.data < customDe) return false;
           if(customAte && p.data > customAte) return false;
