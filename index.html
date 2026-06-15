@@ -463,6 +463,7 @@
 
     /* Planilha sticky header */
     #view-planilha .card{overflow:visible;}
+    #view-config .card{overflow:visible;}
     #view-planilha .card-body{max-height:70vh;overflow-y:auto;padding:0;}
     #table-planilha thead th{
       position:sticky;
@@ -944,14 +945,14 @@
         <div class="stats-grid">
           <div class="stat-card success">
             <div class="stat-label">Quanto posso comprar
-              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Valor máximo viável hoje: busca o maior valor que não faz o saldo cair abaixo da reserva mínima em nenhum dia dos próximos 30 dias.</span></span>
+              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Quanto você pode gastar hoje sem comprometer o caixa? Testa automaticamente o valor máximo que, somado às contas futuras, mantém o saldo acima da reserva mínima nos próximos 30 dias. Use o Simulador para testar valores específicos.</span></span>
             </div>
             <div class="stat-value text-success" id="stat-comprar">—</div>
           </div>
 
           <div class="stat-card warning">
             <div class="stat-label">Pior saldo projetado (30d)
-              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Menor saldo acumulado projetado nos próximos 30 dias, considerando entradas confirmadas + projeção complementar e todas as contas a pagar.</span></span>
+              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Nos próximos 30 dias, qual o momento mais crítico do caixa? Soma tudo que deve entrar (ML + projeção) e subtrai todos os pagamentos. Se ficar abaixo da reserva mínima, tem um alerta vermelho no calendário nesse dia.</span></span>
             </div>
             <div class="stat-value text-warning" id="stat-pior">—</div>
           </div>
@@ -965,7 +966,7 @@
 
           <div class="stat-card">
             <div class="stat-label">Cobertura de caixa
-              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Quantos dias o saldo atual cobre, com base na média de gastos dos últimos 30 dias. Quanto maior, mais seguro.</span></span>
+              <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Se você parasse de receber hoje, quantos dias pagaria suas contas com o saldo atual? Calculado pelo saldo dividido pela média diária de gastos dos últimos 30 dias. Zero = nenhum pagamento registrado ainda.</span></span>
             </div>
             <div class="stat-value" id="stat-cobertura">— dias</div>
           </div>
@@ -1113,9 +1114,9 @@
                 <tr>
                   <th>Data</th>
                   <th>Dia</th>
-                  <th id="th-conf">Entrada Conf. ML <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Valor importado diretamente do relatório do Mercado Livre para este dia. Dado real e confirmado.</span></span></th>
-                  <th id="th-proj">Projeção Compl. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Complemento prudencial (D+8+): MAX(0, média × fator − confirmado). Zero se o confirmado já supera a projeção.</span></span></th>
-                  <th id="th-total">Total Entrada <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">MAX(Confirmado ML, Projeção Prudencial). Nunca substitui um confirmado maior por uma projeção menor.</span></span></th>
+                  <th id="th-conf">Entrada Conf. ML <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Valor confirmado pelo Mercado Livre para este dia. Vem diretamente da API do ML (coletado todo dia às 06h). Para os próximos 7 dias, este dado é real e preciso.</span></span></th>
+                  <th id="th-proj">Projeção Compl. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Estimativa adicional para dias sem confirmação do ML (D+8 em diante). Calculado: média histórica × fator prudencial − o que já está confirmado. Zero quando o ML já confirmou mais do que a estimativa.</span></span></th>
+                  <th id="th-total">Total Entrada <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">O maior entre o confirmado ML e a projeção. Garante que a projeção nunca diminua um valor real que o ML já confirmou.</span></span></th>
                   <th>A Pagar <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Soma de todas as contas a pagar em aberto com vencimento nesta data.</span></span></th>
                   <th>Saldo Dia <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Entrada do dia menos saída do dia. Positivo = caixa cresce, negativo = caixa encolhe.</span></span></th>
                   <th>Saldo Acum. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Saldo total acumulado até este dia (saldo anterior + saldo do dia). Vermelho se abaixo da reserva mínima.</span></span></th>
@@ -1372,15 +1373,17 @@
 
               <div id="sim-parcelado" style="display:none;">
                 <div class="form-group">
-                  <label class="form-label">Opção de Parcelamento
-                    <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Define os intervalos de pagamento das parcelas a partir de hoje. O sistema sugerirá a melhor data dentro de cada janela para manter o caixa saudável.</span></span>
+                  <label class="form-label">Intervalos das parcelas (dias a partir de hoje)
+                    <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Digite os dias de cada parcela separados por espaço. Ex: "0 15 30" = entrada hoje + 2 parcelas. Presets: 2x, 3x, 4x.</span></span>
                   </label>
-                  <select id="sim-parcelas">
-                    <option value="30,60">2x (30/60 dias)</option>
-                    <option value="30,60,90">3x (30/60/90 dias)</option>
-                    <option value="15,30">2x (15/30 dias)</option>
-                    <option value="15,30,45">3x (15/30/45 dias)</option>
-                  </select>
+                  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+                    <button type="button" class="btn-out btn-sm" onclick="document.getElementById('sim-parcelas-txt').value='30 60'">2x 30/60</button>
+                    <button type="button" class="btn-out btn-sm" onclick="document.getElementById('sim-parcelas-txt').value='30 60 90'">3x 30/60/90</button>
+                    <button type="button" class="btn-out btn-sm" onclick="document.getElementById('sim-parcelas-txt').value='15 30 45'">3x 15/30/45</button>
+                    <button type="button" class="btn-out btn-sm" onclick="document.getElementById('sim-parcelas-txt').value='0 15 30 45'">Entrada+3x</button>
+                    <button type="button" class="btn-out btn-sm" onclick="document.getElementById('sim-parcelas-txt').value='0 30 60 90 120'">Entrada+4x</button>
+                  </div>
+                  <input type="text" id="sim-parcelas-txt" class="form-control" value="30 60 90" placeholder="ex: 0 15 30 45 60" style="font-family:monospace;letter-spacing:1px;">
                 </div>
               </div>
 
@@ -3647,7 +3650,8 @@
         if(modoProjecaoAtivo === 'tendencia' && regressaoAtual){
           const sinal = regressaoAtual.b >= 0 ? '↗' : '↘';
           const dias = periodoHistorico || 90;
-          const tooltip = `Regressão linear sobre os últimos ${dias} dias de recebimentos. A tendência indica variação média de R$${regressaoAtual.b >= 0 ? '+' : ''}${regressaoAtual.b.toFixed(0)}/dia. Configurável em: Configurações → Modo de Projeção.`;
+          const varMensal = Math.round(regressaoAtual.b * 30);
+          const tooltip = `Nos últimos ${dias} dias, suas vendas estão ${regressaoAtual.b >= 0 ? 'crescendo' : 'caindo'} em média R$${Math.abs(regressaoAtual.b).toFixed(0)}/dia. Isso equivale a R$${Math.abs(varMensal).toLocaleString('pt-BR')} por mês ${regressaoAtual.b >= 0 ? 'a mais' : 'a menos'}. Calculado por regressão linear sobre o extrato de recebimentos do ML. Mude o modo em: Configurações → Modo de Projeção.`;
           modoEl.innerHTML = `Projeção: Tendência ${sinal} (R$${regressaoAtual.b >= 0 ? '+' : ''}${regressaoAtual.b.toFixed(0)}/dia) <span class="tip tip-up" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">${tooltip}</span></span>`;
           modoEl.style.color = regressaoAtual.b >= 0 ? 'var(--success)' : 'var(--warning)';
         } else {
@@ -4066,6 +4070,9 @@
         return;
       }
 
+      // Limpa estado parcelado ao simular no modo avulso
+      _simParcelasState = [];
+
       // Caso 1: Só valor → encontrar melhor data
       if(valor > 0 && !data){
         const melhorData = encontrarMelhorData(valor);
@@ -4111,61 +4118,128 @@
     }
 
     function simularParcelado(valor){
-      const parcelasOpt = document.getElementById('sim-parcelas').value;
-      const offsetDias = parcelasOpt.split(',').map(Number);
+      const txt = (document.getElementById('sim-parcelas-txt').value || '').trim();
+      const offsetDias = txt.split(/[\s,]+/).map(Number).filter(n => !isNaN(n) && n >= 0);
+      if(offsetDias.length === 0){
+        document.getElementById('sim-resultado').innerHTML = '<div class="alert alert-warning">Informe os intervalos das parcelas (ex: 30 60 90).</div>';
+        return;
+      }
       const n = offsetDias.length;
-      const valorParcela = valor / n;
+      const valorParcela = Math.round(valor / n * 100) / 100;
       const hoje = getToday();
+
+      _simParcelasState = offsetDias.map(d => ({
+        offset: d,
+        valor: valorParcela,
+        data: addDias(hoje, d)
+      }));
+
+      renderSimParcelado(valor);
+    }
+
+    function renderSimParcelado(valorTotal){
       const resultado = document.getElementById('sim-resultado');
+      if(!resultado) return;
+      const hoje = getToday();
 
-      let html = `<div style="margin-bottom:12px;padding:10px 14px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;">
-        <strong>${fmt(valor)}</strong> em ${n}x de <strong>${fmt(valorParcela)}</strong>
-        <span style="font-size:11px;color:#666;margin-left:8px;">(simulação independente por parcela)</span>
-      </div><div style="display:flex;flex-direction:column;gap:8px;">`;
-
-      let primeiraData = null;
-      let todosViaveis = true;
-
-      offsetDias.forEach((d, idx) => {
-        const dataBase = addDias(hoje, d);
-        let melhorData = dataBase;
-        let melhorSaldo = simularSaldo(valorParcela, dataBase);
-
-        // Tenta ±10 dias em torno da data nominal para encontrar o melhor dia
-        for(let j = -10; j <= 10; j++){
-          const dataTest = addDias(dataBase, j);
-          if(dataTest < hoje) continue;
-          const s = simularSaldo(valorParcela, dataTest);
-          if(s > melhorSaldo){ melhorSaldo = s; melhorData = dataTest; }
-        }
-
-        if(!primeiraData) primeiraData = melhorData;
-        const viavel = melhorSaldo >= reservaMinima;
-        if(!viavel) todosViaveis = false;
-        const ajustado = melhorData !== dataBase;
-
-        html += `<div style="padding:12px 14px;border-radius:8px;background:${viavel?'#f0fdf4':'#fff5f5'};border:1px solid ${viavel?'#86efac':'#fca5a5'};">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <span style="font-weight:600;font-size:13px;">Parcela ${idx+1}/${n} — ${fmt(valorParcela)}</span>
-            <span style="font-size:12px;color:${viavel?'var(--success)':'var(--danger)'};">${viavel?'✅ Viável':'⚠️ Arriscado'}</span>
-          </div>
-          <div>Melhor data: <strong>${ptDate(melhorData)}</strong>
-            <span style="font-size:11px;color:#888;margin-left:6px;">(dia +${d} a partir de hoje${ajustado?' → ajustado':''})</span>
-          </div>
-          <div style="font-size:12px;color:#666;margin-top:2px;">
-            Saldo mín. após pagamento: <strong style="color:${viavel?'var(--success)':'var(--danger)'};">${fmt(melhorSaldo)}</strong>
-            ${reservaMinima > 0 ? `· Reserva mínima: ${fmt(reservaMinima)}` : ''}
-          </div>
-        </div>`;
+      // Compras acumuladas por data
+      const comprasPorData = {};
+      _simParcelasState.forEach(p => {
+        comprasPorData[p.data] = (comprasPorData[p.data] || 0) + p.valor;
       });
 
-      html += `</div><div style="margin-top:8px;font-size:11px;color:#888;">* Cada parcela é simulada individualmente sobre o fluxo atual. Para ver o impacto acumulado, confira a planilha abaixo.</div>`;
+      // Calcular range de dias necessário
+      let maxOffset = 0;
+      _simParcelasState.forEach(p => {
+        const d = diasDif(hoje, p.data);
+        if(d > maxOffset) maxOffset = d;
+      });
+      const nDias = Math.min(Math.max(simDias, maxOffset + 14), 90);
 
-      const resumoBadge = todosViaveis
-        ? `<div class="alert alert-info" style="margin-bottom:12px;">✅ Todas as parcelas são viáveis no fluxo projetado.</div>`
-        : `<div class="alert alert-warning" style="margin-bottom:12px;">⚠️ Uma ou mais parcelas podem comprometer o caixa. Analise datas alternativas.</div>`;
+      // Simulação acumulada completa considerando TODAS as parcelas
+      let saldo = saldoAtual;
+      let minSaldo = saldo;
+      let dataCritica = hoje;
+      const saldoAcum = {};
 
-      resultado.innerHTML = resumoBadge + html + renderPlanilhaSimulador(valorParcela, primeiraData || hoje);
+      for(let i = 0; i < nDias; i++){
+        const data = addDias(hoje, i);
+        const e = getEntrada(data);
+        const entrada = simModoProj === 'conf' ? e.conf : (e.conf + e.proj);
+        saldo += entrada - getPag(data) - (comprasPorData[data] || 0);
+        saldoAcum[data] = saldo;
+        if(saldo < minSaldo){ minSaldo = saldo; dataCritica = data; }
+      }
+
+      // Preencher simPlanilhaDados com todas as parcelas marcadas
+      simPlanilhaDados = [];
+      for(let i = 0; i < nDias; i++){
+        const data = addDias(hoje, i);
+        const e = getEntrada(data);
+        simPlanilhaDados.push({ data, conf:e.conf, proj:e.proj, pag:getPag(data), compra: comprasPorData[data] || 0 });
+      }
+
+      const viavel = minSaldo >= reservaMinima;
+      const badge = viavel
+        ? `<div class="alert alert-info">✅ Compra VIÁVEL — saldo mínimo: <strong>${fmt(minSaldo)}</strong> em ${ptDate(dataCritica)}</div>`
+        : `<div class="alert alert-warning">⚠️ Fluxo ARRISCADO — saldo mínimo: <strong style="color:var(--danger)">${fmt(minSaldo)}</strong> em ${ptDate(dataCritica)} · Reserva: ${fmt(reservaMinima)}</div>`;
+
+      const th2 = 'padding:6px 8px;background:#f9fafb;border:1px solid #e5e5e5;font-size:11px;text-align:left;';
+      const td2 = 'padding:5px 8px;border:1px solid #e5e5e5;font-size:12px;';
+
+      let tabelaHtml = `<div style="margin:12px 0;">
+        <div style="font-size:12px;color:#666;margin-bottom:6px;">Edite valores ou datas diretamente na tabela e clique em Recalcular:</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr>
+            <th style="${th2}">Parcela</th>
+            <th style="${th2}">Data</th>
+            <th style="${th2}">Valor (R$)</th>
+            <th style="${th2}">Saldo após</th>
+            <th style="${th2}">Status</th>
+          </tr></thead><tbody>`;
+
+      _simParcelasState.forEach((p, idx) => {
+        const saldoApos = saldoAcum[p.data] !== undefined ? saldoAcum[p.data] : minSaldo;
+        const pViavel = saldoApos >= reservaMinima;
+        tabelaHtml += `<tr style="${!pViavel?'background:#fff5f5;':''}">
+          <td style="${td2};font-weight:600;">${idx+1}/${_simParcelasState.length}</td>
+          <td style="${td2};padding:2px 4px;">
+            <input type="date" value="${p.data}" style="border:1px solid #e5e5e5;border-radius:4px;padding:3px 6px;font-size:12px;"
+              onchange="setSimParcelaData(${idx},this.value)">
+          </td>
+          <td style="${td2};padding:2px 4px;">
+            <input type="text" value="${fmtMoney(p.valor)}" style="border:1px solid #e5e5e5;border-radius:4px;padding:3px 6px;font-size:12px;width:110px;"
+              oninput="onMoneyInput(this)"
+              onblur="this.value=fmtMoney(parseMoney(this.value)||0)"
+              onchange="setSimParcelaValor(${idx},this.value)">
+          </td>
+          <td style="${td2};font-weight:600;color:${pViavel?'var(--success)':'var(--danger)'};">${fmt(saldoApos)}</td>
+          <td style="${td2};">${pViavel?'<span style="color:var(--success);font-size:11px;">✅ ok</span>':'<span style="color:var(--danger);font-size:11px;">⚠️ risco</span>'}</td>
+        </tr>`;
+      });
+
+      tabelaHtml += `</tbody></table>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn-out btn-sm" onclick="recalcularSimParcelado()">↺ Recalcular</button>
+          <button class="btn-out btn-sm" onclick="distribuirIgualParcelado()">= Distribuir igual</button>
+        </div>
+      </div>`;
+
+      resultado.innerHTML = badge + tabelaHtml + gerarHTMLPlanilhaSimulador();
+    }
+
+    function recalcularSimParcelado(){
+      if(_simParcelasState.length === 0) return;
+      const total = _simParcelasState.reduce((s, p) => s + p.valor, 0);
+      renderSimParcelado(total);
+    }
+
+    function distribuirIgualParcelado(){
+      if(_simParcelasState.length === 0) return;
+      const total = _simParcelasState.reduce((s, p) => s + p.valor, 0);
+      const eq = Math.round(total / _simParcelasState.length * 100) / 100;
+      _simParcelasState.forEach(p => { p.valor = eq; });
+      renderSimParcelado(total);
     }
 
     function encontrarMelhorData(valor){
@@ -4655,10 +4729,18 @@
     
     // ===== IMPORT/EXPORT =====
     function exportarCSV(){
-      const csv = 'data;desc;forn;val;cat;pago\n' + 
-        pagamentos.map(p => `${p.data};${p.desc};${p.forn||''};${p.val.toFixed(2).replace('.',',')};${p.cat};${p.pago?'sim':'nao'}`).join('\n');
-      
-      const BOM = '\uFEFF'; // BOM UTF-8 para Excel reconhecer acentos
+      const esc = s => (String(s||'')).replace(/;/g,'|');
+      const n2 = v => (Number(v)||0).toFixed(2).replace('.',',');
+      const header = 'data;desc;forn;val;cat;pago;tipo;parcela;valorPago;data_paga;desconto;juros';
+      const linhas = pagamentos.map(p => [
+        p.data||'', esc(p.desc), esc(p.forn),
+        n2(p.val), esc(p.cat), p.pago?'sim':'nao',
+        p.tipo||'unico', p.parcela||'',
+        n2(p.valorPago), p.data_paga||'',
+        n2(p.desconto), n2(p.juros)
+      ].join(';'));
+      const csv = header + '\n' + linhas.join('\n');
+      const BOM = '\uFEFF';
       const blob = new Blob([BOM + csv], {type:'text/csv;charset=utf-8'});
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -5458,7 +5540,11 @@
       reader.onload = e => {
         try {
           const lines = e.target.result.replace(/\uFEFF/,'').split('\n');
-          let count = 0;
+          const hdr = lines[0].toLowerCase().split(';');
+          const col = nm => { const i = hdr.indexOf(nm); return i >= 0 ? i : null; };
+          const get2 = (p, nm, fb) => { const i = col(nm); return i !== null && p[i] !== undefined ? p[i].trim() : fb; };
+          const getN = (p, nm) => parseFloat((get2(p,nm,'0')||'0').replace(',','.')) || 0;
+          let adicionados = 0, atualizados = 0;
 
           for(let i = 1; i < lines.length; i++){
             const line = lines[i].trim();
@@ -5466,24 +5552,41 @@
             const p = line.split(';');
             if(p.length < 4) continue;
 
-            const val = parseFloat(p[3].replace(',','.'));
+            const dataVal = (get2(p,'data', p[0]||'')||'').trim();
+            const descVal = (get2(p,'desc', p[1]||'')||'').trim();
+            const fornVal = (get2(p,'forn', p[2]||'')||'').trim();
+            const val = parseFloat((get2(p,'val', p[3]||'0')||'0').replace(',','.'));
             if(isNaN(val)) continue;
 
-            pagamentos.push({
-              data: p[0].trim(),
-              desc: p[1].trim(),
-              forn: p[2].trim(),
-              val,
-              cat: p[4] ? p[4].trim() : 'Fornecedor',
-              pago: p[5] && p[5].trim() === 'sim',
-              tipo: 'unico'
-            });
-            count++;
+            const existing = pagamentos.find(x =>
+              x.data === dataVal && x.desc === descVal && (x.forn||'') === fornVal && Math.abs(x.val - val) < 0.01
+            );
+
+            if(existing){
+              const catV = get2(p,'cat',''); if(catV) existing.cat = catV;
+              const pagoV = get2(p,'pago',''); if(pagoV) existing.pago = pagoV === 'sim';
+              const vp = getN(p,'valorpago'); if(vp) existing.valorPago = vp;
+              const dp = get2(p,'data_paga',''); if(dp) existing.data_paga = dp;
+              const desc2 = getN(p,'desconto'); if(desc2) existing.desconto = desc2;
+              const jr = getN(p,'juros'); if(jr) existing.juros = jr;
+              atualizados++;
+            } else {
+              pagamentos.push({
+                data: dataVal, desc: descVal, forn: fornVal, val,
+                cat: get2(p,'cat','Fornecedor') || 'Fornecedor',
+                pago: get2(p,'pago','nao') === 'sim',
+                tipo: get2(p,'tipo','unico') || 'unico',
+                parcela: get2(p,'parcela','') || null,
+                valorPago: getN(p,'valorpago'), data_paga: get2(p,'data_paga','') || null,
+                desconto: getN(p,'desconto'), juros: getN(p,'juros')
+              });
+              adicionados++;
+            }
           }
 
           salvar();
           renderPagar();
-          alert(count + ' lançamento(s) importado(s)!');
+          alert(adicionados + ' adicionado(s) · ' + atualizados + ' atualizado(s).');
         } catch(err){
           alert('Erro ao importar: ' + err.message);
         }
@@ -5803,6 +5906,7 @@
     let simPlanilhaDados = [];
     let simDias = 30;
     let simModoProj = 'total';
+    let _simParcelasState = [];
 
     function renderPlanilhaSimulador(valorExtra, dataPag){
       const hoje = getToday();
@@ -5840,6 +5944,7 @@
               <button onclick="setSimDias(90)" style="${simDias===90?btnOn:btnOff}">90d</button>
             </div>
             <button class="btn-out btn-sm" onclick="recalcularSimulador()">↺ Recalcular</button>
+            <button class="btn-out btn-sm" onclick="exportarSimulacaoXLS()">📊 Exportar XLS</button>
           </div>
         </div>
         <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
@@ -5884,6 +5989,7 @@
     }
 
     function recalcularSimulador(){
+      if(_simParcelasState.length > 0){ recalcularSimParcelado(); return; }
       const res = document.getElementById('sim-resultado');
       if(!res || simPlanilhaDados.length === 0) return;
 
@@ -5907,7 +6013,34 @@
 
     function setSimDias(n){ simDias = n; recalcularSimulador(); }
     function setSimModoProj(m){ simModoProj = m; recalcularSimulador(); }
+    function setSimParcelaData(idx, val){ if(_simParcelasState[idx]){ _simParcelasState[idx].data = val; recalcularSimParcelado(); } }
+    function setSimParcelaValor(idx, val){ if(_simParcelasState[idx]){ _simParcelasState[idx].valor = parseMoney(val) || 0; recalcularSimParcelado(); } }
 
+    function exportarSimulacaoXLS(){
+      if(simPlanilhaDados.length === 0){ alert('Rode uma simulação primeiro.'); return; }
+      const modo = simModoProj === 'conf' ? 'Confirmado' : '+Projetado';
+      const rows = [['Data','Conf. ML (R$)','Proj. compl. (R$)','A pagar (R$)','Compra sim. (R$)','Saldo real (R$)','Saldo sim. (R$)','Status','Modo']];
+      let saldoReal = saldoAtual;
+      let saldoSim  = saldoAtual;
+      simPlanilhaDados.forEach(d => {
+        const entrada = simModoProj === 'conf' ? d.conf : (d.conf + d.proj);
+        saldoReal = Math.round((saldoReal + entrada - d.pag) * 100) / 100;
+        saldoSim  = Math.round((saldoSim  + entrada - d.pag - d.compra) * 100) / 100;
+        rows.push([
+          d.data,
+          Math.round((d.conf||0)*100)/100,
+          simModoProj==='conf' ? 0 : Math.round((d.proj||0)*100)/100,
+          Math.round((d.pag||0)*100)/100,
+          Math.round((d.compra||0)*100)/100,
+          saldoReal, saldoSim,
+          saldoSim < reservaMinima ? 'Risco' : 'OK', modo
+        ]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Simulacao');
+      XLSX.writeFile(wb, 'simulacao_' + getToday() + '.xlsx');
+    }
 
 
     // ===== VISUALIZAÇÃO CONTAS A PAGAR =====
