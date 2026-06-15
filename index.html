@@ -2651,6 +2651,7 @@
         versao_termos: 'v0.1-beta',
         aceito_em: new Date().toISOString()
       });
+      localStorage.setItem('mk_termos_' + usuarioAtual.id, 'v0.1-beta');
       // Continuar entrada no app normalmente
       document.getElementById('login-sync').style.display = 'flex';
       document.querySelector('.login-form').style.display = 'none';
@@ -2694,15 +2695,21 @@
       document.getElementById('login-sync-msg').textContent = 'Carregando seus dados...';
 
       try {
-        // Verificar se já aceitou os termos (cobre usuários antigos e casos de bypass)
-        const { data: termosData } = await supa.from('termos_aceite').select('id').eq('usuario_id', user.id).maybeSingle();
-        if(!termosData){
-          // Restaurar tela de login antes de abrir modal (evita tela congelada)
-          document.getElementById('login-sync').style.display = 'none';
-          document.querySelector('.login-form').style.display = 'flex';
-          document.querySelector('.login-tabs').style.display = 'flex';
-          abrirTermos(true);
-          return;
+        // Verificar se já aceitou os termos — cache local primeiro para evitar piscar modal a cada login
+        const termosLocalKey = 'mk_termos_' + user.id;
+        const termosLocal = localStorage.getItem(termosLocalKey);
+        if(!termosLocal){
+          const { data: termosData } = await supa.from('termos_aceite').select('id').eq('usuario_id', user.id).maybeSingle();
+          if(!termosData){
+            // Restaurar tela de login antes de abrir modal (evita tela congelada)
+            document.getElementById('login-sync').style.display = 'none';
+            document.querySelector('.login-form').style.display = 'flex';
+            document.querySelector('.login-tabs').style.display = 'flex';
+            abrirTermos(true);
+            return;
+          }
+          // Cachear localmente para não consultar toda hora
+          localStorage.setItem(termosLocalKey, 'v0.1-beta');
         }
 
         // Salvar localStorage como backup ANTES de qualquer reset ou load do Supabase
@@ -3856,13 +3863,14 @@
         // Para pagas, usa dataPaga se disponível, senão data de vencimento
         const dataRef = isPagas ? (p.dataPaga || p.data) : p.data;
         if(periodo === 'dia' && dataRef !== hoje) return false;
+        const isVencida = !p.pago && p.data < hoje;
         if(periodo === 'semana'){
           if(isPagas){ if(Math.abs(diasDif(hoje, dataRef)) > 7)  return false; }
-          else        { if(p.data < hoje || diasDif(hoje, p.data) > 7)  return false; }
+          else if(!isVencida){ if(p.data < hoje || diasDif(hoje, p.data) > 7)  return false; }
         }
         if(periodo === 'mes'){
           if(isPagas){ if(Math.abs(diasDif(hoje, dataRef)) > 30) return false; }
-          else        { if(p.data < hoje || diasDif(hoje, p.data) > 30) return false; }
+          else if(!isVencida){ if(p.data < hoje || diasDif(hoje, p.data) > 30) return false; }
         }
         if(periodo === 'custom'){
           if(customDe && p.data < customDe) return false;
@@ -5810,13 +5818,13 @@
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <span style="font-size:12px;color:#666;">Fator: <strong>${Math.round(cfgPct*100)}%</strong></span>
             <div style="${grpStyle}">
-              <button onclick="simModoProj='total';recalcularSimulador()" style="${simModoProj==='total'?btnOn:btnOff}">+Projetado</button>
-              <button onclick="simModoProj='conf';recalcularSimulador()" style="${simModoProj==='conf'?btnOn:btnOff}">Confirmado</button>
+              <button onclick="setSimModoProj('total')" style="${simModoProj==='total'?btnOn:btnOff}">+Projetado</button>
+              <button onclick="setSimModoProj('conf')" style="${simModoProj==='conf'?btnOn:btnOff}">Confirmado</button>
             </div>
             <div style="${grpStyle}">
-              <button onclick="simDias=30;recalcularSimulador()" style="${simDias===30?btnOn:btnOff}">30d</button>
-              <button onclick="simDias=60;recalcularSimulador()" style="${simDias===60?btnOn:btnOff}">60d</button>
-              <button onclick="simDias=90;recalcularSimulador()" style="${simDias===90?btnOn:btnOff}">90d</button>
+              <button onclick="setSimDias(30)" style="${simDias===30?btnOn:btnOff}">30d</button>
+              <button onclick="setSimDias(60)" style="${simDias===60?btnOn:btnOff}">60d</button>
+              <button onclick="setSimDias(90)" style="${simDias===90?btnOn:btnOff}">90d</button>
             </div>
             <button class="btn-out btn-sm" onclick="recalcularSimulador()">↺ Recalcular</button>
           </div>
@@ -5872,16 +5880,20 @@
 
       // Recomputar todos os dias com getEntrada() fresco (respeita cfgPct atual e simDias)
       const hoje = getToday();
-      simPlanilhaDados = [];
+      const novosDados = [];
       for(let i = 0; i < simDias; i++){
         const data = addDias(hoje, i);
         const e = getEntrada(data);
-        simPlanilhaDados.push({data, conf:e.conf, proj:e.proj, pag:getPag(data), compra: compraEdits[data] || 0});
+        novosDados.push({data, conf:e.conf, proj:e.proj, pag:getPag(data), compra: compraEdits[data] || 0});
       }
+      simPlanilhaDados = novosDados;
 
       const badge = res.querySelector('.alert');
       res.innerHTML = (badge ? badge.outerHTML : '') + gerarHTMLPlanilhaSimulador();
     }
+
+    function setSimDias(n){ simDias = n; recalcularSimulador(); }
+    function setSimModoProj(m){ simModoProj = m; recalcularSimulador(); }
 
 
 
