@@ -670,6 +670,12 @@
       /* Tabs do Motor de Reposição e Resultado — scroll horizontal */
       .estoque-tabs,.resultado-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;padding-bottom:2px;}
       .estoque-tab,.resultado-tab{white-space:nowrap;font-size:11px;padding:7px 10px;}
+      .dd-wrap{position:relative;display:inline-block;}
+      .dd-menu{display:none;position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:220px;z-index:200;padding:4px 0;}
+      .dd-menu.left{right:auto;left:0;}
+      .dd-item{padding:9px 14px;cursor:pointer;font-size:13px;color:var(--gray-800);white-space:nowrap;display:flex;align-items:center;gap:8px;}
+      .dd-item:hover{background:var(--gray-50);}
+      .dd-sep{border-top:1px solid var(--gray-100);margin:4px 0;}
 
       /* Cenários de liquidação P12 — empilhar */
       .responsive-grid-3{gap:8px !important;}
@@ -761,7 +767,7 @@
         <li class="nav-item" onclick="nav('pagar')">💰 Contas a pagar</li>
         <li class="nav-item" onclick="nav('receber')">💵 A receber ML</li>
         <li class="nav-item" onclick="nav('simulador')">🎯 Simulador</li>
-        <li class="nav-item" onclick="nav('skus')">📦 SKUs / Custos</li>
+        <li class="nav-item" onclick="nav('skus')">📦 Produtos</li>
         <li class="nav-item" onclick="nav('estoque')">🏭 Estoque</li>
         <li class="nav-item" onclick="nav('analise')">📊 Análise</li>
         <li class="nav-item" onclick="nav('resultado')">📈 Resultado</li>
@@ -1409,25 +1415,46 @@
       <!-- SKUS -->
       <div id="view-skus" class="view">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h1>SKUs / Custos</h1>
+          <h1>Produtos</h1>
           <div class="d-flex gap-1" id="sku-header-btns-lista">
             <button class="btn" onclick="abrirModalSKU()">+ Novo SKU</button>
-            <button class="btn-out" onclick="document.getElementById('import-skus-csv').click()">📤 Importar CSV</button>
-            <button class="btn-out" onclick="exportarSKUs()">📥 Exportar CSV</button>
+            <div class="dd-wrap">
+              <button class="btn-out" onclick="toggleDropdown('dd-sku-importar')">📥 Importar ▾</button>
+              <div class="dd-menu" id="dd-sku-importar">
+                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-skus-csv').click()">📄 Importar CSV</div>
+                <div class="dd-sep"></div>
+                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-upseller-estoque').click()">🏪 Lista Upseller (XLS)</div>
+              </div>
+            </div>
+            <div class="dd-wrap">
+              <button class="btn-out" onclick="toggleDropdown('dd-sku-exportar')">📤 Exportar ▾</button>
+              <div class="dd-menu left" id="dd-sku-exportar">
+                <div class="dd-item" onclick="closeDropdowns();exportarSKUs()">📄 Exportar SKUs (CSV)</div>
+              </div>
+            </div>
             <input type="file" id="import-skus-csv" accept=".csv" style="display:none" onchange="importarSKUs()">
             <input type="file" id="import-upseller-estoque" accept=".xlsx,.xls" style="display:none" onchange="importarUpsellerEstoque(this)">
-            <button class="btn-out" onclick="document.getElementById('import-upseller-estoque').click()" title="Importa Lista_de_Estoque do Upseller: cria SKUs novos e atualiza estoque galpão">🏪 Lista Upseller</button>
           </div>
           <div class="d-flex gap-1" id="sku-header-btns-composicoes" style="display:none!important;">
-            <button class="btn-out btn-sm" onclick="baixarTemplateSKUUn()">⬇ Template SKU/un</button>
-            <button class="btn-out btn-sm" onclick="baixarTemplateKit()">⬇ Template Kit</button>
-            <button class="btn-out btn-sm" onclick="document.getElementById('import-csv-skuun').click()">📤 Importar SKU/un</button>
-            <button class="btn-out btn-sm" onclick="document.getElementById('import-csv-kit').click()">📤 Importar Kits</button>
-            <input type="file" id="import-csv-skuun" accept=".csv" style="display:none" onchange="importarCSVSKUUn(this)">
+            <button class="btn btn-sm" onclick="abrirModalComposicao(null)">+ Novo Kit</button>
+            <div class="dd-wrap">
+              <button class="btn-out btn-sm" onclick="toggleDropdown('dd-kit-importar')">📥 Importar ▾</button>
+              <div class="dd-menu" id="dd-kit-importar">
+                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-upseller-kits').click()">🏪 Kits Upseller (XLS)</div>
+                <div class="dd-sep"></div>
+                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-csv-kit').click()">📄 Importar CSV</div>
+                <div class="dd-sep"></div>
+                <div class="dd-item" onclick="closeDropdowns();baixarTemplateKit()">⬇ Template Kit (CSV)</div>
+              </div>
+            </div>
+            <div class="dd-wrap">
+              <button class="btn-out btn-sm" onclick="toggleDropdown('dd-kit-exportar')">📤 Exportar ▾</button>
+              <div class="dd-menu left" id="dd-kit-exportar">
+                <div class="dd-item" onclick="closeDropdowns();exportarKitsCSV()">📄 Exportar Kits (CSV)</div>
+              </div>
+            </div>
             <input type="file" id="import-csv-kit" accept=".csv" style="display:none" onchange="importarCSVKit(this)">
             <input type="file" id="import-upseller-kits" accept=".xlsx,.xls" style="display:none" onchange="importarUpsellerKits(this)">
-            <button class="btn-out btn-sm" onclick="document.getElementById('import-upseller-kits').click()" title="Importa export_kit do Upseller: cria/atualiza composição dos kits">🏪 Kits Upseller</button>
-            <button class="btn btn-sm" onclick="abrirModalComposicao(null)">+ Novo Kit</button>
           </div>
         </div>
 
@@ -1938,14 +1965,16 @@
       <div id="view-estoque" class="view">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
           <h1>Motor de Reposição</h1>
-          <div class="d-flex gap-1" style="flex-wrap:wrap;">
-            <button class="btn-out btn-sm" onclick="document.getElementById('import-vendas-ml-est').click()">📊 Importar vendas ML</button>
-            <button class="btn-out btn-sm" onclick="document.getElementById('import-kit-upseller').click()">🔗 Importar kits</button>
-            <button class="btn-out btn-sm" onclick="document.getElementById('import-estoque-upseller').click()">📦 Importar estoque galpão</button>
-            <button class="btn-out btn-sm" onclick="document.getElementById('import-estoque-full-ml').click()">🏬 Importar estoque FULL (ML)</button>
-            <button class="btn-out btn-sm" onclick="baixarTemplateCSVComponentes()">⬇️ Template CSV</button>
-            <button class="btn btn-sm" onclick="abrirModalComponente()" title="Cadastra um SKU físico base (peça, componente ou produto unitário). Depois você pode combiná-los em composições de kit.">+ SKU Base</button>
-            <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="limparDadosPlanilhas()">🗑 Limpar planilhas</button>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
+            <div class="dd-wrap">
+              <button class="btn btn-sm" onclick="toggleDropdown('dd-estoque-importar')">📥 Importar ▾</button>
+              <div class="dd-menu" id="dd-estoque-importar">
+                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-estoque-full-ml').click()">🏭 Estoque Full ML</div>
+                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-estoque-upseller').click()">🏠 Estoque Galpão</div>
+                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-vendas-ml-est').click()">📊 Vendas ML</div>
+              </div>
+            </div>
+            <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="limparDadosPlanilhas()">🗑 Limpar</button>
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
             <input type="file" id="import-estoque-upseller" accept=".xlsx,.xls,.csv" style="display:none" onchange="onImportEstoqueUpseller(this)">
@@ -1966,7 +1995,7 @@
             <div style="flex:1;">
               <div style="font-weight:600;color:#92400e;margin-bottom:4px;">⚠️ SKUs no relatório de vendas sem cadastro em SKUs/Custos</div>
               <div id="alerta-skus-lista" style="font-size:11px;color:#78350f;font-family:monospace;line-height:1.8;"></div>
-              <div style="font-size:11px;color:#92400e;margin-top:6px;">Cadastre esses SKUs na aba <b>SKUs / Custos</b> para que apareçam corretamente no Motor de Reposição.</div>
+              <div style="font-size:11px;color:#92400e;margin-top:6px;">Cadastre esses SKUs na aba <b>Produtos</b> para que apareçam corretamente no Motor de Reposição.</div>
             </div>
             <button class="btn-out btn-sm" onclick="document.getElementById('alerta-skus-nao-cadastrados').style.display='none'" style="flex-shrink:0;">✕</button>
           </div>
@@ -2064,6 +2093,23 @@
 
         <!-- Tab: Vendas ML (raw do relatório ML, todos SKUs) -->
         <div id="estoque-view-vendas" style="display:none;">
+          <div class="card" id="vendas-status-card" style="margin-bottom:12px;display:none;">
+            <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 14px;">
+              <div>
+                <div id="vendas-status-texto" style="font-size:12px;color:var(--gray-700);font-weight:500;"></div>
+                <div id="vendas-status-dedup" style="font-size:11px;color:var(--gray-500);margin-top:2px;"></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <label style="font-size:12px;color:var(--gray-600);">Período:</label>
+                <select id="vendas-periodo-sel" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;" onchange="setVendasPeriodo(parseInt(this.value))">
+                  <option value="30">30 dias</option>
+                  <option value="60">60 dias</option>
+                  <option value="90">90 dias</option>
+                  <option value="120">120 dias</option>
+                </select>
+              </div>
+            </div>
+          </div>
           <div class="card" id="estoque-vendas-vazio" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
               <div style="font-size:32px;margin-bottom:10px;">📊</div>
@@ -2136,12 +2182,11 @@
             <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
               <div>
                 <div style="font-weight:600;font-size:13px;">🏭 Estoque Full (Mercado Livre)</div>
-                <div id="estoque-full-status" style="font-size:11px;color:#64748b;margin-top:3px;">Importe o relatório XLS do Mercado Livre</div>
+                <div id="estoque-full-status" style="font-size:11px;color:#64748b;margin-top:3px;">Use o botão Importar no cabeçalho para carregar o XLS</div>
               </div>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <button class="btn-out btn-sm" onclick="exportarEstoqueFullCSV()" id="btn-export-full" style="display:none;">⬇ Exportar CSV</button>
                 <input type="file" id="input-full-xls" accept=".xlsx,.xls" style="display:none;" onchange="importarEstoqueFullXLS(this)">
-                <button class="btn-primary btn-sm" onclick="document.getElementById('input-full-xls').click()">📥 Importar XLS</button>
               </div>
             </div>
           </div>
@@ -3246,6 +3291,20 @@
       }
     };
 
+    function toggleDropdown(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      var open = el.style.display !== 'none';
+      closeDropdowns();
+      if(!open) el.style.display = '';
+    }
+    function closeDropdowns(){
+      document.querySelectorAll('.dd-menu').forEach(function(el){ el.style.display = 'none'; });
+    }
+    document.addEventListener('click', function(e){
+      if(!e.target.closest('.dd-wrap')) closeDropdowns();
+    });
+
     // ===== ESTADO GLOBAL =====
     let pagamentos = [];
     let liberacoes = [];
@@ -3273,6 +3332,7 @@
     let componentes = [];    // [{codigo, descricao, custo_unitario, fornecedor, lead_time_dias}]
     let composicaoKit = [];  // [{sku_comercial, titulo_comercial, sku_componente, qty}]
     let vendasSku = [];      // [{sku, titulo, unidades, receita, tarifa_ml, envio, liquido, unidades_ads, cancelamentos, periodo_dias}]
+    let vendasImportMeta = { importAt: null, periodo: 30 };
     let estoqueGalpao = [];  // [{sku, descricao, qtd_galpao, qtd_full, qtd_full_pendente, em_transito, custo_medio, data_atualizacao}]
     // Regras globais (padrão)
     let metaFullDias = 30;      // meta de dias de cobertura no FULL
@@ -4788,6 +4848,7 @@
       localStorage.setItem('mk_componentes', JSON.stringify(componentes));
       localStorage.setItem('mk_composicao', JSON.stringify(composicaoKit));
       localStorage.setItem('mk_vendas_sku', JSON.stringify(vendasSku));
+      localStorage.setItem('mk_vendas_meta', JSON.stringify(vendasImportMeta));
       localStorage.setItem('mk_estoque_galpao', JSON.stringify(estoqueGalpao));
       localStorage.setItem('mk_meta_comp', JSON.stringify(metaComp));
       localStorage.setItem('mk_p11_cfg', JSON.stringify({metaFullDias, metaGalpaoDias, diasSeguranca, alertaCriticoDias}));
@@ -7434,6 +7495,21 @@ Perfil do usuário:
       }
     }
 
+    function exportarKitsCSV(){
+      if(composicaoKit.length === 0){ alert('Nenhum kit cadastrado.'); return; }
+      var rows = ['sku_comercial,titulo_comercial,sku_componente,qty,custo_kit'];
+      composicaoKit.forEach(function(k){
+        rows.push([
+          k.sku_comercial, k.titulo_comercial||'', k.sku_componente,
+          k.qty, (k.custo_kit||0).toFixed(2)
+        ].map(function(v){ return '"' + String(v||0).replace(/"/g,'""')+'"'; }).join(','));
+      });
+      var blob = new Blob(['\uFEFF' + rows.join('\n')], {type:'text/csv;charset=utf-8'});
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'kits_' + getToday() + '.csv';
+      a.click();
+    }
     function exportarEstoqueFullCSV(){
       if(estoqueFullML.length === 0){ alert('Nada para exportar.'); return; }
       const esc = s => (String(s||'')).replace(/;/g,'|');
@@ -7824,6 +7900,7 @@ Perfil do usuário:
     }
 
     function renderVendasSkuTab(){
+      atualizarStatusVendas();
       const vazioEl = document.getElementById('estoque-vendas-vazio');
       const cardEl  = document.getElementById('estoque-vendas-card');
       const tbody   = document.getElementById('tbody-vendas-sku');
@@ -8175,17 +8252,42 @@ Perfil do usuário:
     }
 
     // ----- Import handlers -----
+    function setVendasPeriodo(dias){
+      vendasImportMeta.periodo = dias || 30;
+      vendasSku.forEach(function(v){ v.periodo_dias = vendasImportMeta.periodo; });
+      salvar(); renderEstoque();
+    }
+    function atualizarStatusVendas(){
+      var card = document.getElementById('vendas-status-card');
+      var txt  = document.getElementById('vendas-status-texto');
+      var ded  = document.getElementById('vendas-status-dedup');
+      var sel  = document.getElementById('vendas-periodo-sel');
+      if(!card) return;
+      if(vendasSku.length === 0){ card.style.display = 'none'; return; }
+      card.style.display = '';
+      var dt = vendasImportMeta.importAt ? new Date(vendasImportMeta.importAt).toLocaleString('pt-BR') : '-';
+      if(txt) txt.textContent = 'Último relatório: ' + dt + ' — ' + vendasSku.length + ' SKUs';
+      if(ded && vendasImportMeta.dedupInfo) ded.textContent = vendasImportMeta.dedupInfo;
+      if(sel) sel.value = String(vendasImportMeta.periodo || 30);
+    }
     function onImportVendasML(input){
-      const file = input.files[0];
+      var file = input.files[0];
       if(!file) return;
-      const reader = new FileReader();
-      reader.onload = e => {
+      var reader = new FileReader();
+      reader.onload = function(e){
         try {
-          const result = parseVendasMLXLS(e.target.result);
+          var result = parseVendasMLXLS(e.target.result);
           if(result.error){ alert('Erro: ' + result.error); return; }
+          var skusAntes = new Set(vendasSku.map(function(v){ return v.sku; }));
+          var novos = result.vendas.filter(function(v){ return !skusAntes.has(v.sku); }).length;
+          var atualizados = result.vendas.length - novos;
+          var periodo = vendasImportMeta.periodo || 30;
+          result.vendas.forEach(function(v){ v.periodo_dias = periodo; });
           vendasSku = result.vendas;
+          vendasImportMeta.importAt = new Date().toISOString();
+          vendasImportMeta.dedupInfo = novos + ' SKUs novos, ' + atualizados + ' atualizados — ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades';
           salvar(); renderEstoque();
-          alert(`✅ ${result.vendas.length} SKUs importados — ${result.totalUnidades.toLocaleString('pt-BR')} unidades vendidas.`);
+          alert('Vendas ML importadas!\n\n' + vendasSku.length + ' SKUs  |  ' + novos + ' novos  |  ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades');
         } catch(err){ alert('Erro ao processar: ' + err.message); }
         input.value = '';
       };
