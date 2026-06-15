@@ -2837,6 +2837,8 @@
         const _lsComp   = JSON.parse(localStorage.getItem('mk_componentes')   || '[]');
         const _lsCompos = JSON.parse(localStorage.getItem('mk_composicao')    || '[]');
         const _lsVendas = JSON.parse(localStorage.getItem('mk_vendas_sku')    || '[]');
+        const _lsMeta = localStorage.getItem('mk_vendas_meta');
+        if(_lsMeta){ try{ vendasImportMeta = JSON.parse(_lsMeta); }catch(e){} }
         const _lsEst    = JSON.parse(localStorage.getItem('mk_estoque_galpao')|| '[]');
 
         // Resetar variáveis JS
@@ -4581,12 +4583,12 @@
         csv += 'SKU-EXEMPLO-001;Produto Exemplo A;15,50;6,18\n';
         csv += 'SKU-EXEMPLO-002;Produto Exemplo B;28,90;6,18\n';
         csv += 'SKU-EXEMPLO-003;;42,00;6,18\n';
-        csv += '\n# INSTRUÇÕES:\n';
-        csv += '# - sku: código do produto\n';
-        csv += '# - titulo: nome/descrição (opcional)\n';
-        csv += '# - custo: custo em reais (use vírgula)\n';
-        csv += '# - imposto: % de imposto (padrão 6.18)\n';
-        csv += '# - Apague exemplos e preencha com seus SKUs\n';
+        csv += '\n# INSTRUCOES:\n';
+        csv += '# - sku: codigo do produto\n';
+        csv += '# - titulo: nome/descricao (opcional)\n';
+        csv += '# - custo: custo em reais (use ponto ou virgula)\n';
+        csv += '# - imposto: % de imposto (padrao 6.18)\n';
+        csv += '# - Apague os exemplos e preencha com seus SKUs\n';
       } else {
         csv += skus.map(s => `${s.sku};${s.titulo||''};${s.custo.toFixed(2).replace('.',',')};${s.imposto.toFixed(2).replace('.',',')}`).join('\n');
       }
@@ -8294,10 +8296,10 @@ Perfil do usuário:
         if(!sku) return;
         estoque.push({
           sku, descricao: r[1] ? String(r[1]).trim() : '',
-          qtd_galpao: Number(r[8]) || 0,
+          qtd_galpao: Number(r[9]) || 0,
           qtd_full: 0,
           em_transito: Number(r[5]) || 0,
-          custo_medio: Number(r[10]) || 0,
+          custo_medio: 0,
           data_atualizacao: today
         });
       });
@@ -8589,25 +8591,23 @@ Perfil do usuário:
             if(!sku){ semSku++; continue; }
             const titulo  = String(row[1]||'').trim();
             const qtd     = parseFloat(row[9]) || 0;
-            const custo   = parseFloat(row[10]) || 0;
-            // Upsert em skus[]
+            // custo NAO lido do Upseller — custo é editado manualmente ou via CSV
+            // Upsert em skus[] (somente titulo)
             const idxSku = skus.findIndex(s => s.sku === sku);
             if(idxSku >= 0){
-              skus[idxSku].titulo = titulo || skus[idxSku].titulo;
-              if(custo > 0) skus[idxSku].custo = custo;
+              if(titulo) skus[idxSku].titulo = titulo;
             } else {
-              skus.push({ sku, titulo, custo, imposto: 0 });
+              skus.push({ sku, titulo, custo: 0, imposto: 0 });
             }
-            // Upsert em estoqueGalpao[]
+            // Upsert em estoqueGalpao[] (somente qtd)
             const idxEg = estoqueGalpao.findIndex(e => e.sku === sku);
             if(idxEg >= 0){
               estoqueGalpao[idxEg].qtd_galpao = qtd;
-              if(custo > 0) estoqueGalpao[idxEg].custo_medio = custo;
               estoqueGalpao[idxEg].data_atualizacao = hoje;
-              estoqueGalpao[idxEg].descricao = titulo || estoqueGalpao[idxEg].descricao;
+              if(titulo) estoqueGalpao[idxEg].descricao = titulo;
               atualizados++;
             } else {
-              estoqueGalpao.push({ sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: custo, data_atualizacao: hoje });
+              estoqueGalpao.push({ sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje });
               criados++;
             }
           }
