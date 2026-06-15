@@ -763,6 +763,7 @@
         <li class="nav-item" onclick="nav('simulador')">🎯 Simulador</li>
         <li class="nav-item" onclick="nav('skus')">📦 SKUs / Custos</li>
         <li class="nav-item" onclick="nav('estoque')">🏭 Estoque</li>
+        <li class="nav-item" onclick="nav('analise')">📊 Análise</li>
         <li class="nav-item" onclick="nav('resultado')">📈 Resultado</li>
         <li class="nav-item" onclick="nav('patrimonio')">🏛️ Saúde Patrimonial</li>
         <li class="nav-item" onclick="nav('config')">⚙️ Configurações</li>
@@ -1982,11 +1983,10 @@
         <div class="resultado-tabs" style="margin-bottom:16px;">
           <div class="resultado-tab active" id="estoque-tab-reposicao" onclick="setEstoqueTab('reposicao')">📋 Reposição</div>
           <div class="resultado-tab" id="estoque-tab-excesso" onclick="setEstoqueTab('excesso')">🚫 Excesso</div>
-          <div class="resultado-tab" id="estoque-tab-rentabilidade" onclick="setEstoqueTab('rentabilidade')">💰 Rentabilidade</div>
-          <div class="resultado-tab" id="estoque-tab-cancelamentos" onclick="setEstoqueTab('cancelamentos')">↩️ Cancelamentos</div>
-          <div class="resultado-tab" id="estoque-tab-ads" onclick="setEstoqueTab('ads')">📣 ADS</div>
           <div class="resultado-tab" id="estoque-tab-vendas" onclick="setEstoqueTab('vendas')">📦 Vendas ML</div>
           <div class="resultado-tab" id="estoque-tab-skuunit" onclick="setEstoqueTab('skuunit')">🔩 SKU Unitário</div>
+          <div class="resultado-tab" id="estoque-tab-full" onclick="setEstoqueTab('full')">🏭 Full ML</div>
+          <div class="resultado-tab" id="estoque-tab-galpao" onclick="setEstoqueTab('galpao')">🏠 Galpão</div>
         </div>
 
         <!-- Tab: Reposição -->
@@ -2055,80 +2055,8 @@
           </div>
         </div>
 
-        <!-- Tab: Rentabilidade -->
-        <div id="estoque-view-rentabilidade" style="display:none;">
-          <div id="estoque-rent-vazio" class="card" style="display:none;">
-            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">💰</div>
-              <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas</div>
-              <div style="font-size:12px;">Importe o relatório de vendas ML para ver a rentabilidade por SKU.</div>
-            </div>
-          </div>
-          <div class="card" id="estoque-rent-card" style="display:none;">
-            <div class="card-body" style="padding:0;overflow-x:auto;">
-              <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                <thead>
-                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
-                    <th style="padding:8px 10px;text-align:left;">SKU</th>
-                    <th style="padding:8px 6px;text-align:left;">Título</th>
-                    <th style="padding:8px 6px;text-align:right;">Unidades</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Receita bruta</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Tarifa ML</th>
-                    <th style="padding:8px 6px;text-align:right;">Envio</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Líquido ML</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Custo produto</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Margem R$</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Margem %</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-rentabilidade"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
 
-        <!-- Tab: Cancelamentos -->
-        <div id="estoque-view-cancelamentos" style="display:none;">
-          <div class="card">
-            <div class="card-body" style="padding:0;overflow-x:auto;">
-              <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                <thead>
-                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
-                    <th style="padding:8px 10px;text-align:left;">SKU</th>
-                    <th style="padding:8px 6px;text-align:left;">Título</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Vendas efetivas</th>
-                    <th style="padding:8px 6px;text-align:right;">Cancelamentos</th>
-                    <th style="padding:8px 6px;text-align:right;">Taxa %</th>
-                    <th style="padding:8px 6px;text-align:left;">Alerta</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-cancelamentos"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
 
-        <!-- Tab: ADS -->
-        <div id="estoque-view-ads" style="display:none;">
-          <div class="card">
-            <div class="card-body" style="padding:0;overflow-x:auto;">
-              <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                <thead>
-                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
-                    <th style="padding:8px 10px;text-align:left;">SKU</th>
-                    <th style="padding:8px 6px;text-align:left;">Título</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Total unid.</th>
-                    <th style="padding:8px 6px;text-align:right;">Orgânico</th>
-                    <th style="padding:8px 6px;text-align:right;">ADS</th>
-                    <th style="padding:8px 6px;text-align:right;">% ADS</th>
-                    <th style="padding:8px 6px;text-align:left;">Alerta</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-ads"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
 
         <!-- Tab: Vendas ML (raw do relatório ML, todos SKUs) -->
         <div id="estoque-view-vendas" style="display:none;">
@@ -2198,8 +2126,180 @@
           </div>
         </div>
 
+        <!-- Tab: Estoque Full ML -->
+        <div id="estoque-view-full" style="display:none;">
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-weight:600;font-size:13px;">🏭 Estoque Full (Mercado Livre)</div>
+                <div id="estoque-full-status" style="font-size:11px;color:#64748b;margin-top:3px;">Clique em Sincronizar para buscar dados do ML</div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn-out btn-sm" onclick="exportarEstoqueFullCSV()" id="btn-export-full" style="display:none;">⬇ Exportar CSV</button>
+                <button class="btn-primary btn-sm" onclick="sincronizarEstoqueFull()" id="btn-sync-full">🔄 Sincronizar ML</button>
+              </div>
+            </div>
+          </div>
+          <div class="card" id="estoque-full-vazio" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">🏭</div>
+              <div style="font-weight:600;margin-bottom:6px;">Sem dados de estoque Full</div>
+              <div style="font-size:12px;">Clique em Sincronizar para buscar o estoque direto da API do Mercado Livre.</div>
+            </div>
+          </div>
+          <div class="card" id="estoque-full-card" style="display:none;">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Título</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Aptos p/ venda</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Em transf.</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Pendente</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Total</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-estoque-full"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Estoque Galpão -->
+        <div id="estoque-view-galpao" style="display:none;">
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-weight:600;font-size:13px;">🏠 Estoque Galpão</div>
+                <div id="estoque-galpao-aba-status" style="font-size:11px;color:#64748b;margin-top:3px;">Importe via Upseller (JSON) ou edite na aba SKUs</div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn-out btn-sm" onclick="exportarEstoqueGalpaoCSV()" id="btn-export-galpao" style="display:none;">⬇ Exportar CSV</button>
+              </div>
+            </div>
+          </div>
+          <div class="card" id="estoque-galpao-aba-vazio" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">🏠</div>
+              <div style="font-weight:600;margin-bottom:6px;">Sem dados de galpão</div>
+              <div style="font-size:12px;">Importe o estoque do galpão pelo menu de importação (JSON Upseller).</div>
+            </div>
+          </div>
+          <div class="card" id="estoque-galpao-aba-card" style="display:none;">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Descrição</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Qtd galpão</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Custo médio</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Valor total</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Atualizado</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-estoque-galpao-aba"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
       </div>
 
+    </div>
+
+  </div>
+
+  <!-- VIEW: ANÁLISE -->
+  <div id="view-analise" class="view" style="display:none;">
+    <div class="d-flex" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:var(--gray-900);">📊 Análise</div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px;">Rentabilidade, cancelamentos e ADS por SKU</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="resultado-tabs" style="margin-bottom:16px;">
+      <div class="resultado-tab active" id="analise-tab-rentabilidade" onclick="setAnaliseTab('rentabilidade')">💰 Rentabilidade</div>
+      <div class="resultado-tab" id="analise-tab-cancelamentos" onclick="setAnaliseTab('cancelamentos')">↩️ Cancelamentos</div>
+      <div class="resultado-tab" id="analise-tab-ads" onclick="setAnaliseTab('ads')">📣 ADS</div>
+    </div>
+
+    <!-- Tab: Rentabilidade -->
+    <div id="analise-view-rentabilidade">
+      <div id="estoque-rent-vazio" class="card" style="display:none;">
+        <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+          <div style="font-size:32px;margin-bottom:10px;">💰</div>
+          <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas</div>
+          <div style="font-size:12px;">Importe o relatório de vendas ML para ver a rentabilidade por SKU.</div>
+        </div>
+      </div>
+      <div class="card" id="estoque-rent-card" style="display:none;">
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                <th style="padding:8px 10px;text-align:left;">SKU</th>
+                <th style="padding:8px 6px;text-align:left;">Título</th>
+                <th style="padding:8px 6px;text-align:right;">Unidades</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Receita bruta</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Tarifa ML</th>
+                <th style="padding:8px 6px;text-align:right;">Envio</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Líquido ML</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Custo produto</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Margem R$</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Margem %</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-rentabilidade"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Cancelamentos -->
+    <div id="analise-view-cancelamentos" style="display:none;">
+      <div class="card">
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                <th style="padding:8px 10px;text-align:left;">SKU</th>
+                <th style="padding:8px 6px;text-align:left;">Título</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Vendas efetivas</th>
+                <th style="padding:8px 6px;text-align:right;">Cancelamentos</th>
+                <th style="padding:8px 6px;text-align:right;">Taxa %</th>
+                <th style="padding:8px 6px;text-align:left;">Alerta</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-cancelamentos"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: ADS -->
+    <div id="analise-view-ads" style="display:none;">
+      <div class="card">
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                <th style="padding:8px 10px;text-align:left;">SKU</th>
+                <th style="padding:8px 6px;text-align:left;">Título</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Total unid.</th>
+                <th style="padding:8px 6px;text-align:right;">Orgânico</th>
+                <th style="padding:8px 6px;text-align:right;">ADS</th>
+                <th style="padding:8px 6px;text-align:right;">% ADS</th>
+                <th style="padding:8px 6px;text-align:left;">Alerta</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-ads"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -3175,6 +3275,7 @@
     // Regras por componente (override do padrão) — {[sku]: {meta_full, meta_galpao, seg, alerta}}
     let metaComp = {};
     let estoqueCurrentTab = 'reposicao';
+    let estoqueFullML = []; // [{sku, titulo, aptos_venda, em_transito, pendente}]
 
     // Estado UI
     let planilhaMode = 'confirmado';
@@ -3628,6 +3729,7 @@
       else if(page === 'simulador') renderFormSimulador();
       else if(page === 'skus') setSkuTab(skuCurrentTab || 'lista');
       else if(page === 'estoque') renderEstoque();
+      else if(page === 'analise') renderAnalise();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
       else if(page === 'resultado'){ setResultadoTab('dre'); }
@@ -4718,6 +4820,8 @@
       if(comp) composicaoKit = JSON.parse(comp);
       if(vs) vendasSku = JSON.parse(vs);
       if(eg) estoqueGalpao = JSON.parse(eg);
+      const efml = localStorage.getItem('mk_estoque_full_ml');
+      if(efml){ const o = JSON.parse(efml); estoqueFullML = o.itens || []; estoqueFullML._syncAt = o.syncAt || null; }
       const mc = localStorage.getItem('mk_meta_comp');
       if(mc) metaComp = JSON.parse(mc);
       const p11cfg = localStorage.getItem('mk_p11_cfg');
@@ -7201,7 +7305,7 @@ Perfil do usuário:
 
     function setEstoqueTab(tab){
       estoqueCurrentTab = tab;
-      const tabs = ['reposicao','excesso','rentabilidade','cancelamentos','ads','vendas','skuunit'];
+      const tabs = ['reposicao','excesso','vendas','skuunit','full','galpao'];
       tabs.forEach(t => {
         const btn = document.getElementById('estoque-tab-' + t);
         const view = document.getElementById('estoque-view-' + t);
@@ -7210,11 +7314,30 @@ Perfil do usuário:
       });
       if(tab === 'reposicao') renderReposicaoTab();
       else if(tab === 'excesso') renderExcessoTab();
-      else if(tab === 'rentabilidade') renderRentabilidadeTab();
-      else if(tab === 'cancelamentos') renderCancelamentosTab();
-      else if(tab === 'ads') renderADSTab();
       else if(tab === 'vendas') renderVendasSkuTab();
       else if(tab === 'skuunit') renderSkuUnitarioTab();
+      else if(tab === 'full') renderEstoqueFullTab();
+      else if(tab === 'galpao') renderEstoqueGalpaoAbaTab();
+    }
+
+    let analiseCurrentTab = 'rentabilidade';
+
+    function setAnaliseTab(tab){
+      analiseCurrentTab = tab;
+      const tabs = ['rentabilidade','cancelamentos','ads'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('analise-tab-' + t);
+        const view = document.getElementById('analise-view-' + t);
+        if(btn) btn.classList.toggle('active', t === tab);
+        if(view) view.style.display = t === tab ? '' : 'none';
+      });
+      if(tab === 'rentabilidade') renderRentabilidadeTab();
+      else if(tab === 'cancelamentos') renderCancelamentosTab();
+      else if(tab === 'ads') renderADSTab();
+    }
+
+    function renderAnalise(){
+      setAnaliseTab(analiseCurrentTab || 'rentabilidade');
     }
 
     function renderEstoque(){
@@ -7225,6 +7348,143 @@ Perfil do usuário:
     function renderEstoqueIfActive(){
       const v = document.getElementById('view-estoque');
       if(v && v.style.display !== 'none') renderEstoque();
+    }
+
+    // ===== ESTOQUE FULL ML =====
+    function renderEstoqueFullTab(){
+      const vazio = document.getElementById('estoque-full-vazio');
+      const card = document.getElementById('estoque-full-card');
+      const btnExp = document.getElementById('btn-export-full');
+      const st = document.getElementById('estoque-full-status');
+      if(!vazio || !card) return;
+      if(estoqueFullML.length === 0){
+        vazio.style.display = '';
+        card.style.display = 'none';
+        if(btnExp) btnExp.style.display = 'none';
+        return;
+      }
+      vazio.style.display = 'none';
+      card.style.display = '';
+      if(btnExp) btnExp.style.display = '';
+      const tbody = document.getElementById('tbody-estoque-full');
+      if(!tbody) return;
+      const rows = estoqueFullML.slice().sort((a,b) => (a.sku||'').localeCompare(b.sku||''));
+      tbody.innerHTML = rows.map(e => {
+        const total = (e.aptos_venda||0) + (e.em_transito||0) + (e.pendente||0);
+        const cls = e.aptos_venda === 0 ? 'color:#ef4444;font-weight:600;' : (e.aptos_venda < 5 ? 'color:#f97316;font-weight:600;' : '');
+        return `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:7px 10px;white-space:nowrap;font-family:monospace;font-size:11px;">${e.sku||''}</td>
+          <td style="padding:7px 6px;color:#374151;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.titulo||''}">${e.titulo||'-'}</td>
+          <td style="padding:7px 6px;text-align:right;${cls}">${e.aptos_venda||0}</td>
+          <td style="padding:7px 6px;text-align:right;color:#0ea5e9;">${e.em_transito||0}</td>
+          <td style="padding:7px 6px;text-align:right;color:#a78bfa;">${e.pendente||0}</td>
+          <td style="padding:7px 6px;text-align:right;font-weight:600;">${total}</td>
+        </tr>`;
+      }).join('');
+      if(st){
+        const dt = estoqueFullML._syncAt ? new Date(estoqueFullML._syncAt).toLocaleString('pt-BR') : '';
+        st.textContent = dt ? `Última sincronização: ${dt} — ${estoqueFullML.length} SKUs` : `${estoqueFullML.length} SKUs carregados`;
+      }
+    }
+
+    async function sincronizarEstoqueFull(){
+      const btn = document.getElementById('btn-sync-full');
+      const st = document.getElementById('estoque-full-status');
+      if(btn){ btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
+      if(st) st.textContent = 'Conectando ao Mercado Livre...';
+      try {
+        const { data:{ session } } = await window._supabase.auth.getSession();
+        if(!session) throw new Error('Sessão expirada — faça login novamente.');
+        const url = window._supaUrl + '/functions/v1/ml-inventory';
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario_id: session.user.id })
+        });
+        const json = await res.json();
+        if(!res.ok || json.error) throw new Error(json.error || json.message || 'Erro na sincronização');
+        estoqueFullML = json.itens || [];
+        estoqueFullML._syncAt = new Date().toISOString();
+        localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt }));
+        renderEstoqueFullTab();
+      } catch(err){
+        if(st) st.textContent = 'Erro: ' + err.message;
+        alert('Erro ao sincronizar estoque Full:\n' + err.message);
+      } finally {
+        if(btn){ btn.disabled = false; btn.textContent = '🔄 Sincronizar ML'; }
+      }
+    }
+
+    function exportarEstoqueFullCSV(){
+      if(estoqueFullML.length === 0){ alert('Nada para exportar.'); return; }
+      const esc = s => (String(s||'')).replace(/;/g,'|');
+      const header = 'sku;titulo;aptos_venda;em_transito;pendente;total';
+      const linhas = estoqueFullML.map(e => [
+        esc(e.sku), esc(e.titulo), e.aptos_venda||0, e.em_transito||0, e.pendente||0,
+        (e.aptos_venda||0)+(e.em_transito||0)+(e.pendente||0)
+      ].join(';'));
+      const blob = new Blob(['\uFEFF' + header + '\n' + linhas.join('\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'estoque_full_' + getToday() + '.csv';
+      a.click();
+    }
+
+    // ===== ESTOQUE GALPAO ABA =====
+    function renderEstoqueGalpaoAbaTab(){
+      const vazio = document.getElementById('estoque-galpao-aba-vazio');
+      const card = document.getElementById('estoque-galpao-aba-card');
+      const btnExp = document.getElementById('btn-export-galpao');
+      const st = document.getElementById('estoque-galpao-aba-status');
+      if(!vazio || !card) return;
+      if(estoqueGalpao.length === 0){
+        vazio.style.display = '';
+        card.style.display = 'none';
+        if(btnExp) btnExp.style.display = 'none';
+        return;
+      }
+      vazio.style.display = 'none';
+      card.style.display = '';
+      if(btnExp) btnExp.style.display = '';
+      const tbody = document.getElementById('tbody-estoque-galpao-aba');
+      if(!tbody) return;
+      const rows = estoqueGalpao.slice().sort((a,b) => (a.sku||'').localeCompare(b.sku||''));
+      let totalCapital = 0;
+      tbody.innerHTML = rows.map(e => {
+        const qtd = e.qtd_galpao || 0;
+        const custo = e.custo_medio || 0;
+        const total = qtd * custo;
+        totalCapital += total;
+        const dt = e.data_atualizacao ? e.data_atualizacao.substring(0,10) : '-';
+        return `<tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:7px 10px;white-space:nowrap;font-family:monospace;font-size:11px;">${e.sku||''}</td>
+          <td style="padding:7px 6px;color:#374151;">${e.descricao||'-'}</td>
+          <td style="padding:7px 6px;text-align:right;font-weight:600;">${qtd}</td>
+          <td style="padding:7px 6px;text-align:right;">${custo > 0 ? 'R$ ' + custo.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '-'}</td>
+          <td style="padding:7px 6px;text-align:right;">${total > 0 ? 'R$ ' + total.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '-'}</td>
+          <td style="padding:7px 6px;text-align:right;font-size:11px;color:#94a3b8;">${dt}</td>
+        </tr>`;
+      }).join('');
+      if(st){
+        st.textContent = `${estoqueGalpao.length} SKUs — Capital total: R$ ${totalCapital.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+      }
+    }
+
+    function exportarEstoqueGalpaoCSV(){
+      if(estoqueGalpao.length === 0){ alert('Nada para exportar.'); return; }
+      const esc = s => (String(s||'')).replace(/;/g,'|');
+      const header = 'sku;descricao;qtd_galpao;custo_medio;valor_total;data_atualizacao';
+      const linhas = estoqueGalpao.map(e => [
+        esc(e.sku), esc(e.descricao), e.qtd_galpao||0,
+        (e.custo_medio||0).toFixed(2).replace('.',','),
+        ((e.qtd_galpao||0)*(e.custo_medio||0)).toFixed(2).replace('.',','),
+        e.data_atualizacao||''
+      ].join(';'));
+      const blob = new Blob(['\uFEFF' + header + '\n' + linhas.join('\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'estoque_galpao_' + getToday() + '.csv';
+      a.click();
     }
 
     function atualizarStatusBarEstoque(){
