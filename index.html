@@ -2134,8 +2134,10 @@
                 <div style="font-weight:600;font-size:13px;">🏭 Estoque Full (Mercado Livre)</div>
                 <div id="estoque-full-status" style="font-size:11px;color:#64748b;margin-top:3px;">Clique em Sincronizar para buscar dados do ML</div>
               </div>
-              <div style="display:flex;gap:8px;align-items:center;">
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <button class="btn-out btn-sm" onclick="exportarEstoqueFullCSV()" id="btn-export-full" style="display:none;">⬇ Exportar CSV</button>
+                <input type="file" id="input-full-xls" accept=".xlsx,.xls" style="display:none;" onchange="importarEstoqueFullXLS(this)">
+                <button class="btn-out btn-sm" onclick="document.getElementById('input-full-xls').click()">📥 Importar XLS</button>
                 <button class="btn-primary btn-sm" onclick="sincronizarEstoqueFull()" id="btn-sync-full">🔄 Sincronizar ML</button>
               </div>
             </div>
@@ -2144,7 +2146,7 @@
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
               <div style="font-size:32px;margin-bottom:10px;">🏭</div>
               <div style="font-weight:600;margin-bottom:6px;">Sem dados de estoque Full</div>
-              <div style="font-size:12px;">Clique em Sincronizar para buscar o estoque direto da API do Mercado Livre.</div>
+              <div style="font-size:12px;">Clique em <strong>Importar XLS</strong> para carregar o relatório do ML, ou <strong>Sincronizar ML</strong> para buscar via API.</div>
             </div>
           </div>
           <div class="card" id="estoque-full-card" style="display:none;">
@@ -4821,7 +4823,7 @@
       if(vs) vendasSku = JSON.parse(vs);
       if(eg) estoqueGalpao = JSON.parse(eg);
       const efml = localStorage.getItem('mk_estoque_full_ml');
-      if(efml){ const o = JSON.parse(efml); estoqueFullML = o.itens || []; estoqueFullML._syncAt = o.syncAt || null; }
+      if(efml){ const o = JSON.parse(efml); estoqueFullML = o.itens || []; estoqueFullML._syncAt = o.syncAt || null; estoqueFullML._fonte = o.fonte || 'api'; }
       const mc = localStorage.getItem('mk_meta_comp');
       if(mc) metaComp = JSON.parse(mc);
       const p11cfg = localStorage.getItem('mk_p11_cfg');
@@ -7383,7 +7385,8 @@ Perfil do usuário:
       }).join('');
       if(st){
         const dt = estoqueFullML._syncAt ? new Date(estoqueFullML._syncAt).toLocaleString('pt-BR') : '';
-        st.textContent = dt ? `Última sincronização: ${dt} — ${estoqueFullML.length} SKUs` : `${estoqueFullML.length} SKUs carregados`;
+        const label = estoqueFullML._fonte === 'xls' ? 'Importado via XLS' : 'Última sincronização';
+        st.textContent = dt ? `${label}: ${dt} — ${estoqueFullML.length} SKUs` : `${estoqueFullML.length} SKUs carregados`;
       }
     }
 
@@ -7439,6 +7442,48 @@ Perfil do usuário:
       a.href = URL.createObjectURL(blob);
       a.download = 'estoque_full_' + getToday() + '.csv';
       a.click();
+    }
+
+    function importarEstoqueFullXLS(input){
+      const file = input.files[0];
+      if(!file) return;
+      const st = document.getElementById('estoque-full-status');
+      if(st) st.textContent = 'Lendo arquivo...';
+      const reader = new FileReader();
+      reader.onload = function(e){
+        try {
+          const wb = XLSX.read(e.target.result, {type:'array'});
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+          const itens = [];
+          for(const row of rows){
+            const sku = String(row[2]||'').trim();
+            if(!sku) continue;
+            // Ignora linha de cabeçalho se houver
+            if(/^sku|seller.?sku/i.test(sku)) continue;
+            const titulo = String(row[5]||'').trim();
+            const aptos = parseInt(row[12])||0;
+            const totalFull = parseInt(row[17])||0;
+            const pendente = Math.max(0, totalFull - aptos);
+            const itemId = String(row[0]||'').trim();
+            const status = String(row[8]||'').trim();
+            const prazo = String(row[28]||'-').trim();
+            itens.push({ sku, titulo, aptos_venda: aptos, em_transito: 0, pendente, item_id: itemId, status, prazo });
+          }
+          if(itens.length === 0){ alert('Nenhum SKU encontrado no arquivo.\nVerifique se o arquivo é o relatório "Estoque Full" do Mercado Livre.'); if(st) st.textContent = 'Importação cancelada — arquivo inválido'; return; }
+          estoqueFullML = itens;
+          estoqueFullML._syncAt = new Date().toISOString();
+          estoqueFullML._fonte = 'xls';
+          localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt, fonte: 'xls' }));
+          renderEstoqueFullTab();
+        } catch(err){
+          if(st) st.textContent = 'Erro ao importar: ' + err.message;
+          alert('Erro ao importar XLS:\n' + err.message);
+        } finally {
+          input.value = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
     }
 
     // ===== ESTOQUE GALPAO ABA =====
