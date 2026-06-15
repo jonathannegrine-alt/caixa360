@@ -7401,8 +7401,10 @@ Perfil do usuário:
           headers: { 'Authorization': 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
           body: JSON.stringify({ usuario_id: session.user.id })
         });
-        const json = await res.json();
-        if(!res.ok || json.error) throw new Error(json.error || json.message || 'Erro na sincronização');
+        const text = await res.text();
+        let json;
+        try { json = JSON.parse(text); } catch(e) { throw new Error(`HTTP ${res.status} — resposta inesperada: ${text.substring(0,200)}`); }
+        if(!res.ok || json.error) throw new Error(json.error || json.message || `HTTP ${res.status}`);
         estoqueFullML = json.itens || [];
         estoqueFullML._syncAt = new Date().toISOString();
         localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt }));
