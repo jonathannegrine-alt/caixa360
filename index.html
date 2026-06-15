@@ -1384,6 +1384,14 @@
                     <button type="button" class="btn-out btn-sm" onclick="document.getElementById('sim-parcelas-txt').value='0 30 60 90 120'">Entrada+4x</button>
                   </div>
                   <input type="text" id="sim-parcelas-txt" class="form-control" value="30 60 90" placeholder="ex: 0 15 30 45 60" style="font-family:monospace;letter-spacing:1px;">
+                  <div style="margin-top:8px;padding:10px 12px;background:#f0f9ff;border-radius:6px;border:1px solid #bae6fd;font-size:12px;color:#0369a1;line-height:1.6;">
+                    <strong>Como usar:</strong> cada número é o <em>dia a partir de hoje</em> em que cai uma parcela. A quantidade de números define o total de parcelas.<br>
+                    <span style="color:#555;">
+                      <strong>0 30 60</strong> → entrada hoje + 30 dias + 60 dias (3 parcelas)<br>
+                      <strong>30 60 90</strong> → 3 parcelas mensais a partir de 30 dias<br>
+                      <strong>0 15 30 45</strong> → entrada hoje + 3 parcelas quinzenais
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -4128,6 +4136,7 @@
       const valorParcela = Math.round(valor / n * 100) / 100;
       const hoje = getToday();
 
+      _simTotalOriginal = valor;
       _simParcelasState = offsetDias.map(d => ({
         offset: d,
         valor: valorParcela,
@@ -4187,8 +4196,13 @@
       const th2 = 'padding:6px 8px;background:#f9fafb;border:1px solid #e5e5e5;font-size:11px;text-align:left;';
       const td2 = 'padding:5px 8px;border:1px solid #e5e5e5;font-size:12px;';
 
+      const totalAtual = _simParcelasState.reduce((s, p) => s + p.valor, 0);
+      const totalInfo = _simTotalOriginal > 0
+        ? `Total original: <strong>${fmt(_simTotalOriginal)}</strong> · Total atual: <strong style="color:${Math.abs(totalAtual-_simTotalOriginal)>0.05?'var(--warning)':'var(--success)'};">${fmt(totalAtual)}</strong>`
+        : `Total: <strong>${fmt(totalAtual)}</strong>`;
+
       let tabelaHtml = `<div style="margin:12px 0;">
-        <div style="font-size:12px;color:#666;margin-bottom:6px;">Edite valores ou datas diretamente na tabela e clique em Recalcular:</div>
+        <div style="font-size:12px;color:#666;margin-bottom:6px;">${totalInfo} · Altere um valor para redistribuir automaticamente as demais parcelas:</div>
         <table style="width:100%;border-collapse:collapse;">
           <thead><tr>
             <th style="${th2}">Parcela</th>
@@ -4236,7 +4250,7 @@
 
     function distribuirIgualParcelado(){
       if(_simParcelasState.length === 0) return;
-      const total = _simParcelasState.reduce((s, p) => s + p.valor, 0);
+      const total = _simTotalOriginal || _simParcelasState.reduce((s, p) => s + p.valor, 0);
       const eq = Math.round(total / _simParcelasState.length * 100) / 100;
       _simParcelasState.forEach(p => { p.valor = eq; });
       renderSimParcelado(total);
@@ -5907,6 +5921,7 @@
     let simDias = 30;
     let simModoProj = 'total';
     let _simParcelasState = [];
+    let _simTotalOriginal = 0;
 
     function renderPlanilhaSimulador(valorExtra, dataPag){
       const hoje = getToday();
@@ -6014,7 +6029,19 @@
     function setSimDias(n){ simDias = n; recalcularSimulador(); }
     function setSimModoProj(m){ simModoProj = m; recalcularSimulador(); }
     function setSimParcelaData(idx, val){ if(_simParcelasState[idx]){ _simParcelasState[idx].data = val; recalcularSimParcelado(); } }
-    function setSimParcelaValor(idx, val){ if(_simParcelasState[idx]){ _simParcelasState[idx].valor = parseMoney(val) || 0; recalcularSimParcelado(); } }
+    function setSimParcelaValor(idx, val){
+      if(!_simParcelasState[idx]) return;
+      const novoValor = parseMoney(val) || 0;
+      _simParcelasState[idx].valor = novoValor;
+      // Auto-ajusta as outras parcelas para manter o total original
+      const outras = _simParcelasState.filter((_, i) => i !== idx);
+      if(outras.length > 0 && _simTotalOriginal > 0){
+        const restante = _simTotalOriginal - novoValor;
+        const porOutra = Math.round(restante / outras.length * 100) / 100;
+        _simParcelasState.forEach((p, i) => { if(i !== idx) p.valor = porOutra; });
+      }
+      recalcularSimParcelado();
+    }
 
     function exportarSimulacaoXLS(){
       if(simPlanilhaDados.length === 0){ alert('Rode uma simulação primeiro.'); return; }
@@ -6271,7 +6298,7 @@
       // Desconto/juros só faz sentido mostrar para lote também, mas campos ficam visíveis sempre
       document.getElementById('baixa-campos-extras').style.display = 'grid';
 
-      abrirModal('modal-baixa');
+      document.getElementById('modal-baixa').classList.add('open');
     }
 
     function _parseBaixaMoneyInput(el){
