@@ -7393,9 +7393,9 @@ Perfil do usuário:
       if(btn){ btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
       if(st) st.textContent = 'Conectando ao Mercado Livre...';
       try {
-        const { data:{ session } } = await window._supabase.auth.getSession();
+        const { data:{ session } } = await supa.auth.getSession();
         if(!session) throw new Error('Sessão expirada — faça login novamente.');
-        const url = window._supaUrl + '/functions/v1/ml-inventory';
+        const url = SUPA_URL + '/functions/v1/ml-inventory';
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
