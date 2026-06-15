@@ -1415,6 +1415,8 @@
             <button class="btn-out" onclick="document.getElementById('import-skus-csv').click()">📤 Importar CSV</button>
             <button class="btn-out" onclick="exportarSKUs()">📥 Exportar CSV</button>
             <input type="file" id="import-skus-csv" accept=".csv" style="display:none" onchange="importarSKUs()">
+            <input type="file" id="import-upseller-estoque" accept=".xlsx,.xls" style="display:none" onchange="importarUpsellerEstoque(this)">
+            <button class="btn-out" onclick="document.getElementById('import-upseller-estoque').click()" title="Importa Lista_de_Estoque do Upseller: cria SKUs novos e atualiza estoque galpão">🏪 Lista Upseller</button>
           </div>
           <div class="d-flex gap-1" id="sku-header-btns-composicoes" style="display:none!important;">
             <button class="btn-out btn-sm" onclick="baixarTemplateSKUUn()">⬇ Template SKU/un</button>
@@ -1423,6 +1425,8 @@
             <button class="btn-out btn-sm" onclick="document.getElementById('import-csv-kit').click()">📤 Importar Kits</button>
             <input type="file" id="import-csv-skuun" accept=".csv" style="display:none" onchange="importarCSVSKUUn(this)">
             <input type="file" id="import-csv-kit" accept=".csv" style="display:none" onchange="importarCSVKit(this)">
+            <input type="file" id="import-upseller-kits" accept=".xlsx,.xls" style="display:none" onchange="importarUpsellerKits(this)">
+            <button class="btn-out btn-sm" onclick="document.getElementById('import-upseller-kits').click()" title="Importa export_kit do Upseller: cria/atualiza composição dos kits">🏪 Kits Upseller</button>
             <button class="btn btn-sm" onclick="abrirModalComposicao(null)">+ Novo Kit</button>
           </div>
         </div>
@@ -2132,13 +2136,12 @@
             <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
               <div>
                 <div style="font-weight:600;font-size:13px;">🏭 Estoque Full (Mercado Livre)</div>
-                <div id="estoque-full-status" style="font-size:11px;color:#64748b;margin-top:3px;">Clique em Sincronizar para buscar dados do ML</div>
+                <div id="estoque-full-status" style="font-size:11px;color:#64748b;margin-top:3px;">Importe o relatório XLS do Mercado Livre</div>
               </div>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <button class="btn-out btn-sm" onclick="exportarEstoqueFullCSV()" id="btn-export-full" style="display:none;">⬇ Exportar CSV</button>
                 <input type="file" id="input-full-xls" accept=".xlsx,.xls" style="display:none;" onchange="importarEstoqueFullXLS(this)">
-                <button class="btn-out btn-sm" onclick="document.getElementById('input-full-xls').click()">📥 Importar XLS</button>
-                <button class="btn-primary btn-sm" onclick="sincronizarEstoqueFull()" id="btn-sync-full">🔄 Sincronizar ML</button>
+                <button class="btn-primary btn-sm" onclick="document.getElementById('input-full-xls').click()">📥 Importar XLS</button>
               </div>
             </div>
           </div>
@@ -2146,7 +2149,7 @@
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
               <div style="font-size:32px;margin-bottom:10px;">🏭</div>
               <div style="font-weight:600;margin-bottom:6px;">Sem dados de estoque Full</div>
-              <div style="font-size:12px;">Clique em <strong>Importar XLS</strong> para carregar o relatório do ML, ou <strong>Sincronizar ML</strong> para buscar via API.</div>
+              <div style="font-size:12px;">Clique em <strong>📥 Importar XLS</strong> e selecione o relatório "Estoque Geral Full" baixado do painel do Mercado Livre.</div>
             </div>
           </div>
           <div class="card" id="estoque-full-card" style="display:none;">
@@ -8042,6 +8045,20 @@ Perfil do usuário:
       makeSortable('tbody-ads', [6]);
     }
 
+
+    function calcEstoqueKit(sku_comercial){
+      const comps = composicaoKit.filter(c => c.sku_comercial === sku_comercial);
+      if(comps.length === 0) return null;
+      let min = Infinity;
+      for(const c of comps){
+        const eg = estoqueGalpao.find(e => e.sku === c.sku_componente);
+        const qtd = eg ? (eg.qtd_galpao || 0) : 0;
+        const kits = Math.floor(qtd / (c.qty || 1));
+        if(kits < min) min = kits;
+      }
+      return min === Infinity ? 0 : min;
+    }
+
     function renderComposicoesTab(){
       const el = document.getElementById('composicoes-lista');
       const vazioEl = document.getElementById('composicoes-vazio');
@@ -8068,6 +8085,14 @@ Perfil do usuário:
           ? `<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">R$ ${fmt(custoKit)}</span>`
           : (custoCalc > 0 ? `<span style="background:#f1f5f9;color:#475569;border-radius:4px;padding:2px 8px;font-size:11px;">≈ ${fmt(custoCalc)} <span style="font-weight:400;font-size:10px;">(soma componentes)</span></span>` : `<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:2px 8px;font-size:11px;">Sem custo</span>`);
         const tags = comps.map(c => `<span style="background:var(--gray-100);border-radius:4px;padding:2px 8px;font-size:11px;font-family:monospace;">${c.sku_componente} ×${c.qty}</span>`).join('');
+        const estoqueKit = calcEstoqueKit(kitSku);
+        const estoqueKitLabel = estoqueKit !== null
+          ? (estoqueKit === 0
+            ? `<span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">📦 0 kits</span>`
+            : (estoqueKit <= 5
+              ? `<span style="background:#ffedd5;color:#c2410c;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">📦 ${estoqueKit} kits</span>`
+              : `<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">📦 ${estoqueKit} kits</span>`))
+          : '';
         const skuEsc = kitSku.replace(/'/g, "\\'");
         html += `<div class="card mb-2" id="kit-card-${kitSku.replace(/[^a-zA-Z0-9]/g,'-')}">
           <div class="card-body" style="padding:12px 15px;">
@@ -8084,7 +8109,7 @@ Perfil do usuário:
                 <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${skuEsc}')">🗑️</button>
               </div>
             </div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;">${tags}<span style="margin-left:auto;">${custoLabel}</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;">${tags}<span style="margin-left:auto;display:flex;gap:6px;align-items:center;">${estoqueKitLabel}${custoLabel}</span></div>
           </div>
         </div>`;
       });
@@ -8545,6 +8570,104 @@ Perfil do usuário:
       };
       reader.readAsText(file, 'UTF-8');
     }
+
+    function importarUpsellerEstoque(input){
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e){
+        try {
+          const wb = XLSX.read(e.target.result, {type:'array'});
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+          // Linha 0 é cabeçalho: ["SKU","Título","Armazém",...,"Estoque Atual","Custo Médio","Subtotal"]
+          let criados = 0, atualizados = 0, semSku = 0;
+          const hoje = new Date().toISOString().slice(0,10);
+          for(let i = 1; i < rows.length; i++){
+            const row = rows[i];
+            const sku = String(row[0]||'').trim();
+            if(!sku){ semSku++; continue; }
+            const titulo  = String(row[1]||'').trim();
+            const qtd     = parseFloat(row[9]) || 0;
+            const custo   = parseFloat(row[10]) || 0;
+            // Upsert em skus[]
+            const idxSku = skus.findIndex(s => s.sku === sku);
+            if(idxSku >= 0){
+              skus[idxSku].titulo = titulo || skus[idxSku].titulo;
+              if(custo > 0) skus[idxSku].custo = custo;
+            } else {
+              skus.push({ sku, titulo, custo, imposto: 0 });
+            }
+            // Upsert em estoqueGalpao[]
+            const idxEg = estoqueGalpao.findIndex(e => e.sku === sku);
+            if(idxEg >= 0){
+              estoqueGalpao[idxEg].qtd_galpao = qtd;
+              if(custo > 0) estoqueGalpao[idxEg].custo_medio = custo;
+              estoqueGalpao[idxEg].data_atualizacao = hoje;
+              estoqueGalpao[idxEg].descricao = titulo || estoqueGalpao[idxEg].descricao;
+              atualizados++;
+            } else {
+              estoqueGalpao.push({ sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: custo, data_atualizacao: hoje });
+              criados++;
+            }
+          }
+          salvar();
+          renderSKUs();
+          renderEstoqueIfActive();
+          alert('Upseller - Lista de Estoque importada!\n\nCriados: ' + criados + '\nAtualizados: ' + atualizados + '\nIgnorados (sem SKU): ' + semSku);
+        } catch(err){
+          alert('Erro ao importar Lista Upseller:\n' + err.message);
+        } finally {
+          input.value = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function importarUpsellerKits(input){
+      const file = input.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e){
+        try {
+          const wb = XLSX.read(e.target.result, {type:'array'});
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+          // Linha 0 é cabeçalho: ["KIT SKU","Título",...,"SKU de Produto","Qtd. SKU de Produto"]
+          const novos = {}; // sku_comercial → { titulo, comps: [{sku_componente, qty}] }
+          for(let i = 1; i < rows.length; i++){
+            const row = rows[i];
+            const kitSku  = String(row[0]||'').trim();
+            const titulo  = String(row[1]||'').trim();
+            const compSku = String(row[7]||'').trim();
+            const qty     = parseFloat(row[8]) || 1;
+            if(!kitSku || !compSku) continue;
+            if(!novos[kitSku]) novos[kitSku] = { titulo, comps: [] };
+            novos[kitSku].comps.push({ sku_componente: compSku, qty });
+          }
+          const kitSkus = Object.keys(novos);
+          if(kitSkus.length === 0){ alert('Nenhum kit encontrado no arquivo.'); return; }
+          // Remove entradas antigas dos kits que vão ser reimportados
+          composicaoKit = composicaoKit.filter(c => !kitSkus.includes(c.sku_comercial));
+          // Insere os novos
+          kitSkus.forEach(kitSku => {
+            const { titulo, comps } = novos[kitSku];
+            comps.forEach(c => {
+              composicaoKit.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: c.sku_componente, qty: c.qty, custo_kit: 0 });
+            });
+          });
+          salvar();
+          setSkuTab('composicoes');
+          alert('Upseller - Kits importados!\n\n' + kitSkus.length + ' kits importados.');
+        } catch(err){
+          alert('Erro ao importar Kits Upseller:\n' + err.message);
+        } finally {
+          input.value = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
     function importarCSVKit(input){
       const file = input.files[0];
       if(!file) return;
