@@ -3519,8 +3519,9 @@
         const totalAtrasado = atrasadas.reduce((s,p) => s + p.val, 0);
         const nomes = atrasadas.slice(0,3).map(p => p.desc).join(', ') + (atrasadas.length > 3 ? '...' : '');
         insights.push({ tipo:'danger', icon:'🔴',
-          texto:`${atrasadas.length} conta${atrasadas.length > 1 ? 's' : ''} em atraso: <strong>${fmt(totalAtrasado)}</strong>.`,
-          sub: nomes
+          texto:`${atrasadas.length} conta${atrasadas.length > 1 ? 's' : ''} em atraso: <strong>${fmt(totalAtrasado)}</strong>. <span style="font-size:11px;text-decoration:underline;cursor:pointer;">Ver contas →</span>`,
+          sub: nomes,
+          onclick: 'irParaAtrasadas()'
         });
       }
 
@@ -3533,7 +3534,9 @@
 
       el.innerHTML = insights.slice(0, 5).map(ins => {
         const c = cores[ins.tipo] || cores.info;
-        return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:8px;background:${c.bg};border-left:3px solid ${c.borda};">
+        const clickStyle = ins.onclick ? 'cursor:pointer;' : '';
+        const clickAttr  = ins.onclick ? `onclick="${ins.onclick}"` : '';
+        return `<div ${clickAttr} style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:8px;background:${c.bg};border-left:3px solid ${c.borda};${clickStyle}">
           <span style="font-size:18px;flex-shrink:0;line-height:1.4;">${ins.icon}</span>
           <div>
             <div style="font-size:13px;color:${c.txt};line-height:1.5;">${ins.texto}</div>
@@ -3541,6 +3544,12 @@
           </div>
         </div>`;
       }).join('');
+    }
+
+    function irParaAtrasadas(){
+      nav('pagar');
+      const sel = document.getElementById('filtro-status');
+      if(sel){ sel.value = 'atrasado'; renderPagar(); }
     }
 
     // ===== P1 — REGRESSÃO LINEAR =====
@@ -5390,10 +5399,14 @@
       const saldo = e.total - pag;
 
       const itens = pagList.length > 0
-        ? pagList.map(p => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:12px;">
-            <span>${p.desc} ${p.forn ? '· '+p.forn : ''}</span>
-            <span style="color:var(--danger);font-weight:600;">${fmt(p.val)}</span>
-          </div>`).join('')
+        ? pagList.map(p => {
+            const idx = pagamentos.indexOf(p);
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0f0f0;gap:8px;">
+              <span style="font-size:12px;flex:1;">${p.desc}${p.forn ? ' · '+p.forn : ''}</span>
+              <span style="color:var(--danger);font-weight:600;font-size:12px;white-space:nowrap;">${fmt(p.val)}</span>
+              <button class="btn-out btn-sm" style="font-size:11px;padding:3px 8px;white-space:nowrap;" onclick="fecharModal('modal-dia');abrirModalBaixa([${idx}])">✓ Baixar</button>
+            </div>`;
+          }).join('')
         : '<div style="font-size:12px;color:#999;padding:8px 0;">Nenhuma conta a pagar</div>';
 
       // Usar um alert estilizado via modal reutilizável
@@ -6192,8 +6205,16 @@
         });
       }
 
+      // Debitar valor pago do saldo (saldoMP)
+      saldoMP = Math.max(0, saldoMP - totalPago);
+      saldoAtual = saldoMP + saldoOutros;
+      const mpEl = document.getElementById('saldo-mp');
+      const totalEl = document.getElementById('saldo-total-label');
+      if(mpEl) mpEl.value = fmtMoney(saldoMP);
+      if(totalEl) totalEl.textContent = fmt(saldoAtual);
+
       fecharModal('modal-baixa');
-      salvar(); renderPagar(); recalc();
+      salvar(); salvarCfg(); renderPagar(); recalc();
     }
 
     function deletarSelecionadosPagar(){
