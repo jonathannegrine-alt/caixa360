@@ -7391,27 +7391,34 @@ Perfil do usuário:
       const btn = document.getElementById('btn-sync-full');
       const st = document.getElementById('estoque-full-status');
       if(btn){ btn.disabled = true; btn.textContent = '⏳ Buscando...'; }
-      if(st) st.textContent = 'Conectando ao Mercado Livre...';
+      if(st) st.textContent = 'Conectando...';
       try {
-        const { data:{ session } } = await supa.auth.getSession();
+        console.log('[Full] passo 1: getSession');
+        const sd = await supa.auth.getSession();
+        const session = sd && sd.data && sd.data.session;
+        console.log('[Full] passo 2: session ok?', !!session, session && session.user && session.user.id);
         if(!session) throw new Error('Sessão expirada — faça login novamente.');
         const url = SUPA_URL + '/functions/v1/ml-inventory';
+        console.log('[Full] passo 3: fetch', url);
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
           body: JSON.stringify({ usuario_id: session.user.id })
         });
+        console.log('[Full] passo 4: status', res.status, res.ok);
         const text = await res.text();
+        console.log('[Full] passo 5: resposta (primeiros 300):', text.substring(0,300));
         let json;
-        try { json = JSON.parse(text); } catch(e) { throw new Error(`HTTP ${res.status} — resposta inesperada: ${text.substring(0,200)}`); }
+        try { json = JSON.parse(text); } catch(e) { throw new Error(`HTTP ${res.status} — resposta não-JSON: ${text.substring(0,200)}`); }
         if(!res.ok || json.error) throw new Error(json.error || json.message || `HTTP ${res.status}`);
         estoqueFullML = json.itens || [];
         estoqueFullML._syncAt = new Date().toISOString();
         localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt }));
         renderEstoqueFullTab();
       } catch(err){
+        console.error('[Full] ERRO:', err);
         if(st) st.textContent = 'Erro: ' + err.message;
-        alert('Erro ao sincronizar estoque Full:\n' + err.message);
+        alert('Erro ao sincronizar estoque Full:\n[' + (err.constructor&&err.constructor.name) + '] ' + err.message);
       } finally {
         if(btn){ btn.disabled = false; btn.textContent = '🔄 Sincronizar ML'; }
       }
