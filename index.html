@@ -696,13 +696,7 @@
             <div class="card-body" style="overflow-x:auto;padding:0;">
               <table>
                 <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;align-items:center;">
-                  <div class="dd-wrap" id="dd-apagar-skus" style="position:relative;">
-                    <button class="btn-out btn-sm" style="color:var(--danger);" onclick="toggleDropdown('dd-apagar-skus')">🗑 Apagar ▾</button>
-                    <div class="dd-menu" style="min-width:180px;">
-                      <div class="dd-item" onclick="confirmarApagarSKUs('selecionados');closeDropdowns()">Apagar selecionados</div>
-                      <div class="dd-item" onclick="confirmarApagarSKUs('todos');closeDropdowns()">Apagar todos</div>
-                    </div>
-                  </div>
+                  <button class="btn-out btn-sm" style="color:var(--danger);" onclick="abrirModalApagarSKUs()">🗑 Apagar</button>
                   <button class="btn-out btn-sm" onclick="abrirModalLoteSKU()">✏️ Editar custo/imposto</button>
                   <span id="sku-sel-count" style="font-size:12px;color:#666;margin-left:4px;"></span>
                 </div>
@@ -741,13 +735,7 @@
           <!-- Lista -->
           <div class="card">
             <div class="card-body" style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <div class="dd-wrap" id="dd-apagar-kits" style="position:relative;">
-                <button class="btn-out btn-sm" style="color:var(--danger);" onclick="toggleDropdown('dd-apagar-kits')">🗑 Apagar ▾</button>
-                <div class="dd-menu" style="min-width:180px;">
-                  <div class="dd-item" onclick="confirmarApagarKits('selecionados');closeDropdowns()">Apagar selecionados</div>
-                  <div class="dd-item" onclick="confirmarApagarKits('todos');closeDropdowns()">Apagar todos</div>
-                </div>
-              </div>
+              <button class="btn-out btn-sm" style="color:var(--danger);" onclick="abrirModalApagarKits()">🗑 Apagar</button>
               <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
                 <input type="checkbox" id="kits-sel-all" onchange="toggleTodosKits(this.checked)"> Selecionar todos
               </label>
@@ -2133,9 +2121,13 @@
           <span style="font-size:22px;">🏪</span>
           <div><div style="font-weight:600;font-size:13px;">Lista Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo Lista_de_Estoque — cria SKUs novos e atualiza estoque galpão</div></div>
         </div>
-        <div onclick="document.getElementById('import-skus-csv').click();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+        <div onclick="document.getElementById('import-skus-csv').click();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
           <span style="font-size:22px;">📄</span>
           <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV exportado pelo sistema com SKU, custo e imposto</div></div>
+        </div>
+        <div onclick="exportarSKUs();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">📤</span>
+          <div><div style="font-weight:600;font-size:13px;">Exportar SKUs (CSV)</div><div style="font-size:11px;color:#666;">Baixar planilha atual com todos os SKUs e custos</div></div>
         </div>
       </div>
     </div>
@@ -2157,9 +2149,13 @@
           <span style="font-size:22px;">📄</span>
           <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV no formato do sistema</div></div>
         </div>
-        <div onclick="baixarTemplateKit();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+        <div onclick="baixarTemplateKit();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
           <span style="font-size:22px;">⬇️</span>
           <div><div style="font-weight:600;font-size:13px;">Baixar template (CSV)</div><div style="font-size:11px;color:#666;">Modelo vazio para preencher manualmente</div></div>
+        </div>
+        <div onclick="exportarKitsCSV();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">📤</span>
+          <div><div style="font-weight:600;font-size:13px;">Exportar Kits (CSV)</div><div style="font-size:11px;color:#666;">Baixar planilha atual com todos os kits</div></div>
         </div>
       </div>
     </div>
@@ -2173,6 +2169,14 @@
         <button class="btn-out btn-sm" onclick="fecharModal('modal-confirm-apagar')">✕</button>
       </div>
       <div class="modal-body">
+        <div id="modal-apagar-radios" style="margin-bottom:14px;display:flex;gap:24px;">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:500;">
+            <input type="radio" name="apagar-modo" value="selecionados" checked> Selecionados
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:500;">
+            <input type="radio" name="apagar-modo" value="todos"> Todos
+          </label>
+        </div>
         <div id="modal-apagar-descricao" style="margin-bottom:10px;color:#374151;font-size:13px;"></div>
         <div id="modal-apagar-lista" style="font-size:11px;color:#6b7280;max-height:120px;overflow-y:auto;background:#f9fafb;border-radius:6px;padding:8px 10px;line-height:1.6;"></div>
         <div style="margin-top:10px;font-size:11px;color:#059669;">✅ Você poderá desfazer esta ação por 15 minutos após excluir.</div>

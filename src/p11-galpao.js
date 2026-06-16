@@ -999,43 +999,52 @@
       _undoBuffer=null;
       alert('Restaurado com sucesso!');
     }
-    function confirmarApagarKits(tipo){
-      var selecionados=[...document.querySelectorAll('.kit-sel-cb:checked')].map(function(cb){return cb.dataset.sku;});
-      var todos=[...new Set(composicaoKit.map(function(c){return c.sku_comercial;}))];
-      var lista=tipo==='selecionados'?selecionados:todos;
-      if(lista.length===0){alert(tipo==='selecionados'?'Nenhum kit selecionado.':'Nenhum kit cadastrado.');return;}
-      _apagarPendente={tipo:'kits',modo:tipo,lista:lista};
-      document.getElementById('modal-apagar-descricao').textContent='Apagar '+lista.length+' kit(s). Você terá 15 min para desfazer.';
-      document.getElementById('modal-apagar-lista').textContent=lista.join(', ');
-      document.getElementById('modal-confirm-apagar').classList.add('open');
+    function abrirModalApagarSKUs(){
+      var el=document.getElementById('modal-confirm-apagar');
+      el.dataset.contexto='skus';
+      var r=document.querySelector('input[name="apagar-modo"][value="selecionados"]');
+      if(r) r.checked=true;
+      document.getElementById('modal-apagar-descricao').textContent='';
+      document.getElementById('modal-apagar-lista').textContent='';
+      el.classList.add('open');
     }
-    function confirmarApagarSKUs(tipo){
-      var selecionados=[...document.querySelectorAll('.sku-cb:checked')].map(function(cb){var s=skus[parseInt(cb.dataset.idx)];return s?s.sku:null;}).filter(Boolean);
-      var todos=skus.map(function(s){return s.sku;});
-      var lista=tipo==='selecionados'?selecionados:todos;
-      if(lista.length===0){alert(tipo==='selecionados'?'Nenhum SKU selecionado.':'Nenhum SKU cadastrado.');return;}
-      _apagarPendente={tipo:'skus',modo:tipo,lista:lista};
-      document.getElementById('modal-apagar-descricao').textContent='Apagar '+lista.length+' SKU(s). Você terá 15 min para desfazer.';
-      document.getElementById('modal-apagar-lista').textContent=lista.join(', ');
-      document.getElementById('modal-confirm-apagar').classList.add('open');
+    function abrirModalApagarKits(){
+      var el=document.getElementById('modal-confirm-apagar');
+      el.dataset.contexto='kits';
+      var r=document.querySelector('input[name="apagar-modo"][value="selecionados"]');
+      if(r) r.checked=true;
+      document.getElementById('modal-apagar-descricao').textContent='';
+      document.getElementById('modal-apagar-lista').textContent='';
+      el.classList.add('open');
     }
     function executarApagar(){
-      if(!_apagarPendente) return;
-      var tipo=_apagarPendente.tipo, lista=_apagarPendente.lista;
-      fecharModal('modal-confirm-apagar');
-      if(tipo==='kits'){
-        _undoBuffer={type:'kits',data:{composicao:[...composicaoKit],skus_bak:[...skus]}};
-        skus=skus.filter(function(s){return !lista.includes(s.sku);});
-        composicaoKit=composicaoKit.filter(function(c){return !lista.includes(c.sku_comercial);});
-        salvar(); renderComposicoesTab(); renderSKUs();
-        showUndoToast(lista.length,'kit(s)');
-      } else if(tipo==='skus'){
+      var el=document.getElementById('modal-confirm-apagar');
+      var contexto=el?el.dataset.contexto:null;
+      var modoEl=document.querySelector('input[name="apagar-modo"]:checked');
+      var modo=modoEl?modoEl.value:'selecionados';
+
+      if(contexto==='skus'){
+        var sel=[...document.querySelectorAll('.sku-cb:checked')]
+          .map(function(cb){var s=skus[parseInt(cb.dataset.idx)];return s?s.sku:null;}).filter(Boolean);
+        var lista=modo==='todos'?skus.map(function(s){return s.sku;}):sel;
+        if(lista.length===0){alert(modo==='todos'?'Nenhum SKU cadastrado.':'Nenhum SKU selecionado.');return;}
+        fecharModal('modal-confirm-apagar');
         _undoBuffer={type:'skus',data:[...skus]};
         skus=skus.filter(function(s){return !lista.includes(s.sku);});
         salvar(); renderSKUs();
         showUndoToast(lista.length,'SKU(s)');
+      } else if(contexto==='kits'){
+        var selK=[...document.querySelectorAll('.kit-sel-cb:checked')].map(function(cb){return cb.dataset.sku;});
+        var todosK=[...new Set(composicaoKit.map(function(c){return c.sku_comercial;}))];
+        var listaK=modo==='todos'?todosK:selK;
+        if(listaK.length===0){alert(modo==='todos'?'Nenhum kit cadastrado.':'Nenhum kit selecionado.');return;}
+        fecharModal('modal-confirm-apagar');
+        _undoBuffer={type:'kits',data:{composicao:[...composicaoKit],skus_bak:[...skus]}};
+        skus=skus.filter(function(s){return !listaK.includes(s.sku);});
+        composicaoKit=composicaoKit.filter(function(c){return !listaK.includes(c.sku_comercial);});
+        salvar(); renderComposicoesTab(); renderSKUs();
+        showUndoToast(listaK.length,'kit(s)');
       }
-      _apagarPendente=null;
     }
     function deletarKitsSelecionados(){
       const selecionados = [...document.querySelectorAll('.kit-sel-cb:checked')].map(cb => cb.dataset.sku);
