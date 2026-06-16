@@ -1948,6 +1948,7 @@
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
             <input type="file" id="import-estoque-upseller" accept=".xlsx,.xls,.csv" style="display:none" onchange="onImportEstoqueUpseller(this)">
+            <input type="file" id="import-galpao-only" accept=".xlsx,.xls" style="display:none" onchange="importarGalpaoEstoqueOnly(this)">
             <input type="file" id="import-estoque-full-ml" accept=".xlsx,.xls" style="display:none" onchange="onImportFULLEstoqueML(this)">
           </div>
         </div>
@@ -2721,13 +2722,9 @@
           <span style="font-size:22px;">🏭</span>
           <div><div style="font-weight:600;font-size:13px;">Estoque Full ML (XLS)</div><div style="font-size:11px;color:#666;">Relatório de Estoque Geral Full do Mercado Livre</div></div>
         </div>
-        <div onclick="document.getElementById('import-upseller-estoque').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+        <div onclick="document.getElementById('import-galpao-only').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
           <span style="font-size:22px;">🏠</span>
-          <div><div style="font-weight:600;font-size:13px;">Estoque Galpão — Lista Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo Lista_de_Estoque do Upseller — cria SKUs e atualiza qtd</div></div>
-        </div>
-        <div onclick="document.getElementById('import-upseller-kits').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">🔗</span>
-          <div><div style="font-weight:600;font-size:13px;">Kits — export_kit Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo export_kit do Upseller — cria/atualiza composição dos kits</div></div>
+          <div><div style="font-weight:600;font-size:13px;">Estoque Galpão — Lista Upseller (XLS)</div><div style="font-size:11px;color:#666;">Atualiza apenas quantidades — não cria nem altera produtos</div></div>
         </div>
         <div onclick="document.getElementById('import-vendas-ml-est').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
           <span style="font-size:22px;">📊</span>
@@ -8799,6 +8796,44 @@ Perfil do usuário:
       reader.readAsText(file, 'UTF-8');
     }
 
+    function importarGalpaoEstoqueOnly(input){
+      var file = input.files[0];
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(e){
+        try {
+          var wb = XLSX.read(e.target.result, {type:'array'});
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+          var atualizados = 0, naoEncontrados = 0;
+          var hoje = new Date().toISOString().slice(0,10);
+          for(var i = 1; i < rows.length; i++){
+            var row = rows[i];
+            var sku = String(row[0]||''). trim();
+            if(!sku) continue;
+            var qtd = parseFloat(row[9]) || 0;
+            var titulo = String(row[1]||''). trim();
+            var idx = estoqueGalpao.findIndex(function(e){ return e.sku === sku; });
+            if(idx >= 0){
+              estoqueGalpao[idx].qtd_galpao = qtd;
+              estoqueGalpao[idx].data_atualizacao = hoje;
+              if(titulo) estoqueGalpao[idx].descricao = titulo;
+              atualizados++;
+            } else {
+              estoqueGalpao.push({ sku: sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje });
+              naoEncontrados++;
+            }
+          }
+          salvar();
+          renderEstoqueIfActive();
+          alert('Estoque Galpão atualizado!\n\n' + atualizados + ' atualizados\n' + naoEncontrados + ' novos no galpão (sem SKU cadastrado em Produtos)');
+        } catch(err){
+          alert('Erro ao importar: ' + err.message);
+        }
+        input.value = '';
+      };
+      reader.readAsArrayBuffer(file);
+    }
     function importarUpsellerEstoque(input){
       const file = input.files[0];
       if(!file) return;
