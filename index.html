@@ -1966,14 +1966,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
           <h1>Motor de Reposição</h1>
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
-            <div class="dd-wrap">
-              <button class="btn btn-sm" onclick="toggleDropdown('dd-estoque-importar')">📥 Importar ▾</button>
-              <div class="dd-menu" id="dd-estoque-importar">
-                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-estoque-full-ml').click()">🏭 Estoque Full ML</div>
-                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-estoque-upseller').click()">🏠 Estoque Galpão</div>
-                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-vendas-ml-est').click()">📊 Vendas ML</div>
-              </div>
-            </div>
+            <button class="btn-out btn-sm" onclick="abrirModalImportarEstoque()">📥 Importar dados</button>
             <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="limparDadosPlanilhas()">🗑 Limpar</button>
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
@@ -2734,7 +2727,35 @@
       </div>
     </div>
   </div>
-  
+
+  <!-- Modal: Importar dados Estoque -->
+  <div class="modal" id="modal-importar-estoque">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="modal-header">
+        <div class="modal-title">📥 Importar dados</div>
+        <button class="btn-out btn-sm" onclick="fecharModal('modal-importar-estoque')">✕</button>
+      </div>
+      <div class="modal-body" style="padding:10px 0;">
+        <div onclick="document.getElementById('import-estoque-full-ml').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">🏭</span>
+          <div><div style="font-weight:600;font-size:13px;">Estoque Full ML (XLS)</div><div style="font-size:11px;color:#666;">Relatório de Estoque Geral Full do Mercado Livre</div></div>
+        </div>
+        <div onclick="document.getElementById('import-upseller-estoque').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">🏠</span>
+          <div><div style="font-weight:600;font-size:13px;">Estoque Galpão — Lista Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo Lista_de_Estoque do Upseller — cria SKUs e atualiza qtd</div></div>
+        </div>
+        <div onclick="document.getElementById('import-upseller-kits').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">🔗</span>
+          <div><div style="font-weight:600;font-size:13px;">Kits — export_kit Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo export_kit do Upseller — cria/atualiza composição dos kits</div></div>
+        </div>
+        <div onclick="document.getElementById('import-vendas-ml-est').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">📊</span>
+          <div><div style="font-weight:600;font-size:13px;">Vendas ML (XLS)</div><div style="font-size:11px;color:#666;">Relatório de vendas do Mercado Livre por SKU</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ===== SUPABASE =====
     const SUPA_URL = 'https://qasrccmtrllotukyeiax.supabase.co';
@@ -4768,6 +4789,9 @@
       document.getElementById('modal-lanc').classList.add('open');
     }
     
+    function abrirModalImportarEstoque(){
+      document.getElementById('modal-importar-estoque').classList.add('open');
+    }
     function fecharModal(id){
       document.getElementById(id).classList.remove('open');
     }
