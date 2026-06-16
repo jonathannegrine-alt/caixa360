@@ -7670,11 +7670,6 @@ Perfil do usuário:
           estoqueFullML._syncAt = new Date().toISOString();
           estoqueFullML._fonte = 'xls';
           localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt, fonte: 'xls' }));
-          // Atualiza estoqueGalpao[].qtd_full (sem criar novos)
-          itens.forEach(function(item){
-            var eg = estoqueGalpao.find(function(e){ return e.sku === item.sku; });
-            if(eg){ eg.qtd_full = item.aptos_venda; eg.qtd_full_pendente = item.pendente; }
-          });
           salvar();
           renderEstoqueFullTab();
           if(st) st.textContent = 'Importado via XLS: ' + new Date().toLocaleString('pt-BR') + ' — ' + itens.length + ' SKUs';
