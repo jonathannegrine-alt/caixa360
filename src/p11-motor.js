@@ -129,12 +129,18 @@
 
     function exportarKitsCSV(){
       if(composicaoKit.length === 0){ alert('Nenhum kit cadastrado.'); return; }
-      var rows = ['sku_comercial,titulo_comercial,sku_componente,qty,custo_kit'];
+      var rows = ['sku_comercial,titulo_comercial,sku_componente,qty,custo_kit,custo_componente,imposto_componente'];
       composicaoKit.forEach(function(k){
+        var comp = skus.find(function(s){ return s.sku === k.sku_componente; });
         rows.push([
-          k.sku_comercial, k.titulo_comercial||'', k.sku_componente,
-          k.qty, (k.custo_kit||0).toFixed(2)
-        ].map(function(v){ return '"' + String(v||0).replace(/"/g,'""')+'"'; }).join(','));
+          k.sku_comercial,
+          k.titulo_comercial||'',
+          k.sku_componente,
+          k.qty,
+          (k.custo_kit||0).toFixed(2),
+          comp ? (comp.custo||0).toFixed(2) : '0.00',
+          comp ? (comp.imposto||0).toFixed(2) : '0.00'
+        ].join(','));
       });
       var blob = new Blob(['\uFEFF' + rows.join('\n')], {type:'text/csv;charset=utf-8'});
       var a = document.createElement('a');

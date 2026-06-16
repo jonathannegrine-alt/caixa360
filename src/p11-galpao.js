@@ -1543,9 +1543,9 @@
       a.download = 'template_sku_un.csv'; a.click();
     }
     function baixarTemplateKit(){
-      const header = 'SKU_kit,Titulo_kit,Custo_kit,SKU_componente,Quantidade';
-      const ex1 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2001,1';
-      const ex2 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2005,2';
+      const header = 'SKU_kit,Titulo_kit,Custo_kit,SKU_componente,Quantidade,Custo_componente,Imposto_componente';
+      const ex1 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2001,1,8.50,0.12';
+      const ex2 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2005,2,12.00,0.12';
       const blob = new Blob([header + '\n' + ex1 + '\n' + ex2 + '\n'], {type:'text/csv;charset=utf-8;'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
       a.download = 'template_kit.csv'; a.click();
@@ -1729,31 +1729,45 @@
       const reader = new FileReader();
       reader.onload = e => {
         try {
-          const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('SKU_kit,'));
+          const sq = v => String(v||'').trim().replace(/^"|"$/g,'');
+          const lines = e.target.result.split('\n').map(l => l.trim())
+            .filter(l => l && !l.startsWith('SKU_kit,') && !l.startsWith('sku_comercial,'));
           const novosMap = {};
           lines.forEach(line => {
             const cols = line.split(',');
             if(cols.length < 4) return;
-            const kitSku = (cols[0]||'').trim().toUpperCase();
-            const titulo = (cols[1]||'').trim();
-            const custoKit = parseFloat(cols[2])||0;
-            const compSku = (cols[3]||'').trim().toUpperCase();
-            const qty = parseFloat(cols[4])||1;
+            const kitSku = sq(cols[0]).toUpperCase();
+            const titulo = sq(cols[1]);
+            const custoKit = parseFloat(sq(cols[2]))||0;
+            const compSku = sq(cols[3]).toUpperCase();
+            const qty = parseFloat(sq(cols[4]))||1;
+            const custoComp = parseFloat(sq(cols[5]))||0;
+            const impostoComp = parseFloat(sq(cols[6]))||0;
             if(!kitSku || !compSku) return;
             if(!novosMap[kitSku]) novosMap[kitSku] = { titulo, custoKit, comps: [] };
-            novosMap[kitSku].comps.push({ sku_componente: compSku, qty });
+            novosMap[kitSku].comps.push({ sku_componente: compSku, qty, custoComp, impostoComp });
           });
           const kitSkus = Object.keys(novosMap);
           if(kitSkus.length === 0){ alert('Nenhum kit encontrado no arquivo.'); return; }
           composicaoKit = composicaoKit.filter(c => !kitSkus.includes(c.sku_comercial));
+          let skusAtualizados = 0;
           kitSkus.forEach(kitSku => {
             const { titulo, custoKit, comps } = novosMap[kitSku];
             comps.forEach(c => {
               composicaoKit.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: c.sku_componente, qty: c.qty, custo_kit: custoKit });
+              if(c.custoComp > 0 || c.impostoComp > 0){
+                const idx = skus.findIndex(s => s.sku === c.sku_componente);
+                if(idx >= 0){
+                  if(c.custoComp > 0) skus[idx].custo = c.custoComp;
+                  if(c.impostoComp > 0) skus[idx].imposto = c.impostoComp;
+                  skusAtualizados++;
+                }
+              }
             });
           });
           salvar(); renderEstoque();
-          alert(`✅ ${kitSkus.length} kits importados.`);
+          const extra = skusAtualizados > 0 ? ` | ${skusAtualizados} componente(s) com custo/imposto atualizado.` : '';
+          alert(`✅ ${kitSkus.length} kits importados.${extra}`);
         } catch(err){ alert('Erro ao processar CSV: ' + err.message); }
         input.value = '';
       };
