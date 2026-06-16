@@ -147,6 +147,7 @@
         const _lsMeta = localStorage.getItem('mk_vendas_meta');
         if(_lsMeta){ try{ vendasImportMeta = JSON.parse(_lsMeta); }catch(e){} }
         const _lsEst    = JSON.parse(localStorage.getItem('mk_estoque_galpao')|| '[]');
+        const _lsFullML = localStorage.getItem('mk_estoque_full_ml');
 
         // Resetar variáveis JS
         pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
@@ -166,6 +167,7 @@
         if(composicaoKit.length=== 0 && _lsCompos.length > 0) composicaoKit = _lsCompos;
         if(_lsVendas.length > 0 && _lsVendas.length >= vendasSku.length)    vendasSku     = _lsVendas;
         if(_lsEst.length    > 0 && _lsEst.length    >= estoqueGalpao.length) estoqueGalpao = _lsEst;
+        if(_lsFullML){ try{ const _o=JSON.parse(_lsFullML); estoqueFullML=_o.itens||[]; estoqueFullML._syncAt=_o.syncAt||null; estoqueFullML._fonte=_o.fonte||'xls'; }catch(e){} }
         // Para saldo: Supabase pode estar desatualizado (save async não concluiu antes do F5)
         if(saldoMP === 0 && _lsCfg.saldoMP > 0){ saldoMP = _lsCfg.saldoMP; saldoAtual = saldoMP + saldoOutros; }
         if(saldoOutros === 0 && _lsCfg.saldoOutros > 0){ saldoOutros = _lsCfg.saldoOutros; saldoAtual = saldoMP + saldoOutros; }

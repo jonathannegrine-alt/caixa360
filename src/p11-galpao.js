@@ -573,6 +573,9 @@
       }
       if(vazioEl) vazioEl.style.display = 'none';
       if(cardEl) cardEl.style.display = '';
+      const _periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
+      const _periodoOrig = vendasImportMeta.periodoOriginal || (vendasSku[0] ? (vendasSku[0].periodo_import || _periodo) : _periodo);
+      const _escala = _periodoOrig > 0 ? _periodo / _periodoOrig : 1;
       let sorted = [...vendasSku].sort((a,b) => b.receita - a.receita);
       if(vendasFiltroInatividade > 0){
         const _hoje = new Date();
@@ -583,19 +586,24 @@
       }
       let html = '';
       sorted.forEach(v => {
+        const unids = Math.round(v.unidades * _escala);
+        const receita = v.receita * _escala;
+        const tarifa = (v.tarifa_ml||0) * _escala;
+        const envio = (v.envio||0) * _escala;
+        const liquido = (v.liquido||0) * _escala;
         const custoUn = calcCustoComposicao(v.sku);
-        const custoTotal = custoUn * v.unidades;
-        const margem = v.liquido - custoTotal;
-        const margemPct = v.receita > 0 ? (margem / v.receita * 100) : 0;
+        const custoTotal = custoUn * unids;
+        const margem = liquido - custoTotal;
+        const margemPct = receita > 0 ? (margem / receita * 100) : 0;
         const semCusto = custoUn === 0;
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:8px 6px;font-family:monospace;font-size:11px;font-weight:600;">${v.sku}</td>
           <td style="padding:8px 6px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;" title="${v.titulo}">${v.titulo||'—'}</td>
-          <td style="padding:8px 6px;text-align:right;">${v.unidades}</td>
-          <td style="padding:8px 6px;text-align:right;">${fmt(v.receita)}</td>
-          <td style="padding:8px 6px;text-align:right;color:var(--danger);">${fmt(v.tarifa_ml)}</td>
-          <td style="padding:8px 6px;text-align:right;color:var(--danger);">${fmt(v.envio)}</td>
-          <td style="padding:8px 6px;text-align:right;font-weight:600;">${fmt(v.liquido)}</td>
+          <td style="padding:8px 6px;text-align:right;">${unids}</td>
+          <td style="padding:8px 6px;text-align:right;">${fmt(receita)}</td>
+          <td style="padding:8px 6px;text-align:right;color:var(--danger);">${fmt(tarifa)}</td>
+          <td style="padding:8px 6px;text-align:right;color:var(--danger);">${fmt(envio)}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;">${fmt(liquido)}</td>
           <td style="padding:8px 6px;text-align:right;color:var(--danger);">${semCusto ? '<span style="color:#999;">sem composição</span>' : fmt(-custoTotal)}</td>
           <td style="padding:8px 6px;text-align:right;font-weight:600;color:${semCusto?'#999':margem>=0?'var(--success)':'var(--danger)'};">${semCusto ? '—' : fmt(margem)}</td>
           <td style="padding:8px 6px;text-align:right;${!semCusto&&margemPct<10?'color:var(--danger);font-weight:600;':''}">${semCusto ? '—' : margemPct.toFixed(1)+'%'+(margemPct<10?' ⚠️':'')}</td>
@@ -621,9 +629,11 @@
       if(cardEl)  cardEl.style.display  = '';
 
       const periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
+      const periodoOrig = vendasImportMeta.periodoOriginal || (vendasSku[0] ? (vendasSku[0].periodo_import || periodo) : periodo);
+      const escala = periodoOrig > 0 ? periodo / periodoOrig : 1;
       // Atualizar cabeçalho dinâmico
       const thU = document.getElementById('th-vendas-unidades');
-      if(thU) thU.textContent = 'Unid. ' + (periodo === 30 ? '30' : periodo) + 'd';
+      if(thU) thU.textContent = 'Unid. ' + periodo + 'd';
       // Aplicar filtros
       let sorted = [...vendasSku].sort((a,b) => b.unidades - a.unidades);
       if(vendasFiltroInatividade > 0){
@@ -641,16 +651,21 @@
       }
       let html = '';
       sorted.forEach(v => {
-        const giro = (v.unidades / periodo).toFixed(1);
-        const pctAds = v.unidades > 0 ? Math.round(v.unidades_ads / v.unidades * 100) : 0;
-        const adsStr = v.unidades_ads > 0 ? `${v.unidades_ads} <span style="font-size:10px;color:#999;">(${pctAds}%)</span>` : '—';
-        const cancStr = v.cancelamentos > 0 ? `<span style="color:var(--warning);">${v.cancelamentos}</span>` : '—';
-        const receitaStr = v.receita > 0 ? 'R$ ' + v.receita.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—';
-        const cancelStr = v.receita_cancelada > 0 ? '<span style="color:var(--danger);">R$ ' + v.receita_cancelada.toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</span>' : '—';
+        const unids = Math.round(v.unidades * escala);
+        const giro = (unids / periodo).toFixed(1);
+        const uAds = Math.round((v.unidades_ads||0) * escala);
+        const pctAds = unids > 0 ? Math.round(uAds / unids * 100) : 0;
+        const adsStr = uAds > 0 ? `${uAds} <span style="font-size:10px;color:#999;">(${pctAds}%)</span>` : '—';
+        const cancs = Math.round((v.cancelamentos||0) * escala);
+        const cancStr = cancs > 0 ? `<span style="color:var(--warning);">${cancs}</span>` : '—';
+        const receita = v.receita * escala;
+        const recCanc = (v.receita_cancelada||0) * escala;
+        const receitaStr = receita > 0 ? 'R$ ' + receita.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—';
+        const cancelStr = recCanc > 0 ? '<span style="color:var(--danger);">R$ ' + recCanc.toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</span>' : '—';
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${v.sku}</td>
           <td style="padding:8px 6px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#555;" title="${v.titulo}">${v.titulo||'—'}</td>
-          <td style="padding:8px 6px;text-align:right;font-weight:700;">${v.unidades}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:700;">${unids}</td>
           <td style="padding:8px 6px;text-align:right;">${giro}</td>
           <td style="padding:8px 6px;text-align:right;">${adsStr}</td>
           <td style="padding:8px 6px;text-align:right;">${cancStr}</td>
@@ -1155,8 +1170,9 @@
           var novos = result.vendas.filter(function(v){ return !skusAntes.has(v.sku); }).length;
           var atualizados = result.vendas.length - novos;
           var periodo = vendasImportMeta.periodo || 30;
-          result.vendas.forEach(function(v){ v.periodo_dias = periodo; });
+          result.vendas.forEach(function(v){ v.periodo_dias = periodo; v.periodo_import = periodo; });
           vendasSku = result.vendas;
+          vendasImportMeta.periodoOriginal = periodo;
           vendasImportMeta.importAt = new Date().toISOString();
           vendasImportMeta.dedupInfo = novos + ' SKUs novos, ' + atualizados + ' atualizados — ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades';
           salvar(); renderEstoque();
@@ -1543,9 +1559,9 @@
       a.download = 'template_sku_un.csv'; a.click();
     }
     function baixarTemplateKit(){
-      const header = 'SKU_kit,Titulo_kit,Custo_kit,SKU_componente,Quantidade,Custo_componente,Imposto_componente';
-      const ex1 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2001,1,8.50,0.12';
-      const ex2 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2005,2,12.00,0.12';
+      const header = 'SKU_kit,Titulo_kit,Custo_kit,SKU_componente,Quantidade';
+      const ex1 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2001,1';
+      const ex2 = 'J-2021-BANANA-CINZA-CASCA,Vaso Completo Bananeira,45.00,J-2005,2';
       const blob = new Blob([header + '\n' + ex1 + '\n' + ex2 + '\n'], {type:'text/csv;charset=utf-8;'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
       a.download = 'template_kit.csv'; a.click();
@@ -1741,33 +1757,21 @@
             const custoKit = parseFloat(sq(cols[2]))||0;
             const compSku = sq(cols[3]).toUpperCase();
             const qty = parseFloat(sq(cols[4]))||1;
-            const custoComp = parseFloat(sq(cols[5]))||0;
-            const impostoComp = parseFloat(sq(cols[6]))||0;
             if(!kitSku || !compSku) return;
             if(!novosMap[kitSku]) novosMap[kitSku] = { titulo, custoKit, comps: [] };
-            novosMap[kitSku].comps.push({ sku_componente: compSku, qty, custoComp, impostoComp });
+            novosMap[kitSku].comps.push({ sku_componente: compSku, qty });
           });
           const kitSkus = Object.keys(novosMap);
           if(kitSkus.length === 0){ alert('Nenhum kit encontrado no arquivo.'); return; }
           composicaoKit = composicaoKit.filter(c => !kitSkus.includes(c.sku_comercial));
-          let skusAtualizados = 0;
           kitSkus.forEach(kitSku => {
             const { titulo, custoKit, comps } = novosMap[kitSku];
             comps.forEach(c => {
               composicaoKit.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: c.sku_componente, qty: c.qty, custo_kit: custoKit });
-              if(c.custoComp > 0 || c.impostoComp > 0){
-                const idx = skus.findIndex(s => s.sku === c.sku_componente);
-                if(idx >= 0){
-                  if(c.custoComp > 0) skus[idx].custo = c.custoComp;
-                  if(c.impostoComp > 0) skus[idx].imposto = c.impostoComp;
-                  skusAtualizados++;
-                }
-              }
             });
           });
           salvar(); renderEstoque();
-          const extra = skusAtualizados > 0 ? ` | ${skusAtualizados} componente(s) com custo/imposto atualizado.` : '';
-          alert(`✅ ${kitSkus.length} kits importados.${extra}`);
+          alert(`✅ ${kitSkus.length} kits importados.`);
         } catch(err){ alert('Erro ao processar CSV: ' + err.message); }
         input.value = '';
       };
