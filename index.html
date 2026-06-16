@@ -2718,7 +2718,7 @@
         <button class="btn-out btn-sm" onclick="fecharModal('modal-importar-estoque')">✕</button>
       </div>
       <div class="modal-body" style="padding:10px 0;">
-        <div onclick="document.getElementById('import-estoque-full-ml').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+        <div onclick="document.getElementById('input-full-xls').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
           <span style="font-size:22px;">🏭</span>
           <div><div style="font-weight:600;font-size:13px;">Estoque Full ML (XLS)</div><div style="font-size:11px;color:#666;">Relatório de Estoque Geral Full do Mercado Livre</div></div>
         </div>
@@ -7670,7 +7670,15 @@ Perfil do usuário:
           estoqueFullML._syncAt = new Date().toISOString();
           estoqueFullML._fonte = 'xls';
           localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt, fonte: 'xls' }));
+          // Atualiza estoqueGalpao[].qtd_full (sem criar novos)
+          itens.forEach(function(item){
+            var eg = estoqueGalpao.find(function(e){ return e.sku === item.sku; });
+            if(eg){ eg.qtd_full = item.aptos_venda; eg.qtd_full_pendente = item.pendente; }
+          });
+          salvar();
           renderEstoqueFullTab();
+          if(st) st.textContent = 'Importado via XLS: ' + new Date().toLocaleString('pt-BR') + ' — ' + itens.length + ' SKUs';
+          alert('Estoque Full ML importado!\n\n' + itens.length + ' SKUs');
         } catch(err){
           if(st) st.textContent = 'Erro ao importar: ' + err.message;
           alert('Erro ao importar XLS:\n' + err.message);
