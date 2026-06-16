@@ -4845,11 +4845,19 @@
     }
     
     function deletarSKU(){
-      if(!confirm('Deletar este SKU?')) return;
-      skus.splice(editandoIdxSKU, 1);
-      salvar();
-      fecharModal('modal-sku');
-      renderSKUs();
+      try {
+        if(!confirm('Deletar este SKU?')) return;
+        const codigo = document.getElementById('sku-codigo').value.trim();
+        const idx = skus.findIndex(function(s){ return s.sku === codigo; });
+        if(idx < 0){ alert('SKU não encontrado: "' + codigo + '"'); return; }
+        skus.splice(idx, 1);
+        salvar();
+        fecharModal('modal-sku');
+        renderSKUs();
+      } catch(e) {
+        console.error('[deletarSKU] Erro:', e);
+        alert('Erro ao deletar SKU: ' + e.message);
+      }
     }
     
     function abrirModalImpostoLote(){ abrirModalLoteSKU(); }
