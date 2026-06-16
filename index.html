@@ -1489,6 +1489,7 @@
               </label>
               <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarKitsSelecionados()">🗑 Deletar selecionados</button>
               <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarTodosKits()">🗑 Apagar todos</button>
+              <button class="btn-out btn-sm" onclick="abrirModalLoteKits()">✏️ Editar imposto em lote</button>
               <span id="kits-sel-count" style="font-size:12px;color:#666;"></span>
             </div>
             <div style="font-size:12px;color:var(--gray-600);" id="composicoes-info"></div>
@@ -2776,6 +2777,28 @@
           <span style="font-size:22px;">⬇️</span>
           <div><div style="font-weight:600;font-size:13px;">Baixar template (CSV)</div><div style="font-size:11px;color:#666;">Modelo vazio para preencher manualmente</div></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Editar imposto kits em lote -->
+  <div class="modal" id="modal-imposto-lote-kits">
+    <div class="modal-content" style="max-width:400px;">
+      <div class="modal-header">
+        <div class="modal-title">✏️ Editar Imposto dos Kits em Lote</div>
+        <button class="btn-out btn-sm" onclick="fecharModal('modal-imposto-lote-kits')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:12px;color:#666;margin-bottom:12px;">Aplica o mesmo imposto para todos os kits cadastrados em Produtos.</div>
+        <div class="form-group">
+          <label class="form-label">Novo Imposto (%)</label>
+          <input type="number" id="imposto-lote-kits" step="0.01" placeholder="Ex: 6.18" min="0" max="100">
+        </div>
+        <div id="lote-kits-preview" style="font-size:12px;color:#666;margin-top:8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-out" onclick="fecharModal('modal-imposto-lote-kits')">Cancelar</button>
+        <button class="btn" onclick="aplicarImpostoLoteKits()">Aplicar</button>
       </div>
     </div>
   </div>
@@ -4824,6 +4847,33 @@
       if(!confirm('Apagar TODOS os ' + skus.length + ' SKUs cadastrados? Esta ação não pode ser desfeita.')) return;
       skus = [];
       salvar(); renderSKUs();
+    }
+    function abrirModalLoteKits(){
+      document.getElementById('imposto-lote-kits').value = '';
+      var kitSkus = [...new Set(composicaoKit.map(function(c){ return c.sku_comercial; }))];
+      var prev = document.getElementById('lote-kits-preview');
+      if(prev) prev.textContent = kitSkus.length + ' kits serão afetados';
+      document.getElementById('modal-imposto-lote-kits').classList.add('open');
+    }
+    function aplicarImpostoLoteKits(){
+      var novoImposto = document.getElementById('imposto-lote-kits').value;
+      if(novoImposto === ''){ alert('Informe o imposto'); return; }
+      novoImposto = parseFloat(novoImposto);
+      if(isNaN(novoImposto)){ alert('Valor inválido'); return; }
+      var kitSkus = new Set(composicaoKit.map(function(c){ return c.sku_comercial; }));
+      var afetados = 0;
+      kitSkus.forEach(function(kitSku){
+        var idx = skus.findIndex(function(s){ return s.sku === kitSku; });
+        if(idx >= 0){
+          skus[idx].imposto = novoImposto;
+        } else {
+          skus.push({ sku: kitSku, titulo: '', custo: 0, imposto: novoImposto });
+        }
+        afetados++;
+      });
+      salvar();
+      fecharModal('modal-imposto-lote-kits');
+      alert('Imposto atualizado em ' + afetados + ' kits.');
     }
     function deletarTodosKits(){
       var total = new Set(composicaoKit.map(function(c){ return c.sku_comercial; })).size;
@@ -8768,12 +8818,14 @@ Perfil do usuário:
             const titulo  = String(row[1]||'').trim();
             const qtd     = parseFloat(row[9]) || 0;
             // custo NAO lido do Upseller — custo é editado manualmente ou via CSV
-            // Upsert em skus[] (somente titulo)
+            // Upsert em skus[] — CONTAGEM baseada aqui (não no estoqueGalpao)
             const idxSku = skus.findIndex(s => s.sku === sku);
             if(idxSku >= 0){
               if(titulo) skus[idxSku].titulo = titulo;
+              atualizados++;
             } else {
               skus.push({ sku, titulo, custo: 0, imposto: 0 });
+              criados++;
             }
             // Upsert em estoqueGalpao[] (somente qtd)
             const idxEg = estoqueGalpao.findIndex(e => e.sku === sku);
@@ -8781,10 +8833,8 @@ Perfil do usuário:
               estoqueGalpao[idxEg].qtd_galpao = qtd;
               estoqueGalpao[idxEg].data_atualizacao = hoje;
               if(titulo) estoqueGalpao[idxEg].descricao = titulo;
-              atualizados++;
             } else {
               estoqueGalpao.push({ sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje });
-              criados++;
             }
           }
           salvar();
