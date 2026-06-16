@@ -743,6 +743,8 @@
     .comp-table td{padding:9px 12px;border-bottom:1px solid var(--gray-100);font-size:13px;}
     .comp-table tr:hover td{background:var(--gray-50);}
     @media(max-width:768px){.cfo-modal{width:calc(100vw - 32px);right:16px;bottom:70px;}}
+    .crh{position:absolute;right:0;top:0;width:5px;height:100%;cursor:col-resize;z-index:2;user-select:none;}
+    .crh:hover{background:rgba(59,130,246,0.25);}
   </style>
 </head>
 <body>
@@ -1454,8 +1456,13 @@
             <div class="card-body" style="overflow-x:auto;padding:0;">
               <table>
                 <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;align-items:center;">
-                  <button class="btn-out btn-sm" onclick="deletarSKUsSelecionados()">🗑️ Deletar selecionados</button>
-                  <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarTodosSKUs()">🗑 Apagar todos</button>
+                  <div class="dd-wrap" id="dd-apagar-skus" style="position:relative;">
+                    <button class="btn-out btn-sm" style="color:var(--danger);" onclick="toggleDropdown('dd-apagar-skus')">🗑 Apagar ▾</button>
+                    <div class="dd-menu" style="min-width:180px;">
+                      <div class="dd-item" onclick="confirmarApagarSKUs('selecionados');closeDropdowns()">Apagar selecionados</div>
+                      <div class="dd-item" onclick="confirmarApagarSKUs('todos');closeDropdowns()">Apagar todos</div>
+                    </div>
+                  </div>
                   <button class="btn-out btn-sm" onclick="abrirModalLoteSKU()">✏️ Editar custo/imposto</button>
                   <span id="sku-sel-count" style="font-size:12px;color:#666;margin-left:4px;"></span>
                 </div>
@@ -1487,8 +1494,14 @@
               <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
                 <input type="checkbox" id="kits-sel-all" onchange="toggleTodosKits(this.checked)"> Selecionar todos
               </label>
-              <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarKitsSelecionados()">🗑 Deletar selecionados</button>
-              <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarTodosKits()">🗑 Apagar todos</button>
+              <input type="text" id="filtro-kits" placeholder="🔍 Buscar kit..." style="font-size:12px;padding:4px 10px;border:1px solid var(--gray-200);border-radius:6px;width:180px;" oninput="filtroKits=this.value.toLowerCase();renderComposicoesTab()">
+              <div class="dd-wrap" id="dd-apagar-kits" style="position:relative;">
+                <button class="btn-out btn-sm" style="color:var(--danger);" onclick="toggleDropdown('dd-apagar-kits')">🗑 Apagar ▾</button>
+                <div class="dd-menu" style="min-width:180px;">
+                  <div class="dd-item" onclick="confirmarApagarKits('selecionados');closeDropdowns()">Apagar selecionados</div>
+                  <div class="dd-item" onclick="confirmarApagarKits('todos');closeDropdowns()">Apagar todos</div>
+                </div>
+              </div>
               <button class="btn-out btn-sm" onclick="abrirModalLoteKits()">✏️ Editar imposto em lote</button>
               <span id="kits-sel-count" style="font-size:12px;color:#666;"></span>
             </div>
@@ -2072,17 +2085,34 @@
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
                 <label style="font-size:12px;color:var(--gray-600);">Período:</label>
-                <select id="vendas-periodo-sel" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;" onchange="setVendasPeriodo(parseInt(this.value))">
-                  <option value="30">30 dias</option>
+                <select id="vendas-periodo-sel" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;" onchange="onVendasPeriodoChange(this.value)">
+                  <option value="7">7 dias</option>
+                  <option value="30" selected>30 dias</option>
                   <option value="60">60 dias</option>
                   <option value="90">90 dias</option>
                   <option value="120">120 dias</option>
+                  <option value="-1">Personalizado</option>
                 </select>
+                <span id="vendas-periodo-custom" style="display:none;align-items:center;gap:4px;">
+                  <input type="date" id="vendas-dt-ini" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
+                  <span style="font-size:11px;">até</span>
+                  <input type="date" id="vendas-dt-fim" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;">
+                  <button class="btn-out btn-sm" style="font-size:11px;" onclick="aplicarPeriodoCustom()">OK</button>
+                </span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">
-                <label style="font-size:12px;color:var(--gray-600);white-space:nowrap;">Ignorar inativos há mais de</label>
+                <label style="font-size:12px;color:var(--gray-600);white-space:nowrap;">Ignorar produtos sem venda há mais de</label>
                 <input type="number" id="vendas-inatividade-input" min="0" placeholder="N" style="width:52px;font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;" onchange="setVendasFiltroInatividade(parseInt(this.value)||0)">
                 <span style="font-size:12px;color:var(--gray-600);">dias</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">
+                <label style="font-size:12px;color:var(--gray-600);white-space:nowrap;">Buscar SKU</label>
+                <input type="text" id="vendas-filtro-sku" placeholder="ex: J-2005" style="width:110px;font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;" oninput="filtroVendasSku=this.value.trim();renderVendasSkuTab()">
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">
+                <label style="font-size:12px;color:var(--gray-600);white-space:nowrap;">Ignorar menos de</label>
+                <input type="number" id="vendas-filtro-min" min="0" placeholder="0" style="width:52px;font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;" onchange="filtroMinVendas=parseInt(this.value)||0;renderVendasSkuTab()">
+                <span style="font-size:12px;color:var(--gray-600);">vendas</span>
               </div>
             </div>
           </div>
@@ -2104,12 +2134,12 @@
                   <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
                     <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
                     <th style="padding:8px 6px;text-align:left;">Título</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Unid. 30d</th>
+                    <th id="th-vendas-unidades" style="padding:8px 6px;text-align:right;white-space:nowrap;">Unid. 30d</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Unid./dia</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;">ADS</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cancelamentos</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Estoque atual</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cobertura</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Receita (R$)</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cancel. (R$)</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-vendas-sku"></tbody>
@@ -2180,10 +2210,12 @@
                   <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
                     <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
                     <th style="padding:8px 6px;text-align:left;">Título</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Aptos p/ venda</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Em transf.</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Pendente</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Total</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Disponíveis para venda">Aptas venda</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Em separação para pedidos">Em separação</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="A caminho do CD">Em transf.</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Avariados/não disponíveis">Não aptos</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Total no CD">Total CD</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;color:#7c3aed;" title="Vendas últimos 30 dias">Vendas 30d</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-estoque-full"></tbody>
@@ -2783,6 +2815,25 @@
     </div>
   </div>
 
+  <!-- Modal: Confirmar exclusão com undo -->
+  <div class="modal" id="modal-confirm-apagar">
+    <div class="modal-content" style="max-width:420px;">
+      <div class="modal-header">
+        <div class="modal-title">⚠️ Confirmar Exclusão</div>
+        <button class="btn-out btn-sm" onclick="fecharModal('modal-confirm-apagar')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="modal-apagar-descricao" style="margin-bottom:10px;color:#374151;font-size:13px;"></div>
+        <div id="modal-apagar-lista" style="font-size:11px;color:#6b7280;max-height:120px;overflow-y:auto;background:#f9fafb;border-radius:6px;padding:8px 10px;line-height:1.6;"></div>
+        <div style="margin-top:10px;font-size:11px;color:#059669;">✅ Você poderá desfazer esta ação por 15 minutos após excluir.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-out" onclick="fecharModal('modal-confirm-apagar')">Cancelar</button>
+        <button class="btn" style="background:var(--danger);" onclick="executarApagar()">Confirmar exclusão</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Editar imposto kits em lote -->
   <div class="modal" id="modal-imposto-lote-kits">
     <div class="modal-content" style="max-width:400px;">
@@ -3347,6 +3398,7 @@
           <div style="font-size:13px;">${f.mensagem}</div>
         </div>`;
       }).join('');
+      initResizableCols('tbody-categorias');
     }
 
     // ===== LOG DE ERROS =====
@@ -3404,6 +3456,11 @@
     let vendasSku = [];      // [{sku, titulo, unidades, receita, tarifa_ml, envio, liquido, unidades_ads, cancelamentos, periodo_dias}]
     let vendasImportMeta = { importAt: null, periodo: 30 };
     let vendasFiltroInatividade = 0;
+    let filtroVendasSku = '';
+    let filtroMinVendas = 0;
+    let filtroKits = '';
+    let _undoBuffer = null;
+    let _apagarPendente = null;
     let estoqueGalpao = [];  // [{sku, descricao, qtd_galpao, qtd_full, qtd_full_pendente, em_transito, custo_medio, data_atualizacao}]
     // Regras globais (padrão)
     let metaFullDias = 30;      // meta de dias de cobertura no FULL
@@ -3498,6 +3555,47 @@
         if(!arr) return;
         if(i === colIdx){ arr.textContent = dir === 'asc' ? ' ▲' : ' ▼'; arr.style.opacity='1'; }
         else { arr.textContent = ' ⇅'; arr.style.opacity='0.35'; }
+      });
+    }
+    const _savedColWidths = {};
+    function initResizableCols(tbodyId){
+      var tbody = document.getElementById(tbodyId);
+      if(!tbody) return;
+      var table = tbody.closest('table');
+      if(!table) return;
+      var thead = table.querySelector('thead');
+      if(!thead) return;
+      var ths = thead.querySelectorAll('th');
+      var key = 'cw_'+tbodyId;
+      var saved = _savedColWidths[key];
+      if(!saved){ try{ saved=JSON.parse(localStorage.getItem(key)||'null'); }catch(e){} }
+      ths.forEach(function(th,i){
+        if(saved && saved[i]) th.style.minWidth=saved[i]+'px';
+        if(th.querySelector('.crh')) return;
+        th.style.position='relative';
+        var handle=document.createElement('div');
+        handle.className='crh';
+        handle.title='Arrastar para redimensionar';
+        handle.addEventListener('mousedown',function(e){
+          if(table.style.tableLayout!=='fixed'){
+            ths.forEach(function(t){ t.style.width=t.getBoundingClientRect().width+'px'; });
+            table.style.tableLayout='fixed';
+            table.style.width='100%';
+          }
+          var startX=e.clientX, startW=th.getBoundingClientRect().width;
+          function onMove(e2){ th.style.width=Math.max(40,startW+e2.clientX-startX)+'px'; }
+          function onUp(){
+            document.removeEventListener('mousemove',onMove);
+            document.removeEventListener('mouseup',onUp);
+            var widths=[...ths].map(function(t){return Math.round(t.getBoundingClientRect().width);});
+            _savedColWidths[key]=widths;
+            try{localStorage.setItem(key,JSON.stringify(widths));}catch(er){}
+          }
+          document.addEventListener('mousemove',onMove);
+          document.addEventListener('mouseup',onUp);
+          e.preventDefault(); e.stopPropagation();
+        });
+        th.appendChild(handle);
       });
     }
     function makeSortable(tbodyId, skipCols){
@@ -4081,6 +4179,7 @@
 
       tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px;color:#999;">Nenhum dado no período</td></tr>';
       makeSortable('tbody-planilha', [8]);
+      initResizableCols('tbody-planilha');
 
       const labelEl = document.getElementById('plan-label-periodo');
       if(labelEl) labelEl.textContent = 'Período: ' + ptDate(dataIni) + ' até ' + ptDate(dataFim);
@@ -4576,8 +4675,8 @@
           || (componentes.find(c => c.codigo === s.sku)||{}).descricao
           || (estoqueGalpao.find(e => e.sku === s.sku)||{}).descricao
           || '';
-        html += `<tr>
-          <td style="text-align:center;"><input type="checkbox" class="sku-cb" data-idx="${idx}" onchange="atualizarContSKUSel()"></td>
+        html += `<tr onclick="editarSKU(${idx})" style="cursor:pointer;" title="Clique para editar">
+          <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="sku-cb" data-idx="${idx}" onchange="atualizarContSKUSel()"></td>
           <td style="font-family:monospace;font-weight:600;white-space:nowrap;">${s.sku}</td>
           <td style="font-size:12px;color:#555;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${titulo}">${titulo||'—'}</td>
           <td>${fmt(s.custo)}</td>
@@ -4591,6 +4690,7 @@
 
       tbody.innerHTML = html;
       makeSortable('tbody-skus', [3]);
+      initResizableCols('tbody-skus');
       const selAll = document.getElementById('sku-sel-all');
       if(selAll) selAll.checked = false;
       document.getElementById('sku-sel-count').textContent = '';
@@ -5170,6 +5270,7 @@
         </tr>
       `).join('');
       makeSortable('tbody-receber');
+      initResizableCols('tbody-receber');
     }
 
     function abrirModalHoje(){
@@ -7569,6 +7670,7 @@ Perfil do usuário:
           <td style="padding:7px 6px;text-align:right;font-weight:600;">${total}</td>
         </tr>`;
       }).join('');
+      initResizableCols('tbody-estoque-full');
       if(st){
         const dt = estoqueFullML._syncAt ? new Date(estoqueFullML._syncAt).toLocaleString('pt-BR') : '';
         const label = estoqueFullML._fonte === 'xls' ? 'Importado via XLS' : 'Última sincronização';
@@ -7712,24 +7814,58 @@ Perfil do usuário:
       let totalCapital = 0;
       tbody.innerHTML = rows.map(e => {
         const qtd = e.qtd_galpao || 0;
-        const custo = e.custo_medio || 0;
+        // Custo: primeiro tenta skus[], depois custo_medio do galpão
+        const skuProd = skus.find(function(s){ return s.sku === e.sku; });
+        const custo = skuProd && skuProd.custo > 0 ? skuProd.custo : (e.custo_medio || 0);
+        const custoSrc = skuProd && skuProd.custo > 0 ? 'title="Custo do cadastro de Produtos"' : '';
         const total = qtd * custo;
         totalCapital += total;
         const dt = e.data_atualizacao ? e.data_atualizacao.substring(0,10) : '-';
+        const skuId = (e.sku||'').replace(/[^a-zA-Z0-9]/g,'-');
         return `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:7px 10px;white-space:nowrap;font-family:monospace;font-size:11px;">${e.sku||''}</td>
           <td style="padding:7px 6px;color:#374151;">${e.descricao||'-'}</td>
-          <td style="padding:7px 6px;text-align:right;font-weight:600;">${qtd}</td>
-          <td style="padding:7px 6px;text-align:right;">${custo > 0 ? 'R$ ' + custo.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '-'}</td>
+          <td id="qty-g-${skuId}" data-sku="${e.sku||''}" style="padding:7px 6px;text-align:right;font-weight:600;cursor:pointer;" title="Clique para editar" onclick="editarQtdGalpao(this.dataset.sku,${qtd})">${qtd} ✏️</td>
+          <td style="padding:7px 6px;text-align:right;" ${custoSrc}>${custo > 0 ? 'R$ ' + custo.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '-'}</td>
           <td style="padding:7px 6px;text-align:right;">${total > 0 ? 'R$ ' + total.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '-'}</td>
           <td style="padding:7px 6px;text-align:right;font-size:11px;color:#94a3b8;">${dt}</td>
         </tr>`;
       }).join('');
+      initResizableCols('tbody-estoque-galpao-aba');
       if(st){
         st.textContent = `${estoqueGalpao.length} SKUs — Capital total: R$ ${totalCapital.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
       }
     }
 
+    function editarQtdGalpao(sku, qtdAtual){
+      var skuId = sku.replace(/[^a-zA-Z0-9]/g,'-');
+      var cell = document.getElementById('qty-g-'+skuId);
+      if(!cell || cell.querySelector('input')) return;
+      var inp = document.createElement('input');
+      inp.type = 'number';
+      inp.value = qtdAtual;
+      inp.min = '0';
+      inp.style.cssText = 'width:60px;text-align:right;border:1px solid var(--primary);border-radius:4px;padding:2px 4px;';
+      inp.addEventListener('blur', function(){ salvarQtdGalpao(sku, this.value); });
+      inp.addEventListener('keydown', function(e){ if(e.key==='Enter')this.blur(); if(e.key==='Escape')renderEstoqueGalpaoAbaTab(); });
+      inp.addEventListener('click', function(e){ e.stopPropagation(); });
+      cell.innerHTML = '';
+      cell.appendChild(inp);
+      inp.focus();
+      inp.select();
+    }
+
+    function salvarQtdGalpao(sku, novaQtd){
+      var val = parseInt(novaQtd);
+      if(isNaN(val) || val < 0){ renderEstoqueGalpaoAbaTab(); return; }
+      var idx = estoqueGalpao.findIndex(function(e){ return e.sku===sku; });
+      if(idx >= 0){
+        estoqueGalpao[idx].qtd_galpao = val;
+        estoqueGalpao[idx].data_atualizacao = new Date().toISOString().slice(0,10);
+      }
+      salvar();
+      renderEstoqueGalpaoAbaTab();
+    }
     function exportarEstoqueGalpaoCSV(){
       if(estoqueGalpao.length === 0){ alert('Nada para exportar.'); return; }
       const esc = s => (String(s||'')).replace(/;/g,'|');
@@ -7949,6 +8085,7 @@ Perfil do usuário:
       });
       tbody.innerHTML = html;
       makeSortable('tbody-reposicao', [9,10,11]);
+      initResizableCols('tbody-reposicao');
     }
 
     function renderExcessoTab(){
@@ -7983,6 +8120,7 @@ Perfil do usuário:
       });
       tbody.innerHTML = html;
       makeSortable('tbody-excesso', [6]);
+      initResizableCols('tbody-excesso');
     }
 
     function renderRentabilidadeTab(){
@@ -8027,6 +8165,7 @@ Perfil do usuário:
       });
       tbody.innerHTML = html;
       makeSortable('tbody-rentabilidade');
+      initResizableCols('tbody-rentabilidade');
     }
 
     function renderVendasSkuTab(){
@@ -8043,26 +8182,33 @@ Perfil do usuário:
       if(vazioEl) vazioEl.style.display = 'none';
       if(cardEl)  cardEl.style.display  = '';
 
-      const sorted = [...vendasSku].sort((a,b) => b.unidades - a.unidades);
       const periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
+      // Atualizar cabeçalho dinâmico
+      const thU = document.getElementById('th-vendas-unidades');
+      if(thU) thU.textContent = 'Unid. ' + (periodo === 30 ? '30' : periodo) + 'd';
+      // Aplicar filtros
+      let sorted = [...vendasSku].sort((a,b) => b.unidades - a.unidades);
+      if(vendasFiltroInatividade > 0){
+        const hoje = new Date().toISOString().slice(0,10);
+        sorted = sorted.filter(function(v){
+          if(!v.ultima_venda) return false;
+          const diffDias = Math.floor((new Date(hoje)-new Date(v.ultima_venda))/(1000*86400));
+          return diffDias <= vendasFiltroInatividade;
+        });
+      }
+      if(filtroMinVendas > 0) sorted = sorted.filter(function(v){ return v.unidades >= filtroMinVendas; });
+      if(filtroVendasSku) {
+        const q = filtroVendasSku.toLowerCase();
+        sorted = sorted.filter(function(v){ return v.sku.toLowerCase().includes(q); });
+      }
       let html = '';
       sorted.forEach(v => {
         const giro = (v.unidades / periodo).toFixed(1);
         const pctAds = v.unidades > 0 ? Math.round(v.unidades_ads / v.unidades * 100) : 0;
         const adsStr = v.unidades_ads > 0 ? `${v.unidades_ads} <span style="font-size:10px;color:#999;">(${pctAds}%)</span>` : '—';
         const cancStr = v.cancelamentos > 0 ? `<span style="color:var(--warning);">${v.cancelamentos}</span>` : '—';
-        const est = estoqueGalpao.find(e => e.sku === v.sku);
-        const qtd = est ? (est.qtd_galpao||0) + (est.qtd_full||0) : null;
-        let estStr = '—', cobStr = '—';
-        if(qtd !== null){
-          estStr = String(qtd);
-          const giroNum = v.unidades / periodo;
-          if(giroNum > 0){
-            const dias = Math.floor(qtd / giroNum);
-            const cor = dias < 15 ? 'var(--danger)' : dias < 30 ? 'var(--warning)' : 'var(--success)';
-            cobStr = `<span style="color:${cor};font-weight:600;">${dias}d</span>`;
-          }
-        }
+        const receitaStr = v.receita > 0 ? 'R$ ' + v.receita.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—';
+        const cancelStr = v.receita_cancelada > 0 ? '<span style="color:var(--danger);">R$ ' + v.receita_cancelada.toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</span>' : '—';
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${v.sku}</td>
           <td style="padding:8px 6px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#555;" title="${v.titulo}">${v.titulo||'—'}</td>
@@ -8070,12 +8216,13 @@ Perfil do usuário:
           <td style="padding:8px 6px;text-align:right;">${giro}</td>
           <td style="padding:8px 6px;text-align:right;">${adsStr}</td>
           <td style="padding:8px 6px;text-align:right;">${cancStr}</td>
-          <td style="padding:8px 6px;text-align:right;">${estStr}</td>
-          <td style="padding:8px 6px;text-align:right;">${cobStr}</td>
+          <td style="padding:8px 6px;text-align:right;font-size:11px;">${receitaStr}</td>
+          <td style="padding:8px 6px;text-align:right;font-size:11px;">${cancelStr}</td>
         </tr>`;
       });
       tbody.innerHTML = html;
       makeSortable('tbody-vendas-sku');
+      initResizableCols('tbody-vendas-sku');
     }
 
     function renderSkuUnitarioTab(){
@@ -8142,6 +8289,7 @@ Perfil do usuário:
       });
       tbody.innerHTML = html;
       makeSortable('tbody-skuunit');
+      initResizableCols('tbody-skuunit');
     }
 
     function exportarSkuUnitarioCSV(){
@@ -8225,6 +8373,7 @@ Perfil do usuário:
       });
       tbody.innerHTML = html;
       makeSortable('tbody-cancelamentos', [5]);
+      initResizableCols('tbody-cancelamentos');
     }
 
     function renderADSTab(){
@@ -8252,6 +8401,7 @@ Perfil do usuário:
       });
       tbody.innerHTML = html;
       makeSortable('tbody-ads', [6]);
+      initResizableCols('tbody-ads');
     }
 
 
@@ -8285,7 +8435,8 @@ Perfil do usuário:
       }
       if(vazioEl) vazioEl.style.display = 'none';
       let html = '';
-      kitsUnicos.forEach(kitSku => {
+      const kitsExibir = filtroKits ? kitsUnicos.filter(k => k.toLowerCase().includes(filtroKits) || (composicaoKit.find(c=>c.sku_comercial===k)||{}).titulo_comercial?.toLowerCase().includes(filtroKits)) : kitsUnicos;
+      kitsExibir.forEach(kitSku => {
         const comps = composicaoKit.filter(c => c.sku_comercial === kitSku);
         const titulo = comps[0] ? comps[0].titulo_comercial : '';
         const custoKit = comps[0] ? (comps[0].custo_kit || 0) : 0;
@@ -8302,6 +8453,9 @@ Perfil do usuário:
               ? `<span style="background:#ffedd5;color:#c2410c;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">📦 ${estoqueKit} kits</span>`
               : `<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">📦 ${estoqueKit} kits</span>`))
           : '';
+        const _skuKitEnt = skus.find(function(s){ return s.sku === kitSku; });
+        const impostoKit = _skuKitEnt ? (_skuKitEnt.imposto || 0) : 0;
+        const impostoLabel = impostoKit > 0 ? `<span style="background:#ede9fe;color:#5b21b6;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">${impostoKit.toFixed(2)}% imp.</span>` : '';
         const skuEsc = kitSku.replace(/'/g, "\\'");
         html += `<div class="card mb-2" id="kit-card-${kitSku.replace(/[^a-zA-Z0-9]/g,'-')}">
           <div class="card-body" style="padding:12px 15px;cursor:pointer;" onclick="abrirModalComposicao('${skuEsc}')">
@@ -8318,7 +8472,7 @@ Perfil do usuário:
                 <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${skuEsc}')">🗑️</button>
               </div>
             </div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;">${tags}<span style="margin-left:auto;display:flex;gap:6px;align-items:center;">${estoqueKitLabel}${custoLabel}</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;">${tags}<span style="margin-left:auto;display:flex;gap:6px;align-items:center;">${estoqueKitLabel}${custoLabel}${impostoLabel}</span></div>
           </div>
         </div>`;
       });
@@ -8333,6 +8487,74 @@ Perfil do usuário:
     function toggleTodosKits(checked){
       document.querySelectorAll('.kit-sel-cb').forEach(cb => cb.checked = checked);
       atualizarContadorKitsSel();
+    }
+    function showUndoToast(count, label){
+      const ex = document.getElementById('undo-toast');
+      if(ex) ex.remove();
+      const t = document.createElement('div');
+      t.id = 'undo-toast';
+      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;display:flex;align-items:center;gap:12px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.35);white-space:nowrap;';
+      const span1 = document.createElement('span');
+      span1.textContent = count + ' ' + label + ' excluído(s)';
+      const btn1 = document.createElement('button');
+      btn1.textContent = '↩ Desfazer';
+      btn1.style.cssText = 'background:#3b82f6;color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600;';
+      btn1.onclick = function(){ desfazerApagar(); };
+      const span2 = document.createElement('span');
+      span2.textContent = '15 min';
+      span2.style.cssText = 'font-size:11px;color:#9ca3af;';
+      const btn2 = document.createElement('button');
+      btn2.textContent = '×';
+      btn2.style.cssText = 'background:none;border:none;color:#9ca3af;cursor:pointer;font-size:20px;line-height:1;';
+      btn2.onclick = function(){ var el=document.getElementById('undo-toast'); if(el)el.remove(); _undoBuffer=null; };
+      t.appendChild(span1); t.appendChild(btn1); t.appendChild(span2); t.appendChild(btn2);
+      document.body.appendChild(t);
+      setTimeout(function(){ var el=document.getElementById('undo-toast'); if(el)el.remove(); _undoBuffer=null; }, 15*60*1000);
+    }
+    function desfazerApagar(){
+      if(!_undoBuffer) return;
+      if(_undoBuffer.type==='kits'){ composicaoKit=_undoBuffer.data; salvar(); renderComposicoesTab(); }
+      else if(_undoBuffer.type==='skus'){ skus=_undoBuffer.data; salvar(); renderSKUs(); }
+      var t=document.getElementById('undo-toast'); if(t)t.remove();
+      _undoBuffer=null;
+      alert('Restaurado com sucesso!');
+    }
+    function confirmarApagarKits(tipo){
+      var selecionados=[...document.querySelectorAll('.kit-sel-cb:checked')].map(function(cb){return cb.dataset.sku;});
+      var todos=[...new Set(composicaoKit.map(function(c){return c.sku_comercial;}))];
+      var lista=tipo==='selecionados'?selecionados:todos;
+      if(lista.length===0){alert(tipo==='selecionados'?'Nenhum kit selecionado.':'Nenhum kit cadastrado.');return;}
+      _apagarPendente={tipo:'kits',modo:tipo,lista:lista};
+      document.getElementById('modal-apagar-descricao').textContent='Apagar '+lista.length+' kit(s). Você terá 15 min para desfazer.';
+      document.getElementById('modal-apagar-lista').textContent=lista.join(', ');
+      document.getElementById('modal-confirm-apagar').classList.add('open');
+    }
+    function confirmarApagarSKUs(tipo){
+      var selecionados=[...document.querySelectorAll('.sku-cb:checked')].map(function(cb){var s=skus[parseInt(cb.dataset.idx)];return s?s.sku:null;}).filter(Boolean);
+      var todos=skus.map(function(s){return s.sku;});
+      var lista=tipo==='selecionados'?selecionados:todos;
+      if(lista.length===0){alert(tipo==='selecionados'?'Nenhum SKU selecionado.':'Nenhum SKU cadastrado.');return;}
+      _apagarPendente={tipo:'skus',modo:tipo,lista:lista};
+      document.getElementById('modal-apagar-descricao').textContent='Apagar '+lista.length+' SKU(s). Você terá 15 min para desfazer.';
+      document.getElementById('modal-apagar-lista').textContent=lista.join(', ');
+      document.getElementById('modal-confirm-apagar').classList.add('open');
+    }
+    function executarApagar(){
+      if(!_apagarPendente) return;
+      var tipo=_apagarPendente.tipo, lista=_apagarPendente.lista;
+      fecharModal('modal-confirm-apagar');
+      if(tipo==='kits'){
+        _undoBuffer={type:'kits',data:[...composicaoKit]};
+        composicaoKit=composicaoKit.filter(function(c){return !lista.includes(c.sku_comercial);});
+        salvar(); renderComposicoesTab();
+        showUndoToast(lista.length,'kit(s)');
+      } else if(tipo==='skus'){
+        _undoBuffer={type:'skus',data:[...skus]};
+        skus=skus.filter(function(s){return !lista.includes(s.sku);});
+        salvar(); renderSKUs();
+        showUndoToast(lista.length,'SKU(s)');
+      }
+      _apagarPendente=null;
     }
     function deletarKitsSelecionados(){
       const selecionados = [...document.querySelectorAll('.kit-sel-cb:checked')].map(cb => cb.dataset.sku);
@@ -8389,9 +8611,34 @@ Perfil do usuário:
     function setVendasPeriodo(dias){
       vendasImportMeta.periodo = dias || 30;
       vendasSku.forEach(function(v){ v.periodo_dias = vendasImportMeta.periodo; });
+      const thU = document.getElementById('th-vendas-unidades');
+      if(thU) thU.textContent = 'Unid. ' + (dias||30) + 'd';
       salvar(); renderEstoque();
     }
+    function onVendasPeriodoChange(val){
+      const v = parseInt(val);
+      const customEl = document.getElementById('vendas-periodo-custom');
+      if(v === -1){
+        if(customEl) customEl.style.display = 'flex';
+      } else {
+        if(customEl) customEl.style.display = 'none';
+        setVendasPeriodo(v);
+      }
+    }
+    function aplicarPeriodoCustom(){
+      const ini = document.getElementById('vendas-dt-ini');
+      const fim = document.getElementById('vendas-dt-fim');
+      if(!ini||!fim||!ini.value||!fim.value){ alert('Selecione data de início e fim.'); return; }
+      const d1 = new Date(ini.value), d2 = new Date(fim.value);
+      const dias = Math.max(1, Math.round((d2-d1)/(1000*86400))+1);
+      setVendasPeriodo(dias);
+    }
     function atualizarStatusVendas(){
+      // Sincronizar filtros do DOM
+      var skuInp = document.getElementById('vendas-filtro-sku');
+      if(skuInp) filtroVendasSku = skuInp.value.trim();
+      var minInp = document.getElementById('vendas-filtro-min');
+      if(minInp) filtroMinVendas = parseInt(minInp.value)||0;
       var card = document.getElementById('vendas-status-card');
       var txt  = document.getElementById('vendas-status-texto');
       var ded  = document.getElementById('vendas-status-dedup');
@@ -8486,7 +8733,12 @@ Perfil do usuário:
       const dataRows = rows.slice(6).filter(r => r[22] && String(r[22]).trim() !== '');
       if(dataRows.length === 0) return {error:'Nenhuma linha com SKU encontrada (esperado col 23 = SKU)'};
       // Detectar coluna de data (r[0]-r[5], primeiro que pareça data)
+      const _mesesPT={'janeiro':'01','fevereiro':'02','março':'03','abril':'04','maio':'05','junho':'06','julho':'07','agosto':'08','setembro':'09','outubro':'10','novembro':'11','dezembro':'12'};
       function _parseDataVenda(r){
+        // Tenta col[1] primeiro: formato "7 de junho de 2026 14:48 hs."
+        const v1 = String(r[1]||'');
+        const mPT = v1.toLowerCase().match(/(\d+)\s+de\s+(\w+)\s+de\s+(\d{4})/);
+        if(mPT && _mesesPT[mPT[2]]) return mPT[3]+'-'+_mesesPT[mPT[2]]+'-'+mPT[1].padStart(2,'0');
         for(let dc = 0; dc <= 5; dc++){
           const v = String(r[dc]||'');
           if(/^\d{2}\/\d{2}\/\d{4}/.test(v)){
@@ -8501,9 +8753,10 @@ Perfil do usuário:
       dataRows.forEach(r => {
         const sku = String(r[22]).trim();
         const cancelado = r[17] && parseFloat(r[17]) < 0;
-        if(!agg[sku]) agg[sku] = { sku, titulo: String(r[26]||'').trim(), unidades:0, receita:0, tarifa_ml:0, envio:0, liquido:0, unidades_ads:0, cancelamentos:0, periodo_dias:30, ultima_venda: null };
+        if(!agg[sku]) agg[sku] = { sku, titulo: String(r[26]||'').trim(), unidades:0, receita:0, tarifa_ml:0, envio:0, liquido:0, unidades_ads:0, cancelamentos:0, receita_cancelada:0, periodo_dias:30, ultima_venda: null };
         if(cancelado){
           agg[sku].cancelamentos++;
+          agg[sku].receita_cancelada += Math.abs(Number(r[7])||0);
         } else {
           agg[sku].unidades += Number(r[6])||0;
           agg[sku].receita  += Number(r[7])||0;
@@ -8719,8 +8972,9 @@ Perfil do usuário:
       let html = '';
       comps.forEach((c, i) => {
         html += `<div class="d-flex gap-1 mb-1" id="mcomp-linha-${i}">
-          <select style="flex:2;" class="mcomp-comp-sku"><option value="">Selecionar componente...</option>${opts}</select>
+          <select style="flex:2;" class="mcomp-comp-sku" onchange="atualizarEstoqueComp(${i},this.value)"><option value="">Selecionar componente...</option>${opts}</select>
           <input type="number" class="mcomp-qty" placeholder="Qtd" style="width:70px;" step="0.5" min="0.5" value="${c.qty||1}">
+          <span class="mcomp-est-disp" style="width:58px;font-size:11px;padding:3px 5px;background:#f3f4f6;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#6b7280;">—</span>
           <button class="btn-out btn-sm" onclick="adicionarLinhaComposicao()" title="Adicionar linha">+</button>
           <button class="btn-out btn-sm" style="color:var(--danger);" onclick="removerLinhaComposicao(${i})" title="Remover linha">−</button>
         </div>`;
@@ -8728,8 +8982,21 @@ Perfil do usuário:
       container.innerHTML = html;
       comps.forEach((c, i) => {
         const sel = container.querySelectorAll('.mcomp-comp-sku')[i];
-        if(sel && c.sku_componente) sel.value = c.sku_componente;
+        if(sel && c.sku_componente){ sel.value = c.sku_componente; atualizarEstoqueComp(i, c.sku_componente); }
       });
+    }
+    function atualizarEstoqueComp(idx, sku){
+      const linha = document.getElementById('mcomp-linha-'+idx);
+      if(!linha) return;
+      const el = linha.querySelector('.mcomp-est-disp');
+      if(!el) return;
+      if(!sku){ el.textContent='—'; el.style.color='#6b7280'; return; }
+      const eg = estoqueGalpao.find(function(e){ return e.sku===sku; });
+      const efml = estoqueFullML.find ? estoqueFullML.find(function(e){ return e.sku===sku; }) : null;
+      const qtd = eg ? ((eg.qtd_galpao||0)+(eg.qtd_full||0)) : (efml ? (efml.aptos_venda||0) : null);
+      if(qtd === null){ el.textContent='—'; el.style.color='#6b7280'; return; }
+      el.textContent = qtd+' un';
+      el.style.color = qtd===0 ? 'var(--danger)' : qtd<5 ? 'var(--warning)' : 'var(--success)';
     }
     function adicionarLinhaComposicao(){
       const container = document.getElementById('mcomp-linhas');
