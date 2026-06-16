@@ -1418,41 +1418,15 @@
           <h1>Produtos</h1>
           <div class="d-flex gap-1" id="sku-header-btns-lista">
             <button class="btn" onclick="abrirModalSKU()">+ Novo SKU</button>
-            <div class="dd-wrap">
-              <button class="btn-out" onclick="toggleDropdown('dd-sku-importar')">📥 Importar ▾</button>
-              <div class="dd-menu" id="dd-sku-importar">
-                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-skus-csv').click()">📄 Importar CSV</div>
-                <div class="dd-sep"></div>
-                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-upseller-estoque').click()">🏪 Lista Upseller (XLS)</div>
-              </div>
-            </div>
-            <div class="dd-wrap">
-              <button class="btn-out" onclick="toggleDropdown('dd-sku-exportar')">📤 Exportar ▾</button>
-              <div class="dd-menu left" id="dd-sku-exportar">
-                <div class="dd-item" onclick="closeDropdowns();exportarSKUs()">📄 Exportar SKUs (CSV)</div>
-              </div>
-            </div>
+            <button class="btn-out" onclick="abrirModalImportarProdutos()">📥 Importar dados</button>
+            <button class="btn-out" onclick="exportarSKUs()">📤 Exportar CSV</button>
             <input type="file" id="import-skus-csv" accept=".csv" style="display:none" onchange="importarSKUs()">
             <input type="file" id="import-upseller-estoque" accept=".xlsx,.xls" style="display:none" onchange="importarUpsellerEstoque(this)">
           </div>
           <div class="d-flex gap-1" id="sku-header-btns-composicoes" style="display:none!important;">
             <button class="btn btn-sm" onclick="abrirModalComposicao(null)">+ Novo Kit</button>
-            <div class="dd-wrap">
-              <button class="btn-out btn-sm" onclick="toggleDropdown('dd-kit-importar')">📥 Importar ▾</button>
-              <div class="dd-menu" id="dd-kit-importar">
-                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-upseller-kits').click()">🏪 Kits Upseller (XLS)</div>
-                <div class="dd-sep"></div>
-                <div class="dd-item" onclick="closeDropdowns();document.getElementById('import-csv-kit').click()">📄 Importar CSV</div>
-                <div class="dd-sep"></div>
-                <div class="dd-item" onclick="closeDropdowns();baixarTemplateKit()">⬇ Template Kit (CSV)</div>
-              </div>
-            </div>
-            <div class="dd-wrap">
-              <button class="btn-out btn-sm" onclick="toggleDropdown('dd-kit-exportar')">📤 Exportar ▾</button>
-              <div class="dd-menu left" id="dd-kit-exportar">
-                <div class="dd-item" onclick="closeDropdowns();exportarKitsCSV()">📄 Exportar Kits (CSV)</div>
-              </div>
-            </div>
+            <button class="btn-out btn-sm" onclick="abrirModalImportarKits()">📥 Importar dados</button>
+            <button class="btn-out btn-sm" onclick="exportarKitsCSV()">📤 Exportar CSV</button>
             <input type="file" id="import-csv-kit" accept=".csv" style="display:none" onchange="importarCSVKit(this)">
             <input type="file" id="import-upseller-kits" accept=".xlsx,.xls" style="display:none" onchange="importarUpsellerKits(this)">
           </div>
@@ -1481,6 +1455,7 @@
               <table>
                 <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;align-items:center;">
                   <button class="btn-out btn-sm" onclick="deletarSKUsSelecionados()">🗑️ Deletar selecionados</button>
+                  <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarTodosSKUs()">🗑 Apagar todos</button>
                   <button class="btn-out btn-sm" onclick="abrirModalLoteSKU()">✏️ Editar custo/imposto</button>
                   <span id="sku-sel-count" style="font-size:12px;color:#666;margin-left:4px;"></span>
                 </div>
@@ -1513,6 +1488,7 @@
                 <input type="checkbox" id="kits-sel-all" onchange="toggleTodosKits(this.checked)"> Selecionar todos
               </label>
               <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarKitsSelecionados()">🗑 Deletar selecionados</button>
+              <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarTodosKits()">🗑 Apagar todos</button>
               <span id="kits-sel-count" style="font-size:12px;color:#666;"></span>
             </div>
             <div style="font-size:12px;color:var(--gray-600);" id="composicoes-info"></div>
@@ -2431,6 +2407,10 @@
             <label class="form-label">Custo do kit (R$)</label>
             <input type="number" id="mcomp-custo-kit" placeholder="0,00" step="0.01" min="0">
           </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Imposto (%)</label>
+            <input type="number" id="mcomp-imposto" placeholder="6.18" step="0.01" min="0" max="100">
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Título do anúncio (opcional)</label>
@@ -2751,6 +2731,50 @@
         <div onclick="document.getElementById('import-vendas-ml-est').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
           <span style="font-size:22px;">📊</span>
           <div><div style="font-weight:600;font-size:13px;">Vendas ML (XLS)</div><div style="font-size:11px;color:#666;">Relatório de vendas do Mercado Livre por SKU</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Importar dados Produtos (SKU) -->
+  <div class="modal" id="modal-importar-produtos">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="modal-header">
+        <div class="modal-title">📥 Importar produtos</div>
+        <button class="btn-out btn-sm" onclick="fecharModal('modal-importar-produtos')">✕</button>
+      </div>
+      <div class="modal-body" style="padding:10px 0;">
+        <div onclick="document.getElementById('import-upseller-estoque').click();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">🏪</span>
+          <div><div style="font-weight:600;font-size:13px;">Lista Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo Lista_de_Estoque — cria SKUs novos e atualiza estoque galpão</div></div>
+        </div>
+        <div onclick="document.getElementById('import-skus-csv').click();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">📄</span>
+          <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV exportado pelo sistema com SKU, custo e imposto</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Importar dados Kits -->
+  <div class="modal" id="modal-importar-kits-prod">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="modal-header">
+        <div class="modal-title">📥 Importar kits</div>
+        <button class="btn-out btn-sm" onclick="fecharModal('modal-importar-kits-prod')">✕</button>
+      </div>
+      <div class="modal-body" style="padding:10px 0;">
+        <div onclick="document.getElementById('import-upseller-kits').click();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">🏪</span>
+          <div><div style="font-weight:600;font-size:13px;">Kits Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo export_kit do Upseller — cria/atualiza composição dos kits</div></div>
+        </div>
+        <div onclick="document.getElementById('import-csv-kit').click();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">📄</span>
+          <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV no formato do sistema</div></div>
+        </div>
+        <div onclick="baixarTemplateKit();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+          <span style="font-size:22px;">⬇️</span>
+          <div><div style="font-weight:600;font-size:13px;">Baixar template (CSV)</div><div style="font-size:11px;color:#666;">Modelo vazio para preencher manualmente</div></div>
         </div>
       </div>
     </div>
@@ -4789,6 +4813,25 @@
       document.getElementById('modal-lanc').classList.add('open');
     }
     
+    function abrirModalImportarProdutos(){
+      document.getElementById('modal-importar-produtos').classList.add('open');
+    }
+    function abrirModalImportarKits(){
+      document.getElementById('modal-importar-kits-prod').classList.add('open');
+    }
+    function deletarTodosSKUs(){
+      if(skus.length === 0){ alert('Nenhum SKU cadastrado.'); return; }
+      if(!confirm('Apagar TODOS os ' + skus.length + ' SKUs cadastrados? Esta ação não pode ser desfeita.')) return;
+      skus = [];
+      salvar(); renderSKUs();
+    }
+    function deletarTodosKits(){
+      var total = new Set(composicaoKit.map(function(c){ return c.sku_comercial; })).size;
+      if(total === 0){ alert('Nenhum kit cadastrado.'); return; }
+      if(!confirm('Apagar TODOS os ' + total + ' kits cadastrados? Esta ação não pode ser desfeita.')) return;
+      composicaoKit = [];
+      salvar(); renderComposicoesTab();
+    }
     function abrirModalImportarEstoque(){
       document.getElementById('modal-importar-estoque').classList.add('open');
     }
@@ -8198,16 +8241,16 @@ Perfil do usuário:
           : '';
         const skuEsc = kitSku.replace(/'/g, "\\'");
         html += `<div class="card mb-2" id="kit-card-${kitSku.replace(/[^a-zA-Z0-9]/g,'-')}">
-          <div class="card-body" style="padding:12px 15px;">
+          <div class="card-body" style="padding:12px 15px;cursor:pointer;" onclick="abrirModalComposicao('${skuEsc}')">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-              <div style="display:flex;align-items:center;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;" onclick="event.stopPropagation()">
                 <input type="checkbox" class="kit-sel-cb" data-sku="${kitSku}" onchange="atualizarContadorKitsSel()" style="margin:0;">
                 <div>
                   <div style="font-family:monospace;font-weight:600;font-size:12px;">${kitSku}</div>
                   <div style="font-size:11px;color:#666;margin-top:2px;">${titulo}</div>
                 </div>
               </div>
-              <div class="d-flex gap-1">
+              <div class="d-flex gap-1" onclick="event.stopPropagation()">
                 <button class="btn-out btn-sm" onclick="abrirModalComposicao('${skuEsc}')">✏️</button>
                 <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${skuEsc}')">🗑️</button>
               </div>
@@ -8580,6 +8623,8 @@ Perfil do usuário:
       document.getElementById('mcomp-kit-sku').disabled = !!kitSku;
       document.getElementById('mcomp-titulo').value = comps.length > 0 ? (comps[0].titulo_comercial || '') : '';
       document.getElementById('mcomp-custo-kit').value = comps.length > 0 && comps[0].custo_kit > 0 ? comps[0].custo_kit : '';
+      var _skuKitEntry = kitSku ? skus.find(function(s){ return s.sku === kitSku; }) : null;
+      document.getElementById('mcomp-imposto').value = _skuKitEntry ? (_skuKitEntry.imposto || '') : '';
       document.getElementById('modal-composicao-title').textContent = kitSku ? 'Editar Kit' : 'Novo Kit';
       renderLinhasComposicao(comps.length > 0 ? comps : [{}]);
       document.getElementById('modal-composicao').style.display = 'flex';
@@ -8623,6 +8668,7 @@ Perfil do usuário:
       const kitSku = document.getElementById('mcomp-kit-sku').value.trim().toUpperCase();
       const titulo = document.getElementById('mcomp-titulo').value.trim();
       const custoKit = parseFloat(document.getElementById('mcomp-custo-kit').value) || 0;
+      const impostoKit = parseFloat(document.getElementById('mcomp-imposto').value) || 0;
       if(!kitSku){ alert('Informe o SKU do kit'); return; }
       const skuEls = document.querySelectorAll('.mcomp-comp-sku');
       const qtyEls = document.querySelectorAll('.mcomp-qty');
@@ -8635,6 +8681,10 @@ Perfil do usuário:
       if(novas.length === 0){ alert('Adicione ao menos um componente'); return; }
       composicaoKit = composicaoKit.filter(c => c.sku_comercial !== kitSku);
       composicaoKit.push(...novas);
+      // Sincronizar imposto com skus[]
+      var _idxSkuKit = skus.findIndex(function(s){ return s.sku === kitSku; });
+      if(_idxSkuKit >= 0){ skus[_idxSkuKit].imposto = impostoKit; if(!skus[_idxSkuKit].custo && custoKit > 0) skus[_idxSkuKit].custo = custoKit; }
+      else { skus.push({ sku: kitSku, titulo: titulo, custo: custoKit, imposto: impostoKit }); }
       salvar(); fecharModalComposicao(); renderEstoque();
     }
     function deletarComposicaoKit(kitSku){
