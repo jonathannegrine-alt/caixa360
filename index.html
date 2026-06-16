@@ -2079,6 +2079,11 @@
                   <option value="120">120 dias</option>
                 </select>
               </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">
+                <label style="font-size:12px;color:var(--gray-600);white-space:nowrap;">Ignorar inativos há mais de</label>
+                <input type="number" id="vendas-inatividade-input" min="0" placeholder="N" style="width:52px;font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;" onchange="setVendasFiltroInatividade(parseInt(this.value)||0)">
+                <span style="font-size:12px;color:var(--gray-600);">dias</span>
+              </div>
             </div>
           </div>
           <div class="card" id="estoque-vendas-vazio" style="display:none;">
@@ -3398,6 +3403,7 @@
     let composicaoKit = [];  // [{sku_comercial, titulo_comercial, sku_componente, qty}]
     let vendasSku = [];      // [{sku, titulo, unidades, receita, tarifa_ml, envio, liquido, unidades_ads, cancelamentos, periodo_dias}]
     let vendasImportMeta = { importAt: null, periodo: 30 };
+    let vendasFiltroInatividade = 0;
     let estoqueGalpao = [];  // [{sku, descricao, qtd_galpao, qtd_full, qtd_full_pendente, em_transito, custo_medio, data_atualizacao}]
     // Regras globais (padrão)
     let metaFullDias = 30;      // meta de dias de cobertura no FULL
@@ -7991,7 +7997,14 @@ Perfil do usuário:
       }
       if(vazioEl) vazioEl.style.display = 'none';
       if(cardEl) cardEl.style.display = '';
-      const sorted = [...vendasSku].sort((a,b) => b.receita - a.receita);
+      let sorted = [...vendasSku].sort((a,b) => b.receita - a.receita);
+      if(vendasFiltroInatividade > 0){
+        const _hoje = new Date();
+        const _lim = new Date(_hoje);
+        _lim.setDate(_hoje.getDate() - vendasFiltroInatividade);
+        const _limStr = _lim.toISOString().slice(0,10);
+        sorted = sorted.filter(v => !v.ultima_venda || v.ultima_venda >= _limStr);
+      }
       let html = '';
       sorted.forEach(v => {
         const custoUn = calcCustoComposicao(v.sku);
@@ -8369,6 +8382,10 @@ Perfil do usuário:
     }
 
     // ----- Import handlers -----
+    function setVendasFiltroInatividade(n){
+      vendasFiltroInatividade = n || 0;
+      renderEstoque();
+    }
     function setVendasPeriodo(dias){
       vendasImportMeta.periodo = dias || 30;
       vendasSku.forEach(function(v){ v.periodo_dias = vendasImportMeta.periodo; });
@@ -8386,6 +8403,8 @@ Perfil do usuário:
       if(txt) txt.textContent = 'Último relatório: ' + dt + ' — ' + vendasSku.length + ' SKUs';
       if(ded && vendasImportMeta.dedupInfo) ded.textContent = vendasImportMeta.dedupInfo;
       if(sel) sel.value = String(vendasImportMeta.periodo || 30);
+      var inpInat = document.getElementById('vendas-inatividade-input');
+      if(inpInat) inpInat.value = vendasFiltroInatividade > 0 ? String(vendasFiltroInatividade) : '';
     }
     function onImportVendasML(input){
       var file = input.files[0];
@@ -8466,11 +8485,23 @@ Perfil do usuário:
       if(rows.length < 7) return {error:'Arquivo sem dados suficientes'};
       const dataRows = rows.slice(6).filter(r => r[22] && String(r[22]).trim() !== '');
       if(dataRows.length === 0) return {error:'Nenhuma linha com SKU encontrada (esperado col 23 = SKU)'};
+      // Detectar coluna de data (r[0]-r[5], primeiro que pareça data)
+      function _parseDataVenda(r){
+        for(let dc = 0; dc <= 5; dc++){
+          const v = String(r[dc]||'');
+          if(/^\d{2}\/\d{2}\/\d{4}/.test(v)){
+            const p = v.split('/');
+            return p[2].substring(0,4) + '-' + p[1] + '-' + p[0];
+          }
+          if(/^\d{4}-\d{2}-\d{2}/.test(v)) return v.substring(0,10);
+        }
+        return null;
+      }
       const agg = {};
       dataRows.forEach(r => {
         const sku = String(r[22]).trim();
         const cancelado = r[17] && parseFloat(r[17]) < 0;
-        if(!agg[sku]) agg[sku] = { sku, titulo: String(r[26]||'').trim(), unidades:0, receita:0, tarifa_ml:0, envio:0, liquido:0, unidades_ads:0, cancelamentos:0, periodo_dias:30 };
+        if(!agg[sku]) agg[sku] = { sku, titulo: String(r[26]||'').trim(), unidades:0, receita:0, tarifa_ml:0, envio:0, liquido:0, unidades_ads:0, cancelamentos:0, periodo_dias:30, ultima_venda: null };
         if(cancelado){
           agg[sku].cancelamentos++;
         } else {
@@ -8480,6 +8511,8 @@ Perfil do usuário:
           agg[sku].envio    += Number(r[12])||0;
           agg[sku].liquido  += Number(r[18])||0;
           if(r[21] && String(r[21]).trim() === 'Sim') agg[sku].unidades_ads++;
+          const dv = _parseDataVenda(r);
+          if(dv && (!agg[sku].ultima_venda || dv > agg[sku].ultima_venda)) agg[sku].ultima_venda = dv;
         }
       });
       const vendas = Object.values(agg);
