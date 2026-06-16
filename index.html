@@ -176,11 +176,11 @@
       width:100%;
       height:100%;
       background:rgba(0,0,0,0.5);
-      z-index:1000;
+      z-index:9001;
       align-items:center;
       justify-content:center;
     }
-    
+
     .modal.open{display:flex;}
     
     .modal-content{
@@ -3103,8 +3103,8 @@
         if(categorias.length   === 0 && _lsCat.length    > 0){ categorias    = _lsCat;    _syncNeeded = true; }
         if(componentes.length  === 0 && _lsComp.length   > 0) componentes   = _lsComp;
         if(composicaoKit.length=== 0 && _lsCompos.length > 0) composicaoKit = _lsCompos;
-        if(vendasSku.length    === 0 && _lsVendas.length > 0) vendasSku     = _lsVendas;
-        if(estoqueGalpao.length=== 0 && _lsEst.length   > 0) estoqueGalpao = _lsEst;
+        if(_lsVendas.length > 0 && _lsVendas.length >= vendasSku.length)    vendasSku     = _lsVendas;
+        if(_lsEst.length    > 0 && _lsEst.length    >= estoqueGalpao.length) estoqueGalpao = _lsEst;
         // Para saldo: Supabase pode estar desatualizado (save async não concluiu antes do F5)
         if(saldoMP === 0 && _lsCfg.saldoMP > 0){ saldoMP = _lsCfg.saldoMP; saldoAtual = saldoMP + saldoOutros; }
         if(saldoOutros === 0 && _lsCfg.saldoOutros > 0){ saldoOutros = _lsCfg.saldoOutros; saldoAtual = saldoMP + saldoOutros; }
@@ -3496,9 +3496,11 @@
     function toggleDropdown(id){
       var el = document.getElementById(id);
       if(!el) return;
-      var open = el.style.display !== 'none';
+      var menu = el.querySelector('.dd-menu');
+      if(!menu) return;
+      var isOpen = menu.style.display === 'block';
       closeDropdowns();
-      if(!open) el.style.display = '';
+      if(!isOpen) menu.style.display = 'block';
     }
     function closeDropdowns(){
       document.querySelectorAll('.dd-menu').forEach(function(el){ el.style.display = 'none'; });
@@ -4809,10 +4811,13 @@
     }
 
     function editarSKU(idx){
-      editandoIdxSKU = idx;
       const s = skus[idx];
+      if(!s){ console.error('[editarSKU] SKU indefinido no índice', idx, '— skus.length=', skus.length); return; }
+      editandoIdxSKU = idx;
       document.getElementById('modal-sku-title').textContent = 'Editar SKU';
-      document.getElementById('btn-del-sku').style.display = 'block';
+      const btnDel = document.getElementById('btn-del-sku');
+      btnDel.style.display = 'block';
+      btnDel.onclick = deletarSKU;
       document.getElementById('sku-codigo').value = s.sku;
       document.getElementById('sku-titulo').value = s.titulo || '';
       document.getElementById('sku-custo').value = s.custo;
