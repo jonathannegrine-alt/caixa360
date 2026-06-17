@@ -172,13 +172,19 @@
         const limiteExt = addDias(hoje, -periodoHistoricoML);
         const extFiltrado = extratoHistorico.filter(e => e.data >= limiteExt && e.data < hoje);
         if(extFiltrado.length > 0){
-          totalBase = extFiltrado.reduce((s,e) => s + e.val_liquido, 0);
-          // Usar span real dos dados (a API do ML pode retornar menos que o período configurado)
-          // Ex: configurado 90d mas API só retorna 49d → dividir por 49, não por 90
-          const dataMin = extFiltrado[extFiltrado.length - 1].data; // mais antigo (array desc)
-          const dataMax = extFiltrado[0].data;                      // mais recente
+          // Trimmed mean: remove os 10% maiores para evitar que picos pontuais (ex: aporte/empréstimo)
+          // inflacionem a média histórica e distorçam a projeção D+8+
+          let baseDados = extFiltrado;
+          if(extFiltrado.length > 5){
+            const sorted = [...extFiltrado].sort((a,b) => a.val_liquido - b.val_liquido);
+            const trim = Math.max(1, Math.floor(sorted.length * 0.10));
+            baseDados = sorted.slice(0, sorted.length - trim);
+          }
+          totalBase = baseDados.reduce((s,e) => s + e.val_liquido, 0);
+          const dataMin = baseDados.reduce((m,e) => e.data < m ? e.data : m, baseDados[0].data);
+          const dataMax = baseDados.reduce((m,e) => e.data > m ? e.data : m, baseDados[0].data);
           const spanReal = diasDif(dataMin, dataMax) + 1;
-          diasBase = Math.min(periodoHistoricoML, Math.max(spanReal, extFiltrado.length));
+          diasBase = Math.min(periodoHistoricoML, Math.max(spanReal, baseDados.length));
         } else if(liberacoes.length > 0){
           // Fallback offline: usa liberações futuras como proxy da média diária
           const limFut = addDias(hoje, periodoHistorico);

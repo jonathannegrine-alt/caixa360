@@ -115,41 +115,39 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
     byDataFuturo[data].qtd += 1
   }
 
-  // Inserir snapshot (nunca sobrescreve — cada captura é um registro histórico)
-  const snapshotRows = Object.entries(byDataFuturo).map(([dataRecebimento, { val, qtd }]) => {
-    const diasAte = Math.round((new Date(dataRecebimento).getTime() - new Date(hoje).getTime()) / 86400000)
-    return {
-      usuario_id: userId,
-      data_captura: hoje,
-      hora_captura: horaBRT,
-      origem,
-      data_recebimento: dataRecebimento,
-      dias_ate_recebimento: diasAte,
-      val: Math.round(val * 100) / 100,
-      qtd: qtd
-    }
-  })
+  // Inserir snapshot — apenas colunas que existem na tabela
+  const snapshotRows = Object.entries(byDataFuturo).map(([dataRecebimento, { val, qtd }]) => ({
+    usuario_id: userId,
+    data_captura: hoje,
+    data_recebimento: dataRecebimento,
+    val: Math.round(val * 100) / 100,
+    qtd: qtd
+  }))
 
-  // Deletar snapshots do dia atual deste usuário (se cron rodou duas vezes ou reconexão)
-  // Mantém apenas o mais recente do dia
-  await fetch(`${supaUrl}/rest/v1/snapshots_ml?usuario_id=eq.${userId}&data_captura=eq.${hoje}&origem=eq.${origem}`, {
+  // Deletar snapshots do dia atual deste usuário (cron duplo ou reconexão)
+  await fetch(`${supaUrl}/rest/v1/snapshots_ml?usuario_id=eq.${userId}&data_captura=eq.${hoje}`, {
     method: 'DELETE',
     headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
   })
 
+  let snapshotErro: string | null = null
   if (snapshotRows.length > 0) {
-    await fetch(`${supaUrl}/rest/v1/snapshots_ml`, {
+    const insRes = await fetch(`${supaUrl}/rest/v1/snapshots_ml`, {
       method: 'POST',
       headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify(snapshotRows)
     })
+    if (!insRes.ok) {
+      snapshotErro = await insRes.text()
+    }
   }
 
   return {
     usuario_id: userId,
     extrato_dias: extratoRows.length,
     snapshot_datas: snapshotRows.length,
-    ok: true
+    snapshot_erro: snapshotErro,
+    ok: snapshotErro === null
   }
 }
 
@@ -166,6 +164,12 @@ Deno.serve(async (req) => {
     const isCron = body?.cron === true
 
     if (isCron) {
+      // ── MODO CRON: valida CRON_SECRET antes de processar ─────────────────
+      const cronSecret = Deno.env.get('CRON_SECRET')
+      if (cronSecret && body?.secret !== cronSecret) {
+        return resp({ error: 'Unauthorized' })
+      }
+
       // ── MODO CRON: processa todos os usuários com token ML ────────────────
       const tokens = await fetch(`${supaUrl}/rest/v1/ml_tokens?select=usuario_id`, {
         headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, Accept: 'application/json' }

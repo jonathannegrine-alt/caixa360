@@ -250,7 +250,7 @@
       }));
     }
 
-    function calcRankingPorProduto(){
+    function calcRankingPorProduto(incluirExcesso = false){
       const kitSkus = new Set(composicaoKit.map(c => c.sku_comercial));
       const dias = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
       const periodoOrig = vendasImportMeta.periodoOriginal || dias;
@@ -286,7 +286,7 @@
         else if(cobertura < regras.alerta) status = 'critico';
         else if(cobertura < meta_total) status = 'atencao';
         return { sku: p.sku, descricao: p.descricao, isKit: p.isKit, consumo_diario, qtd_galpao, qtd_full, qtd_full_pendente, qtd_total, cobertura, data_ruptura, meta_full: regras.meta_full, meta_galpao: regras.meta_galpao, meta_total, alerta: regras.alerta, status, qtd_sugerida, capital_necessario: qtd_sugerida*custo, custo_unitario: custo };
-      }).filter(r => !['excesso_critico','excesso_mod'].includes(r.status)).sort((a,b) => a.cobertura - b.cobertura);
+      }).filter(r => incluirExcesso || !['excesso_critico','excesso_mod'].includes(r.status)).sort((a,b) => a.cobertura - b.cobertura);
     }
 
     function calcRankingReposicao(){
@@ -598,7 +598,7 @@
       const vazioEl = document.getElementById('excesso-vazio');
       const cardEl = document.getElementById('excesso-card');
       if(!tbody) return;
-      const ranking = calcRankingReposicao().filter(r => ['excesso_critico','excesso_mod'].includes(r.status))
+      const ranking = calcRankingPorProduto(true).filter(r => ['excesso_critico','excesso_mod'].includes(r.status))
         .sort((a,b) => b.cobertura - a.cobertura);
       if(ranking.length === 0){
         if(vazioEl) vazioEl.style.display = '';
