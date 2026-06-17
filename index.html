@@ -1193,7 +1193,7 @@
           <h1>Motor de Reposição</h1>
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
             <button class="btn-out btn-sm" onclick="abrirModalImportarEstoque()">📥 Importar dados</button>
-            <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="limparDadosPlanilhas()">🗑 Limpar</button>
+            <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="abrirModalLimparDados()">🗑 Limpar</button>
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
             <input type="file" id="import-estoque-upseller" accept=".xlsx,.xls,.csv" style="display:none" onchange="onImportEstoqueUpseller(this)">
@@ -1400,12 +1400,12 @@
                   <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
                     <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
                     <th style="padding:8px 6px;text-align:left;">Título</th>
-                    <th id="th-vendas-unidades" style="padding:8px 6px;text-align:right;white-space:nowrap;">Unid. 30d</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Unid./dia</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">ADS</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cancelamentos</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Receita (R$)</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Cancel. (R$)</th>
+                    <th id="th-vendas-unidades" style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Unidades vendidas no período selecionado. Ajuste o período pelo filtro acima.">Unid. 30d</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Velocidade média de venda: unidades ÷ dias do período.">Unid./dia</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Unidades vendidas via ADS (publicidade ML). Entre parênteses: % do total.">ADS</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Quantidade de pedidos cancelados ou devolvidos no período.">Cancelamentos</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Receita bruta gerada pelo SKU no período (antes de tarifas e descontos).">Receita (R$)</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Valor de receita perdida por cancelamentos no período.">Cancel. (R$)</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-vendas-sku"></tbody>
@@ -1555,10 +1555,10 @@
                   <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
                     <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
                     <th style="padding:8px 6px;text-align:left;">Descrição</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Qtd galpão</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Custo médio</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Valor total</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Atualizado</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Quantidade física no galpão. Clique no número para editar.">Qtd galpão</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Custo cadastrado em Produtos (SKU ou Kit). Não inclui custo médio do Upseller.">Custo</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Qtd × Custo — capital imobilizado no galpão para este SKU.">Valor total</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Data da última importação do Upseller para este SKU.">Atualizado</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-estoque-galpao-aba"></tbody>
@@ -1605,14 +1605,14 @@
               <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
                 <th style="padding:8px 10px;text-align:left;">SKU</th>
                 <th style="padding:8px 6px;text-align:left;">Título</th>
-                <th style="padding:8px 6px;text-align:right;">Unidades</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Receita bruta</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Tarifa ML</th>
-                <th style="padding:8px 6px;text-align:right;">Envio</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Líquido ML</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Custo produto</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Margem R$</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Margem %</th>
+                <th style="padding:8px 6px;text-align:right;" title="Unidades vendidas no período selecionado (ajustadas proporcionalmente se o período foi alterado).">Unidades</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Valor pago pelo comprador antes de descontos e taxas.">Receita bruta</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Comissão ML + impostos sobre a venda cobrados pelo ML.">Tarifa ML</th>
+                <th style="padding:8px 6px;text-align:right;" title="Frete cobrado do comprador, repassado ao vendedor (ou custo do frete grátis).">Envio</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Valor líquido que o ML efetivamente libera: Receita − Tarifa − Envio.">Líquido ML</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Custo do produto × unidades. Vem do cadastro de Produtos (SKU ou Kit). ⚠️ sem composição = custo não cadastrado.">Custo produto</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Líquido ML − Custo produto. Representa o lucro antes de custos fixos (galpão, contador, etc.).">Margem R$</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Margem R$ ÷ Receita bruta. Abaixo de 10% = alerta ⚠️.">Margem %</th>
               </tr>
             </thead>
             <tbody id="tbody-rentabilidade"></tbody>
@@ -1630,10 +1630,10 @@
               <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
                 <th style="padding:8px 10px;text-align:left;">SKU</th>
                 <th style="padding:8px 6px;text-align:left;">Título</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Vendas efetivas</th>
-                <th style="padding:8px 6px;text-align:right;">Cancelamentos</th>
-                <th style="padding:8px 6px;text-align:right;">Taxa %</th>
-                <th style="padding:8px 6px;text-align:left;">Alerta</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Vendas concluídas no período (sem cancelamentos).">Vendas efetivas</th>
+                <th style="padding:8px 6px;text-align:right;" title="Pedidos cancelados/devolvidos no período.">Cancelamentos</th>
+                <th style="padding:8px 6px;text-align:right;" title="Cancelamentos ÷ (Vendas + Cancelamentos). Acima de 5% = atenção.">Taxa %</th>
+                <th style="padding:8px 6px;text-align:left;" title="Alerta gerado automaticamente quando a taxa de cancelamento é alta.">Alerta</th>
               </tr>
             </thead>
             <tbody id="tbody-cancelamentos"></tbody>
@@ -1651,11 +1651,11 @@
               <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
                 <th style="padding:8px 10px;text-align:left;">SKU</th>
                 <th style="padding:8px 6px;text-align:left;">Título</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Total unid.</th>
-                <th style="padding:8px 6px;text-align:right;">Orgânico</th>
-                <th style="padding:8px 6px;text-align:right;">ADS</th>
-                <th style="padding:8px 6px;text-align:right;">% ADS</th>
-                <th style="padding:8px 6px;text-align:left;">Alerta</th>
+                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Total de unidades vendidas no período.">Total unid.</th>
+                <th style="padding:8px 6px;text-align:right;" title="Vendas sem ADS — comprador chegou de forma orgânica.">Orgânico</th>
+                <th style="padding:8px 6px;text-align:right;" title="Vendas via Publicidade (ADS Mercado Livre).">ADS</th>
+                <th style="padding:8px 6px;text-align:right;" title="ADS ÷ Total. Alta dependência de ADS pode indicar produto fraco organicamente.">% ADS</th>
+                <th style="padding:8px 6px;text-align:left;" title="Alerta quando a dependência de ADS está acima de 60%.">Alerta</th>
               </tr>
             </thead>
             <tbody id="tbody-ads"></tbody>
@@ -2184,6 +2184,42 @@
       <div class="modal-footer">
         <button class="btn-out" onclick="fecharModal('modal-confirm-apagar')">Cancelar</button>
         <button class="btn" style="background:var(--danger);" onclick="executarApagar()">Confirmar exclusão</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Limpar dados importados -->
+  <div class="modal" id="modal-limpar-dados">
+    <div class="modal-content" style="max-width:400px;">
+      <div class="modal-header">
+        <div class="modal-title">🗑 Limpar dados importados</div>
+        <button class="btn-out btn-sm" onclick="fecharModal('modal-limpar-dados')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="limpar-dados-info" style="font-size:11px;color:#6b7280;margin-bottom:14px;"></div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="limpar-cb-galpao" style="width:16px;height:16px;">
+            <span>🏠 <b>Galpão</b> — estoque importado do Upseller</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="limpar-cb-full" style="width:16px;height:16px;">
+            <span>🏭 <b>Full ML</b> — estoque no centro de distribuição ML</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="limpar-cb-vendas" style="width:16px;height:16px;">
+            <span>📦 <b>Vendas ML</b> — relatório de vendas por SKU</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--danger);border-top:1px solid var(--gray-200);padding-top:10px;">
+            <input type="checkbox" id="limpar-cb-todos" style="width:16px;height:16px;" onchange="toggleLimparTodos(this.checked)">
+            <span><b>Selecionar todos</b></span>
+          </label>
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:#6b7280;">Os kits e SKUs cadastrados em Produtos NÃO serão apagados.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-out" onclick="fecharModal('modal-limpar-dados')">Cancelar</button>
+        <button class="btn" style="background:var(--danger);" onclick="executarLimparDados()">Limpar selecionados</button>
       </div>
     </div>
   </div>

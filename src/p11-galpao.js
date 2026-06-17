@@ -20,10 +20,12 @@
       let totalCapital = 0;
       tbody.innerHTML = rows.map(e => {
         const qtd = e.qtd_galpao || 0;
-        // Custo: primeiro tenta skus[], depois custo_medio do galpão
+        // Custo: somente do cadastro de Produtos (skus[] ou custo_kit do kit)
         const skuProd = skus.find(function(s){ return s.sku === e.sku; });
-        const custo = skuProd && skuProd.custo > 0 ? skuProd.custo : (e.custo_medio || 0);
-        const custoSrc = skuProd && skuProd.custo > 0 ? 'title="Custo do cadastro de Produtos"' : '';
+        const kitEntry = composicaoKit.find(function(c){ return c.sku_comercial === e.sku; });
+        const custo = skuProd && skuProd.custo > 0 ? skuProd.custo
+                    : kitEntry && kitEntry.custo_kit > 0 ? kitEntry.custo_kit : 0;
+        const custoSrc = custo > 0 ? 'title="Custo do cadastro de Produtos"' : 'title="Sem custo cadastrado"';
         const total = qtd * custo;
         totalCapital += total;
         const dt = e.data_atualizacao ? e.data_atualizacao.substring(0,10) : '-';
@@ -76,13 +78,13 @@
     function exportarEstoqueGalpaoCSV(){
       if(estoqueGalpao.length === 0){ alert('Nada para exportar.'); return; }
       const esc = s => (String(s||'')).replace(/;/g,'|');
-      const header = 'sku;descricao;qtd_galpao;custo_medio;valor_total;data_atualizacao';
-      const linhas = estoqueGalpao.map(e => [
-        esc(e.sku), esc(e.descricao), e.qtd_galpao||0,
-        (e.custo_medio||0).toFixed(2).replace('.',','),
-        ((e.qtd_galpao||0)*(e.custo_medio||0)).toFixed(2).replace('.',','),
-        e.data_atualizacao||''
-      ].join(';'));
+      const header = 'sku;descricao;qtd_galpao;custo;valor_total;data_atualizacao';
+      const linhas = estoqueGalpao.map(e => {
+        const sp = skus.find(s => s.sku === e.sku);
+        const kc = composicaoKit.find(c => c.sku_comercial === e.sku);
+        const custo = sp && sp.custo > 0 ? sp.custo : (kc && kc.custo_kit > 0 ? kc.custo_kit : 0);
+        return [esc(e.sku), esc(e.descricao), e.qtd_galpao||0, custo.toFixed(2).replace('.',','), ((e.qtd_galpao||0)*custo).toFixed(2).replace('.',','), e.data_atualizacao||''].join(';');
+      });
       const blob = new Blob(['\uFEFF' + header + '\n' + linhas.join('\n')], {type:'text/csv;charset=utf-8'});
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -239,6 +241,54 @@
       };
     }
 
+    function calcKitsMontaveis(sku_comercial){
+      const comps = composicaoKit.filter(c => c.sku_comercial === sku_comercial);
+      if(comps.length === 0) return 0;
+      return Math.min(...comps.map(c => {
+        const eg = estoqueGalpao.find(e => e.sku === c.sku_componente);
+        return eg ? Math.floor((eg.qtd_galpao||0) / c.qty) : 0;
+      }));
+    }
+
+    function calcRankingPorProduto(){
+      const kitSkus = new Set(composicaoKit.map(c => c.sku_comercial));
+      const dias = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
+      const periodoOrig = vendasImportMeta.periodoOriginal || dias;
+      const escala = periodoOrig > 0 ? dias / periodoOrig : 1;
+      const produtosComVendas = new Set(vendasSku.map(v => v.sku));
+
+      const produtos = [
+        ...vendasSku.map(v => ({ sku: v.sku, descricao: v.titulo||'', unidades: Math.round(v.unidades*escala), isKit: kitSkus.has(v.sku) })),
+        ...skus.filter(s => !produtosComVendas.has(s.sku)).map(s => ({ sku: s.sku, descricao: s.titulo||s.sku||'', unidades: 0, isKit: kitSkus.has(s.sku) })),
+      ];
+
+      return produtos.map(p => {
+        const consumo_diario = dias > 0 ? p.unidades / dias : 0;
+        const regras = getMetaComp(p.sku);
+        const meta_total = regras.meta_full + regras.meta_galpao;
+        const qtd_galpao = p.isKit ? calcKitsMontaveis(p.sku) : (estoqueGalpao.find(e=>e.sku===p.sku)||{}).qtd_galpao||0;
+        const fullEntry = estoqueFullML.find(e => e.sku === p.sku);
+        const qtd_full = fullEntry ? (fullEntry.aptos_venda||0) : 0;
+        const qtd_full_pendente = fullEntry ? (fullEntry.em_transito||0) : 0;
+        const qtd_total = qtd_galpao + qtd_full;
+        const cobertura = consumo_diario > 0 ? qtd_total / consumo_diario : Infinity;
+        const kitComps = composicaoKit.filter(c => c.sku_comercial === p.sku);
+        const custoKit = kitComps.length > 0 && kitComps[0].custo_kit > 0 ? kitComps[0].custo_kit : 0;
+        const skuEntry = skus.find(s => s.sku === p.sku);
+        const custo = custoKit > 0 ? custoKit : (skuEntry && skuEntry.custo > 0 ? skuEntry.custo : 0);
+        const deficit_dias = Math.max(0, meta_total + regras.seg - cobertura);
+        const qtd_sugerida = consumo_diario > 0 ? Math.ceil(deficit_dias * consumo_diario) : 0;
+        let data_ruptura = null;
+        if(consumo_diario > 0 && cobertura < 9999){ const d = new Date(); d.setDate(d.getDate()+Math.floor(cobertura)); data_ruptura = d; }
+        let status = 'ok';
+        if(cobertura !== Infinity && cobertura > 180) status = 'excesso_critico';
+        else if(cobertura !== Infinity && cobertura > 120) status = 'excesso_mod';
+        else if(cobertura < regras.alerta) status = 'critico';
+        else if(cobertura < meta_total) status = 'atencao';
+        return { sku: p.sku, descricao: p.descricao, isKit: p.isKit, consumo_diario, qtd_galpao, qtd_full, qtd_full_pendente, qtd_total, cobertura, data_ruptura, meta_full: regras.meta_full, meta_galpao: regras.meta_galpao, meta_total, alerta: regras.alerta, status, qtd_sugerida, capital_necessario: qtd_sugerida*custo, custo_unitario: custo };
+      }).filter(r => !['excesso_critico','excesso_mod'].includes(r.status)).sort((a,b) => a.cobertura - b.cobertura);
+    }
+
     function calcRankingReposicao(){
       const consumo = calcConsumoComponentes();
       const { isolados, kitSkus } = getSkusIsolados();
@@ -298,7 +348,7 @@
       const vazioEl = document.getElementById('estoque-reposicao-vazio');
       const cardEl = document.getElementById('estoque-reposicao-card');
       if(!tbody) return;
-      let ranking = calcRankingReposicao().filter(r => !['excesso_critico','excesso_mod'].includes(r.status));
+      let ranking = calcRankingPorProduto();
       // Aplicar filtros
       const filtroInativ = parseInt(document.getElementById('rep-filtro-inatividade')?.value) || 0;
       const filtroMin = parseInt(document.getElementById('rep-filtro-min-vendas')?.value) || 0;
@@ -337,10 +387,10 @@
         const metaStr = `${r.meta_full}d+${r.meta_galpao}d`;
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="text-align:center;padding:4px 6px;"><input type="checkbox" class="rep-sel-cb" data-sku="${r.sku}" onchange="updateOCBtn('rep')"></td>
-          <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${r.sku}</td>
+          <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${r.isKit?'🧩 ':''}${r.sku}</td>
           <td style="padding:8px 6px;color:#555;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${r.descricao}">${r.descricao||'—'}</td>
           <td style="padding:8px 6px;text-align:right;">${r.consumo_diario > 0 ? r.consumo_diario.toFixed(1) : '—'}</td>
-          <td style="padding:8px 6px;text-align:right;">${r.qtd_galpao}</td>
+          <td style="padding:8px 6px;text-align:right;" title="${r.isKit?'Kits montáveis com os componentes em galpão':'Qtd no galpão'}">${r.qtd_galpao}</td>
           <td style="padding:8px 6px;text-align:right;">${fullStr}</td>
           <td style="padding:8px 6px;text-align:right;font-weight:600;">${r.qtd_total}</td>
           <td style="padding:8px 6px;text-align:right;">${cob}</td>
@@ -1094,18 +1144,41 @@
     }
 
     // ----- Limpar dados de planilhas -----
-    function limparDadosPlanilhas(){
-      const linhas = [
-        vendasSku.length > 0 ? `• Vendas ML: ${vendasSku.length} SKUs` : null,
-        estoqueGalpao.length > 0 ? `• Estoque Galpão (Upseller): ${estoqueGalpao.length} itens` : null,
-      ].filter(Boolean);
-      if(linhas.length === 0){ alert('Nenhuma planilha carregada no momento.'); return; }
-      if(!confirm('Apagar os seguintes dados importados via planilha?\n\n' + linhas.join('\n') + '\n\nOs kits e SKUs cadastrados manualmente NÃO serão apagados.')) return;
-      vendasSku = [];
-      estoqueGalpao = [];
+    function abrirModalLimparDados(){
+      const temGalpao = estoqueGalpao.length > 0;
+      const temFull = estoqueFullML.length > 0;
+      const temVendas = vendasSku.length > 0;
+      if(!temGalpao && !temFull && !temVendas){ alert('Nenhum dado importado no momento.'); return; }
+      var cb = document.getElementById('limpar-cb-galpao'); if(cb) cb.checked = false; if(cb) cb.disabled = !temGalpao;
+      cb = document.getElementById('limpar-cb-full'); if(cb) cb.checked = false; if(cb) cb.disabled = !temFull;
+      cb = document.getElementById('limpar-cb-vendas'); if(cb) cb.checked = false; if(cb) cb.disabled = !temVendas;
+      var info = document.getElementById('limpar-dados-info');
+      if(info) info.innerHTML = [
+        temGalpao ? `Galpão: ${estoqueGalpao.length} itens` : null,
+        temFull   ? `Full ML: ${estoqueFullML.length} SKUs` : null,
+        temVendas ? `Vendas: ${vendasSku.length} SKUs` : null,
+      ].filter(Boolean).map(s=>`<span style="font-size:11px;color:#555;">${s}</span>`).join(' &nbsp;·&nbsp; ');
+      document.getElementById('modal-limpar-dados').classList.add('open');
+    }
+    function executarLimparDados(){
+      const cbG = document.getElementById('limpar-cb-galpao');
+      const cbF = document.getElementById('limpar-cb-full');
+      const cbV = document.getElementById('limpar-cb-vendas');
+      const limG = cbG && cbG.checked;
+      const limF = cbF && cbF.checked;
+      const limV = cbV && cbV.checked;
+      if(!limG && !limF && !limV){ alert('Selecione ao menos uma opção.'); return; }
+      if(limG){ estoqueGalpao = []; }
+      if(limF){ estoqueFullML = []; localStorage.removeItem('mk_estoque_full_ml'); }
+      if(limV){ vendasSku = []; vendasImportMeta = {}; }
       salvar();
+      fecharModal('modal-limpar-dados');
       renderEstoque();
-      alert('✅ Dados das planilhas removidos.');
+    }
+    function toggleLimparTodos(checked){
+      ['limpar-cb-galpao','limpar-cb-full','limpar-cb-vendas'].forEach(function(id){
+        var cb = document.getElementById(id); if(cb && !cb.disabled) cb.checked = checked;
+      });
     }
 
     // ----- Import handlers -----
@@ -1191,11 +1264,13 @@
         try {
           const result = parseKitUpseller(e.target.result);
           if(result.error){ alert('Erro: ' + result.error); return; }
-          const novosKitSkus = [...new Set(result.composicao.map(c => c.sku_comercial))];
-          composicaoKit = composicaoKit.filter(c => !novosKitSkus.includes(c.sku_comercial));
-          composicaoKit.push(...result.composicao);
+          const existentes = new Set(composicaoKit.map(c => c.sku_comercial));
+          const novosKitSkus = [...new Set(result.composicao.map(c => c.sku_comercial))].filter(k => !existentes.has(k));
+          const novasEntradas = result.composicao.filter(c => novosKitSkus.includes(c.sku_comercial));
+          const ignorados = result.kits - novosKitSkus.length;
+          composicaoKit.push(...novasEntradas);
           salvar(); renderEstoque();
-          alert(`✅ ${result.kits} kits importados · ${result.composicao.length} mapeamentos.`);
+          alert(`✅ ${novosKitSkus.length} kits novos adicionados · ${novasEntradas.length} mapeamentos.${ignorados > 0 ? '\n' + ignorados + ' já existentes ignorados.' : ''}`);
         } catch(err){ alert('Erro ao processar: ' + err.message); }
         input.value = '';
       };
@@ -1210,20 +1285,21 @@
         try {
           const result = parseEstoqueUpseller(e.target.result);
           if(result.error){ alert('Erro: ' + result.error); return; }
-          estoqueGalpao = result.estoque;
-          let novos = 0;
+          let novos = 0, atualizados = 0;
+          const hoje = new Date().toISOString().slice(0,10);
           result.estoque.forEach(eg => {
-            const idx = componentes.findIndex(c => c.codigo === eg.sku);
-            if(idx < 0){
-              componentes.push({ codigo: eg.sku, descricao: eg.descricao, custo_unitario: eg.custo_medio||0, fornecedor:'', lead_time_dias:0 });
-              novos++;
+            const idx = estoqueGalpao.findIndex(x => x.sku === eg.sku);
+            if(idx >= 0){
+              estoqueGalpao[idx].qtd_galpao = eg.qtd_galpao;
+              estoqueGalpao[idx].data_atualizacao = hoje;
+              atualizados++;
             } else {
-              if(eg.custo_medio > 0) componentes[idx].custo_unitario = eg.custo_medio;
-              if(eg.descricao && !componentes[idx].descricao) componentes[idx].descricao = eg.descricao;
+              estoqueGalpao.push({ sku: eg.sku, descricao: eg.descricao, qtd_galpao: eg.qtd_galpao, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje });
+              novos++;
             }
           });
           salvar(); renderEstoque();
-          alert(`✅ ${result.estoque.length} componentes importados.${novos > 0 ? ' ' + novos + ' novos criados.' : ''}`);
+          alert(`✅ Estoque galpão atualizado: ${atualizados} atualizados, ${novos} novos.`);
         } catch(err){ alert('Erro ao processar: ' + err.message); }
         input.value = '';
       };
