@@ -30,6 +30,8 @@
     let filtroVendasSku = '';
     let filtroMinVendas = 0;
     let filtroKits = '';
+    let repVendasDias = 30;
+    let skuunitVendasDias = 30;
     let _undoBuffer = null;
     let _apagarPendente = null;
     let estoqueGalpao = [];  // [{sku, descricao, qtd_galpao, qtd_full, qtd_full_pendente, em_transito, custo_medio, data_atualizacao}]

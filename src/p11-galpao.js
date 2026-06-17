@@ -267,7 +267,7 @@
         const regras = getMetaComp(p.sku);
         const meta_total = regras.meta_full + regras.meta_galpao;
         const qtd_galpao = p.isKit ? calcKitsMontaveis(p.sku) : (estoqueGalpao.find(e=>e.sku===p.sku)||{}).qtd_galpao||0;
-        const fullEntry = estoqueFullML.find(e => e.sku === p.sku);
+        const fullEntry = estoqueFullML.find(e => e.sku.toUpperCase() === p.sku.toUpperCase());
         const qtd_full = fullEntry ? (fullEntry.aptos_venda||0) : 0;
         const qtd_full_pendente = fullEntry ? (fullEntry.em_transito||0) : 0;
         const qtd_total = qtd_galpao + qtd_full;
@@ -348,6 +348,10 @@
       const vazioEl = document.getElementById('estoque-reposicao-vazio');
       const cardEl = document.getElementById('estoque-reposicao-card');
       if(!tbody) return;
+      const thVxd = document.getElementById('th-rep-vendas-xd');
+      if(thVxd) thVxd.textContent = 'Vendas ' + repVendasDias + 'd';
+      const selDias = document.getElementById('rep-vendas-dias');
+      if(selDias) selDias.value = String(repVendasDias);
       let ranking = calcRankingPorProduto();
       // Aplicar filtros
       const filtroInativ = parseInt(document.getElementById('rep-filtro-inatividade')?.value) || 0;
@@ -385,10 +389,12 @@
           ? (r.qtd_full_pendente > 0 ? `${r.qtd_full} <span style="font-size:10px;color:#999;">(+${r.qtd_full_pendente} pend.)</span>` : String(r.qtd_full))
           : (r.qtd_full_pendente > 0 ? `<span style="color:#999;font-size:10px;">+${r.qtd_full_pendente} pend.</span>` : '—');
         const metaStr = `${r.meta_full}d+${r.meta_galpao}d`;
+        const vendasXd = Math.round(r.consumo_diario * repVendasDias);
         html += `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="text-align:center;padding:4px 6px;"><input type="checkbox" class="rep-sel-cb" data-sku="${r.sku}" onchange="updateOCBtn('rep')"></td>
           <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${r.isKit?'🧩 ':''}${r.sku}</td>
           <td style="padding:8px 6px;color:#555;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${r.descricao}">${r.descricao||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;">${vendasXd > 0 ? vendasXd : '—'}</td>
           <td style="padding:8px 6px;text-align:right;">${r.consumo_diario > 0 ? r.consumo_diario.toFixed(1) : '—'}</td>
           <td style="padding:8px 6px;text-align:right;" title="${r.isKit?'Kits montáveis com os componentes em galpão':'Qtd no galpão'}">${r.qtd_galpao}</td>
           <td style="padding:8px 6px;text-align:right;">${fullStr}</td>
@@ -743,6 +749,11 @@
       if(vazioEl) vazioEl.style.display = 'none';
       if(cardEl)  cardEl.style.display  = '';
 
+      const thVxd = document.getElementById('th-skuunit-vendas-xd');
+      if(thVxd) thVxd.textContent = 'Vendas ' + skuunitVendasDias + 'd';
+      const selDias = document.getElementById('skuunit-vendas-dias');
+      if(selDias) selDias.value = String(skuunitVendasDias);
+
       const consumo = calcConsumoComponentes();
       const skusExibir = new Set([
         ...Object.keys(consumo).filter(sku => !kitSkus.has(sku)),
@@ -757,15 +768,23 @@
       const rows = [];
       skusExibir.forEach(sku => {
         const c = consumo[sku] || { consumo30d: 0, consumo_diario: 0 };
-        const vendaDireta = vendasSku.find(v => v.sku === sku);
+        const vendaDireta = vendasSku.find(v => v.sku.toUpperCase() === sku.toUpperCase());
         const direto = vendaDireta ? vendaDireta.unidades : 0;
         const viaKits = Math.max(0, c.consumo30d - direto);
-        const descricao = (componentes.find(x => x.codigo === sku) || {}).descricao
+        const descricao = (componentes.find(x => x.codigo.toUpperCase() === sku.toUpperCase()) || {}).descricao
           || (vendaDireta && vendaDireta.titulo) || '';
-        const est = estoqueGalpao.find(e => e.sku === sku);
+        const est = estoqueGalpao.find(e => e.sku.toUpperCase() === sku.toUpperCase());
         const qtdGalpao = est ? (est.qtd_galpao||0) : 0;
-        const qtdFull = est ? (est.qtd_full||0) : (estoqueFullML.find(f => f.sku === sku)?.aptos_venda || 0);
-        const qtdTotal = est ? qtdGalpao + qtdFull : null;
+        const fullDirectEntry = estoqueFullML.find(f => f.sku.toUpperCase() === sku.toUpperCase());
+        const fullDireto = fullDirectEntry ? (fullDirectEntry.aptos_venda||0) : (est ? (est.qtd_full||0) : 0);
+        // Via Kits Full: unidades deste SKU embutidas em kits que estão no Full ML
+        const fullViaKits = composicaoKit
+          .filter(c2 => c2.sku_componente.toUpperCase() === sku.toUpperCase())
+          .reduce((sum, c2) => {
+            const kitFull = estoqueFullML.find(f => f.sku.toUpperCase() === c2.sku_comercial.toUpperCase());
+            return sum + (kitFull ? (kitFull.aptos_venda||0) : 0) * c2.qty;
+          }, 0);
+        const qtdTotal = est || fullDirectEntry ? qtdGalpao + fullDireto : null;
         const mc = getMetaComp(sku);
         const cobertura = (qtdTotal !== null && c.consumo_diario > 0) ? qtdTotal / c.consumo_diario : Infinity;
         const status = cobertura < mc.alerta ? 'critico' : cobertura < (mc.meta_full + mc.meta_galpao) ? 'atencao' : 'saudavel';
@@ -774,7 +793,7 @@
         const custoUn = (skus.find(s => s.sku === sku)||{}).custo || 0;
         const capital = compraSugerida * custoUn;
         const metaStr = `${mc.meta_full}d+${mc.meta_galpao}d`;
-        rows.push({ sku, descricao, total30d: c.consumo30d, direto, viaKits, giro: c.consumo_diario, qtdGalpao, qtdFull, qtdTotal, cobertura, status, compraSugerida, capital, metaStr, custoUn });
+        rows.push({ sku, descricao, total30d: c.consumo30d, direto, viaKits, giro: c.consumo_diario, qtdGalpao, fullDireto, fullViaKits, qtdTotal, cobertura, status, compraSugerida, capital, metaStr, custoUn });
       });
 
       // Aplicar filtros
@@ -791,8 +810,10 @@
         const giroStr = r.giro > 0 ? r.giro.toFixed(1) : '—';
         const kitStr = r.viaKits > 0 ? `<span style="font-size:10px;color:var(--primary);">+${r.viaKits}</span>` : '—';
         const estGStr = r.qtdTotal !== null ? String(r.qtdGalpao) : '—';
-        const estFStr = r.qtdTotal !== null ? String(r.qtdFull) : '—';
+        const estFDStr = r.qtdTotal !== null ? String(r.fullDireto) : '—';
+        const estFVStr = r.fullViaKits > 0 ? String(r.fullViaKits) : '—';
         const estTStr = r.qtdTotal !== null ? String(r.qtdTotal) : '—';
+        const vendasXd = Math.round(r.giro * skuunitVendasDias);
         let cobStr = '—';
         if(r.qtdTotal !== null && r.giro > 0){
           const dias = Math.floor(r.cobertura);
@@ -813,12 +834,14 @@
           <td style="text-align:center;padding:4px 6px;"><input type="checkbox" class="skuunit-sel-cb" data-sku="${r.sku}" data-qtd="${r.compraSugerida}" data-custo="${r.custoUn}" onchange="updateOCBtn('skuunit')"></td>
           <td style="padding:8px 10px;font-family:monospace;font-size:11px;font-weight:600;white-space:nowrap;">${r.sku}</td>
           <td style="padding:8px 6px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#555;" title="${r.descricao}">${r.descricao||'—'}</td>
+          <td style="padding:8px 6px;text-align:right;font-weight:600;">${vendasXd > 0 ? vendasXd : '—'}</td>
           <td style="padding:8px 6px;text-align:right;font-weight:700;">${r.total30d}</td>
           <td style="padding:8px 6px;text-align:right;color:#555;">${r.direto > 0 ? r.direto : '—'}</td>
           <td style="padding:8px 6px;text-align:right;">${kitStr}</td>
           <td style="padding:8px 6px;text-align:right;">${giroStr}</td>
           <td style="padding:8px 6px;text-align:right;">${estGStr}</td>
-          <td style="padding:8px 6px;text-align:right;">${estFStr}</td>
+          <td style="padding:8px 6px;text-align:right;">${estFDStr}</td>
+          <td style="padding:8px 6px;text-align:right;color:var(--primary);">${estFVStr}</td>
           <td style="padding:8px 6px;text-align:right;font-weight:600;">${estTStr}</td>
           <td style="padding:8px 6px;text-align:right;">${cobStr}</td>
           <td style="padding:8px 6px;text-align:center;">${sb}</td>
@@ -1127,15 +1150,15 @@
       const listaEl = document.getElementById('alerta-skus-lista');
       if(!alertEl || !listaEl) return;
       if(vendasSku.length === 0){ alertEl.style.display = 'none'; return; }
-      const skusKit = new Set(composicaoKit.map(c => c.sku_comercial));
+      const skusKit = new Set(composicaoKit.map(c => c.sku_comercial.toUpperCase()));
       const skusCadastrados = new Set([
-        ...skus.map(s => s.sku),
-        ...componentes.map(c => c.codigo),
-        ...estoqueGalpao.map(e => e.sku),
+        ...skus.map(s => s.sku.toUpperCase()),
+        ...componentes.map(c => c.codigo.toUpperCase()),
+        ...estoqueGalpao.map(e => e.sku.toUpperCase()),
       ]);
       // Verifica só SKUs isolados (não kits) que estão nas vendas mas sem cadastro
       const faltando = vendasSku
-        .filter(v => !skusKit.has(v.sku) && !skusCadastrados.has(v.sku))
+        .filter(v => !skusKit.has(v.sku.toUpperCase()) && !skusCadastrados.has(v.sku.toUpperCase()))
         .map(v => v.sku)
         .sort();
       if(faltando.length === 0){ alertEl.style.display = 'none'; return; }

@@ -54,7 +54,7 @@
             table.style.width='100%';
           }
           var startX=e.clientX, startW=th.getBoundingClientRect().width;
-          function onMove(e2){ th.style.width=Math.max(40,startW+e2.clientX-startX)+'px'; }
+          function onMove(e2){ th.style.width=Math.max(1,startW+e2.clientX-startX)+'px'; }
           function onUp(){
             document.removeEventListener('mousemove',onMove);
             document.removeEventListener('mouseup',onUp);

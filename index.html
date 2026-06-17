@@ -686,7 +686,6 @@
             <div class="card-body">
               <div class="d-flex gap-1">
                 <input type="text" id="filtro-sku" placeholder="🔍 Buscar SKU..." style="flex:1;" oninput="renderSKUs()">
-                <button class="btn-out" onclick="abrirModalImpostoLote()">🔄 Atualizar imposto em lote</button>
               </div>
             </div>
           </div>
@@ -697,7 +696,7 @@
               <table>
                 <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;align-items:center;">
                   <button class="btn-out btn-sm" style="color:var(--danger);" onclick="abrirModalApagarSKUs()">🗑 Apagar</button>
-                  <button class="btn-out btn-sm" onclick="abrirModalLoteSKU()">✏️ Editar custo/imposto</button>
+                  <button class="btn-out btn-sm" onclick="abrirModalLoteSKU()">✏️ Editar custo em lote</button>
                   <span id="sku-sel-count" style="font-size:12px;color:#666;margin-left:4px;"></span>
                 </div>
                 <thead>
@@ -706,8 +705,6 @@
                     <th>SKU</th>
                     <th>Título</th>
                     <th>Custo (R$)</th>
-                    <th>Imposto (%)</th>
-                    <th>Custo Total (R$)</th>
                     <th style="width:60px;text-align:center;">Ações</th>
                   </tr>
                 </thead>
@@ -728,7 +725,6 @@
             <div class="card-body">
               <div class="d-flex gap-1">
                 <input type="text" id="filtro-kits" placeholder="🔍 Buscar kit..." style="flex:1;" oninput="filtroKits=this.value.toLowerCase();renderComposicoesTab()">
-                <button class="btn-out" onclick="abrirModalLoteKits()">✏️ Editar imposto em lote</button>
               </div>
             </div>
           </div>
@@ -1234,12 +1230,12 @@
 
         <!-- Tabs -->
         <div class="resultado-tabs" style="margin-bottom:16px;">
-          <div class="resultado-tab active" id="estoque-tab-galpao" onclick="setEstoqueTab('galpao')">🏠 Galpão</div>
-          <div class="resultado-tab" id="estoque-tab-full" onclick="setEstoqueTab('full')">🏭 Full ML</div>
-          <div class="resultado-tab" id="estoque-tab-vendas" onclick="setEstoqueTab('vendas')">📦 Venda ML</div>
-          <div class="resultado-tab" id="estoque-tab-reposicao" onclick="setEstoqueTab('reposicao')">📋 Rep. Produto</div>
-          <div class="resultado-tab" id="estoque-tab-skuunit" onclick="setEstoqueTab('skuunit')">📊 Rep. por SKU</div>
-          <div class="resultado-tab" id="estoque-tab-excesso" onclick="setEstoqueTab('excesso')">🗄 Estoque Parado</div>
+          <div class="resultado-tab active" id="estoque-tab-galpao" onclick="setEstoqueTab('galpao')" title="Estoque físico armazenado no seu galpão. Mostra quantidade, custo cadastrado e valor total por SKU.">🏠 Galpão</div>
+          <div class="resultado-tab" id="estoque-tab-full" onclick="setEstoqueTab('full')" title="Estoque enviado ao Centro de Distribuição do Mercado Livre. Importado via XLS ou sincronizado pelo painel ML.">🏭 Full ML</div>
+          <div class="resultado-tab" id="estoque-tab-vendas" onclick="setEstoqueTab('vendas')" title="Relatório de vendas importado do ML. Mostra unidades vendidas, giro, ADS e receita por SKU ou kit comercial.">📦 Venda ML</div>
+          <div class="resultado-tab" id="estoque-tab-reposicao" onclick="setEstoqueTab('reposicao')" title="Reposição por produto comercial (SKU ou Kit). Consolida kits montáveis e SKUs isolados com status de cobertura e sugestão de compra.">📋 Rep. Produto</div>
+          <div class="resultado-tab" id="estoque-tab-skuunit" onclick="setEstoqueTab('skuunit')" title="Reposição por componente físico. Mostra o consumo real de cada SKU unitário (vendas diretas + consumo via kits).">📊 Rep. por SKU</div>
+          <div class="resultado-tab" id="estoque-tab-excesso" onclick="setEstoqueTab('excesso')" title="SKUs com estoque acima da meta configurada — capital imobilizado além do necessário para cobrir a demanda.">🗄 Estoque Parado</div>
         </div>
 
         <!-- Tab: Rep. por Produto -->
@@ -1267,6 +1263,16 @@
                   <option value="60">≤ 60d</option>
                 </select>
               </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <label style="font-size:12px;white-space:nowrap;">Vendas em</label>
+                <select id="rep-vendas-dias" style="font-size:12px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;" onchange="repVendasDias=parseInt(this.value);renderReposicaoTab()">
+                  <option value="7">7 dias</option>
+                  <option value="15">15 dias</option>
+                  <option value="30" selected>30 dias</option>
+                  <option value="60">60 dias</option>
+                  <option value="90">90 dias</option>
+                </select>
+              </div>
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
                 <button class="btn-out btn-sm" id="btn-criar-oc-rep" style="display:none;" onclick="criarOCdeSelecionados('reposicao')">🛒 Criar OC</button>
                 <button class="btn-out btn-sm" onclick="abrirConfigReposicao()">⚙️ Config</button>
@@ -1288,6 +1294,7 @@
                     <th style="width:36px;text-align:center;"><input type="checkbox" id="rep-sel-all" onchange="toggleTodosRep(this.checked)"></th>
                     <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
                     <th style="padding:8px 6px;text-align:left;">Descrição</th>
+                    <th id="th-rep-vendas-xd" style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Quantidade vendida no período selecionado pelo filtro 'Vendas em'.">Vendas 30d</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Consumo médio por dia">Cons./dia</th>
                     <th style="padding:8px 6px;text-align:right;" title="Estoque no galpão">Galpão</th>
                     <th style="padding:8px 6px;text-align:right;" title="Estoque no Full ML">FULL</th>
@@ -1439,6 +1446,16 @@
                   <option value="60">≤ 60d</option>
                 </select>
               </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <label style="font-size:12px;white-space:nowrap;">Vendas em</label>
+                <select id="skuunit-vendas-dias" style="font-size:12px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;" onchange="skuunitVendasDias=parseInt(this.value);renderSkuUnitarioTab()">
+                  <option value="7">7 dias</option>
+                  <option value="15">15 dias</option>
+                  <option value="30" selected>30 dias</option>
+                  <option value="60">60 dias</option>
+                  <option value="90">90 dias</option>
+                </select>
+              </div>
               <div style="margin-left:auto;">
                 <button class="btn-out btn-sm" id="btn-criar-oc-skuunit" style="display:none;" onclick="criarOCdeSelecionados('skuunit')">🛒 Criar OC</button>
               </div>
@@ -1463,13 +1480,15 @@
                     <th style="width:36px;text-align:center;"><input type="checkbox" id="skuunit-sel-all" onchange="toggleTodosSkuUnit(this.checked)"></th>
                     <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
                     <th style="padding:8px 6px;text-align:left;">Descrição</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Total consumido no período (direto + via kits)">Total 30d</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Vendas diretas no ML">Direto</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Consumo via kits comerciais">Via kits</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Consumo médio diário">Unid./dia</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Estoque no galpão">Galpão</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Estoque Full ML">Full</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Estoque total">Total</th>
+                    <th id="th-skuunit-vendas-xd" style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Quantidade consumida (direto + via kits) no período selecionado pelo filtro 'Vendas em'.">Vendas 30d</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Total consumido em 30 dias (direto + via kits)">Total 30d</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Vendas diretas do SKU no ML (não via kits)">Direto</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Consumo indireto: unidades consumidas ao vender kits que contêm este SKU">Via kits</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Consumo médio diário (direto + via kits)">Unid./dia</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Estoque físico no galpão">Galpão</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Unidades deste SKU unitário no estoque Full ML (não via kits)">Full Direto</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Unidades deste SKU 'embutidas' em kits que estão no Full ML. Ex: kit J-2021 tem 50 no Full usando 2×J-2001 → Via Kits de J-2001 = 100.">Via Kits Full</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Total disponível: galpão + Full Direto (não inclui Via Kits, pois estão comprometidos nos kits)">Total</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Dias de cobertura">Cobertura</th>
                     <th style="padding:8px 6px;text-align:center;" title="Crítico: abaixo do alerta | Atenção: abaixo da meta | Saudável: na meta">Status</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Quantidade sugerida para compra">Compra sug.</th>
@@ -1998,15 +2017,9 @@
           <label class="form-label">Título / Descrição (opcional)</label>
           <input type="text" id="sku-titulo" placeholder="Ex: Vaso de Barro Pequeno">
         </div>
-        <div class="form-row">
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Custo (R$)</label>
-            <input type="number" id="sku-custo" step="0.01">
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Imposto (%)</label>
-            <input type="number" id="sku-imposto" step="0.01" value="6.18">
-          </div>
+        <div class="form-group">
+          <label class="form-label">Custo (R$)</label>
+          <input type="number" id="sku-custo" step="0.01">
         </div>
       </div>
       <div class="modal-footer">
@@ -2051,22 +2064,15 @@
 
   <!-- MODAL EDITAR LOTE SKU -->
   <div class="modal" id="modal-imposto-lote">
-    <div class="modal-content" style="max-width:420px;">
+    <div class="modal-content" style="max-width:380px;">
       <div class="modal-header">
-        <div class="modal-title">✏️ Editar Custo / Imposto em Lote</div>
+        <div class="modal-title">✏️ Editar Custo em Lote</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-imposto-lote')">✕</button>
       </div>
       <div class="modal-body">
-        <div style="font-size:12px;color:#666;margin-bottom:12px;">Deixe em branco os campos que não quer alterar.</div>
-        <div class="form-row">
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Novo Custo (R$)</label>
-            <input type="number" id="custo-lote" step="0.01" placeholder="Deixe vazio para manter">
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Novo Imposto (%)</label>
-            <input type="number" id="imposto-lote" step="0.01" placeholder="Deixe vazio para manter">
-          </div>
+        <div class="form-group">
+          <label class="form-label">Novo Custo (R$)</label>
+          <input type="number" id="custo-lote" step="0.01" placeholder="Ex: 15.90">
         </div>
         <div class="form-group">
           <label class="form-label">Aplicar a:</label>
@@ -2123,7 +2129,7 @@
         </div>
         <div onclick="document.getElementById('import-skus-csv').click();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
           <span style="font-size:22px;">📄</span>
-          <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV exportado pelo sistema com SKU, custo e imposto</div></div>
+          <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV exportado pelo sistema com SKU, título e custo</div></div>
         </div>
         <div onclick="exportarSKUs();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
           <span style="font-size:22px;">📤</span>
@@ -2224,27 +2230,6 @@
     </div>
   </div>
 
-  <!-- Modal: Editar imposto kits em lote -->
-  <div class="modal" id="modal-imposto-lote-kits">
-    <div class="modal-content" style="max-width:400px;">
-      <div class="modal-header">
-        <div class="modal-title">✏️ Editar Imposto dos Kits em Lote</div>
-        <button class="btn-out btn-sm" onclick="fecharModal('modal-imposto-lote-kits')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div style="font-size:12px;color:#666;margin-bottom:12px;">Aplica o mesmo imposto para todos os kits cadastrados em Produtos.</div>
-        <div class="form-group">
-          <label class="form-label">Novo Imposto (%)</label>
-          <input type="number" id="imposto-lote-kits" step="0.01" placeholder="Ex: 6.18" min="0" max="100">
-        </div>
-        <div id="lote-kits-preview" style="font-size:12px;color:#666;margin-top:8px;"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-out" onclick="fecharModal('modal-imposto-lote-kits')">Cancelar</button>
-        <button class="btn" onclick="aplicarImpostoLoteKits()">Aplicar</button>
-      </div>
-    </div>
-  </div>
 
   <script src="src/supabase-auth.js"></script>
   <script src="src/state.js"></script>

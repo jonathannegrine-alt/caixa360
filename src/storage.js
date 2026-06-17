@@ -50,6 +50,8 @@
       if(compon) componentes = JSON.parse(compon);
       if(comp) composicaoKit = JSON.parse(comp);
       if(vs) vendasSku = JSON.parse(vs);
+      const vm = localStorage.getItem('mk_vendas_meta');
+      if(vm){ try{ vendasImportMeta = JSON.parse(vm); }catch(e){} }
       if(eg) estoqueGalpao = JSON.parse(eg);
       const efml = localStorage.getItem('mk_estoque_full_ml');
       if(efml){ const o = JSON.parse(efml); estoqueFullML = o.itens || []; estoqueFullML._syncAt = o.syncAt || null; estoqueFullML._fonte = o.fonte || 'api'; }

@@ -59,33 +59,6 @@
       skus = [];
       salvar(); renderSKUs();
     }
-    function abrirModalLoteKits(){
-      document.getElementById('imposto-lote-kits').value = '';
-      var kitSkus = [...new Set(composicaoKit.map(function(c){ return c.sku_comercial; }))];
-      var prev = document.getElementById('lote-kits-preview');
-      if(prev) prev.textContent = kitSkus.length + ' kits serão afetados';
-      document.getElementById('modal-imposto-lote-kits').classList.add('open');
-    }
-    function aplicarImpostoLoteKits(){
-      var novoImposto = document.getElementById('imposto-lote-kits').value;
-      if(novoImposto === ''){ alert('Informe o imposto'); return; }
-      novoImposto = parseFloat(novoImposto);
-      if(isNaN(novoImposto)){ alert('Valor inválido'); return; }
-      var kitSkus = new Set(composicaoKit.map(function(c){ return c.sku_comercial; }));
-      var afetados = 0;
-      kitSkus.forEach(function(kitSku){
-        var idx = skus.findIndex(function(s){ return s.sku === kitSku; });
-        if(idx >= 0){
-          skus[idx].imposto = novoImposto;
-        } else {
-          skus.push({ sku: kitSku, titulo: '', custo: 0, imposto: novoImposto });
-        }
-        afetados++;
-      });
-      salvar();
-      fecharModal('modal-imposto-lote-kits');
-      alert('Imposto atualizado em ' + afetados + ' kits.');
-    }
     function deletarTodosKits(){
       var total = new Set(composicaoKit.map(function(c){ return c.sku_comercial; })).size;
       if(total === 0){ alert('Nenhum kit cadastrado.'); return; }

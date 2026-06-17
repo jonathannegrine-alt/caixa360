@@ -695,7 +695,6 @@
       let html = '';
       filtrados.forEach((s) => {
         const idx = skus.indexOf(s);
-        const total = s.custo + (s.custo * s.imposto / 100);
         // Título: próprio > vendasSku > componentes > estoqueGalpao
         const titulo = s.titulo
           || (vendasSku.find(v => v.sku === s.sku)||{}).titulo
@@ -707,8 +706,6 @@
           <td style="font-family:monospace;font-weight:600;white-space:nowrap;">${s.sku}</td>
           <td style="font-size:12px;color:#555;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${titulo}">${titulo||'—'}</td>
           <td>${fmt(s.custo)}</td>
-          <td>${s.imposto.toFixed(2)}%</td>
-          <td>${fmt(total)}</td>
           <td style="text-align:center;">
             <button class="btn-out btn-sm" onclick="editarSKU(${idx})">✏️</button>
           </td>
@@ -748,7 +745,6 @@
       document.getElementById('sku-codigo').value = '';
       document.getElementById('sku-titulo').value = '';
       document.getElementById('sku-custo').value = '';
-      document.getElementById('sku-imposto').value = '6.18';
       document.getElementById('modal-sku').classList.add('open');
     }
 
@@ -763,16 +759,16 @@
       document.getElementById('sku-codigo').value = s.sku;
       document.getElementById('sku-titulo').value = s.titulo || '';
       document.getElementById('sku-custo').value = s.custo;
-      document.getElementById('sku-imposto').value = s.imposto;
       document.getElementById('modal-sku').classList.add('open');
     }
 
     function salvarSKU(){
+      const skuAnterior = editandoIdxSKU !== null ? skus[editandoIdxSKU] : null;
       const sku = {
         sku: document.getElementById('sku-codigo').value.trim(),
         titulo: document.getElementById('sku-titulo').value.trim(),
         custo: parseFloat(document.getElementById('sku-custo').value) || 0,
-        imposto: parseFloat(document.getElementById('sku-imposto').value) || 6.18
+        imposto: skuAnterior ? (skuAnterior.imposto || 0) : 0
       };
 
       if(!sku.sku || !sku.custo){
@@ -807,10 +803,8 @@
       }
     }
     
-    function abrirModalImpostoLote(){ abrirModalLoteSKU(); }
     function abrirModalLoteSKU(){
       document.getElementById('custo-lote').value = '';
-      document.getElementById('imposto-lote').value = '';
       const sel = getSKUsSelecionados();
       const selRadio = document.getElementById('lote-alvo-sel');
       if(selRadio) selRadio.checked = true;
@@ -821,8 +815,7 @@
 
     function aplicarImpostoLote(){
       const novoCusto = document.getElementById('custo-lote').value !== '' ? parseFloat(document.getElementById('custo-lote').value) : null;
-      const novoImposto = document.getElementById('imposto-lote').value !== '' ? parseFloat(document.getElementById('imposto-lote').value) : null;
-      if(novoCusto === null && novoImposto === null){ alert('Preencha ao menos Custo ou Imposto'); return; }
+      if(novoCusto === null){ alert('Preencha o novo custo'); return; }
       const alvo = document.querySelector('input[name="lote-alvo"]:checked')?.value || 'todos';
       let alvos = [];
       if(alvo === 'selecionados'){
@@ -835,10 +828,7 @@
       } else {
         alvos = skus;
       }
-      alvos.forEach(s => {
-        if(novoCusto !== null) s.custo = novoCusto;
-        if(novoImposto !== null) s.imposto = novoImposto;
-      });
+      alvos.forEach(s => { s.custo = novoCusto; });
       salvar();
       fecharModal('modal-imposto-lote');
       renderSKUs();
@@ -846,20 +836,19 @@
     }
     
     function exportarSKUs(){
-      let csv = 'sku;titulo;custo;imposto\n';
+      let csv = 'sku;titulo;custo\n';
 
       if(skus.length === 0){
-        csv += 'SKU-EXEMPLO-001;Produto Exemplo A;15,50;6,18\n';
-        csv += 'SKU-EXEMPLO-002;Produto Exemplo B;28,90;6,18\n';
-        csv += 'SKU-EXEMPLO-003;;42,00;6,18\n';
+        csv += 'SKU-EXEMPLO-001;Produto Exemplo A;15,50\n';
+        csv += 'SKU-EXEMPLO-002;Produto Exemplo B;28,90\n';
+        csv += 'SKU-EXEMPLO-003;;42,00\n';
         csv += '\n# INSTRUCOES:\n';
         csv += '# - sku: codigo do produto\n';
         csv += '# - titulo: nome/descricao (opcional)\n';
         csv += '# - custo: custo em reais (use ponto ou virgula)\n';
-        csv += '# - imposto: % de imposto (padrao 6.18)\n';
         csv += '# - Apague os exemplos e preencha com seus SKUs\n';
       } else {
-        csv += skus.map(s => `${s.sku};${s.titulo||''};${s.custo.toFixed(2).replace('.',',')};${s.imposto.toFixed(2).replace('.',',')}`).join('\n');
+        csv += skus.map(s => `${s.sku};${s.titulo||''};${s.custo.toFixed(2).replace('.',',')}`).join('\n');
       }
       
       const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
@@ -889,7 +878,7 @@
             if(parts.length < 2) continue;
 
             const sku = parts[0].trim();
-            // Detecta se linha tem campo titulo (4 colunas: sku;titulo;custo;imposto) ou 3 (sku;custo;imposto)
+            // Detecta se linha tem campo titulo (3+ colunas: sku;titulo;custo[;imposto]) ou 2 (sku;custo)
             const normDec = s => {
               if(!s) return '';
               s = s.trim();
@@ -897,21 +886,31 @@
               if(s.includes(',')) return s.replace(',','.');
               return s;
             };
-            let titulo = '', custo, imposto;
+            let titulo = '', custo, impostoLegado;
             if(parts.length >= 4){
               titulo = parts[1].trim();
               custo = parseFloat(normDec(parts[2]));
-              imposto = parts[3] ? parseFloat(normDec(parts[3])) : 6.18;
+              impostoLegado = parts[3] ? parseFloat(normDec(parts[3])) : null;
+            } else if(parts.length === 3){
+              // pode ser sku;titulo;custo ou sku;custo;imposto
+              const v2 = parseFloat(normDec(parts[1]));
+              const v3 = parseFloat(normDec(parts[2]));
+              if(!isNaN(v2) && !isNaN(v3) && v3 < 100){
+                custo = v2; impostoLegado = v3;
+              } else {
+                titulo = parts[1].trim(); custo = v3;
+              }
             } else {
               custo = parseFloat(normDec(parts[1]));
-              imposto = parts[2] ? parseFloat(normDec(parts[2])) : 6.18;
             }
 
             if(!sku || isNaN(custo)) continue;
 
             const idx = skus.findIndex(s => s.sku === sku);
+            const existing = idx >= 0 ? skus[idx] : null;
+            const imposto = impostoLegado !== null && impostoLegado !== undefined ? impostoLegado : (existing ? existing.imposto || 0 : 0);
             if(idx >= 0){
-              skus[idx] = {sku, titulo, custo, imposto};
+              skus[idx] = {sku, titulo: titulo || existing.titulo || '', custo, imposto};
             } else {
               skus.push({sku, titulo, custo, imposto});
             }
