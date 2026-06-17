@@ -348,10 +348,21 @@
       const vazioEl = document.getElementById('estoque-reposicao-vazio');
       const cardEl = document.getElementById('estoque-reposicao-card');
       if(!tbody) return;
+      const periodoOrig = vendasImportMeta.periodoOriginal || (vendasSku[0] ? (vendasSku[0].periodo_import || 30) : 30);
+      const avisoRepEl = document.getElementById('rep-periodo-aviso');
+      const extrapolando = vendasSku.length > 0 && repVendasDias > periodoOrig;
       const thVxd = document.getElementById('th-rep-vendas-xd');
-      if(thVxd) thVxd.textContent = 'Vendas ' + repVendasDias + 'd';
+      if(thVxd) thVxd.textContent = 'Vendas ' + repVendasDias + 'd' + (extrapolando ? ' ⚠' : '');
       const selDias = document.getElementById('rep-vendas-dias');
       if(selDias) selDias.value = String(repVendasDias);
+      if(avisoRepEl){
+        if(extrapolando){
+          avisoRepEl.style.display = '';
+          avisoRepEl.textContent = '⚠ O relatório importado tem apenas ' + periodoOrig + ' dias de dados. A coluna "Vendas ' + repVendasDias + 'd" é uma estimativa proporcional — importe um relatório de ' + repVendasDias + ' dias ou mais para dados reais.';
+        } else {
+          avisoRepEl.style.display = 'none';
+        }
+      }
       let ranking = calcRankingPorProduto();
       // Aplicar filtros
       const filtroInativ = parseInt(document.getElementById('rep-filtro-inatividade')?.value) || 0;
@@ -749,10 +760,21 @@
       if(vazioEl) vazioEl.style.display = 'none';
       if(cardEl)  cardEl.style.display  = '';
 
+      const periodoOrigSku = vendasImportMeta.periodoOriginal || (vendasSku[0] ? (vendasSku[0].periodo_import || 30) : 30);
+      const extrapolandoSku = vendasSku.length > 0 && skuunitVendasDias > periodoOrigSku;
+      const avisoSkuEl = document.getElementById('skuunit-periodo-aviso');
       const thVxd = document.getElementById('th-skuunit-vendas-xd');
-      if(thVxd) thVxd.textContent = 'Vendas ' + skuunitVendasDias + 'd';
+      if(thVxd) thVxd.textContent = 'Vendas ' + skuunitVendasDias + 'd' + (extrapolandoSku ? ' ⚠' : '');
       const selDias = document.getElementById('skuunit-vendas-dias');
       if(selDias) selDias.value = String(skuunitVendasDias);
+      if(avisoSkuEl){
+        if(extrapolandoSku){
+          avisoSkuEl.style.display = '';
+          avisoSkuEl.textContent = '⚠ O relatório importado tem apenas ' + periodoOrigSku + ' dias de dados. A coluna "Vendas ' + skuunitVendasDias + 'd" é uma estimativa proporcional — importe um relatório de ' + skuunitVendasDias + ' dias ou mais para dados reais.';
+        } else {
+          avisoSkuEl.style.display = 'none';
+        }
+      }
 
       const consumo = calcConsumoComponentes();
       const skusExibir = new Set([
