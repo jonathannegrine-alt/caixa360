@@ -177,26 +177,26 @@
       const consumo = {};
       const dias = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
 
-      // SKUs que são kits comerciais mapeados
-      const skusKit = new Set(composicaoKit.map(c => c.sku_comercial));
-
-      // Isolados: estoqueGalpao + componentes[] + skus[] cadastrados, todos sem kits comerciais
-      const codigosComp = new Set([
-        ...estoqueGalpao.filter(e => !skusKit.has(e.sku)).map(e => e.sku),
-        ...componentes.filter(c => !skusKit.has(c.codigo)).map(c => c.codigo),
-        ...skus.filter(s => !skusKit.has(s.sku)).map(s => s.sku),
+      // Comparações case-insensitive: sets com uppercase
+      const skusKitU = new Set(composicaoKit.map(c => c.sku_comercial.toUpperCase()));
+      const codigosCompU = new Set([
+        ...estoqueGalpao.filter(e => !skusKitU.has(e.sku.toUpperCase())).map(e => e.sku.toUpperCase()),
+        ...componentes.filter(c => !skusKitU.has(c.codigo.toUpperCase())).map(c => c.codigo.toUpperCase()),
+        ...skus.filter(s => !skusKitU.has(s.sku.toUpperCase())).map(s => s.sku.toUpperCase()),
       ]);
 
-      // 1. Consumo via kits: cada venda de kit distribui para seus componentes
+      // 1. Consumo via kits (case-insensitive)
       vendasSku.forEach(v => {
-        composicaoKit.filter(c => c.sku_comercial === v.sku).forEach(c => {
+        const vU = v.sku.toUpperCase();
+        composicaoKit.filter(c => c.sku_comercial.toUpperCase() === vU).forEach(c => {
           consumo[c.sku_componente] = (consumo[c.sku_componente] || 0) + v.unidades * c.qty;
         });
       });
 
-      // 2. Vendas diretas: SKU vendido isolado que também é componente físico
+      // 2. Vendas diretas: SKU não-kit que é componente físico (case-insensitive)
       vendasSku.forEach(v => {
-        if(!skusKit.has(v.sku) && codigosComp.has(v.sku)){
+        const vU = v.sku.toUpperCase();
+        if(!skusKitU.has(vU) && codigosCompU.has(vU)){
           consumo[v.sku] = (consumo[v.sku] || 0) + v.unidades;
         }
       });
@@ -783,6 +783,7 @@
       ]);
 
       // Ler filtros
+      const filtroBusca = (document.getElementById('skuunit-busca')?.value || '').trim().toUpperCase();
       const filtroInativ = parseInt(document.getElementById('skuunit-filtro-inatividade')?.value) || 0;
       const filtroMin = parseInt(document.getElementById('skuunit-filtro-min-vendas')?.value) || 0;
       const filtroCob = document.getElementById('skuunit-filtro-cob')?.value || 'todos';
@@ -820,6 +821,7 @@
 
       // Aplicar filtros
       let filtered = rows;
+      if(filtroBusca) filtered = filtered.filter(r => r.sku.toUpperCase().includes(filtroBusca) || (r.descricao||'').toUpperCase().includes(filtroBusca));
       if(filtroInativ > 0) filtered = filtered.filter(r => r.giro > 0);
       if(filtroMin > 0) filtered = filtered.filter(r => r.total30d >= filtroMin);
       if(filtroCob !== 'todos'){ const maxD = parseInt(filtroCob); filtered = filtered.filter(r => r.cobertura !== Infinity && r.cobertura <= maxD); }
@@ -1276,6 +1278,37 @@
       var inpInat = document.getElementById('vendas-inatividade-input');
       if(inpInat) inpInat.value = vendasFiltroInatividade > 0 ? String(vendasFiltroInatividade) : '';
     }
+    function _mostrarNovosSkusModal(titulo, novosSkus, origemLabel){
+      const modal = document.getElementById('modal-novos-skus');
+      const tit = document.getElementById('novos-skus-titulo');
+      const lista = document.getElementById('novos-skus-lista');
+      if(!modal || !tit || !lista) return;
+      tit.textContent = titulo;
+      if(novosSkus.length === 0){
+        lista.innerHTML = '<div style="color:#6b7280;text-align:center;padding:16px;">Nenhum SKU novo.</div>';
+      } else {
+        lista.innerHTML = novosSkus.map(function(s){
+          const jaExiste = skus.some(function(x){ return x.sku.toUpperCase() === s.sku.toUpperCase(); });
+          return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-100);">' +
+            '<span style="font-family:monospace;font-size:12px;min-width:120px;">' + s.sku + '</span>' +
+            '<span style="color:#6b7280;font-size:12px;flex:1;">' + (s.titulo||'') + '</span>' +
+            (!jaExiste ? '<button class="btn-sm" style="font-size:11px;padding:3px 8px;" onclick="_criarSkuDaImport(\'' + s.sku.replace(/'/g,"\\'") + '\',\'' + (s.titulo||'').replace(/'/g,"\\'") + '\')">+ Criar em Produtos</button>' : '<span style="font-size:11px;color:#10b981;">✓ cadastrado</span>') +
+            '</div>';
+        }).join('');
+      }
+      document.getElementById('novos-skus-origem').textContent = origemLabel;
+      modal.classList.add('open');
+    }
+    function _criarSkuDaImport(sku, titulo){
+      if(skus.some(function(x){ return x.sku.toUpperCase() === sku.toUpperCase(); })){ alert('SKU já existe em Produtos.'); return; }
+      const ts = new Date().toISOString();
+      skus.push({ sku: sku.toUpperCase(), titulo: titulo, custo: 0, imposto: 0, created_at: ts });
+      salvar();
+      const modal = document.getElementById('modal-novos-skus');
+      if(modal) modal.classList.remove('open');
+      alert('✅ ' + sku + ' criado em Produtos. Acesse Produtos para preencher o custo.');
+    }
+
     function onImportVendasML(input){
       var file = input.files[0];
       if(!file) return;
@@ -1284,8 +1317,9 @@
         try {
           var result = parseVendasMLXLS(e.target.result);
           if(result.error){ alert('Erro: ' + result.error); return; }
-          var skusAntes = new Set(vendasSku.map(function(v){ return v.sku; }));
-          var novos = result.vendas.filter(function(v){ return !skusAntes.has(v.sku); }).length;
+          var skusAntes = new Set(vendasSku.map(function(v){ return v.sku.toUpperCase(); }));
+          var novosArr = result.vendas.filter(function(v){ return !skusAntes.has(v.sku.toUpperCase()); });
+          var novos = novosArr.length;
           var atualizados = result.vendas.length - novos;
           var periodo = vendasImportMeta.periodo || 30;
           result.vendas.forEach(function(v){ v.periodo_dias = periodo; v.periodo_import = periodo; });
@@ -1294,7 +1328,13 @@
           vendasImportMeta.importAt = new Date().toISOString();
           vendasImportMeta.dedupInfo = novos + ' SKUs novos, ' + atualizados + ' atualizados — ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades';
           salvar(); renderEstoque();
-          alert('Vendas ML importadas!\n\n' + vendasSku.length + ' SKUs  |  ' + novos + ' novos  |  ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades');
+          if(novos > 0){
+            _mostrarNovosSkusModal('Vendas ML — ' + novos + ' SKUs novos encontrados',
+              novosArr.map(function(v){ return { sku: v.sku, titulo: v.titulo||'' }; }),
+              'Importação: ' + new Date().toLocaleString('pt-BR') + ' — ' + vendasSku.length + ' SKUs | ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades');
+          } else {
+            alert('Vendas ML importadas!\n\n' + vendasSku.length + ' SKUs  |  0 novos  |  ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades');
+          }
         } catch(err){ alert('Erro ao processar: ' + err.message); }
         input.value = '';
       };
@@ -1332,6 +1372,8 @@
           if(result.error){ alert('Erro: ' + result.error); return; }
           let novos = 0, atualizados = 0;
           const hoje = new Date().toISOString().slice(0,10);
+          const ts = new Date().toISOString();
+          const novosArr = [];
           result.estoque.forEach(eg => {
             const idx = estoqueGalpao.findIndex(x => x.sku === eg.sku);
             if(idx >= 0){
@@ -1339,12 +1381,18 @@
               estoqueGalpao[idx].data_atualizacao = hoje;
               atualizados++;
             } else {
-              estoqueGalpao.push({ sku: eg.sku, descricao: eg.descricao, qtd_galpao: eg.qtd_galpao, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje });
+              estoqueGalpao.push({ sku: eg.sku, descricao: eg.descricao, qtd_galpao: eg.qtd_galpao, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje, created_at: ts });
+              novosArr.push({ sku: eg.sku, titulo: eg.descricao });
               novos++;
             }
           });
           salvar(); renderEstoque();
-          alert(`✅ Estoque galpão atualizado: ${atualizados} atualizados, ${novos} novos.`);
+          if(novos > 0){
+            _mostrarNovosSkusModal('Estoque Galpão — ' + novos + ' SKUs novos',
+              novosArr, 'Importação Upseller: ' + new Date().toLocaleString('pt-BR') + ' — ' + atualizados + ' atualizados, ' + novos + ' novos.');
+          } else {
+            alert(`✅ Estoque galpão atualizado: ${atualizados} atualizados, 0 novos.`);
+          }
         } catch(err){ alert('Erro ao processar: ' + err.message); }
         input.value = '';
       };
@@ -1428,7 +1476,7 @@
         if(!sku) return;
         estoque.push({
           sku, descricao: r[1] ? String(r[1]).trim() : '',
-          qtd_galpao: Number(r[9]) || 0,
+          qtd_galpao: Number(r[8]) || 0,  // col[8] = Disponível (não Estoque Atual col[9])
           qtd_full: 0,
           em_transito: Number(r[5]) || 0,
           custo_medio: 0,
@@ -1656,12 +1704,15 @@
         if(compSku) novas.push({ sku_comercial: kitSku, titulo_comercial: titulo, sku_componente: compSku, qty, custo_kit: custoKit });
       });
       if(novas.length === 0){ alert('Adicione ao menos um componente'); return; }
+      const isNovo = !composicaoKit.some(c => c.sku_comercial === kitSku);
+      const ts = isNovo ? new Date().toISOString() : (composicaoKit.find(c => c.sku_comercial === kitSku) || {}).created_at;
+      const novasComTs = novas.map(n => ({ ...n, created_at: ts || new Date().toISOString() }));
       composicaoKit = composicaoKit.filter(c => c.sku_comercial !== kitSku);
-      composicaoKit.push(...novas);
+      composicaoKit.push(...novasComTs);
       // Sincronizar imposto com skus[]
       var _idxSkuKit = skus.findIndex(function(s){ return s.sku === kitSku; });
       if(_idxSkuKit >= 0){ skus[_idxSkuKit].imposto = impostoKit; if(!skus[_idxSkuKit].custo && custoKit > 0) skus[_idxSkuKit].custo = custoKit; }
-      else { skus.push({ sku: kitSku, titulo: titulo, custo: custoKit, imposto: impostoKit }); }
+      else { skus.push({ sku: kitSku, titulo: titulo, custo: custoKit, imposto: impostoKit, created_at: ts || new Date().toISOString() }); }
       salvar(); fecharModalComposicao(); renderEstoque();
     }
     function deletarComposicaoKit(kitSku){
@@ -1669,6 +1720,38 @@
       composicaoKit = composicaoKit.filter(c => c.sku_comercial !== kitSku);
       skus = skus.filter(s => s.sku !== kitSku);
       salvar(); renderComposicoesTab(); renderSKUs();
+    }
+
+    function mostrarUltimosCadastrados(){
+      const modal = document.getElementById('modal-ultimos-cadastrados');
+      const lista = document.getElementById('ultimos-cadastrados-lista');
+      if(!modal || !lista) return;
+      const fmtDt = function(iso){ if(!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}); };
+      const skuItems = skus
+        .filter(function(s){ return s.created_at; })
+        .map(function(s){ return { sku: s.sku, titulo: s.titulo||'', tipo: 'SKU', ts: s.created_at }; });
+      const kitSkusVistos = new Set();
+      const kitItems = composicaoKit
+        .filter(function(c){ return c.created_at && !kitSkusVistos.has(c.sku_comercial) && kitSkusVistos.add(c.sku_comercial); })
+        .map(function(c){ return { sku: c.sku_comercial, titulo: c.titulo_comercial||'', tipo: 'Kit', ts: c.created_at }; });
+      const galpaoItems = estoqueGalpao
+        .filter(function(e){ return e.created_at; })
+        .map(function(e){ return { sku: e.sku, titulo: e.descricao||'', tipo: 'Galpão', ts: e.created_at }; });
+      const todos = [...skuItems, ...kitItems, ...galpaoItems].sort(function(a,b){ return b.ts.localeCompare(a.ts); }).slice(0,30);
+      if(todos.length === 0){
+        lista.innerHTML = '<div style="color:#6b7280;text-align:center;padding:24px;">Nenhum registro com data de criação.<br><small>Registros criados antes desta versão não têm data.</small></div>';
+      } else {
+        lista.innerHTML = todos.map(function(it){
+          const cor = it.tipo==='Kit' ? '#7c3aed' : it.tipo==='Galpão' ? '#0ea5e9' : '#374151';
+          return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--gray-100);">' +
+            '<span style="font-size:10px;font-weight:600;padding:2px 6px;background:' + (it.tipo==='Kit'?'#ede9fe':it.tipo==='Galpão'?'#e0f2fe':'#f3f4f6') + ';border-radius:4px;color:' + cor + ';white-space:nowrap;">' + it.tipo + '</span>' +
+            '<span style="font-family:monospace;font-size:12px;min-width:140px;">' + it.sku + '</span>' +
+            '<span style="color:#6b7280;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.titulo + '</span>' +
+            '<span style="font-size:11px;color:#9ca3af;white-space:nowrap;">' + fmtDt(it.ts) + '</span>' +
+            '</div>';
+        }).join('');
+      }
+      modal.classList.add('open');
     }
 
     // ----- Templates CSV -----

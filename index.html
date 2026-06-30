@@ -1189,6 +1189,7 @@
           <h1>Motor de Reposição</h1>
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
             <button class="btn-out btn-sm" onclick="abrirModalImportarEstoque()">📥 Importar dados</button>
+            <button class="btn-out btn-sm" onclick="mostrarUltimosCadastrados()" title="Ver últimos SKUs e Kits cadastrados com data/hora">🕐 Últimos cadastrados</button>
             <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="abrirModalLimparDados()">🗑 Limpar</button>
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
@@ -1428,14 +1429,17 @@
           <div class="card mb-2">
             <div class="card-body" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;">
               <div style="display:flex;align-items:center;gap:6px;">
-                <label style="font-size:12px;white-space:nowrap;">Sem venda há mais de</label>
-                <input type="number" id="skuunit-filtro-inatividade" min="0" placeholder="—" style="width:52px;font-size:12px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;" onchange="renderSkuUnitarioTab()">
-                <span style="font-size:12px;">dias</span>
+                <input type="text" id="skuunit-busca" placeholder="Buscar SKU ou descrição…" style="font-size:12px;padding:3px 8px;border:1px solid var(--gray-200);border-radius:5px;width:180px;" oninput="renderSkuUnitarioTab()">
               </div>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <label style="font-size:12px;white-space:nowrap;">Menos de</label>
+              <div style="display:flex;align-items:center;gap:6px;" title="Oculta SKUs que não tiveram venda nos últimos N dias (giro = 0 no período selecionado)">
+                <label style="font-size:12px;white-space:nowrap;">Ocultar inativos há &gt;</label>
+                <input type="number" id="skuunit-filtro-inatividade" min="0" placeholder="—" style="width:52px;font-size:12px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;" onchange="renderSkuUnitarioTab()">
+                <span style="font-size:12px;" title="Oculta SKUs com giro = 0 no relatório importado">dias ⓘ</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;" title="Oculta SKUs com menos de N unidades consumidas no período do relatório (30 ou 60d, etc.)">
+                <label style="font-size:12px;white-space:nowrap;">Ocultar com &lt;</label>
                 <input type="number" id="skuunit-filtro-min-vendas" min="0" placeholder="—" style="width:52px;font-size:12px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:5px;" onchange="renderSkuUnitarioTab()">
-                <span style="font-size:12px;">vendas/mês</span>
+                <span style="font-size:12px;" title="Unidades totais consumidas (direto + via kits) no período do relatório">un/período ⓘ</span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;">
                 <label style="font-size:12px;">Cobertura</label>
@@ -1457,7 +1461,8 @@
                   <option value="90">90 dias</option>
                 </select>
               </div>
-              <div style="margin-left:auto;">
+              <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
+                <button class="btn-out btn-sm" onclick="renderSkuUnitarioTab()" title="Reaplica todos os filtros e atualiza a tabela">🔍 Filtrar</button>
                 <button class="btn-out btn-sm" id="btn-criar-oc-skuunit" style="display:none;" onclick="criarOCdeSelecionados('skuunit')">🛒 Criar OC</button>
               </div>
             </div>
@@ -1532,11 +1537,11 @@
                   <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
                     <th style="padding:8px 10px;text-align:left;white-space:nowrap;">SKU</th>
                     <th style="padding:8px 6px;text-align:left;">Título</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Disponíveis para venda">Aptas venda</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Em separação para pedidos">Em separação</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="A caminho do CD">Em transf.</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Avariados/não disponíveis">Não aptos</th>
-                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Total no CD">Total CD</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Aptas para venda — disponíveis para envio imediato">Aptas venda</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Entrada pendente — a caminho do Full CD">A caminho</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Em transferência entre centros de distribuição">Em transf.</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Devolvidas pelo comprador">Devolvidas</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Estoque médio dos últimos 30 dias">Estoque médio</th>
                     <th style="padding:8px 6px;text-align:right;white-space:nowrap;color:#7c3aed;" title="Vendas últimos 30 dias">Vendas 30d</th>
                   </tr>
                 </thead>
@@ -2023,6 +2028,7 @@
           <label class="form-label">Custo (R$)</label>
           <input type="number" id="sku-custo" step="0.01">
         </div>
+        <div id="sku-created-at-info" style="font-size:11px;color:#9ca3af;margin-top:4px;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn" onclick="salvarSKU()">Salvar</button>
@@ -2032,6 +2038,39 @@
     </div>
   </div>
   
+  <!-- MODAL NOVOS SKUs PÓS-IMPORT -->
+  <div class="modal" id="modal-novos-skus">
+    <div class="modal-content" style="max-width:560px;">
+      <div class="modal-header">
+        <div class="modal-title" id="novos-skus-titulo">SKUs novos encontrados</div>
+        <button class="btn-out btn-sm" onclick="document.getElementById('modal-novos-skus').classList.remove('open')">✕</button>
+      </div>
+      <div class="modal-body" style="max-height:400px;overflow-y:auto;">
+        <div id="novos-skus-lista"></div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <span id="novos-skus-origem" style="font-size:11px;color:#9ca3af;"></span>
+        <button class="btn-out" onclick="document.getElementById('modal-novos-skus').classList.remove('open')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ÚLTIMOS CADASTRADOS -->
+  <div class="modal" id="modal-ultimos-cadastrados">
+    <div class="modal-content" style="max-width:640px;">
+      <div class="modal-header">
+        <div class="modal-title">🕐 Últimos Cadastrados</div>
+        <button class="btn-out btn-sm" onclick="document.getElementById('modal-ultimos-cadastrados').classList.remove('open')">✕</button>
+      </div>
+      <div class="modal-body" style="max-height:480px;overflow-y:auto;">
+        <div id="ultimos-cadastrados-lista"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-out" onclick="document.getElementById('modal-ultimos-cadastrados').classList.remove('open')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL IMPORTAR DADOS -->
   <div class="modal" id="modal-importar">
     <div class="modal-content" style="max-width:480px;">

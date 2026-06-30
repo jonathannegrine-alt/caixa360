@@ -759,6 +759,8 @@
       document.getElementById('sku-codigo').value = s.sku;
       document.getElementById('sku-titulo').value = s.titulo || '';
       document.getElementById('sku-custo').value = s.custo;
+      const infoEl = document.getElementById('sku-created-at-info');
+      if(infoEl) infoEl.textContent = s.created_at ? ('Cadastrado em: ' + new Date(s.created_at).toLocaleString('pt-BR')) : '';
       document.getElementById('modal-sku').classList.add('open');
     }
 
@@ -768,14 +770,15 @@
         sku: document.getElementById('sku-codigo').value.trim(),
         titulo: document.getElementById('sku-titulo').value.trim(),
         custo: parseFloat(document.getElementById('sku-custo').value) || 0,
-        imposto: skuAnterior ? (skuAnterior.imposto || 0) : 0
+        imposto: skuAnterior ? (skuAnterior.imposto || 0) : 0,
+        created_at: skuAnterior ? (skuAnterior.created_at || new Date().toISOString()) : new Date().toISOString()
       };
 
       if(!sku.sku || !sku.custo){
         alert('Preencha SKU e Custo');
         return;
       }
-      
+
       if(editandoIdxSKU !== null){
         skus[editandoIdxSKU] = sku;
       } else {

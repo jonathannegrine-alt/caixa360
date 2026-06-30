@@ -71,11 +71,11 @@
         return `<tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:7px 10px;white-space:nowrap;font-family:monospace;font-size:11px;">${e.sku||''}</td>
           <td style="padding:7px 6px;color:#374151;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.titulo||''}">${e.titulo||'-'}</td>
-          <td style="padding:7px 6px;text-align:right;${cls}" title="Disponíveis para venda">${e.aptos_venda||0}</td>
-          <td style="padding:7px 6px;text-align:right;color:#64748b;" title="Em separação">${e.em_separacao||0}</td>
-          <td style="padding:7px 6px;text-align:right;color:#0ea5e9;" title="A caminho do CD">${e.em_transito||0}</td>
-          <td style="padding:7px 6px;text-align:right;color:#ef4444;" title="Avariados">${e.nao_aptos||0}</td>
-          <td style="padding:7px 6px;text-align:right;font-weight:600;" title="Total no CD">${e.total_cd||0}</td>
+          <td style="padding:7px 6px;text-align:right;${cls}" title="Aptas para venda (disponíveis para envio imediato)">${e.aptos_venda||0}</td>
+          <td style="padding:7px 6px;text-align:right;color:#64748b;" title="Entrada pendente — a caminho do Full">${e.em_separacao||0}</td>
+          <td style="padding:7px 6px;text-align:right;color:#0ea5e9;" title="Em transferência entre CDs">${e.em_transito||0}</td>
+          <td style="padding:7px 6px;text-align:right;color:#ef4444;" title="Devolvidas pelo comprador">${e.nao_aptos||0}</td>
+          <td style="padding:7px 6px;text-align:right;color:#7c3aed;font-size:11px;" title="Estoque médio dos últimos 30 dias">${e.estoque_medio_30d||0}</td>
           <td style="padding:7px 6px;text-align:right;color:#7c3aed;font-size:11px;" title="Vendas 30d">${e.vendas_30d||0}</td>
         </tr>`;
       }).join('');
@@ -148,10 +148,9 @@
     function exportarEstoqueFullCSV(){
       if(estoqueFullML.length === 0){ alert('Nada para exportar.'); return; }
       const esc = s => (String(s||'')).replace(/;/g,'|');
-      const header = 'sku;titulo;aptos_venda;em_transito;pendente;total';
+      const header = 'sku;titulo;aptos_venda;a_caminho;em_transito;devolvidas;estoque_medio_30d;vendas_30d';
       const linhas = estoqueFullML.map(e => [
-        esc(e.sku), esc(e.titulo), e.aptos_venda||0, e.em_transito||0, e.pendente||0,
-        (e.aptos_venda||0)+(e.em_transito||0)+(e.pendente||0)
+        esc(e.sku), esc(e.titulo), e.aptos_venda||0, e.em_separacao||0, e.em_transito||0, e.nao_aptos||0, e.estoque_medio_30d||0, e.vendas_30d||0
       ].join(';'));
       const blob = new Blob(['\uFEFF' + header + '\n' + linhas.join('\n')], {type:'text/csv;charset=utf-8'});
       const a = document.createElement('a');
@@ -178,17 +177,17 @@
             // Ignora linha de cabeçalho se houver
             if(/^sku|seller.?sku/i.test(sku)) continue;
             const titulo = String(row[5]||'').trim();
-            const aptos = parseInt(row[12])||0;
-            const em_separacao = parseInt(row[14])||0;
-            const em_transito = parseInt(row[15])||0;
-            const nao_aptos = parseInt(row[16])||0;
-            const total_cd = parseInt(row[17])||0;
+            const aptos = parseInt(row[17])||0;           // col[17] = Aptas para venda
+            const em_separacao = parseInt(row[14])||0;    // col[14] = Entrada pendente (a caminho Full)
+            const em_transito = parseInt(row[15])||0;     // col[15] = Em transferência
+            const nao_aptos = parseInt(row[16])||0;       // col[16] = Devolvidas pelo comprador
+            const estoque_medio_30d = parseInt(row[12])||0; // col[12] = Estoque médio últimos 30d
             const total_geral = parseInt(row[22])||0;
             const vendas_30d = parseInt(row[10])||0;
             const itemId = String(row[0]||'').trim();
             const status = String(row[8]||'').trim();
             const prazo = String(row[28]||'-').trim();
-            itens.push({ sku, titulo, aptos_venda: aptos, em_separacao, em_transito, nao_aptos, total_cd, total_geral, vendas_30d, item_id: itemId, status, prazo });
+            itens.push({ sku, titulo, aptos_venda: aptos, em_separacao, em_transito, nao_aptos, estoque_medio_30d, total_geral, vendas_30d, item_id: itemId, status, prazo });
           }
           if(itens.length === 0){ alert('Nenhum SKU encontrado no arquivo.\nVerifique se o arquivo é o relatório "Estoque Full" do Mercado Livre.'); if(st) st.textContent = 'Importação cancelada — arquivo inválido'; return; }
           estoqueFullML = itens;
