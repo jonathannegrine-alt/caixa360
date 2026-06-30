@@ -166,10 +166,10 @@
     // Fonte: estoqueGalpao (Upseller = somente isolados) + componentes[], excluindo sku_comercial de composicaoKit.
     // Se ambos vazios: retorna Set vazio (caller filtra somente por !skusKit).
     function getSkusIsolados(){
-      const kitSkus = new Set(composicaoKit.map(c => c.sku_comercial));
+      const kitSkus = new Set(composicaoKit.map(c => c.sku_comercial.toUpperCase()));
       const s = new Set();
-      estoqueGalpao.forEach(e => { if(!kitSkus.has(e.sku)) s.add(e.sku); });
-      componentes.forEach(c => { if(!kitSkus.has(c.codigo)) s.add(c.codigo); });
+      estoqueGalpao.forEach(e => { if(!kitSkus.has(e.sku.toUpperCase())) s.add(e.sku.toUpperCase()); });
+      componentes.forEach(c => { if(!kitSkus.has(c.codigo.toUpperCase())) s.add(c.codigo.toUpperCase()); });
       return { isolados: s, kitSkus };
     }
 
@@ -193,15 +193,16 @@
           const pairKey = vU + '|' + c.sku_componente.toUpperCase();
           if(kitCompSeen.has(pairKey)) return;  // ignora entrada duplicada
           kitCompSeen.add(pairKey);
-          consumo[c.sku_componente] = (consumo[c.sku_componente] || 0) + v.unidades * c.qty;
+          const compU = c.sku_componente.toUpperCase();
+          consumo[compU] = (consumo[compU] || 0) + v.unidades * c.qty;
         });
       });
 
-      // 2. Vendas diretas: SKU não-kit que é componente físico (case-insensitive)
+      // 2. Vendas diretas: SKU não-kit que é componente físico (case-insensitive, chave uppercase)
       vendasSku.forEach(v => {
         const vU = v.sku.toUpperCase();
         if(!skusKitU.has(vU) && codigosCompU.has(vU)){
-          consumo[v.sku] = (consumo[v.sku] || 0) + v.unidades;
+          consumo[vU] = (consumo[vU] || 0) + v.unidades;
         }
       });
 
@@ -783,7 +784,7 @@
       const consumo = calcConsumoComponentes();
       const skusExibir = new Set([
         ...Object.keys(consumo).filter(sku => !kitSkus.has(sku)),
-        ...vendasSku.filter(v => !kitSkus.has(v.sku) && (isolados.size === 0 || isolados.has(v.sku))).map(v => v.sku)
+        ...vendasSku.filter(v => !kitSkus.has(v.sku.toUpperCase()) && (isolados.size === 0 || isolados.has(v.sku.toUpperCase()))).map(v => v.sku.toUpperCase())
       ]);
 
       // Ler filtros
@@ -890,7 +891,7 @@
       const periodo = vendasSku[0] ? (vendasSku[0].periodo_dias || 30) : 30;
       const skusExibir = new Set([
         ...Object.keys(consumo).filter(sku => !kitSkus.has(sku)),
-        ...vendasSku.filter(v => !kitSkus.has(v.sku) && (isolados.size === 0 || isolados.has(v.sku))).map(v => v.sku)
+        ...vendasSku.filter(v => !kitSkus.has(v.sku.toUpperCase()) && (isolados.size === 0 || isolados.has(v.sku.toUpperCase()))).map(v => v.sku.toUpperCase())
       ]);
       const rows = [['SKU','Descricao','Total_30d','Direto','Via_Kits','Unid_dia','Estoque','Cobertura_dias']];
       [...skusExibir].sort().forEach(sku => {
