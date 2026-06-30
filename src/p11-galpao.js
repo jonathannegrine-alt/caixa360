@@ -185,10 +185,14 @@
         ...skus.filter(s => !skusKitU.has(s.sku.toUpperCase())).map(s => s.sku.toUpperCase()),
       ]);
 
-      // 1. Consumo via kits (case-insensitive)
+      // 1. Consumo via kits (case-insensitive + dedup de pares kit→componente duplicados)
+      const kitCompSeen = new Set();
       vendasSku.forEach(v => {
         const vU = v.sku.toUpperCase();
         composicaoKit.filter(c => c.sku_comercial.toUpperCase() === vU).forEach(c => {
+          const pairKey = vU + '|' + c.sku_componente.toUpperCase();
+          if(kitCompSeen.has(pairKey)) return;  // ignora entrada duplicada
+          kitCompSeen.add(pairKey);
           consumo[c.sku_componente] = (consumo[c.sku_componente] || 0) + v.unidades * c.qty;
         });
       });
@@ -1349,13 +1353,25 @@
         try {
           const result = parseKitUpseller(e.target.result);
           if(result.error){ alert('Erro: ' + result.error); return; }
-          const existentes = new Set(composicaoKit.map(c => c.sku_comercial));
-          const novosKitSkus = [...new Set(result.composicao.map(c => c.sku_comercial))].filter(k => !existentes.has(k));
-          const novasEntradas = result.composicao.filter(c => novosKitSkus.includes(c.sku_comercial));
-          const ignorados = result.kits - novosKitSkus.length;
+          // Preservar custo_kit existente por SKU (case-insensitive)
+          const custoKitExistente = {};
+          composicaoKit.forEach(c => {
+            const k = c.sku_comercial.toUpperCase();
+            if(!custoKitExistente[k]) custoKitExistente[k] = c.custo_kit || 0;
+          });
+          // SKUs do arquivo normalizados (dedup case-insensitive)
+          const kitSkusArquivoU = [...new Set(result.composicao.map(c => c.sku_comercial.toUpperCase()))];
+          // Remover entradas antigas (case-insensitive) → evita duplicatas de re-import
+          composicaoKit = composicaoKit.filter(c => !kitSkusArquivoU.includes(c.sku_comercial.toUpperCase()));
+          // Adicionar novas entradas preservando custo_kit existente
+          const novasEntradas = result.composicao.map(c => ({
+            ...c, custo_kit: custoKitExistente[c.sku_comercial.toUpperCase()] || c.custo_kit || 0
+          }));
           composicaoKit.push(...novasEntradas);
+          const novosKits = kitSkusArquivoU.filter(k => !custoKitExistente[k]);
+          const atualizados = kitSkusArquivoU.length - novosKits.length;
           salvar(); renderEstoque();
-          alert(`✅ ${novosKitSkus.length} kits novos adicionados · ${novasEntradas.length} mapeamentos.${ignorados > 0 ? '\n' + ignorados + ' já existentes ignorados.' : ''}`);
+          alert(`✅ ${novosKits.length} kits novos · ${atualizados} atualizados · ${novasEntradas.length} mapeamentos`);
         } catch(err){ alert('Erro ao processar: ' + err.message); }
         input.value = '';
       };
