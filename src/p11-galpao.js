@@ -1294,24 +1294,59 @@
       } else {
         lista.innerHTML = novosSkus.map(function(s){
           const jaExiste = skus.some(function(x){ return x.sku.toUpperCase() === s.sku.toUpperCase(); });
-          return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-100);">' +
-            '<span style="font-family:monospace;font-size:12px;min-width:120px;">' + s.sku + '</span>' +
-            '<span style="color:#6b7280;font-size:12px;flex:1;">' + (s.titulo||'') + '</span>' +
-            (!jaExiste ? '<button class="btn-sm" style="font-size:11px;padding:3px 8px;" onclick="_criarSkuDaImport(\'' + s.sku.replace(/'/g,"\\'") + '\',\'' + (s.titulo||'').replace(/'/g,"\\'") + '\')">+ Criar em Produtos</button>' : '<span style="font-size:11px;color:#10b981;">✓ cadastrado</span>') +
-            '</div>';
+          const sk = s.sku.replace(/'/g,"\\'").replace(/</g,'&lt;');
+          const ti = (s.titulo||'').replace(/'/g,"\\'").replace(/</g,'&lt;');
+          return '<div data-novo-sku style="border-bottom:1px solid var(--gray-100);">' +
+            '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;">' +
+              '<span style="font-family:monospace;font-size:12px;min-width:130px;font-weight:600;">' + s.sku + '</span>' +
+              '<span style="color:#6b7280;font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + (s.titulo||'') + '">' + (s.titulo||'') + '</span>' +
+              (jaExiste
+                ? '<span style="font-size:11px;color:#10b981;white-space:nowrap;">✓ já cadastrado</span>'
+                : '<button class="btn-sm" style="font-size:11px;padding:3px 10px;white-space:nowrap;" onclick="_expandirFormSku(\'' + sk + '\',\'' + ti + '\',this)">+ Criar</button>' +
+                  '<button class="btn-out btn-sm" style="font-size:11px;padding:3px 8px;white-space:nowrap;" onclick="this.closest(\'[data-novo-sku]\').style.display=\'none\'">Ignorar</button>'
+              ) +
+            '</div>' +
+          '</div>';
         }).join('');
       }
       document.getElementById('novos-skus-origem').textContent = origemLabel;
       modal.classList.add('open');
     }
-    function _criarSkuDaImport(sku, titulo){
+    function _expandirFormSku(sku, titulo, btn){
+      const row = btn.closest('[data-novo-sku]');
+      if(!row) return;
+      const sk = sku.replace(/'/g,"\\'");
+      const ti = titulo.replace(/'/g,"\\'");
+      const tituloEsc = titulo.replace(/</g,'&lt;');
+      row.innerHTML =
+        '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">' +
+          '<span style="font-family:monospace;font-size:12px;min-width:130px;font-weight:600;">' + sku + '</span>' +
+          '<span style="color:#6b7280;font-size:12px;flex:1;">' + tituloEsc + '</span>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0 10px;background:#f9fafb;border-radius:6px;padding:6px 8px 8px;">' +
+          '<label style="font-size:11px;color:#374151;font-weight:600;">Custo R$</label>' +
+          '<input type="number" data-custo step="0.01" min="0" placeholder="0,00" style="width:90px;font-size:12px;padding:4px 7px;border:1px solid var(--gray-200);border-radius:5px;">' +
+          '<label style="font-size:11px;color:#374151;font-weight:600;">Imposto %</label>' +
+          '<input type="number" data-imposto step="0.1" min="0" max="100" placeholder="0" style="width:65px;font-size:12px;padding:4px 7px;border:1px solid var(--gray-200);border-radius:5px;">' +
+          '<button class="btn btn-sm" style="font-size:11px;padding:4px 12px;" onclick="_confirmarCriarSku(\'' + sk + '\',\'' + ti + '\',this)">✓ Criar</button>' +
+          '<button class="btn-out btn-sm" style="font-size:11px;padding:4px 8px;" onclick="this.closest(\'[data-novo-sku]\').style.display=\'none\'">Ignorar</button>' +
+        '</div>';
+      const custoInput = row.querySelector('[data-custo]');
+      if(custoInput) custoInput.focus();
+    }
+    function _confirmarCriarSku(sku, titulo, btn){
       if(skus.some(function(x){ return x.sku.toUpperCase() === sku.toUpperCase(); })){ alert('SKU já existe em Produtos.'); return; }
-      const ts = new Date().toISOString();
-      skus.push({ sku: sku.toUpperCase(), titulo: titulo, custo: 0, imposto: 0, created_at: ts });
+      const row = btn.closest('[data-novo-sku]');
+      const custo = parseFloat(row ? (row.querySelector('[data-custo]')||{}).value : 0) || 0;
+      const imposto = parseFloat(row ? (row.querySelector('[data-imposto]')||{}).value : 0) || 0;
+      skus.push({ sku: sku.toUpperCase(), titulo: titulo, custo: custo, imposto: imposto, created_at: new Date().toISOString() });
       salvar();
-      const modal = document.getElementById('modal-novos-skus');
-      if(modal) modal.classList.remove('open');
-      alert('✅ ' + sku + ' criado em Produtos. Acesse Produtos para preencher o custo.');
+      if(row) row.innerHTML =
+        '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--gray-100);">' +
+          '<span style="font-family:monospace;font-size:12px;min-width:130px;">' + sku.toUpperCase() + '</span>' +
+          '<span style="color:#6b7280;font-size:12px;flex:1;">' + titulo.replace(/</g,'&lt;') + '</span>' +
+          '<span style="font-size:11px;color:#10b981;white-space:nowrap;">✓ criado' + (custo > 0 ? ' · R$ ' + custo.toFixed(2) : '') + '</span>' +
+        '</div>';
     }
 
     function onImportVendasML(input){
@@ -1422,8 +1457,39 @@
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
       if(rows.length < 7) return {error:'Arquivo sem dados suficientes'};
-      const dataRows = rows.slice(6).filter(r => r[22] && String(r[22]).trim() !== '');
-      if(dataRows.length === 0) return {error:'Nenhuma linha com SKU encontrada (esperado col 23 = SKU)'};
+
+      // Detectar coluna de SKU do vendedor — o relatório ML às vezes traz o ID do anúncio (MLBxxx)
+      // em vez do SKU cadastrado pelo vendedor
+      const _isMLId = function(v){ return /^(MLB|MLA|MLC|MLM|MLU)\d+/i.test(String(v||'').trim()); };
+      let colSku = 22;  // padrão histórico
+      let colTitulo = 26;  // padrão histórico
+
+      // 1. Tentar header (rows[5] costuma ser a linha de cabeçalho)
+      const headerRow = rows[5] ? rows[5].map(function(h){ return String(h||'').trim(); }) : [];
+      headerRow.forEach(function(h, i){
+        const hl = h.toLowerCase();
+        if(/sku/.test(hl) && !/anúncio|anuncio|número|numero|item.?id/i.test(hl)) colSku = i;
+        if(/título|titulo/.test(hl) && colTitulo === 26) colTitulo = i;
+      });
+
+      // 2. Verificar amostra de dados — se maioria dos valores em colSku são MLB IDs, ajustar
+      const amostra = rows.slice(6, 16).filter(function(r){ return r.length > colSku; });
+      const mlbCount = amostra.filter(function(r){ return _isMLId(r[colSku]); }).length;
+      if(amostra.length > 0 && mlbCount > amostra.length / 2){
+        // colSku atual tem MLB IDs — procurar coluna com SKU real nas adjacentes
+        for(var delta = 1; delta <= 4; delta++){
+          for(var sinal of [1,-1]){
+            const c = colSku + delta * sinal;
+            if(c < 0) continue;
+            const validos = amostra.filter(function(r){ return r[c] && String(r[c]).trim() && !_isMLId(r[c]); }).length;
+            if(validos >= amostra.length / 2){ colSku = c; delta = 99; break; }
+          }
+        }
+      }
+
+      const dataRows = rows.slice(6).filter(function(r){ return r[colSku] && String(r[colSku]).trim() !== '' && !_isMLId(r[colSku]); });
+      if(dataRows.length === 0) return {error:'Nenhuma linha com SKU de vendedor encontrada. O relatório pode estar usando col '+(colSku+1)+' que contém IDs MLB. Verifique o arquivo.'};
+
       // Detectar coluna de data (r[0]-r[5], primeiro que pareça data)
       const _mesesPT={'janeiro':'01','fevereiro':'02','março':'03','abril':'04','maio':'05','junho':'06','julho':'07','agosto':'08','setembro':'09','outubro':'10','novembro':'11','dezembro':'12'};
       function _parseDataVenda(r){
@@ -1443,9 +1509,9 @@
       }
       const agg = {};
       dataRows.forEach(r => {
-        const sku = String(r[22]).trim();
+        const sku = String(r[colSku]).trim();
         const cancelado = r[17] && parseFloat(r[17]) < 0;
-        if(!agg[sku]) agg[sku] = { sku, titulo: String(r[26]||'').trim(), unidades:0, receita:0, tarifa_ml:0, envio:0, liquido:0, unidades_ads:0, cancelamentos:0, receita_cancelada:0, periodo_dias:30, ultima_venda: null };
+        if(!agg[sku]) agg[sku] = { sku, titulo: String(r[colTitulo]||'').trim(), unidades:0, receita:0, tarifa_ml:0, envio:0, liquido:0, unidades_ads:0, cancelamentos:0, receita_cancelada:0, periodo_dias:30, ultima_venda: null };
         if(cancelado){
           agg[sku].cancelamentos++;
           agg[sku].receita_cancelada += Math.abs(Number(r[7])||0);
