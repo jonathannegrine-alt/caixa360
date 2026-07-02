@@ -177,13 +177,8 @@
       const consumo = {};
       const dias = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
 
-      // Comparações case-insensitive: sets com uppercase
+      // skusKitU = SKUs comerciais de kits (sku_comercial em composicaoKit), em uppercase
       const skusKitU = new Set(composicaoKit.map(c => c.sku_comercial.toUpperCase()));
-      const codigosCompU = new Set([
-        ...estoqueGalpao.filter(e => !skusKitU.has(e.sku.toUpperCase())).map(e => e.sku.toUpperCase()),
-        ...componentes.filter(c => !skusKitU.has(c.codigo.toUpperCase())).map(c => c.codigo.toUpperCase()),
-        ...skus.filter(s => !skusKitU.has(s.sku.toUpperCase())).map(s => s.sku.toUpperCase()),
-      ]);
 
       // 1. Consumo via kits (case-insensitive + dedup de pares kit→componente duplicados)
       const kitCompSeen = new Set();
@@ -198,10 +193,11 @@
         });
       });
 
-      // 2. Vendas diretas: SKU não-kit que é componente físico (case-insensitive, chave uppercase)
+      // 2. Vendas diretas: qualquer SKU que não seja um kit comercial
+      // (não restringe a estoqueGalpao/componentes/skus — qualquer produto vendido conta)
       vendasSku.forEach(v => {
         const vU = v.sku.toUpperCase();
-        if(!skusKitU.has(vU) && codigosCompU.has(vU)){
+        if(!skusKitU.has(vU)){
           consumo[vU] = (consumo[vU] || 0) + v.unidades;
         }
       });
@@ -1357,23 +1353,22 @@
         try {
           var result = parseVendasMLXLS(e.target.result);
           if(result.error){ alert('Erro: ' + result.error); return; }
-          var skusAntes = new Set(vendasSku.map(function(v){ return v.sku.toUpperCase(); }));
-          var novosArr = result.vendas.filter(function(v){ return !skusAntes.has(v.sku.toUpperCase()); });
+          // Mostra SKUs que estão nas vendas mas ainda não têm cadastro em Produtos (skus[])
+          var novosArr = result.vendas.filter(function(v){ return !skus.some(function(s){ return s.sku.toUpperCase() === v.sku.toUpperCase(); }); });
           var novos = novosArr.length;
-          var atualizados = result.vendas.length - novos;
           var periodo = vendasImportMeta.periodo || 30;
           result.vendas.forEach(function(v){ v.periodo_dias = periodo; v.periodo_import = periodo; });
           vendasSku = result.vendas;
           vendasImportMeta.periodoOriginal = periodo;
           vendasImportMeta.importAt = new Date().toISOString();
-          vendasImportMeta.dedupInfo = novos + ' SKUs novos, ' + atualizados + ' atualizados — ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades';
+          vendasImportMeta.dedupInfo = novos + ' sem cadastro em Produtos, ' + (result.vendas.length - novos) + ' já cadastrados — ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades';
           salvar(); renderEstoque();
           if(novos > 0){
-            _mostrarNovosSkusModal('Vendas ML — ' + novos + ' SKUs novos encontrados',
+            _mostrarNovosSkusModal('Vendas ML — ' + novos + ' SKUs sem cadastro em Produtos',
               novosArr.map(function(v){ return { sku: v.sku, titulo: v.titulo||'' }; }),
               'Importação: ' + new Date().toLocaleString('pt-BR') + ' — ' + vendasSku.length + ' SKUs | ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades');
           } else {
-            alert('Vendas ML importadas!\n\n' + vendasSku.length + ' SKUs  |  0 novos  |  ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades');
+            alert('Vendas ML importadas!\n\n' + vendasSku.length + ' SKUs  |  todos já cadastrados em Produtos  |  ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades');
           }
         } catch(err){ alert('Erro ao processar: ' + err.message); }
         input.value = '';
