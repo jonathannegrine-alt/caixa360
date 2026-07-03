@@ -5,12 +5,7 @@
       const n = parseFloat(c);
       return isNaN(n) ? null : n;
     }
-    function sortTableByCol(tbodyId, colIdx){
-      const tbody = document.getElementById(tbodyId);
-      if(!tbody) return;
-      const st = _sortState[tbodyId] || {col:-1, dir:'asc'};
-      const dir = (st.col === colIdx && st.dir === 'asc') ? 'desc' : 'asc';
-      _sortState[tbodyId] = {col:colIdx, dir};
+    function _applySortDOM(tbody, colIdx, dir){
       const rows = Array.from(tbody.querySelectorAll('tr'));
       rows.sort((a,b) => {
         const at = a.cells[colIdx] ? a.cells[colIdx].textContent.trim() : '';
@@ -27,6 +22,21 @@
         if(i === colIdx){ arr.textContent = dir === 'asc' ? ' ▲' : ' ▼'; arr.style.opacity='1'; }
         else { arr.textContent = ' ⇅'; arr.style.opacity='0.35'; }
       });
+    }
+    function sortTableByCol(tbodyId, colIdx){
+      const tbody = document.getElementById(tbodyId);
+      if(!tbody) return;
+      const st = _sortState[tbodyId] || {col:-1, dir:'asc'};
+      const dir = (st.col === colIdx && st.dir === 'asc') ? 'desc' : 'asc';
+      _sortState[tbodyId] = {col:colIdx, dir};
+      _applySortDOM(tbody, colIdx, dir);
+    }
+    function _reapplySort(tbodyId){
+      const st = _sortState[tbodyId];
+      if(!st || st.col < 0) return;
+      const tbody = document.getElementById(tbodyId);
+      if(!tbody) return;
+      _applySortDOM(tbody, st.col, st.dir);
     }
     const _savedColWidths = {};
     function initResizableCols(tbodyId){
@@ -90,6 +100,7 @@
         th.onclick = () => sortTableByCol(tbodyId, i);
       });
       makeResizableCols(table);
+      _reapplySort(tbodyId);
     }
 
     // ===== UTILS =====

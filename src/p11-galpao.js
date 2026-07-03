@@ -175,7 +175,9 @@
 
     function calcConsumoComponentes(){
       const consumo = {};
-      const dias = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
+      // diasImport = período real dos dados (ex: 180 para 6 meses); diasDisplay = período escolhido pelo usuário (ex: 30)
+      const diasImport = vendasSku.length > 0 ? (vendasSku[0].periodo_import || vendasSku[0].periodo_dias || 30) : 30;
+      const diasDisplay = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
 
       // skusKitU = SKUs comerciais de kits (sku_comercial em composicaoKit), em uppercase
       const skusKitU = new Set(composicaoKit.map(c => c.sku_comercial.toUpperCase()));
@@ -204,7 +206,11 @@
 
       const result = {};
       Object.keys(consumo).forEach(sku => {
-        result[sku] = { consumo30d: consumo[sku], consumo_diario: consumo[sku] / dias };
+        const consumo_diario = consumo[sku] / diasImport;
+        result[sku] = {
+          consumo30d: Math.round(consumo_diario * diasDisplay),  // escala para período de exibição
+          consumo_diario
+        };
       });
       return result;
     }
@@ -287,7 +293,7 @@
         else if(cobertura < regras.alerta) status = 'critico';
         else if(cobertura < meta_total) status = 'atencao';
         return { sku: p.sku, descricao: p.descricao, isKit: p.isKit, consumo_diario, qtd_galpao, qtd_full, qtd_full_pendente, qtd_total, cobertura, data_ruptura, meta_full: regras.meta_full, meta_galpao: regras.meta_galpao, meta_total, alerta: regras.alerta, status, qtd_sugerida, capital_necessario: qtd_sugerida*custo, custo_unitario: custo };
-      }).filter(r => incluirExcesso || !['excesso_critico','excesso_mod'].includes(r.status)).sort((a,b) => a.cobertura - b.cobertura);
+      }).filter(r => incluirExcesso || !['excesso_critico','excesso_mod'].includes(r.status)).sort((a,b) => b.consumo_diario - a.consumo_diario);
     }
 
     function calcRankingReposicao(){
@@ -789,11 +795,16 @@
       const filtroMin = parseInt(document.getElementById('skuunit-filtro-min-vendas')?.value) || 0;
       const filtroCob = document.getElementById('skuunit-filtro-cob')?.value || 'todos';
 
+      // Fator de escala: ajusta unidades brutas do arquivo para o período de exibição
+      const _diasImport = vendasSku.length > 0 ? (vendasSku[0].periodo_import || vendasSku[0].periodo_dias || 30) : 30;
+      const _diasDisplay = vendasSku.length > 0 ? (vendasSku[0].periodo_dias || 30) : 30;
+      const _escalaComp = _diasImport > 0 ? _diasDisplay / _diasImport : 1;
+
       const rows = [];
       skusExibir.forEach(sku => {
         const c = consumo[sku] || { consumo30d: 0, consumo_diario: 0 };
         const vendaDireta = vendasSku.find(v => v.sku.toUpperCase() === sku.toUpperCase());
-        const direto = vendaDireta ? vendaDireta.unidades : 0;
+        const direto = vendaDireta ? Math.round(vendaDireta.unidades * _escalaComp) : 0;
         const viaKits = Math.max(0, c.consumo30d - direto);
         const descricao = (componentes.find(x => x.codigo.toUpperCase() === sku.toUpperCase()) || {}).descricao
           || (vendaDireta && vendaDireta.titulo) || '';
@@ -1357,9 +1368,10 @@
           var novosArr = result.vendas.filter(function(v){ return !skus.some(function(s){ return s.sku.toUpperCase() === v.sku.toUpperCase(); }); });
           var novos = novosArr.length;
           var periodo = vendasImportMeta.periodo || 30;
-          result.vendas.forEach(function(v){ v.periodo_dias = periodo; v.periodo_import = periodo; });
+          var diasReaisImport = result.diasReais || periodo;
+          result.vendas.forEach(function(v){ v.periodo_dias = periodo; v.periodo_import = diasReaisImport; });
           vendasSku = result.vendas;
-          vendasImportMeta.periodoOriginal = periodo;
+          vendasImportMeta.periodoOriginal = diasReaisImport;
           vendasImportMeta.importAt = new Date().toISOString();
           vendasImportMeta.dedupInfo = novos + ' sem cadastro em Produtos, ' + (result.vendas.length - novos) + ' já cadastrados — ' + result.totalUnidades.toLocaleString('pt-BR') + ' unidades';
           salvar(); renderEstoque();
@@ -1525,7 +1537,16 @@
         }
       });
       const vendas = Object.values(agg);
-      return { vendas, totalUnidades: vendas.reduce((s,v) => s+v.unidades,0), dias: 30 };
+      // Detectar range real de datas para calcular periodo_import correto
+      let minDate = null, maxDate = null;
+      dataRows.forEach(function(r){
+        const dv = _parseDataVenda(r);
+        if(dv){ if(!minDate || dv < minDate) minDate = dv; if(!maxDate || dv > maxDate) maxDate = dv; }
+      });
+      const diasReais = (minDate && maxDate)
+        ? Math.max(1, Math.round((new Date(maxDate) - new Date(minDate)) / 86400000) + 1)
+        : 30;
+      return { vendas, totalUnidades: vendas.reduce((s,v) => s+v.unidades,0), diasReais };
     }
 
     function parseKitUpseller(data){
