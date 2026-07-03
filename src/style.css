@@ -443,15 +443,17 @@
     .btn-toggle:hover{border-color:var(--primary);color:var(--primary);}
     .btn-toggle.active{background:var(--primary);color:#fff;border-color:var(--primary);}
 
-    /* Planilha sticky header */
+    /* Planilha sticky header — relativo ao scroll da página */
     #view-planilha .card{overflow:visible;}
     #view-config .card{overflow:visible;}
-    #view-planilha .card-body{max-height:70vh;overflow-y:auto;padding:0;}
+    #view-planilha .card-body{padding:0;}
+    #planilha-tabela-wrap{overflow-x:auto;}
     #table-planilha thead th{
       position:sticky;
       top:0;
       background:var(--gray-50);
       z-index:10;
+      box-shadow:0 2px 4px rgba(0,0,0,0.06);
     }
 
     /* Lista de lançamentos */
@@ -599,6 +601,7 @@
       /* Tabelas */
       table{min-width:480px;}
       th,td{padding:8px 6px;font-size:12px;}
+      #table-planilha thead th{top:58px;}
 
       /* Calendário */
       .cal-day{min-height:60px;padding:4px 3px;}

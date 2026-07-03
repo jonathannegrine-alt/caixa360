@@ -186,8 +186,9 @@
         const pag = getPag(d);
         const saldoDia = entrada - pag;
         saldoAcum += saldoDia;
-        const corSaldo = saldoAcum < reservaMinima && reservaMinima > 0 ? 'text-danger' : '';
-        const bgRisco = saldoAcum < reservaMinima && reservaMinima > 0 ? 'background:#fff5f5;' : '';
+        const emRisco = saldoAcum < 0 || (reservaMinima > 0 && saldoAcum < reservaMinima);
+        const corSaldo = emRisco ? 'text-danger' : '';
+        const bgRisco = emRisco ? 'background:#fff5f5;' : '';
 
         html += `<tr style="${bgRisco}">
           <td>${ptDate(d)}</td>
