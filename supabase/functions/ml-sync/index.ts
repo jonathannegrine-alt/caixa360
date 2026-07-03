@@ -96,8 +96,11 @@ Deno.serve(async (req) => {
     }
 
     // Agrupar por data (apenas datas >= hoje como segurança extra)
+    // Filtra APENAS pedidos reais (order_id preenchido) — exclui retiradas de cofrinho,
+    // devoluções de crédito e outros movimentos financeiros sem pedido vinculado
     const byDate: Record<string, number> = {}
     for (const item of all) {
+      if (!item.order_id) continue  // retirada de cofrinho / movimento financeiro sem pedido
       const date = (item.money_release_date || '').substring(0, 10)
       if (!date || date < amanha) continue
       byDate[date] = (byDate[date] || 0) + (item.net_received_amount || 0)
@@ -128,8 +131,10 @@ Deno.serve(async (req) => {
       if (offsetHoje >= (dH.paging?.total ?? 0)) break
     }
     // Agrupar por hora em BRT (UTC-3), convertendo corretamente independente do offset do campo
+    // Mesmo filtro: apenas pedidos reais com order_id
     const byHora: Record<string, number> = {}
     for (const item of allHoje) {
+      if (!item.order_id) continue  // retirada de cofrinho / movimento sem pedido
       const dt = item.money_release_date || ''
       if (!dt) continue
       const horaBRT = ((new Date(dt).getUTCHours() - 3 + 24) % 24).toString().padStart(2, '0')
