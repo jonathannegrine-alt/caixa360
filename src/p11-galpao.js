@@ -1453,25 +1453,30 @@
       const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
       if(rows.length < 7) return {error:'Arquivo sem dados suficientes'};
 
-      // Detectar coluna de SKU do vendedor — o relatório ML às vezes traz o ID do anúncio (MLBxxx)
-      // em vez do SKU cadastrado pelo vendedor
+      // Detectar todas as colunas pelo cabeçalho (rows[5])
       const _isMLId = function(v){ return /^(MLB|MLA|MLC|MLM|MLU)\d+/i.test(String(v||'').trim()); };
-      let colSku = 22;  // padrão histórico
-      let colTitulo = 26;  // padrão histórico
-
-      // 1. Tentar header (rows[5] costuma ser a linha de cabeçalho)
       const headerRow = rows[5] ? rows[5].map(function(h){ return String(h||'').trim(); }) : [];
-      headerRow.forEach(function(h, i){
-        const hl = h.toLowerCase();
-        if(/sku/.test(hl) && !/anúncio|anuncio|número|numero|item.?id/i.test(hl)) colSku = i;
-        if(/título|titulo/.test(hl) && colTitulo === 26) colTitulo = i;
-      });
+      function _findCol(patterns, fallback){
+        for(var _pi = 0; _pi < patterns.length; _pi++){
+          var idx = headerRow.findIndex(function(h){ return patterns[_pi].test(h); });
+          if(idx >= 0) return idx;
+        }
+        return fallback;
+      }
+      // Padrões mapeados do relatório "Transações por pedido" do ML
+      let colSku     = _findCol([/^sku$/i], 21);
+      let colTitulo  = _findCol([/título do anúncio/i, /^título$/i], 25);
+      let colUnid    = _findCol([/^unidades$/i], 6);
+      let colReceita = _findCol([/receita por produtos/i], 7);
+      let colTarifa  = _findCol([/tarifa de venda/i], 10);
+      let colEnvio   = _findCol([/tarifas de envio/i], 12);
+      let colTotal   = _findCol([/^total \(BRL\)$/i, /^total$/i], 17);
+      let colAds     = _findCol([/venda por publicidade/i], 20);
 
-      // 2. Verificar amostra de dados — se maioria dos valores em colSku são MLB IDs, ajustar
+      // Se colSku ainda retornou MLB IDs, ajustar para coluna adjacente com SKU real
       const amostra = rows.slice(6, 16).filter(function(r){ return r.length > colSku; });
       const mlbCount = amostra.filter(function(r){ return _isMLId(r[colSku]); }).length;
       if(amostra.length > 0 && mlbCount > amostra.length / 2){
-        // colSku atual tem MLB IDs — procurar coluna com SKU real nas adjacentes
         for(var delta = 1; delta <= 4; delta++){
           for(var sinal of [1,-1]){
             const c = colSku + delta * sinal;
@@ -1485,10 +1490,8 @@
       const dataRows = rows.slice(6).filter(function(r){ return r[colSku] && String(r[colSku]).trim() !== '' && !_isMLId(r[colSku]); });
       if(dataRows.length === 0) return {error:'Nenhuma linha com SKU de vendedor encontrada. O relatório pode estar usando col '+(colSku+1)+' que contém IDs MLB. Verifique o arquivo.'};
 
-      // Detectar coluna de data (r[0]-r[5], primeiro que pareça data)
       const _mesesPT={'janeiro':'01','fevereiro':'02','março':'03','abril':'04','maio':'05','junho':'06','julho':'07','agosto':'08','setembro':'09','outubro':'10','novembro':'11','dezembro':'12'};
       function _parseDataVenda(r){
-        // Tenta col[1] primeiro: formato "7 de junho de 2026 14:48 hs."
         const v1 = String(r[1]||'');
         const mPT = v1.toLowerCase().match(/(\d+)\s+de\s+(\w+)\s+de\s+(\d{4})/);
         if(mPT && _mesesPT[mPT[2]]) return mPT[3]+'-'+_mesesPT[mPT[2]]+'-'+mPT[1].padStart(2,'0');
@@ -1505,18 +1508,18 @@
       const agg = {};
       dataRows.forEach(r => {
         const sku = String(r[colSku]).trim();
-        const cancelado = r[17] && parseFloat(r[17]) < 0;
+        const cancelado = r[colTotal] !== undefined && parseFloat(r[colTotal]) < 0;
         if(!agg[sku]) agg[sku] = { sku, titulo: String(r[colTitulo]||'').trim(), unidades:0, receita:0, tarifa_ml:0, envio:0, liquido:0, unidades_ads:0, cancelamentos:0, receita_cancelada:0, periodo_dias:30, ultima_venda: null };
         if(cancelado){
           agg[sku].cancelamentos++;
-          agg[sku].receita_cancelada += Math.abs(Number(r[7])||0);
+          agg[sku].receita_cancelada += Math.abs(Number(r[colReceita])||0);
         } else {
-          agg[sku].unidades += Number(r[6])||0;
-          agg[sku].receita  += Number(r[7])||0;
-          agg[sku].tarifa_ml+= Number(r[10])||0;
-          agg[sku].envio    += Number(r[12])||0;
-          agg[sku].liquido  += Number(r[18])||0;
-          if(r[21] && String(r[21]).trim() === 'Sim') agg[sku].unidades_ads++;
+          agg[sku].unidades  += Number(r[colUnid])||0;
+          agg[sku].receita   += Number(r[colReceita])||0;
+          agg[sku].tarifa_ml += Number(r[colTarifa])||0;
+          agg[sku].envio     += Number(r[colEnvio])||0;
+          agg[sku].liquido   += Number(r[colTotal])||0;
+          if(r[colAds] && String(r[colAds]).trim() === 'Sim') agg[sku].unidades_ads++;
           const dv = _parseDataVenda(r);
           if(dv && (!agg[sku].ultima_venda || dv > agg[sku].ultima_venda)) agg[sku].ultima_venda = dv;
         }
