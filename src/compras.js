@@ -43,15 +43,15 @@
     // ----- dados de venda (120 dias, por SKU e por dia) -----
     async function comprasCarregarVendas(forcar){
       if(!usuarioAtual) return;
-      const hoje = getToday(), chave = hoje + '|' + (typeof contaAtiva !== 'undefined' ? contaAtiva : '');
+      const hoje = getToday(), chave = hoje + '|todas';   // estoque único: soma as vendas de todas as contas, qualquer que seja a escolhida no menu
       if(!forcar && comprasVendas.chave === chave && comprasVendas.dados && Date.now() - comprasVendas.em < 10 * 60 * 1000) return;
-      const { data, error } = await supa.rpc('vendas_ml_sku_dia', { p_de: addDias(hoje, -121), p_ate: addDias(hoje, -1), p_conta: typeof contaParam === 'function' ? contaParam() : null });
+      const { data, error } = await supa.rpc('vendas_ml_sku_dia', { p_de: addDias(hoje, -121), p_ate: addDias(hoje, -1), p_conta: null });
       // dias já importados do ML: os que faltam não podem contar como 'dia sem venda'
-      let qd = supa.from('vendas_ml_dias').select('dia').eq('usuario_id', usuarioAtual.id).eq('completo', true).gte('dia', addDias(hoje, -121)).limit(1000);
-      if(typeof contaAtiva !== 'undefined' && contaAtiva) qd = qd.eq('ml_user_id', contaAtiva);
-      const cob = await qd;
+      const cob = await supa.from('vendas_ml_dias').select('dia,ml_user_id').eq('usuario_id', usuarioAtual.id).eq('completo', true).gte('dia', addDias(hoje, -121)).limit(3000);
+      const diasConta = {};   // dias já importados de cada conta
+      (cob.data || []).forEach(r => { if(String(r.dia).substring(0,10) < hoje) diasConta[r.ml_user_id] = (diasConta[r.ml_user_id] || 0) + 1; });
       const importados = new Set((cob.data || []).map(r => String(r.dia).substring(0,10)));
-      comprasVendas = { chave, dados: data || {}, em: Date.now(), erro: error?.message || null, importados, diasImportados: [...importados].filter(d => d < hoje).length };
+      comprasVendas = { chave, dados: data || {}, em: Date.now(), erro: error?.message || null, importados, diasConta, diasImportados: [...importados].filter(d => d < hoje).length };
     }
 
     // ----- cálculo (porta de gerarCompras) -----
@@ -216,8 +216,10 @@
       const dataGalpao = estoqueGalpao.reduce((m, e) => (e.data_atualizacao && e.data_atualizacao > m ? e.data_atualizacao : m), '');
       const nContas = typeof contasML !== 'undefined' ? contasML.length : 0;
       return [
-        { nome: 'Vendas do Mercado Livre', st: dias >= 100 ? 'ok' : 'parcial', txt: dias + ' de 120 dias importados' + (dias >= 100 ? '' : '. A média fica mais precisa quando o histórico terminar de carregar') },
-        { nome: 'Contas do Mercado Livre', st: nContas > 1 ? 'ok' : 'parcial', txt: nContas > 1 ? nContas + ' contas conectadas' : 'Só uma conta conectada. Produtos vendidos em outra conta ficam com venda zero aqui' },
+        ...(nContas > 1
+          ? contasML.map(ct => { const n = (comprasVendas.diasConta || {})[ct.id] || 0; return { nome: 'Vendas de ' + (ct.apelido || 'conta ' + ct.id), st: n >= 100 ? 'ok' : n > 0 ? 'parcial' : 'falta', txt: n >= 100 ? n + ' de 120 dias importados' : n > 0 ? n + ' de 120 dias importados. A média fica mais precisa quando o histórico terminar de carregar' : 'Histórico ainda não importado: os produtos desta conta aparecem sem venda. A importação roda sozinha, um pouco a cada 15 minutos' }; })
+          : [{ nome: 'Vendas do Mercado Livre', st: dias >= 100 ? 'ok' : 'parcial', txt: dias + ' de 120 dias importados' + (dias >= 100 ? '' : '. A média fica mais precisa quando o histórico terminar de carregar') },
+             { nome: 'Contas do Mercado Livre', st: 'parcial', txt: 'Só uma conta conectada. Produtos vendidos em outra conta ficam com venda zero aqui' }]),
         { nome: 'Estoque do galpão', st: estoqueGalpao.length ? 'ok' : 'falta', txt: estoqueGalpao.length ? estoqueGalpao.length + ' produtos' + (dataGalpao ? ', atualizado em ' + ptDate(dataGalpao) : '') : 'Não importado: a conta considera galpão zerado', acao: "nav('estoque')", botao: 'Importar' },
         { nome: 'Estoque no Full', st: fullUn > 0 ? 'ok' : 'falta', txt: fullUn > 0 ? cpInt(fullUn) + ' unidades em ' + nFull + (nFull === 1 ? ' anúncio' : ' anúncios') + (fonteFull === 'xls' ? ', vindas de planilha importada. Com duas contas, importe a planilha de cada uma (a segunda é somada)' : ', buscadas no Mercado Livre') : 'Zerado: a conta considera que não há nada no Full', acao: "nav('estoque');setEstoqueTab('full')", botao: 'Abrir estoque Full', sempre: true },
         { nome: 'Kits', st: kitsN ? 'ok' : 'falta', txt: kitsN ? kitsN + ' kits: a venda do kit desconta cada componente' : 'Nenhum kit cadastrado: cada kit aparece como um produto à parte e os componentes ficam com venda de menos', acao: "nav('skus');setSkuTab('composicoes')", botao: 'Cadastrar kits' },
@@ -269,7 +271,7 @@
       el.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Sugestão de compras</div>
-            <div class="pg-sub">Quanto comprar de cada produto para ter estoque pelos dias que você deseja, com a venda real do Mercado Livre.</div></div>
+            <div class="pg-sub">Quanto comprar de cada produto para ter estoque pelos dias que você deseja, com a venda real do Mercado Livre${typeof contasML !== 'undefined' && contasML.length > 1 ? ' (todas as contas somadas, porque o estoque é um só)' : ''}.</div></div>
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
             <button class="btn-out btn-sm" onclick="comprasAtualizar(this)">Atualizar vendas</button>
             <button class="btn-out btn-sm" onclick="comprasParametros()">Regras de compra</button>
