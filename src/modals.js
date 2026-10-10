@@ -135,7 +135,7 @@
       if(document.getElementById('view-dashboard').classList.contains('active')){
         renderDashboard();
       }
-      if(document.getElementById('view-inicio').classList.contains('active')){
+      if(document.getElementById('view-inicio')?.classList.contains('active')){
         renderInicio();
       }
       if(document.getElementById('view-planilha').classList.contains('active')){

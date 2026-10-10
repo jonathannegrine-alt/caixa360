@@ -142,7 +142,8 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
   for (let i = -90; i <= 0; i++) {
     const d = dataBRT(i)
     const forcado = !!refazer && d >= refazer.de && d <= refazer.ate
-    if (d >= dezDiasAtras || !diasGravados.has(d) || forcado) janelasExtrato.push({ de: d, ate: d })
+    // No modo refazer só os dias pedidos são buscados (poupa o limite de chamadas do ML)
+    if (refazer ? forcado : (d >= dezDiasAtras || !diasGravados.has(d))) janelasExtrato.push({ de: d, ate: d })
   }
   const resExtrato = await fetchJanelas(
     'https://api.mercadolibre.com/collections/search?status=approved&released=yes&sort=money_release_date&criteria=desc&range=money_release_date',
@@ -185,6 +186,11 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
       body: JSON.stringify(extratoRows)
     })
     if (!upRes.ok) extratoErro = `gravação do extrato falhou: http ${upRes.status} — ${(await upRes.text()).slice(0, 300)}`
+  }
+
+  // Modo refazer: só o extrato, sem tocar no snapshot do dia
+  if (refazer) {
+    return { usuario_id: userId, extrato_dias: extratoRows.length, snapshot_datas: null, snapshot_erro: null, extrato_erro: extratoErro, ok: extratoErro === null }
   }
 
   // ─── 2. SNAPSHOT DO PIPELINE ATUAL (released=no, datas futuras) ──────────
