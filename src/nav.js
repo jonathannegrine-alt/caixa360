@@ -38,7 +38,7 @@
       else if(page === 'estoque') renderEstoque();
       else if(page === 'analise') renderAnalise();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
-      else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
+      else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }
       else if(page === 'resultado'){ setResultadoTab('anual'); }
       else if(page === 'patrimonio'){ renderPatrimonio(); }
       else if(page === 'ordens-compra') renderOrdensCompra();

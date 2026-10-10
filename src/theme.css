@@ -602,3 +602,31 @@ a.v-id{text-decoration:none;}
 .dre-sync{border:1px solid var(--border);background:var(--surface);color:var(--text-muted);border-radius:6px;width:22px;height:22px;font-size:11px;cursor:pointer;margin-left:4px;padding:0;}
 .dre-sync:hover{border-color:var(--primary);color:var(--primary);}
 .dre-parcial{color:var(--warning);margin-left:4px;font-size:10px;cursor:help;}
+
+/* DRE: primeira coluna das faixas coloridas acompanha a cor da linha */
+.dre-tab tr.dre-entrada td:first-child{background:#17603b;color:#fff;}
+.dre-tab tr.dre-saida td:first-child{background:#d83a52;color:#fff;}
+.dre-tab tr.dre-res td:first-child{background:var(--surface-3);}
+.dre-tab tr.dre-lucro td:first-child{background:var(--primary-soft);}
+
+/* ===== PADRONIZAÇÃO DAS PÁGINAS ANTIGAS ===== */
+.view h1{font-size:22px;font-weight:750;letter-spacing:-.02em;color:var(--text);}
+.view > h1{margin-bottom:18px !important;}
+.cfg-abas{margin:0 0 16px;}
+/* Contas a pagar: filtros lado a lado */
+#view-pagar .card-body > .d-flex{align-items:center;}
+#view-pagar .card-body > .d-flex > select{width:auto;min-width:180px;flex:0 0 auto;}
+#view-pagar .card-body > .d-flex > input[type="text"]{flex:1 1 240px;max-width:340px !important;}
+#filtro-custom-range input[type="date"]{width:auto;}
+/* barras de abas antigas */
+.resultado-tabs,.estoque-tabs{border-bottom:1px solid var(--border);margin-bottom:18px;gap:2px;}
+.resultado-tab,.estoque-tab{border-radius:9px 9px 0 0;font-weight:600;color:var(--text-muted);}
+.resultado-tab.active,.estoque-tab.active{color:var(--primary);border-bottom-color:var(--primary);background:transparent;}
+/* botões de alternância (Lista / Colunas / Calendário, períodos) */
+.btn-toggle,.period-btn{background:var(--surface);color:var(--text-2);border-color:var(--border);font-weight:600;}
+.btn-toggle.active,.period-btn.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+/* listas de lançamentos */
+.entry{border-radius:0;border-bottom:1px solid var(--border);}
+.entry:hover{background:var(--surface-2);}
+/* DRE simplificado ocupa a largura do card */
+#dre-body > div{max-width:none !important;}
