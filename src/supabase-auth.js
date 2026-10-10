@@ -336,7 +336,7 @@
         cat:p.cat, pago:p.pago, tipo:p.tipo, grupo_id:p.grupo_id,
         parcela:p.parcela, valorPago:p.valor_pago,
         dataPaga:p.data_paga||null, desconto:p.desconto||0, juros:p.juros||0,
-        tiny_key:p.tiny_key||null, fonte:p.fonte||null
+        tiny_key:p.tiny_key||null, fonte:p.fonte||null, competencia:p.competencia||null
       }));
 
       if(rLib.data) liberacoes = rLib.data.map(l => ({data:l.data, val:l.val}));
@@ -381,7 +381,7 @@
         cat: p.cat||'', pago: p.pago||false, tipo: p.tipo||'unico',
         grupo_id: p.grupo_id||p.grupoId||null, parcela: p.parcela||null, valor_pago: p.valorPago||null,
         data_paga: p.dataPaga||null, desconto: p.desconto||0, juros: p.juros||0,
-        tiny_key: p.tiny_key||null, fonte: p.fonte||null
+        tiny_key: p.tiny_key||null, fonte: p.fonte||null, competencia: p.competencia||null
       }));
       const snapCat = categorias.map(c => ({usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida', dre_grupo: c.dreGrupo||null}));
       const snapSku = skus.map(s => ({usuario_id: uid, sku: s.sku, custo: s.custo, imposto: s.imposto, titulo: s.titulo||null}));

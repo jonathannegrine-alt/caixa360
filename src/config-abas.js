@@ -4,7 +4,7 @@
 
     const CFG_ABAS = [
       ['ml',     'Mercado Livre',  ['mercado livre', 'pipeline']],
-      ['fin',    'Financeiro',     ['parâmetros financeiros', 'categorias de despesa']],
+      ['fin',    'Financeiro',     ['parâmetros financeiros', 'categorias de despesa', 'olist']],
       ['estoque','Estoque',        ['motor de reposição', 'reposição']],
       ['dados',  'Dados',          ['backup', 'importar xls', 'tiny']],
       ['ia',     'IA',             ['conectar sua ia']],
