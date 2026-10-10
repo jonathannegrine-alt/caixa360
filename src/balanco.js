@@ -68,6 +68,9 @@
       const view = document.getElementById('view-patrimonio'); if(!view) return;
       let host = document.getElementById('bal-host');
       if(!host){ host = document.createElement('div'); host.id = 'bal-host'; const ref = view.children[1] || null; view.insertBefore(host, ref); }
+      // a tela antiga (índice de cobertura, cenários de liquidação) usava outra conta e contradizia o balanço: fica escondida
+      [...view.children].forEach((el, i) => { if(i > 0 && el.id !== 'bal-host') el.style.display = 'none'; });
+      const snap = view.querySelector('button[onclick="salvarSnapshotPatrimonio()"]'); if(snap) snap.style.display = 'none';
       balClassificarCategorias();
       // dados que o balanço usa: estoque (movimentações), Full (API), envios e a venda por loja
       try {

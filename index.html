@@ -57,7 +57,7 @@
         <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('receber')"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg><span>A receber ML</span></li>
         <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('resumo-fin')"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M12 3a9 9 0 0 1 9 9h-9z"/></svg><span>Resumo Financeiro</span><span class="nav-novo">NOVO</span></li>
         <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('resultado')"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>DRE e resultado</span></li>
-        <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('patrimonio')"><svg viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 21h18"/></svg><span>Saúde Patrimonial</span></li>
+        <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('patrimonio')"><svg viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 21h18"/></svg><span>Balanço</span></li>
         <li class="nav-sec" data-sec="ven" onclick="toggleNavSec('ven')"><span>Vendas</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></li>
         <li class="nav-item sec-oculta" data-sec="ven" onclick="nav('vendas')"><svg viewBox="0 0 24 24"><path d="M3 4h2.5l2.2 11h10.6l2-8H7"/><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="17.5" cy="19.5" r="1.4"/></svg><span>Vendas</span><span class="nav-novo">NOVO</span></li>
         <li class="nav-item sec-oculta" data-sec="ven" onclick="nav('analise')"><svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg><span>Análise de vendas</span></li>
@@ -1103,7 +1103,7 @@
       <!-- SAÚDE PATRIMONIAL (P12) -->
       <div id="view-patrimonio" class="view">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-          <div><div class="pg-title">Saúde patrimonial</div><div class="pg-sub">O que a empresa tem, o que deve e a folga entre os dois.</div></div>
+          <div><div class="pg-title">Balanço patrimonial</div><div class="pg-sub">O que a empresa tem, o que deve e a diferença entre os dois.</div></div>
           <button class="btn-out btn-sm" onclick="salvarSnapshotPatrimonio()">Snapshot manual</button>
         </div>
 
