@@ -349,4 +349,6 @@
       if(Date.now() - olistEntrouEm < 20000 || document.hidden || olist.sincronizando || olist.conectado === false) return;
       const idade = olist.ultimo ? Date.now() - new Date(olist.ultimo).getTime() : Infinity;
       if(idade > 15 * 60 * 1000) olistSincronizar(false);
+      else if(!olist.pagTentou && olist.conectado){ olist.pagTentou = true; olistPagamentos(); }   // data real de pagamento, uma vez por sessão
+      else if(olist.conectado === null) olistStatus();
     }, 10000);

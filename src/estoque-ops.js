@@ -96,7 +96,8 @@
       mapa.forEach((v, k) => { if(!vistos.has(k)) vistos.set(k, { sku: k.toUpperCase(), vend: 0, full: 0 }); });
       const linhas = [...vistos.values()].map(o => { const k = esN(o.sku), eq = mapa.get(k);
         const tipo = eq ? 'mapeado' : kits.has(k) ? 'kit' : prods.has(k) ? 'produto' : 'sem';
-        return { ...o, k, tipo, eq }; }).sort((a, b) => (a.tipo === 'sem' ? 0 : 1) - (b.tipo === 'sem' ? 0 : 1) || (b.vend + b.full) - (a.vend + a.full));
+        return { ...o, k, tipo, eq }; }).filter(l => l.tipo !== 'sem' || l.vend + l.full > 0)   // anúncio parado e zerado não precisa de mapeamento
+        .sort((a, b) => (a.tipo === 'sem' ? 0 : 1) - (b.tipo === 'sem' ? 0 : 1) || (b.vend + b.full) - (a.vend + a.full));
       const sem = linhas.filter(l => l.tipo === 'sem').length;
       const mostra = linhas.filter(l => esoMapaSo === 'todos' || l.tipo === 'sem' || l.tipo === 'mapeado');
       const selo = { produto: ['Produto do estoque', 'cp-ok'], kit: ['Kit cadastrado', 'cp-ok'], mapeado: ['Mapeado por você', 'cp-comprar'], sem: ['Sem correspondência', 'cp-urgente'] };
