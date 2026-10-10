@@ -31,13 +31,14 @@
       if(estCfgAba === 'regras') return estCfgRegras();
       if(estCfgAba === 'mapa') return esoMapeamento();
       vmlModal('Configurar estoque', estCfgTopo() + `
-        <div class="text-muted" style="margin-bottom:12px;">Cada depósito tem o seu estoque. O do tipo Full é atualizado sozinho pelo Mercado Livre; os outros você atualiza por compra, venda, contagem ou planilha.</div>
-        <table class="cp-tab"><thead><tr><th>Nome</th><th>Tipo</th><th class="num">Produtos com saldo</th><th></th></tr></thead><tbody>
+        <div class="text-muted" style="margin-bottom:12px;">Escolha quais estoques aparecem na tela. Cada loja do Mercado Livre tem o seu Full, atualizado sozinho; os outros você atualiza por compra, venda, contagem ou planilha. A aba <b>Total</b> soma os que estiverem marcados.</div>
+        <table class="cp-tab"><thead><tr><th>Mostrar</th><th>Nome</th><th>Tipo</th><th class="num">Produtos com saldo</th><th></th></tr></thead><tbody>
           ${est.depositos.map(d => { const n = est.saldo.filter(s => Number(s.deposito_id) === d.id && Number(s.fisico) !== 0).length; return `<tr style="${d.ativo ? '' : 'opacity:.55;'}">
+            <td><input type="checkbox" ${d.ativo ? 'checked' : ''} onchange="estDepAtivo(${d.id}, this.checked)" title="Mostrar este estoque na tela e somar no Total"></td>
             <td><input type="text" value="${esEsc(d.nome)}" onchange="estDepRenomear(${d.id}, this.value)" style="min-width:200px;"></td>
-            <td>${d.tipo === 'full' ? 'Full (Mercado Livre)' : 'Próprio'}${d.ativo ? '' : ' · desativado'}</td>
+            <td>${d.tipo === 'full' ? 'Full do Mercado Livre' + (d.ml_user_id && typeof contaNome === 'function' && contaNome(d.ml_user_id) ? ' · ' + esEsc(contaNome(d.ml_user_id)) : '') : 'Próprio'}</td>
             <td class="num">${d.tipo === 'full' ? '—' : n}</td>
-            <td style="text-align:right;white-space:nowrap;">${d.ativo ? `<button class="btn-out btn-sm" onclick="estDepAtivo(${d.id}, false)">Desativar</button>` : `<button class="btn-out btn-sm" onclick="estDepAtivo(${d.id}, true)">Reativar</button>`} <button class="btn-out btn-sm" style="color:var(--danger);" onclick="estDepExcluir(${d.id})">Excluir</button></td></tr>`; }).join('')}
+            <td style="text-align:right;white-space:nowrap;">${d.tipo === 'full' ? '' : `<button class="btn-out btn-sm" style="color:var(--danger);" onclick="estDepExcluir(${d.id})">Excluir</button>`}</td></tr>`; }).join('')}
         </tbody></table>
         <div class="d-flex" style="gap:8px;margin-top:16px;flex-wrap:wrap;"><input type="text" id="est-dep-novo" placeholder="Nome do novo depósito" style="flex:1 1 240px;max-width:340px;"><button class="btn" onclick="estDepCriar()">Criar depósito</button></div>`);
     }
@@ -73,14 +74,11 @@
         <div class="cpp-campo"><label>Envio ao Full ocupa o estoque enquanto está em preparação</label>
           <select id="estcfg-ocupar"><option value="1" ${c.ocuparPadrao ? 'selected' : ''}>Sim, já sai do disponível (padrão ao importar o PDF)</option><option value="0" ${c.ocuparPadrao ? '' : 'selected'}>Não, só sai quando eu der a saída</option></select>
           <small>Você ainda pode mudar em cada envio. O físico só baixa quando a saída é lançada.</small></div>
-        <div class="cpp-campo"><label>Venda recente sem envio conferido conta como ocupada por quantos dias</label>
-          <input type="number" id="estcfg-dias" min="0" max="15" value="${c.diasSemConferir}" style="max-width:140px;">
-          <small>A situação do envio é conferida no Mercado Livre a cada 15 minutos. Enquanto a conferência de uma venda não chega, ela é tratada como "ainda não enviada" por esse número de dias.</small></div>
-        <div class="cpp-ajuda">Como o estoque se movimenta: a <b>compra conferida</b> entra no depósito; a <b>venda</b> fica ocupada e só baixa quando o Mercado Livre marca o pedido como <b>enviado</b>; o <b>envio ao Full</b> baixa quando você dá a saída; a <b>contagem</b> acerta o saldo e vira o novo ponto de partida.</div>`,
+        <div class="cpp-ajuda">Como o estoque se movimenta: a <b>compra conferida</b> entra no depósito; a <b>venda</b> fica ocupada até o Mercado Livre marcar o pedido como <b>enviado</b> (aí baixa do físico) ou a venda ser <b>cancelada</b> (aí volta a ficar disponível); o <b>envio ao Full</b> baixa quando você dá a saída; a <b>contagem</b> acerta o saldo e vira o novo ponto de partida.</div>`,
         `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn" onclick="estCfgSalvar()">Salvar regras</button>`);
     }
     function estCfgSalvar(){
-      comprasCfg.estoque = { ocuparPadrao: document.getElementById('estcfg-ocupar').value === '1', diasSemConferir: Math.max(0, Number(document.getElementById('estcfg-dias').value) || 0) };
+      comprasCfg.estoque = { ocuparPadrao: document.getElementById('estcfg-ocupar').value === '1' };
       if(typeof comprasSalvarCfg === 'function') comprasSalvarCfg();
       eso.lidoEm = 0; fecharModal('modal-vml'); esoLer(true).then(() => estDesenhar());
     }
@@ -134,8 +132,8 @@
       // o banco devolve no máximo 1000 linhas por consulta: lê em páginas
       const paginas = async q => { const out = []; for(let i = 0; i < 8; i++){ const r = await q().range(i * 1000, i * 1000 + 999); if(r.error || !r.data) break; out.push(...r.data); if(r.data.length < 1000) break; } return out; };
       const [pend, env, e, c] = await Promise.all([
-        // ainda não enviadas: com o envio já conferido no Mercado Livre, ou vendidas nos últimos 3 dias (conferência pode estar atrasada)
-        paginas(() => base().is('enviado_em', null).gte('data_venda', d25).or('envio_status.not.is.null,data_venda.gte.' + d3).order('data_venda', { ascending: false })),
+        // ainda não enviadas: ficam ocupando o estoque até o envio sair ou a venda ser cancelada
+        paginas(() => base().is('enviado_em', null).gte('data_venda', d25).or('envio_status.is.null,envio_status.neq.cancelled').order('data_venda', { ascending: false })),
         // enviadas nos últimos 12 dias: candidatas à baixa do físico
         paginas(() => base().gte('enviado_em', d12).order('enviado_em', { ascending: false })),
         supa.from('estoque_envios_full').select('*').eq('usuario_id', usuarioAtual.id).order('id', { ascending: false }).limit(300),

@@ -32,7 +32,21 @@
           d = await supa.from('estoque_depositos').select('*').eq('usuario_id', usuarioAtual.id).order('id');
         }
         est.depositos = d.data || [];
-        if(!est.dep || !est.depositos.some(x => x.id === est.dep)) est.dep = (estDepProprio() || est.depositos[0] || {}).id || null;
+        // Full separado por loja: garante um depósito do tipo full para cada conta conectada
+        const contas = typeof contasML !== 'undefined' ? contasML : [];
+        if(contas.length){
+          let mexeu = false;
+          for(const c of contas){
+            if(est.depositos.some(x => x.tipo === 'full' && String(x.ml_user_id || '') === String(c.id))) continue;
+            const nome = 'Full ' + (c.apelido || c.id), livre = est.depositos.find(x => x.tipo === 'full' && !x.ml_user_id);
+            const r = livre ? await supa.from('estoque_depositos').update({ ml_user_id: String(c.id), nome }).eq('id', livre.id)
+                            : await supa.from('estoque_depositos').insert({ usuario_id: usuarioAtual.id, nome, tipo: 'full', ml_user_id: String(c.id) });
+            if(livre && !r.error){ livre.ml_user_id = String(c.id); livre.nome = nome; }
+            if(!r.error) mexeu = true;
+          }
+          if(mexeu){ const d2 = await supa.from('estoque_depositos').select('*').eq('usuario_id', usuarioAtual.id).order('id'); if(d2.data) est.depositos = d2.data; }
+        }
+        if(est.dep !== 'total' && (!est.dep || !est.depositos.some(x => x.id === est.dep))) est.dep = 'total';
         await estLerSaldo();
         // primeiro uso com estoque já importado da UpSeller: vira a carga inicial
         const g = estDepProprio();
@@ -120,17 +134,17 @@
 
     function estDesenhar(){
       const host = document.getElementById('est-host'); if(!host) return;
+      if(est.dep === 'total') return estDesenharTotal();
       const dep = est.depositos.find(d => d.id === est.dep) || est.depositos[0];
       if(!dep){ host.innerHTML = `<div class="alert alert-danger">${esEsc(est.erro || 'Não consegui carregar os depósitos.')}</div>`; return; }
-      const abas = `<div class="chips" style="margin-bottom:14px;">${est.depositos.filter(d => d.ativo).map(d => `<button class="chip ${d.id === dep.id ? 'active' : ''}" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estGerenciarDepositos()" title="Depósitos, regras do ocupado e mapeamento dos anúncios">Configurar estoque</button></div>`;
+      const abas = `<div class="chips" style="margin-bottom:14px;"><button class="chip" onclick="est.dep='total';estDesenhar();">Total</button>${est.depositos.filter(d => d.ativo).map(d => `<button class="chip ${d.id === dep.id ? 'active' : ''}" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estGerenciarDepositos()" title="Depósitos, regras do ocupado e mapeamento dos anúncios">Configurar estoque</button></div>`;
       const cab = `<div class="pg-head"><div><div class="pg-title">Estoque</div><div class="pg-sub">Quanto existe em cada depósito, o que está a caminho e o que já está vendido e ainda não saiu.</div></div>
         <div class="d-flex gap-1" style="flex-wrap:wrap;">${dep.tipo === 'full' ? `<button class="btn-out btn-sm" onclick="estAtualizarFull(this)">Atualizar do Mercado Livre</button>` : `<button class="btn-out btn-sm" onclick="estAjuste()">Ajuste manual</button><button class="btn-out btn-sm" onclick="esoEnvios()">Envios ao Full</button><button class="btn btn-sm" onclick="esoContagens()">Contagem de estoque</button>`}</div></div>`;
       const erro = est.erro ? `<div class="alert alert-danger">${esEsc(est.erro)}</div>` : '';
 
       if(dep.tipo === 'full'){
-        const lojas = [...new Set((Array.isArray(estoqueFullML) ? estoqueFullML : []).map(x => String(x._conta || '')).filter(Boolean))];
-        if(est.loja && !lojas.includes(est.loja)) est.loja = '';
-        const itens = (Array.isArray(estoqueFullML) ? estoqueFullML.slice() : []).filter(x => !est.loja || String(x._conta || '') === est.loja);
+        const lojas = [];   // cada loja tem o seu depósito Full
+        const itens = (Array.isArray(estoqueFullML) ? estoqueFullML.slice() : []).filter(x => !dep.ml_user_id || String(x._conta || '') === String(dep.ml_user_id));
         const b = esN(est.busca), lista = itens.filter(x => !b || esN(x.sku).includes(b) || esN(x.titulo).includes(b)).sort((a, c) => (Number(c.total_geral) || 0) - (Number(a.total_geral) || 0));
         const tot = itens.reduce((s, x) => s + (Number(x.total_geral) || 0), 0), disp = itens.reduce((s, x) => s + (Number(x.aptos_venda) || 0), 0), transf = itens.reduce((s, x) => s + (Number(x.em_transito) || 0), 0);
         host.innerHTML = cab + erro + abas + `
@@ -177,6 +191,43 @@
             <td class="num">${l.custo ? fmt(Math.max(0, l.fisico) * l.custo) : '—'}</td>
             <td style="text-align:right;"><button class="btn-out btn-sm" onclick="estMovimentos('${esEsc(l.k)}')">Movimentações</button></td>
           </tr>`).join('') : '<tr><td colspan="8"><div class="vazio"><b>Nada nesta lista</b>Troque a busca ou o filtro.</div></td></tr>'}
+        </tbody></table></div></div>`;
+    }
+
+    // Total: soma de todos os depósitos visíveis, produto a produto (o Full entra com os kits abertos nos componentes)
+    function estDesenharTotal(){
+      const host = document.getElementById('est-host'); if(!host) return;
+      const deps = est.depositos.filter(d => d.ativo);
+      const abrir = (sku, q) => typeof esoAbrir === 'function' ? esoAbrir(sku, q) : [{ sku, qtd: q }];
+      const mapa = new Map(), pega = sku => { const k = esN(sku); if(!mapa.has(k)) mapa.set(k, { k, sku, nome: '', por: {}, caminho: 0, custo: 0 }); return mapa.get(k); };
+      deps.forEach(d => {
+        if(d.tipo === 'full') (Array.isArray(estoqueFullML) ? estoqueFullML : []).filter(x => !d.ml_user_id || String(x._conta || '') === String(d.ml_user_id)).forEach(x => abrir(x.sku, Number(x.total_geral) || 0).forEach(c => { if(!c.qtd) return; const l = pega(c.sku); l.por[d.id] = (l.por[d.id] || 0) + c.qtd; }));
+        else est.saldo.filter(s => Number(s.deposito_id) === d.id).forEach(s => { const l = pega(s.sku); l.por[d.id] = (l.por[d.id] || 0) + (Number(s.fisico) || 0); });
+      });
+      if(typeof ocTransitoPorSku === 'function' && typeof ocTemDados === 'function' && ocTemDados()) ocTransitoPorSku().forEach((q, k) => { (mapa.get(k) || pega(k.toUpperCase())).caminho = q; });
+      mapa.forEach(l => { const g = estoqueGalpao.find(x => esN(x.sku) === l.k), s = skus.find(x => esN(x.sku) === l.k);
+        if(g) l.sku = g.sku; l.nome = (s && s.titulo) || (g && g.descricao !== g.sku && g.descricao) || '';
+        l.custo = (g && Number(g.custo_medio) > 0 ? Number(g.custo_medio) : 0) || (s && Number(s.custo)) || 0;
+        l.total = Object.values(l.por).reduce((a, v) => a + v, 0); });
+      const b = esN(est.busca), todas = [...mapa.values()];
+      const lista = todas.filter(l => !b || l.k.includes(b) || esN(l.nome).includes(b)).sort((a, c) => c.total * c.custo - a.total * a.custo || c.total - a.total);
+      const un = todas.reduce((s, l) => s + Math.max(0, l.total), 0), valor = todas.reduce((s, l) => s + Math.max(0, l.total) * l.custo, 0), cam = todas.reduce((s, l) => s + l.caminho, 0);
+      const somaDep = d => todas.reduce((s, l) => s + Math.max(0, l.por[d.id] || 0), 0);
+      host.innerHTML = `<div class="pg-head"><div><div class="pg-title">Estoque</div><div class="pg-sub">Soma de todos os depósitos, produto a produto. O Full entra com os kits abertos nos componentes.</div></div>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="estAtualizarFull(this)">Atualizar o Full</button></div></div>
+        ${est.erro ? `<div class="alert alert-danger">${esEsc(est.erro)}</div>` : ''}
+        <div class="chips" style="margin-bottom:14px;"><button class="chip active">Total</button>${deps.map(d => `<button class="chip" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estGerenciarDepositos()" title="Depósitos, regras e mapeamento dos anúncios">Configurar estoque</button></div>
+        <div class="kpi-grid k4i">
+          <div class="kpi k-venda"><div class="kpi-label">Estoque total</div><div class="kpi-value">${esInt(un)} un.</div><div class="kpi-sub">${fmt(valor)} a custo médio</div></div>
+          ${deps.map(d => `<div class="kpi ${d.tipo === 'full' ? 'k-frete' : 'k-mc'}" onclick="est.dep=${d.id};estDesenhar();" style="cursor:pointer;"><div class="kpi-label">${esEsc(d.nome)}</div><div class="kpi-value">${esInt(somaDep(d))} un.</div><div class="kpi-sub">${un ? Math.round(somaDep(d) / un * 100) : 0}% do total</div></div>`).join('')}
+          <div class="kpi k-hoje"><div class="kpi-label">A caminho</div><div class="kpi-value">${esInt(cam)} un.</div><div class="kpi-sub">comprado e ainda não conferido</div></div>
+        </div>
+        <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou nome" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)"></div>
+        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Produto</th>${deps.map(d => `<th class="num">${esEsc(d.nome)}</th>`).join('')}<th class="num">Total</th><th class="num" title="Comprado e ainda não conferido">A caminho</th><th class="num">Custo médio</th><th class="num">Valor</th></tr></thead><tbody>
+          ${lista.length ? lista.map(l => `<tr><td class="cp-prod" style="max-width:420px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
+            ${deps.map(d => `<td class="num">${l.por[d.id] ? esInt(l.por[d.id]) : '<span class="text-muted">—</span>'}</td>`).join('')}
+            <td class="num"><b>${esInt(l.total)}</b></td><td class="num">${l.caminho ? esInt(l.caminho) : '<span class="text-muted">—</span>'}</td>
+            <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td><td class="num">${l.custo ? fmt(Math.max(0, l.total) * l.custo) : '—'}</td></tr>`).join('') : '<tr><td colspan="9"><div class="vazio"><b>Nada nesta lista</b>Troque a busca.</div></td></tr>'}
         </tbody></table></div></div>`;
     }
 

@@ -96,3 +96,6 @@ drop policy if exists olist_ordens_local on public.olist_ordens;
 create policy olist_ordens_local on public.olist_ordens for all to authenticated
   using (usuario_id = auth.uid()) with check (usuario_id = auth.uid());
 grant insert, update, delete on public.olist_ordens to authenticated;
+
+-- Full separado por loja: cada deposito do tipo full pertence a uma conta do Mercado Livre
+alter table public.estoque_depositos add column if not exists ml_user_id text;
