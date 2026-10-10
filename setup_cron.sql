@@ -14,3 +14,5 @@ SELECT cron.schedule(
 -- Criado em 2026-10-10 copiando o comando (com o segredo) do job ml-snapshot-diario:
 --   select cron.schedule('ml-vendas-sync', '*/15 * * * *', replace(command, 'ml-snapshot', 'ml-vendas'))
 --   from cron.job where jobname = 'ml-snapshot-diario';
+-- 2026-10-11: o pg_net desistia da resposta em 5 s e a funcao era interrompida cedo; o job ml-vendas-sync passou a
+-- chamar net.http_post com timeout_milliseconds := 140000 para a importacao do historico render mais por execucao.
