@@ -23,6 +23,77 @@ async function dbRun(supaUrl: string, supaKey: string, method: string, table: st
   return { ok: r.ok, status: r.status, text: await r.text() }
 }
 
+// Limite de tempo das buscas no ML — a Edge Function é encerrada aos ~150s
+let prazoMs = Infinity
+
+// Busca todos os resultados paginados da API ML.
+// Cada página é tentada até 4x (429/5xx/erro transitório). Se uma página falhar de vez,
+// retorna completo=false — quem chama NÃO deve gravar dado parcial por cima do bom.
+async function fetchAllML(baseUrl: string, accessToken: string, maxOffset = 10000) {
+  const seen = new Set<number>()
+  const items: any[] = []
+  let offset = 0
+  while (offset < maxOffset) {
+    let data: any = null
+    let falha = ''
+    for (let tent = 0; tent < 4; tent++) {
+      if (Date.now() > prazoMs) { falha = falha || 'tempo esgotado'; break }
+      if (tent > 0) await new Promise(res => setTimeout(res, 700 * tent * tent))
+      try {
+        const r = await fetch(`${baseUrl}&limit=${tent < 2 ? 200 : 50}&offset=${offset}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+        const d = await r.json().catch(() => null)
+        if (r.ok && d && !d.error && Array.isArray(d.results)) { data = d; break }
+        falha = `http ${r.status} — ${d?.message || d?.error || 'resposta inválida'}`
+      } catch (e) {
+        falha = String(e)
+      }
+    }
+    if (!data) return { items, completo: false, erro: `offset ${offset}: ${falha}` }
+    if (data.results.length === 0) break
+    for (const x of data.results) {
+      const item = x.collection || x
+      if (item.id && seen.has(item.id)) continue  // deduplicar por ID
+      if (item.id) seen.add(item.id)
+      items.push(item)
+    }
+    offset += data.results.length
+    const total = data.paging?.total
+    if (typeof total === 'number' && offset >= total) break
+  }
+  return { items, completo: true, erro: null as string | null }
+}
+
+// Dia (YYYY-MM-DD) em BRT de um timestamp ISO, independente do offset que o ML devolver
+function diaBRT(dt: string): string {
+  const t = new Date(dt).getTime()
+  return isNaN(t) ? '' : new Date(t - 3 * 60 * 60 * 1000).toISOString().substring(0, 10)
+}
+
+// Busca por janelas de data (normalmente 1 dia cada) em paralelo. O ML devolve
+// http 500 search_batch_fetch_error em offsets profundos; com janelas curtas cada
+// consulta fica em 1-2 páginas.
+async function fetchJanelas(baseUrl: string, accessToken: string, janelas: { de: string; ate: string }[], conc = 5) {
+  const out: { de: string; ate: string; items: any[]; completo: boolean; erro: string | null }[] = new Array(janelas.length)
+  let prox = 0
+  const worker = async () => {
+    while (prox < janelas.length) {
+      const i = prox++
+      const j = janelas[i]
+      const r = await fetchAllML(`${baseUrl}&begin_date=${j.de}T00:00:00.000-03:00&end_date=${j.ate}T23:59:59.999-03:00`, accessToken)
+      out[i] = { ...j, ...r }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(conc, janelas.length) }, worker))
+  // Segunda passada: o erro 500 do ML costuma sumir depois de alguns segundos
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].completo || Date.now() > prazoMs) continue
+    const j = janelas[i]
+    const r = await fetchAllML(`${baseUrl}&begin_date=${j.de}T00:00:00.000-03:00&end_date=${j.ate}T23:59:59.999-03:00`, accessToken)
+    out[i] = { ...j, ...r }
+  }
+  return out
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -58,51 +129,60 @@ Deno.serve(async (req) => {
         })
       })
       const newTok = await refreshRes.json()
-      if (newTok.error) return resp({ error: 'Token ML expirado. Reconecte sua conta.', detail: newTok.error })
+      if (newTok.error || !newTok.access_token) return resp({ error: 'Token ML expirado. Reconecte sua conta.', detail: newTok.error || newTok.message })
       accessToken = newTok.access_token
       await dbRun(supaUrl, supaKey, 'PATCH', 'ml_tokens', {
         access_token: newTok.access_token, refresh_token: newTok.refresh_token,
-        expires_at: new Date(Date.now() + newTok.expires_in * 1000).toISOString(),
+        expires_at: new Date(Date.now() + (Number(newTok.expires_in) || 21600) * 1000).toISOString(),
         updated_at: new Date().toISOString()
       }, `usuario_id=eq.${userId}`)
     }
 
+    prazoMs = Date.now() + 110000
     // Buscar releases do ML com filtro de data
     // Datas calculadas em BRT (UTC-3) para evitar bug de virada de dia (após 21h BRT o UTC já é dia seguinte)
     const BRT_MS = 3 * 60 * 60 * 1000
     const nowBRT = new Date(Date.now() - BRT_MS)
     const hoje = nowBRT.toISOString().substring(0, 10)
     const amanha = new Date(Date.now() - BRT_MS + 86400000).toISOString().substring(0, 10)
-    const anoFim = nowBRT.getUTCFullYear()
-    const endDate = `${anoFim}-12-31T23:59:59.000-03:00`
-    const beginDate = `${amanha}T00:00:00.000-03:00`
-    const seen = new Set<number>()
+    const diaMais = (n: number) => new Date(Date.now() - BRT_MS + n * 86400000).toISOString().substring(0, 10)
+    // Uma janela por dia nos próximos 45 dias + uma janela de cauda até D+120
+    const DIAS_JANELA = 45
+    const janelas: { de: string; ate: string }[] = []
+    for (let i = 1; i <= DIAS_JANELA; i++) janelas.push({ de: diaMais(i), ate: diaMais(i) })
+    const caudaDe = diaMais(DIAS_JANELA + 1)
+    janelas.push({ de: caudaDe, ate: diaMais(120) })
+    const resJanelas = await fetchJanelas(
+      'https://api.mercadolibre.com/collections/search?status=approved&released=no&sort=money_release_date&criteria=asc&range=money_release_date',
+      accessToken, janelas
+    )
+    const falhas = resJanelas.filter(j => !j.completo)
+    // Nada veio: mantém as liberações já salvas em vez de apagar tudo
+    if (falhas.length === resJanelas.length) {
+      return resp({ error: 'Mercado Livre não devolveu os recebimentos. Dados anteriores mantidos — tente de novo em alguns minutos.', detail: falhas[0].erro })
+    }
+    const diasFalhos = new Set(falhas.filter(j => j.de === j.ate).map(j => j.de))
+    const caudaFalhou = falhas.some(j => j.de !== j.ate)
+    const naoVeio = (d: string) => diasFalhos.has(d) || (caudaFalhou && d >= caudaDe)
+
+    const seenAll = new Set<number>()
     const all: any[] = []
-    let offset = 0
-    while (offset < 10000) {
-      const url = `https://api.mercadolibre.com/collections/search?status=approved&released=no&sort=money_release_date&criteria=asc&limit=200&offset=${offset}&range=money_release_date&begin_date=${beginDate}&end_date=${endDate}`
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
-      const data = await r.json()
-      if (data.error) break
-      if (!data.results || data.results.length === 0) break
-      for (const x of data.results) {
-        const item = x.collection || x
-        if (item.id && seen.has(item.id)) continue  // deduplicar por ID
-        if (item.id) seen.add(item.id)
+    for (const j of resJanelas) {
+      if (!j.completo) continue
+      for (const item of j.items) {
+        if (item.id && seenAll.has(item.id)) continue
+        if (item.id) seenAll.add(item.id)
         all.push(item)
       }
-      offset += 200
-      if (offset >= (data.paging?.total ?? 0)) break
     }
 
-    // Agrupar por data (apenas datas >= hoje como segurança extra)
+    // Agrupar por data (apenas datas >= amanhã como segurança extra)
     // Filtra APENAS pedidos reais (order_id preenchido) — exclui retiradas de cofrinho,
     // devoluções de crédito e outros movimentos financeiros sem pedido vinculado
     const byDate: Record<string, number> = {}
     for (const item of all) {
-      if (!item.order_id) continue  // retirada de cofrinho / movimento financeiro sem pedido
-      const date = (item.money_release_date || '').substring(0, 10)
-      if (!date || date < amanha) continue
+      const date = diaBRT(item.money_release_date || '')
+      if (!date || date < amanha || naoVeio(date)) continue
       byDate[date] = (byDate[date] || 0) + (item.net_received_amount || 0)
     }
     const liberacoes = Object.entries(byDate).map(([data, val]) => ({
@@ -112,29 +192,15 @@ Deno.serve(async (req) => {
     // Buscar releases de HOJE por hora (released=no = ainda não creditado)
     const hojeEnd = `${hoje}T23:59:59.000-03:00`
     const hojeStart = `${hoje}T00:00:00.000-03:00`
-    const seenHoje = new Set<number>()
-    const allHoje: any[] = []
-    let offsetHoje = 0
-    while (offsetHoje < 5000) {
-      const urlH = `https://api.mercadolibre.com/collections/search?status=approved&released=no&sort=money_release_date&criteria=asc&limit=200&offset=${offsetHoje}&range=money_release_date&begin_date=${hojeStart}&end_date=${hojeEnd}`
-      const rH = await fetch(urlH, { headers: { Authorization: `Bearer ${accessToken}` } })
-      const dH = await rH.json()
-      if (dH.error) break
-      if (!dH.results || dH.results.length === 0) break
-      for (const x of dH.results) {
-        const item = x.collection || x
-        if (item.id && seenHoje.has(item.id)) continue
-        if (item.id) seenHoje.add(item.id)
-        allHoje.push(item)
-      }
-      offsetHoje += 200
-      if (offsetHoje >= (dH.paging?.total ?? 0)) break
-    }
+    const hojeRes = await fetchAllML(
+      `https://api.mercadolibre.com/collections/search?status=approved&released=no&sort=money_release_date&criteria=asc&range=money_release_date&begin_date=${hojeStart}&end_date=${hojeEnd}`,
+      accessToken, 5000
+    )
+    const allHoje = hojeRes.items
     // Agrupar por hora em BRT (UTC-3), convertendo corretamente independente do offset do campo
     // Mesmo filtro: apenas pedidos reais com order_id
     const byHora: Record<string, number> = {}
     for (const item of allHoje) {
-      if (!item.order_id) continue  // retirada de cofrinho / movimento sem pedido
       const dt = item.money_release_date || ''
       if (!dt) continue
       const horaBRT = ((new Date(dt).getUTCHours() - 3 + 24) % 24).toString().padStart(2, '0')
@@ -154,16 +220,34 @@ Deno.serve(async (req) => {
       if (sd.available_balance !== undefined) saldoMP = sd.available_balance
     } catch (_) {}
 
-    // Salvar liberações (delete + insert)
-    await dbRun(supaUrl, supaKey, 'DELETE', 'liberacoes', undefined, `usuario_id=eq.${userId}`)
+    // Salvar liberações (delete + insert) — dias que o ML não devolveu ficam como estavam
+    let filtroDel = `usuario_id=eq.${userId}`
+    if (diasFalhos.size > 0 || caudaFalhou) {
+      const manter = [...diasFalhos].map(d => `data.eq.${d}`)
+      if (caudaFalhou) manter.push(`data.gte.${caudaDe}`)
+      filtroDel += `&not.or=(${manter.join(',')})`
+    }
+    const del = await dbRun(supaUrl, supaKey, 'DELETE', 'liberacoes', undefined, filtroDel)
+    if (!del.ok) return resp({ error: 'Erro ao gravar liberações', detail: del.text })
     if (liberacoes.length > 0) {
-      await dbRun(supaUrl, supaKey, 'POST', 'liberacoes', liberacoes as any, undefined, 'return=minimal')
+      const ins = await dbRun(supaUrl, supaKey, 'POST', 'liberacoes', liberacoes as any, undefined, 'return=minimal')
+      if (!ins.ok) return resp({ error: 'Erro ao gravar liberações', detail: ins.text })
     }
 
     // Atualizar updated_at do token
     await dbRun(supaUrl, supaKey, 'PATCH', 'ml_tokens', { updated_at: new Date().toISOString() }, `usuario_id=eq.${userId}`)
 
-    return resp({ success: true, liberacoes: liberacoes.length, liberacoesHoje, saldoMP, atualizado_em: new Date().toISOString() })
+    // liberacoesHoje só vai se a busca de hoje veio completa (senão o app mantém o valor anterior)
+    return resp({
+      success: true, liberacoes: liberacoes.length, pagamentos: all.length,
+      liberacoesHoje: hojeRes.completo ? liberacoesHoje : null,
+      aviso: [
+        falhas.length ? `${falhas.length} dia(s) não vieram do ML e ficaram com o valor anterior: ${falhas.map(j => j.de).slice(0, 6).join(', ')}` : null,
+        hojeRes.completo ? null : 'recebimentos de hoje incompletos'
+      ].filter(Boolean).join(' · ') || null,
+      detalheFalha: falhas[0]?.erro || hojeRes.erro || null,
+      saldoMP, atualizado_em: new Date().toISOString()
+    })
 
   } catch (e) {
     return resp({ error: 'Exceção interna', detail: String(e) })

@@ -273,7 +273,8 @@
         localStorage.setItem('mk_ultimo_sync_ml', Date.now().toString());
         if(data.liberacoesHoje) localStorage.setItem('mk_liberacoes_hoje', JSON.stringify(data.liberacoesHoje));
         const msg = '✅ ' + data.liberacoes + ' liberações importadas'
-          + (data.saldoMP ? ' · Saldo MP: R$ ' + fmt(data.saldoMP) : '');
+          + (data.saldoMP ? ' · Saldo MP: R$ ' + fmt(data.saldoMP) : '')
+          + (data.aviso ? ' · ⚠️ ' + data.aviso : '');
         if(statusEl){ statusEl.className='ml-status-ok'; statusEl.textContent=msg; }
 
         await verificarConexaoML();
