@@ -40,8 +40,16 @@ gestaomk/
                         seleção múltipla pagar
     relatorios-cfo.js ← fmtM/fmtP utils, alertas internos, P5 DRE, P6 Comparativo Mensal,
                         P12 Saúde Patrimonial, CFO Conselheiro (IA)
-    vendas-ml.js      ← páginas Vendas (renderVendas) e Resumo Financeiro (renderResumoFin);
-                        lê a tabela vendas_ml e chama a Edge Function ml-vendas
+    contas-ml.js      ← GRUPOS DE CONTAS ML: contasML, contaAtiva ("" = todas), liberacoesTodas/extratoTodos,
+                        aplicarContaAtiva() recorta liberacoes e extratoHistorico; seletor na barra lateral
+    vendas-ml.js      ← páginas Vendas (renderVendas, gráfico comparativo) e Resumo Financeiro (renderResumoFin,
+                        nivelar/reprocessar custo, ranking consolidado). Dados: view vendas_ml_calc + RPCs;
+                        a página pede só a página atual e os totais ao banco
+    atendimento.js    ← Perguntas e Mensagens do ML (Edge Function ml-atendimento) + pop-up de reconexão
+    dre-anual.js      ← DRE mês a mês (aba padrão de "DRE e resultado"): RPC vendas_ml_por_mes + pagamentos
+    config-abas.js    ← coloca os blocos de Configurações em abas pelo título do card
+    compras.js        ← Sugestão de compras (regras do módulo "Balanço e Compras"); parâmetros em comprasCfg
+    ia-conector.js    ← Configurações → IA: gera/revoga a chave do conector MCP (Edge Function mcp)
     dash-painel.js    ← painel "Caixa projetado" (renderPainelCaixa) — desenha em .view.active .pc-host
     inicio.js         ← página Início (renderInicio): visão geral de caixa, vendas, contas e alertas
     init.js           ← renderConfig, autosave, Enter=Tab em inputs, botão voltar do browser
@@ -66,7 +74,13 @@ gestaomk/
 <script src="src/pagar-import.js"></script>
 <script src="src/simulador-views.js"></script>
 <script src="src/relatorios-cfo.js"></script>
+<script src="src/contas-ml.js"></script>
 <script src="src/vendas-ml.js"></script>
+<script src="src/atendimento.js"></script>
+<script src="src/dre-anual.js"></script>
+<script src="src/config-abas.js"></script>
+<script src="src/compras.js"></script>
+<script src="src/ia-conector.js"></script>
 <script src="src/dash-painel.js"></script>
 <script src="src/inicio.js"></script>
 <script src="src/init.js"></script>
@@ -104,7 +118,7 @@ Dados em `localStorage` (sync) + Supabase (async, fire-and-forget):
 
 ### Navigation pages
 
-`inicio` (página inicial) · `dashboard` · `planilha` · `pagar` · `receber` · `simulador` · `vendas` · `resumo-fin` · `skus` · `estoque` · `ordens-compra` · `analise` · `resultado` · `patrimonio` · `config`  
+`inicio` (página inicial) · `dashboard` · `planilha` · `pagar` · `receber` · `simulador` · `vendas` · `resumo-fin` · `perguntas` · `mensagens` · `compras` · `skus` · `estoque` · `ordens-compra` · `analise` · `resultado` · `patrimonio` · `config`  
 Cada página → `id="view-{page}"` em `index.html` e `render{Page}()` em `renders.js`
 
 ## Development workflow
@@ -132,10 +146,16 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - Anon key: sb_publishable_7TU_CA9JlPgoYTpKHkH8dA_FSBgvPVd
 - Auth: email/senha, sessão persistente, reset por e-mail
 - Tabelas: pagamentos, liberacoes, skus, categorias, configuracoes, ml_tokens, erros_log, feedbacks,
-  extrato_historico, snapshots_ml, vendas_ml (migrations em supabase/migrations/)
-- Edge Functions (supabase/functions/): ml-callback, ml-sync, ml-snapshot (cron diário 06:00 BRT), ml-vendas,
-  ml-inventory, cfo-chat. Deploy: `supabase functions deploy <nome> --project-ref qasrccmtrllotukyeiax`
-  (ml-sync, ml-snapshot, ml-vendas e ml-callback com `--no-verify-jwt`)
+  extrato_historico, snapshots_ml, vendas_ml, vendas_ml_dias, ia_chaves (migrations em supabase/migrations/)
+- Edge Functions (supabase/functions/): ml-callback, ml-sync, ml-snapshot (cron diário 06:00 BRT), ml-vendas
+  (cron ml-vendas-sync a cada 15 min), ml-atendimento, mcp (conector de IA, chave pessoal), ml-inventory, cfo-chat. Deploy: `supabase functions deploy <nome> --project-ref qasrccmtrllotukyeiax`
+  (ml-sync, ml-snapshot, ml-vendas, ml-atendimento, mcp e ml-callback com `--no-verify-jwt`)
+- VÁRIAS CONTAS ML POR USUÁRIO: ml_tokens tem PK (usuario_id, ml_user_id). Todo PATCH/DELETE em ml_tokens e toda
+  gravação em liberacoes/extrato_historico/snapshots_ml/vendas_ml/vendas_ml_dias precisa do ml_user_id.
+- Custo por venda: vendas_ml.custo_unit/imposto_pct ficam gravados (RPC vendas_ml_carimbar); mudar o cadastro
+  não altera o passado. Reprocessar/nivelar: RPCs vendas_ml_reprocessar, vendas_ml_nivelar, vendas_ml_nivelar_sku.
+- Depois de um deploy o navegador pode manter index.html/JS antigos por até 10 min (cache do GitHub Pages):
+  código novo que depende de arquivo novo deve tolerar a ausência dele (typeof x === "function").
 - API do ML: buscar collections/search UM DIA POR VEZ (offsets profundos dão http 500) e nunca gravar
   resultado parcial; só `operation_type = regular_payment` é venda
 - Site URL: https://jonathannegrine-alt.github.io/caixa360/
