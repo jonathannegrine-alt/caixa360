@@ -179,11 +179,14 @@
       const kits = esoKits(), conhecidos = new Set([...kits.keys(), ...skus.map(s => esN(s.sku)), ...estoqueGalpao.map(e => esN(e.sku))]);
       const contas = typeof contasML !== 'undefined' ? contasML : [];
       const ja = eso.envios.find(x => x.numero === r.numero);
+      // a loja sai do próprio PDF: o Código ML de cada linha é o código do anúncio no estoque do Full
+      const doFull = Array.isArray(estoqueFullML) ? r.itens.map(i => estoqueFullML.find(x => x.item_id === i.codigo_ml)).find(x => x && x._conta) : null;
+      const contaAuto = doFull ? String(doFull._conta) : '';
       vmlModal('Envio ao Full nº ' + esEsc(r.numero || '?'), `
         ${ja ? `<div class="alert alert-warning">Já existe um envio com este número (${esEsc(ja.titulo)}). Salvar vai substituir os produtos dele.</div>` : ''}
         ${r.confere ? '' : `<div class="alert alert-danger">A soma das unidades lidas (${esInt(r.soma)}) não bate com o total do documento (${esInt(r.totalDoc)}). Confira as quantidades antes de salvar.</div>`}
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Loja</label><select id="eso-conta">${contas.map(c => `<option value="${esEsc(c.id)}">${esEsc(c.apelido || c.id)}</option>`).join('') || '<option value="">—</option>'}</select></div>
+          <div class="form-group"><label class="form-label">Loja</label><select id="eso-conta">${contas.map(c => `<option value="${esEsc(c.id)}" ${String(c.id) === contaAuto ? 'selected' : ''}>${esEsc(c.apelido || c.id)}</option>`).join('') || '<option value="">—</option>'}</select></div>
           <div class="form-group"><label class="form-label">Saída prevista (deixe vazio se ainda não tem vaga)</label><input type="date" id="eso-data"></div>
         </div>
         <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="eso-ocupar" checked style="margin-top:3px;"><span><b>Ocupar o estoque enquanto está em preparação</b><br><span class="text-muted">Marcado, as unidades saem do "disponível" desde já. O físico só baixa quando você der a saída.</span></span></label>
