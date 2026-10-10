@@ -54,13 +54,20 @@
     // ---------- 2) vendas: ocupado e baixa ----------
     async function esoLer(forcar){
       if(!forcar && eso.lidoEm && Date.now() - eso.lidoEm < 2 * 60 * 1000) return;
-      const desde = new Date(Date.now() - 25 * 86400000).toISOString();
-      const [v, e, c] = await Promise.all([
-        supa.from('vendas_ml').select('order_id,sku,qtd,status,logistic_type,envio_status,enviado_em,data_venda').eq('usuario_id', usuarioAtual.id).gte('data_venda', desde).neq('status', 'cancelled').or('logistic_type.is.null,logistic_type.neq.fulfillment').limit(6000),
+      const d25 = new Date(Date.now() - 25 * 86400000).toISOString(), d3 = new Date(Date.now() - 3 * 86400000).toISOString(), d12 = new Date(Date.now() - 12 * 86400000).toISOString();
+      const campos = 'order_id,sku,qtd,status,logistic_type,envio_status,enviado_em,data_venda';
+      const base = () => supa.from('vendas_ml').select(campos).eq('usuario_id', usuarioAtual.id).neq('status', 'cancelled').or('logistic_type.is.null,logistic_type.neq.fulfillment');
+      // o banco devolve no máximo 1000 linhas por consulta: lê em páginas
+      const paginas = async q => { const out = []; for(let i = 0; i < 8; i++){ const r = await q().range(i * 1000, i * 1000 + 999); if(r.error || !r.data) break; out.push(...r.data); if(r.data.length < 1000) break; } return out; };
+      const [pend, env, e, c] = await Promise.all([
+        // ainda não enviadas: com o envio já conferido no Mercado Livre, ou vendidas nos últimos 3 dias (conferência pode estar atrasada)
+        paginas(() => base().is('enviado_em', null).gte('data_venda', d25).or('envio_status.not.is.null,data_venda.gte.' + d3).order('data_venda', { ascending: false })),
+        // enviadas nos últimos 12 dias: candidatas à baixa do físico
+        paginas(() => base().gte('enviado_em', d12).order('enviado_em', { ascending: false })),
         supa.from('estoque_envios_full').select('*').eq('usuario_id', usuarioAtual.id).order('id', { ascending: false }).limit(300),
         supa.from('estoque_contagens').select('*').eq('usuario_id', usuarioAtual.id).order('id', { ascending: false }).limit(100),
       ]);
-      if(v.data) eso.vendas = v.data;
+      eso.vendas = pend.concat(env);
       if(e.data) eso.envios = e.data;
       if(c.data) eso.contagens = c.data;
       eso.lidoEm = Date.now();
