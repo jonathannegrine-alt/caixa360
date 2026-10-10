@@ -40,7 +40,7 @@ async function fetchAllML(baseUrl: string, accessToken: string, maxOffset = 1000
       if (Date.now() > prazoMs) { falha = falha || 'tempo esgotado'; break }
       if (tent > 0) await new Promise(res => setTimeout(res, 700 * tent * tent))
       try {
-        const r = await fetch(`${baseUrl}&limit=${tent < 2 ? 200 : 50}&offset=${offset}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+        const r = await fetch(`${baseUrl}&limit=${tent < 2 ? 200 : 50}&offset=${offset}`, { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15000) })
         const d = await r.json().catch(() => null)
         if (r.ok && d && !d.error && Array.isArray(d.results)) { data = d; break }
         falha = `http ${r.status} — ${d?.message || d?.error || 'resposta inválida'}`
@@ -63,6 +63,11 @@ async function fetchAllML(baseUrl: string, accessToken: string, maxOffset = 1000
   return { items, completo: true, erro: null as string | null }
 }
 
+// Só vendas (regular_payment). O ML mistura na mesma busca transferências internas do
+// Mercado Pago — partition_transfer (reserva/cofrinho), operation_fund (aporte) e
+// money_transfer — que não são recebimento de venda e inflavam os totais do dia.
+const ehVenda = (item: any) => item.operation_type === 'regular_payment'
+
 // Dia (YYYY-MM-DD) em BRT de um timestamp ISO, independente do offset que o ML devolver
 function diaBRT(dt: string): string {
   const t = new Date(dt).getTime()
@@ -72,7 +77,7 @@ function diaBRT(dt: string): string {
 // Busca por janelas de data (normalmente 1 dia cada) em paralelo. O ML devolve
 // http 500 search_batch_fetch_error em offsets profundos; com janelas curtas cada
 // consulta fica em 1-2 páginas.
-async function fetchJanelas(baseUrl: string, accessToken: string, janelas: { de: string; ate: string }[], conc = 5) {
+async function fetchJanelas(baseUrl: string, accessToken: string, janelas: { de: string; ate: string }[], conc = 4) {
   const out: { de: string; ate: string; items: any[]; completo: boolean; erro: string | null }[] = new Array(janelas.length)
   let prox = 0
   const worker = async () => {
@@ -177,10 +182,9 @@ Deno.serve(async (req) => {
     }
 
     // Agrupar por data (apenas datas >= amanhã como segurança extra)
-    // Filtra APENAS pedidos reais (order_id preenchido) — exclui retiradas de cofrinho,
-    // devoluções de crédito e outros movimentos financeiros sem pedido vinculado
     const byDate: Record<string, number> = {}
     for (const item of all) {
+      if (!ehVenda(item)) continue
       const date = diaBRT(item.money_release_date || '')
       if (!date || date < amanha || naoVeio(date)) continue
       byDate[date] = (byDate[date] || 0) + (item.net_received_amount || 0)
@@ -198,9 +202,9 @@ Deno.serve(async (req) => {
     )
     const allHoje = hojeRes.items
     // Agrupar por hora em BRT (UTC-3), convertendo corretamente independente do offset do campo
-    // Mesmo filtro: apenas pedidos reais com order_id
     const byHora: Record<string, number> = {}
     for (const item of allHoje) {
+      if (!ehVenda(item)) continue
       const dt = item.money_release_date || ''
       if (!dt) continue
       const horaBRT = ((new Date(dt).getUTCHours() - 3 + 24) % 24).toString().padStart(2, '0')

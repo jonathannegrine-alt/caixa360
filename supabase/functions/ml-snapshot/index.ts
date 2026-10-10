@@ -59,7 +59,7 @@ async function fetchAllML(baseUrl: string, accessToken: string, maxOffset = 1000
       if (Date.now() > prazoMs) { falha = falha || 'tempo esgotado'; break }
       if (tent > 0) await new Promise(res => setTimeout(res, 700 * tent * tent))
       try {
-        const r = await fetch(`${baseUrl}&limit=${tent < 2 ? 200 : 50}&offset=${offset}`, { headers: { Authorization: `Bearer ${accessToken}` } })
+        const r = await fetch(`${baseUrl}&limit=${tent < 2 ? 200 : 50}&offset=${offset}`, { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15000) })
         const d = await r.json().catch(() => null)
         if (r.ok && d && !d.error && Array.isArray(d.results)) { data = d; break }
         falha = `http ${r.status} — ${d?.message || d?.error || 'resposta inválida'}`
@@ -82,6 +82,11 @@ async function fetchAllML(baseUrl: string, accessToken: string, maxOffset = 1000
   return { items: all, completo: true, erro: null as string | null }
 }
 
+// Só vendas (regular_payment). O ML mistura na mesma busca transferências internas do
+// Mercado Pago — partition_transfer (reserva/cofrinho), operation_fund (aporte) e
+// money_transfer — que não são recebimento de venda e inflavam os totais do dia.
+const ehVenda = (item: any) => item.operation_type === 'regular_payment'
+
 // Dia (YYYY-MM-DD) em BRT de um timestamp ISO, independente do offset que o ML devolver
 function diaBRT(dt: string): string {
   const t = new Date(dt).getTime()
@@ -91,7 +96,7 @@ function diaBRT(dt: string): string {
 // Busca por janelas de data (normalmente 1 dia cada) em paralelo. O ML devolve
 // http 500 search_batch_fetch_error em offsets profundos; com janelas curtas cada
 // consulta fica em 1-2 páginas.
-async function fetchJanelas(baseUrl: string, accessToken: string, janelas: { de: string; ate: string }[], conc = 6) {
+async function fetchJanelas(baseUrl: string, accessToken: string, janelas: { de: string; ate: string }[], conc = 4) {
   const out: { de: string; ate: string; items: any[]; completo: boolean; erro: string | null }[] = new Array(janelas.length)
   let prox = 0
   const worker = async () => {
@@ -113,7 +118,7 @@ async function fetchJanelas(baseUrl: string, accessToken: string, janelas: { de:
   return out
 }
 
-async function processarUsuario(userId: string, supaUrl: string, supaKey: string, clientId: string, secret: string, origem: string) {
+async function processarUsuario(userId: string, supaUrl: string, supaKey: string, clientId: string, secret: string, origem: string, refazer?: { de: string; ate: string }) {
   const token = await getTokenML(supaUrl, supaKey, clientId, secret, userId)
   if (!token) return { usuario_id: userId, erro: 'sem token ML' }
 
@@ -136,7 +141,8 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
   const janelasExtrato: { de: string; ate: string }[] = []
   for (let i = -90; i <= 0; i++) {
     const d = dataBRT(i)
-    if (d >= dezDiasAtras || !diasGravados.has(d)) janelasExtrato.push({ de: d, ate: d })
+    const forcado = !!refazer && d >= refazer.de && d <= refazer.ate
+    if (d >= dezDiasAtras || !diasGravados.has(d) || forcado) janelasExtrato.push({ de: d, ate: d })
   }
   const resExtrato = await fetchJanelas(
     'https://api.mercadolibre.com/collections/search?status=approved&released=yes&sort=money_release_date&criteria=desc&range=money_release_date',
@@ -154,6 +160,7 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
     for (const item of j.items) {
       if (item.id && seenExtrato.has(item.id)) continue
       if (item.id) seenExtrato.add(item.id)
+      if (!ehVenda(item)) continue
       const data = diaBRT(item.money_release_date || '')
       if (!data || data < noventaDiasAtras || data > hoje || diasFalhosExtrato.has(data)) continue
       if (!byDataExtrato[data]) byDataExtrato[data] = { val: 0, qtd: 0 }
@@ -207,6 +214,7 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
     for (const item of j.items) {
       if (item.id && seenFuturo.has(item.id)) continue
       if (item.id) seenFuturo.add(item.id)
+      if (!ehVenda(item)) continue
       const data = diaBRT(item.money_release_date || '')
       if (!data || data < amanha) continue
       if (!byDataFuturo[data]) byDataFuturo[data] = { val: 0, qtd: 0 }
@@ -296,7 +304,9 @@ Deno.serve(async (req) => {
       if (!jwtRes.ok) return resp({ error: 'Não autenticado' })
       const { id: userId } = await jwtRes.json()
 
-      const resultado = await processarUsuario(userId, supaUrl, supaKey, clientId, secret, 'manual')
+      const resultado = await processarUsuario(userId, supaUrl, supaKey, clientId, secret, 'manual',
+        // { refazer_extrato: { de, ate } } recalcula esses dias do extrato mesmo já gravados
+        body?.refazer_extrato?.de && body?.refazer_extrato?.ate ? body.refazer_extrato : undefined)
       return resp({ success: true, ...resultado })
     }
 
