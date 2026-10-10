@@ -1644,135 +1644,135 @@
 
       </div>
 
-    </div>
+      <!-- VIEW: ANÁLISE -->
+      <div id="view-analise" class="view">
+        <div class="d-flex" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+          <div>
+            <div style="font-size:18px;font-weight:700;color:var(--gray-900);">📊 Análise</div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px;">Rentabilidade, cancelamentos e ADS por SKU</div>
+          </div>
+        </div>
 
-  </div>
+        <!-- Tabs -->
+        <div class="resultado-tabs" style="margin-bottom:16px;">
+          <div class="resultado-tab active" id="analise-tab-rentabilidade" onclick="setAnaliseTab('rentabilidade')">💰 Rentabilidade</div>
+          <div class="resultado-tab" id="analise-tab-cancelamentos" onclick="setAnaliseTab('cancelamentos')">↩️ Cancelamentos</div>
+          <div class="resultado-tab" id="analise-tab-ads" onclick="setAnaliseTab('ads')">📣 ADS</div>
+        </div>
 
-  <!-- VIEW: ANÁLISE -->
-  <div id="view-analise" class="view" style="display:none;">
-    <div class="d-flex" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-      <div>
-        <div style="font-size:18px;font-weight:700;color:var(--gray-900);">📊 Análise</div>
-        <div style="font-size:12px;color:#64748b;margin-top:2px;">Rentabilidade, cancelamentos e ADS por SKU</div>
+        <!-- Tab: Rentabilidade -->
+        <div id="analise-view-rentabilidade">
+          <div id="estoque-rent-vazio" class="card" style="display:none;">
+            <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+              <div style="font-size:32px;margin-bottom:10px;">💰</div>
+              <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas</div>
+              <div style="font-size:12px;">Importe o relatório de vendas ML para ver a rentabilidade por SKU.</div>
+            </div>
+          </div>
+          <div class="card" id="estoque-rent-card" style="display:none;">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Título</th>
+                    <th style="padding:8px 6px;text-align:right;" title="Unidades vendidas no período selecionado (ajustadas proporcionalmente se o período foi alterado).">Unidades</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Valor pago pelo comprador antes de descontos e taxas.">Receita bruta</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Comissão ML + impostos sobre a venda cobrados pelo ML.">Tarifa ML</th>
+                    <th style="padding:8px 6px;text-align:right;" title="Frete cobrado do comprador, repassado ao vendedor (ou custo do frete grátis).">Envio</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Valor líquido que o ML efetivamente libera: Receita − Tarifa − Envio.">Líquido ML</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Custo do produto × unidades. Vem do cadastro de Produtos (SKU ou Kit). ⚠️ sem composição = custo não cadastrado.">Custo produto</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Líquido ML − Custo produto. Representa o lucro antes de custos fixos (galpão, contador, etc.).">Margem R$</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Margem R$ ÷ Receita bruta. Abaixo de 10% = alerta ⚠️.">Margem %</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-rentabilidade"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Cancelamentos -->
+        <div id="analise-view-cancelamentos" style="display:none;">
+          <div class="card">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Título</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Vendas concluídas no período (sem cancelamentos).">Vendas efetivas</th>
+                    <th style="padding:8px 6px;text-align:right;" title="Pedidos cancelados/devolvidos no período.">Cancelamentos</th>
+                    <th style="padding:8px 6px;text-align:right;" title="Cancelamentos ÷ (Vendas + Cancelamentos). Acima de 5% = atenção.">Taxa %</th>
+                    <th style="padding:8px 6px;text-align:left;" title="Alerta gerado automaticamente quando a taxa de cancelamento é alta.">Alerta</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-cancelamentos"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: ADS -->
+        <div id="analise-view-ads" style="display:none;">
+          <div class="card">
+            <div class="card-body" style="padding:0;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                    <th style="padding:8px 10px;text-align:left;">SKU</th>
+                    <th style="padding:8px 6px;text-align:left;">Título</th>
+                    <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Total de unidades vendidas no período.">Total unid.</th>
+                    <th style="padding:8px 6px;text-align:right;" title="Vendas sem ADS — comprador chegou de forma orgânica.">Orgânico</th>
+                    <th style="padding:8px 6px;text-align:right;" title="Vendas via Publicidade (ADS Mercado Livre).">ADS</th>
+                    <th style="padding:8px 6px;text-align:right;" title="ADS ÷ Total. Alta dependência de ADS pode indicar produto fraco organicamente.">% ADS</th>
+                    <th style="padding:8px 6px;text-align:left;" title="Alerta quando a dependência de ADS está acima de 60%.">Alerta</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-ads"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
       </div>
-    </div>
 
-    <!-- Tabs -->
-    <div class="resultado-tabs" style="margin-bottom:16px;">
-      <div class="resultado-tab active" id="analise-tab-rentabilidade" onclick="setAnaliseTab('rentabilidade')">💰 Rentabilidade</div>
-      <div class="resultado-tab" id="analise-tab-cancelamentos" onclick="setAnaliseTab('cancelamentos')">↩️ Cancelamentos</div>
-      <div class="resultado-tab" id="analise-tab-ads" onclick="setAnaliseTab('ads')">📣 ADS</div>
-    </div>
-
-    <!-- Tab: Rentabilidade -->
-    <div id="analise-view-rentabilidade">
-      <div id="estoque-rent-vazio" class="card" style="display:none;">
-        <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-          <div style="font-size:32px;margin-bottom:10px;">💰</div>
-          <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas</div>
-          <div style="font-size:12px;">Importe o relatório de vendas ML para ver a rentabilidade por SKU.</div>
+      <!-- VIEW: ORDENS DE COMPRA -->
+      <div id="view-ordens-compra" class="view">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+          <h1>🛒 Ordens de Compra</h1>
+          <button class="btn" onclick="abrirModalNovaOC(null)">+ Nova OC</button>
+        </div>
+        <div id="oc-vazio" class="card" style="display:none;">
+          <div class="card-body" style="text-align:center;padding:40px;color:#999;">
+            <div style="font-size:32px;margin-bottom:10px;">🛒</div>
+            <div style="font-weight:600;margin-bottom:6px;">Nenhuma ordem de compra</div>
+            <div style="font-size:12px;">Crie uma OC manualmente ou selecione itens na aba Reposição.</div>
+          </div>
+        </div>
+        <div class="card" id="oc-lista-card" style="display:none;">
+          <div class="card-body" style="padding:0;overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
+                  <th style="padding:8px 10px;text-align:left;white-space:nowrap;">ID</th>
+                  <th style="padding:8px 6px;text-align:left;white-space:nowrap;">Data</th>
+                  <th style="padding:8px 6px;text-align:left;">Fornecedor</th>
+                  <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Itens</th>
+                  <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Capital total</th>
+                  <th style="padding:8px 6px;text-align:center;white-space:nowrap;">Forma pgto</th>
+                  <th style="padding:8px 6px;text-align:center;">Status</th>
+                  <th style="padding:8px 6px;text-align:center;width:70px;">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-ordens-compra"></tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div class="card" id="estoque-rent-card" style="display:none;">
-        <div class="card-body" style="padding:0;overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;">
-            <thead>
-              <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
-                <th style="padding:8px 10px;text-align:left;">SKU</th>
-                <th style="padding:8px 6px;text-align:left;">Título</th>
-                <th style="padding:8px 6px;text-align:right;" title="Unidades vendidas no período selecionado (ajustadas proporcionalmente se o período foi alterado).">Unidades</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Valor pago pelo comprador antes de descontos e taxas.">Receita bruta</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Comissão ML + impostos sobre a venda cobrados pelo ML.">Tarifa ML</th>
-                <th style="padding:8px 6px;text-align:right;" title="Frete cobrado do comprador, repassado ao vendedor (ou custo do frete grátis).">Envio</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Valor líquido que o ML efetivamente libera: Receita − Tarifa − Envio.">Líquido ML</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Custo do produto × unidades. Vem do cadastro de Produtos (SKU ou Kit). ⚠️ sem composição = custo não cadastrado.">Custo produto</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Líquido ML − Custo produto. Representa o lucro antes de custos fixos (galpão, contador, etc.).">Margem R$</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Margem R$ ÷ Receita bruta. Abaixo de 10% = alerta ⚠️.">Margem %</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-rentabilidade"></tbody>
-          </table>
-        </div>
-      </div>
+
     </div>
 
-    <!-- Tab: Cancelamentos -->
-    <div id="analise-view-cancelamentos" style="display:none;">
-      <div class="card">
-        <div class="card-body" style="padding:0;overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;">
-            <thead>
-              <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
-                <th style="padding:8px 10px;text-align:left;">SKU</th>
-                <th style="padding:8px 6px;text-align:left;">Título</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Vendas concluídas no período (sem cancelamentos).">Vendas efetivas</th>
-                <th style="padding:8px 6px;text-align:right;" title="Pedidos cancelados/devolvidos no período.">Cancelamentos</th>
-                <th style="padding:8px 6px;text-align:right;" title="Cancelamentos ÷ (Vendas + Cancelamentos). Acima de 5% = atenção.">Taxa %</th>
-                <th style="padding:8px 6px;text-align:left;" title="Alerta gerado automaticamente quando a taxa de cancelamento é alta.">Alerta</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-cancelamentos"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab: ADS -->
-    <div id="analise-view-ads" style="display:none;">
-      <div class="card">
-        <div class="card-body" style="padding:0;overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;">
-            <thead>
-              <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
-                <th style="padding:8px 10px;text-align:left;">SKU</th>
-                <th style="padding:8px 6px;text-align:left;">Título</th>
-                <th style="padding:8px 6px;text-align:right;white-space:nowrap;" title="Total de unidades vendidas no período.">Total unid.</th>
-                <th style="padding:8px 6px;text-align:right;" title="Vendas sem ADS — comprador chegou de forma orgânica.">Orgânico</th>
-                <th style="padding:8px 6px;text-align:right;" title="Vendas via Publicidade (ADS Mercado Livre).">ADS</th>
-                <th style="padding:8px 6px;text-align:right;" title="ADS ÷ Total. Alta dependência de ADS pode indicar produto fraco organicamente.">% ADS</th>
-                <th style="padding:8px 6px;text-align:left;" title="Alerta quando a dependência de ADS está acima de 60%.">Alerta</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-ads"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- VIEW: ORDENS DE COMPRA -->
-  <div id="view-ordens-compra" class="view" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-      <h1>🛒 Ordens de Compra</h1>
-      <button class="btn" onclick="abrirModalNovaOC(null)">+ Nova OC</button>
-    </div>
-    <div id="oc-vazio" class="card" style="display:none;">
-      <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-        <div style="font-size:32px;margin-bottom:10px;">🛒</div>
-        <div style="font-weight:600;margin-bottom:6px;">Nenhuma ordem de compra</div>
-        <div style="font-size:12px;">Crie uma OC manualmente ou selecione itens na aba Reposição.</div>
-      </div>
-    </div>
-    <div class="card" id="oc-lista-card" style="display:none;">
-      <div class="card-body" style="padding:0;overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead>
-            <tr style="background:var(--gray-100);border-bottom:2px solid var(--gray-200);">
-              <th style="padding:8px 10px;text-align:left;white-space:nowrap;">ID</th>
-              <th style="padding:8px 6px;text-align:left;white-space:nowrap;">Data</th>
-              <th style="padding:8px 6px;text-align:left;">Fornecedor</th>
-              <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Itens</th>
-              <th style="padding:8px 6px;text-align:right;white-space:nowrap;">Capital total</th>
-              <th style="padding:8px 6px;text-align:center;white-space:nowrap;">Forma pgto</th>
-              <th style="padding:8px 6px;text-align:center;">Status</th>
-              <th style="padding:8px 6px;text-align:center;width:70px;">Ações</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-ordens-compra"></tbody>
-        </table>
-      </div>
-    </div>
   </div>
 
   <!-- MODAL COMPONENTE -->
