@@ -767,3 +767,11 @@ input[type="checkbox"]{accent-color:var(--primary);}
 @media (max-width:768px){ .fx-controles .fx-modo{margin-left:0;} .fx-table th,.fx-table td{padding:9px 10px;} .fx-acum{min-width:120px;} }
 .fx-table th{padding:11px 12px;} .fx-table td{padding:10px 12px;} .fx-table tfoot td{padding:12px;} .fx-acum{min-width:150px;}
 .fx-table th:first-child,.fx-table td:first-child{padding-left:16px;} .fx-table th:last-child,.fx-table td:last-child{padding-right:16px;}
+
+/* ===== A RECEBER ML ===== */
+.rc-val{position:relative;font-weight:700;color:var(--success);min-width:230px;}
+.rc-val .rc-bar{position:absolute;right:0;top:7px;bottom:7px;background:var(--success);opacity:.13;border-radius:5px 0 0 5px;pointer-events:none;}
+.rc-val span:last-child{position:relative;}
+.rc-acum{color:var(--text-2);font-weight:600;}
+.rc-conexao{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
+@media (max-width:768px){ .rc-val{min-width:130px;} }

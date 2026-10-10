@@ -539,77 +539,38 @@
 
       <!-- A RECEBER ML -->
       <div id="view-receber" class="view">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-          <h1>A Receber — Mercado Livre</h1>
-          <div class="d-flex gap-1" style="border:1px solid var(--gray-200);border-radius:6px;overflow:hidden;">
-            <button class="btn-toggle active" id="rec-view-lista" onclick="setRecView('lista')" style="border-radius:0;border:none;">☰ Lista</button>
-            <button class="btn-toggle" id="rec-view-cal" onclick="setRecView('cal')" style="border-radius:0;border:none;">📅 Calendário</button>
+        <div class="pg-head">
+          <div>
+            <div class="pg-title">A receber — Mercado Livre</div>
+            <div class="pg-sub">Dinheiro das vendas que o Mercado Livre já confirmou e ainda vai liberar.</div>
+          </div>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
+            <div class="seg">
+              <button class="btn-toggle active" id="rec-view-lista" onclick="setRecView('lista')">Lista</button>
+              <button class="btn-toggle" id="rec-view-cal" onclick="setRecView('cal')">Calendário</button>
+            </div>
+            <button class="btn" onclick="sincronizarML()">Atualizar agora</button>
           </div>
         </div>
 
         <!-- Resumo -->
-        <div class="stats-grid">
-          <div class="stat-card success">
-            <div class="stat-label">Total confirmado ML</div>
-            <div class="stat-value text-success" id="rec-total">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Próximos 7 dias</div>
-            <div class="stat-value" id="rec-7d">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Próximos 30 dias</div>
-            <div class="stat-value" id="rec-30d">—</div>
-          </div>
-        </div>
-
-        <!-- Sincronização ML -->
-        <div class="card mb-2" id="card-ml-sync">
-          <div class="card-header"><div class="card-title">🤝 Mercado Livre</div></div>
-          <div class="card-body">
-
-            <!-- Estado: não conectado -->
-            <div id="ml-nao-conectado">
-              <p style="font-size:13px;color:#666;margin-bottom:14px;">Conecte sua conta do Mercado Livre para sincronizar os dados automaticamente — sem precisar do script PowerShell.</p>
-              <button class="btn-ml" onclick="conectarML()">
-                <span style="font-size:18px;">🛒</span> Conectar Mercado Livre
-              </button>
-            </div>
-
-            <!-- Estado: conectado -->
-            <div id="ml-conectado" style="display:none;">
-              <div id="ml-info" class="ml-status-ok" style="margin-bottom:8px;">✅ Conectado</div>
-              <div id="ml-pipeline-badge" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;"></div>
-              <div class="d-flex gap-1" style="flex-wrap:wrap;">
-                <button class="btn" onclick="sincronizarML()">⚡ Atualizar dados agora</button>
-                <button class="btn-out" onclick="desconectarML()">Desconectar</button>
-              </div>
-            </div>
-
-            <div id="ml-status" class="ml-status-info" style="margin-top:10px;min-height:18px;"></div>
-
-
-            <!-- Fallback JSON -->
-            <details style="margin-top:16px;">
-              <summary style="font-size:11px;color:#999;cursor:pointer;">Importar via JSON (alternativa manual)</summary>
-              <div style="margin-top:8px;">
-                <textarea id="ml-json-input" rows="3" style="width:100%;font-size:11px;font-family:monospace;" placeholder='{"liberacoes":[{"data":"2026-05-20","val":1523.45}]}'></textarea>
-                <button class="btn-out btn-sm" onclick="processarJSONColado()" style="margin-top:6px;">📥 Importar JSON</button>
-              </div>
-            </details>
-          </div>
+        <div class="kpi-grid k4i">
+          <div class="kpi k-mc"><div class="kpi-label">Total confirmado</div><div class="kpi-value" id="rec-total">—</div><div class="kpi-sub" id="rec-total-sub"></div></div>
+          <div class="kpi k-hoje"><div class="kpi-label">Ainda hoje</div><div class="kpi-value" id="rec-hoje">—</div><div class="kpi-sub">Liberações previstas para as próximas horas</div></div>
+          <div class="kpi k-frete"><div class="kpi-label">Próximos 7 dias</div><div class="kpi-value" id="rec-7d">—</div><div class="kpi-sub" id="rec-7d-sub"></div></div>
+          <div class="kpi k-venda"><div class="kpi-label">Próximos 30 dias</div><div class="kpi-value" id="rec-30d">—</div><div class="kpi-sub" id="rec-30d-sub"></div></div>
         </div>
 
         <!-- Card: A receber hoje por hora -->
         <div id="card-hoje-ml" class="card" style="display:none;margin-bottom:16px;">
           <div class="card-header">
-            <div class="card-title">⏰ A receber hoje</div>
+            <div class="card-title">A receber hoje, por horário</div>
             <div style="display:flex;align-items:center;gap:10px;">
               <div id="hoje-ml-total" style="font-weight:700;color:var(--success);font-size:1.1rem;"></div>
-              <button class="btn-out btn-sm" onclick="document.getElementById('card-hoje-ml').style.display='none'">✕</button>
+              <button class="ico-btn" onclick="document.getElementById('card-hoje-ml').style.display='none'">✕</button>
             </div>
           </div>
-          <div id="hoje-ml-lista" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;"></div>
+          <div id="hoje-ml-lista" style="display:flex;flex-direction:column;gap:6px;padding:12px 16px;"></div>
         </div>
 
         <!-- Lista / Calendário -->
@@ -617,14 +578,17 @@
           <div class="card">
             <div class="card-header">
               <div class="card-title">Liberações agendadas</div>
+              <div class="text-muted" style="font-size:12px;" id="rec-lista-sub"></div>
             </div>
             <div style="overflow-x:auto;">
-              <table>
+              <table class="fx-table rc-table">
                 <thead>
                   <tr>
                     <th>Data</th>
                     <th>Dia</th>
-                    <th style="text-align:right;">Valor</th>
+                    <th>Quando</th>
+                    <th class="num">Valor</th>
+                    <th class="num">Acumulado</th>
                   </tr>
                 </thead>
                 <tbody id="tbody-receber"></tbody>
@@ -635,11 +599,11 @@
 
         <div id="rec-cal-view" style="display:none;">
           <div class="card">
-            <div class="card-header">
-              <div>
-                <button class="btn-out btn-sm" onclick="navegarRecMes(-1)">◀</button>
-                <span id="rec-cal-label" style="min-width:160px;display:inline-block;text-align:center;font-weight:600;">—</span>
-                <button class="btn-out btn-sm" onclick="navegarRecMes(1)">▶</button>
+            <div class="card-header" style="justify-content:center;">
+              <div class="d-flex" style="gap:8px;align-items:center;">
+                <button class="btn-out btn-sm" onclick="navegarRecMes(-1)">← Anterior</button>
+                <span id="rec-cal-label" style="min-width:160px;display:inline-block;text-align:center;font-weight:650;">—</span>
+                <button class="btn-out btn-sm" onclick="navegarRecMes(1)">Próximo →</button>
               </div>
             </div>
             <div class="card-body" style="padding:0;">
@@ -647,8 +611,46 @@
             </div>
           </div>
         </div>
+
+        <!-- Conexão com o Mercado Livre -->
+        <div class="card" id="card-ml-sync" style="margin-top:16px;">
+          <div class="card-header"><div class="card-title">Conexão com o Mercado Livre</div></div>
+          <div class="card-body">
+
+            <!-- Estado: não conectado -->
+            <div id="ml-nao-conectado">
+              <p class="text-muted" style="font-size:13px;margin-bottom:14px;">Conecte sua conta do Mercado Livre para trazer os valores a receber automaticamente.</p>
+              <button class="btn-ml" onclick="conectarML()">Conectar Mercado Livre</button>
+            </div>
+
+            <!-- Estado: conectado -->
+            <div id="ml-conectado" style="display:none;">
+              <div class="rc-conexao">
+                <div>
+                  <div id="ml-info" class="ml-status-ok">✅ Conectado</div>
+                  <div id="ml-pipeline-badge" style="font-size:12px;color:var(--text-muted);margin-top:4px;"></div>
+                </div>
+                <div class="d-flex gap-1" style="flex-wrap:wrap;">
+                  <button class="btn-out" onclick="sincronizarML()">Atualizar dados agora</button>
+                  <button class="btn-out" onclick="desconectarML()">Desconectar</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="ml-status" class="ml-status-info" style="margin-top:10px;min-height:18px;"></div>
+
+            <!-- Fallback JSON -->
+            <details style="margin-top:12px;">
+              <summary class="text-muted" style="font-size:11.5px;cursor:pointer;">Importar manualmente (JSON)</summary>
+              <div style="margin-top:8px;">
+                <textarea id="ml-json-input" rows="3" style="width:100%;font-size:11px;font-family:monospace;" placeholder='{"liberacoes":[{"data":"2026-05-20","val":1523.45}]}'></textarea>
+                <button class="btn-out btn-sm" onclick="processarJSONColado()" style="margin-top:6px;">Importar JSON</button>
+              </div>
+            </details>
+          </div>
+        </div>
       </div>
-      
+
       <!-- SIMULADOR -->
       <div id="view-simulador" class="view">
         <h1 style="margin-bottom:20px;">Simulador de Compras</h1>

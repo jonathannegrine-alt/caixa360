@@ -78,7 +78,7 @@
       const horaAtual = agora.getHours();
       const total = itens.reduce((s,i) => s + i.val, 0);
 
-      document.getElementById('hoje-ml-total').textContent = 'R$ ' + fmt(total);
+      document.getElementById('hoje-ml-total').textContent = fmt(total);
 
       const lista = document.getElementById('hoje-ml-lista');
       lista.innerHTML = itens.map(i => {
@@ -88,7 +88,7 @@
         const icone = passou ? '✅' : '🕐';
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
           <span style="color:${cor};font-size:.95rem;">${icone} ${i.hora}</span>
-          <span style="font-weight:600;color:${cor};">R$ ${fmt(i.val)}</span>
+          <span style="font-weight:600;color:${cor};">${fmt(i.val)}</span>
         </div>`;
       }).join('');
 
@@ -101,39 +101,58 @@
       // hojeTotal = apenas horas futuras (não creditadas ainda)
       const hojeTotal = getHojeTotal();
 
-      // Resumo stats — excluir hoje de liberacoes (evita double-count com hojeTotal)
-      const totalFut = liberacoes.filter(l => l.data > hoje).reduce((s,l) => s + l.val, 0);
+      // Resumo — excluir hoje de liberacoes (evita contar duas vezes com hojeTotal)
+      const futuras = liberacoes.filter(l => l.data > hoje).sort((a,b) => a.data.localeCompare(b.data));
+      const totalFut = futuras.reduce((s,l) => s + l.val, 0);
       const total = totalFut + hojeTotal;
-      const p7  = liberacoes.filter(l => diasDif(hoje, l.data) <= 7  && l.data > hoje).reduce((s,l) => s + l.val, 0);
-      const p30 = liberacoes.filter(l => diasDif(hoje, l.data) <= 30 && l.data > hoje).reduce((s,l) => s + l.val, 0);
+      const f7  = futuras.filter(l => diasDif(hoje, l.data) <= 7);
+      const f30 = futuras.filter(l => diasDif(hoje, l.data) <= 30);
+      const p7  = f7.reduce((s,l) => s + l.val, 0);
+      const p30 = f30.reduce((s,l) => s + l.val, 0);
+      const set = (id, t) => { const el = document.getElementById(id); if(el) el.textContent = t; };
+      const dias = n => n + (n === 1 ? ' dia' : ' dias');
 
-      document.getElementById('rec-total').textContent = fmt(total);
-      document.getElementById('rec-7d').textContent = fmt(p7);
-      document.getElementById('rec-30d').textContent = fmt(p30);
+      set('rec-total', fmt(total));
+      set('rec-7d', fmt(p7));
+      set('rec-30d', fmt(p30));
+      set('rec-hoje', hojeTotal > 0 ? fmt(hojeTotal) : '—');
+      set('rec-total-sub', futuras.length ? 'Última liberação em ' + ptDate(futuras[futuras.length - 1].data) : 'Nenhuma liberação futura');
+      set('rec-7d-sub', f7.length ? 'Média de ' + fmt(p7 / 7) + ' por dia' : 'Nada confirmado');
+      set('rec-30d-sub', total > 0 ? Math.round(p30 / total * 100) + '% do total confirmado' : '');
+      set('rec-lista-sub', futuras.length ? dias(futuras.length) + ' com liberação' : '');
 
       // Lista
       const tbody = document.getElementById('tbody-receber');
-      const futuras = liberacoes.filter(l => l.data > hoje).sort((a,b) => a.data.localeCompare(b.data));
+      const maior = Math.max(1, hojeTotal, ...futuras.map(l => l.val));
+      const barra = v => `<span class="rc-bar" style="width:${Math.max(2, Math.round(v / maior * 100))}%;"></span>`;
+      let acum = hojeTotal;
 
       const hojeRow = hojeTotal > 0 ? `
-        <tr onclick="abrirModalHoje()" style="cursor:pointer;background:rgba(var(--accent-rgb),.07);">
-          <td><strong>${ptDate(hoje)}</strong></td>
-          <td>${nomeDia(hoje)} <span style="font-size:.75rem;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;">hoje ⏰</span></td>
-          <td style="text-align:right;font-weight:700;color:var(--accent);">${fmt(hojeTotal)}</td>
+        <tr class="fx-row fx-hoje" onclick="abrirModalHoje()" style="cursor:pointer;" title="Ver por horário">
+          <td>${ptDate(hoje)} <span class="fx-tag">hoje</span></td>
+          <td class="fx-dia">${nomeDia(hoje)}</td>
+          <td class="fx-dia">nas próximas horas</td>
+          <td class="num rc-val">${barra(hojeTotal)}<span>${fmt(hojeTotal)}</span></td>
+          <td class="num rc-acum">${fmt(acum)}</td>
         </tr>` : '';
 
       if(!hojeRow && futuras.length === 0){
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:#999;">Nenhuma liberação importada. Conecte o Mercado Livre ou use a importação manual.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted);">Nenhuma liberação importada. Conecte o Mercado Livre logo abaixo.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = hojeRow + futuras.map(l => `
-        <tr>
+      tbody.innerHTML = hojeRow + futuras.map(l => {
+        acum += l.val;
+        const n = diasDif(hoje, l.data), dow = parseDate(l.data).getDay();
+        return `
+        <tr class="fx-row${dow === 0 || dow === 6 ? ' fx-fds' : ''}">
           <td>${ptDate(l.data)}</td>
-          <td>${nomeDia(l.data)}</td>
-          <td style="text-align:right;font-weight:600;color:var(--success);">${fmt(l.val)}</td>
-        </tr>
-      `).join('');
+          <td class="fx-dia">${nomeDia(l.data)}</td>
+          <td class="fx-dia">${n === 1 ? 'amanhã' : 'em ' + n + ' dias'}</td>
+          <td class="num rc-val">${barra(l.val)}<span>${fmt(l.val)}</span></td>
+          <td class="num rc-acum">${fmt(acum)}</td>
+        </tr>`;
+      }).join('');
       makeSortable('tbody-receber');
       initResizableCols('tbody-receber');
     }
