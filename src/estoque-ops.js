@@ -9,12 +9,28 @@
     let eso = { vendas: [], envios: [], contagens: [], lidoEm: 0 };
     const esoKits = () => { const m = new Map(); composicaoKit.forEach(c => { const k = esN(c.sku_comercial); if(!m.has(k)) m.set(k, []); m.get(k).push({ sku: c.sku_componente, qtd: Number(c.qty) || 1 }); }); return m; };
     // um SKU de anúncio vira a lista de produtos físicos (kit aberto nos componentes)
-    function esoAbrir(sku, qtd, kits){ const k = esN(sku); return (kits || esoKits()).has(k) ? (kits || esoKits()).get(k).map(c => ({ sku: c.sku, qtd: qtd * c.qtd })) : [{ sku, qtd }]; }
+    // Mapeamento: quando o SKU que vem no anúncio não é o do estoque (digitado errado, código antigo, pacote com
+    // várias unidades), diz para qual produto ou kit ele vai e quantas unidades cada venda consome.
+    // Fica em comprasCfg.equivalentes [{ de, para, mult }] — o mesmo lugar que a Sugestão de compras já usava.
+    function esoMapa(){ const m = new Map(); ((typeof comprasCfg !== 'undefined' && comprasCfg.equivalentes) || []).forEach(e => { if(e.de && e.para) m.set(esN(e.de), { para: e.para, mult: Number(e.mult) > 0 ? Number(e.mult) : 1 }); }); return m; }
+    function esoCfg(){ const c = (typeof comprasCfg !== 'undefined' && comprasCfg.estoque) || {}; return { diasSemConferir: c.diasSemConferir >= 0 ? Number(c.diasSemConferir) : 3, ocuparPadrao: c.ocuparPadrao !== false }; }
+    function esoAbrir(sku, qtd, kits){
+      const eq = esoMapa().get(esN(sku)); if(eq){ sku = eq.para; qtd = qtd * eq.mult; }
+      const k = esN(sku), ks = kits || esoKits();
+      return ks.has(k) ? ks.get(k).map(c => ({ sku: c.sku, qtd: qtd * c.qtd })) : [{ sku, qtd }];
+    }
 
     // ---------- 1) depósitos ----------
     function estNovoDeposito(){ estGerenciarDepositos(); }
+    let estCfgAba = 'dep';
+    const ESTCFG_ABAS = [['dep', 'Depósitos'], ['regras', 'Regras'], ['mapa', 'Mapeamento de anúncios']];
+    const estCfgTopo = () => '<div class="chips" style="margin-bottom:16px;">' + ESTCFG_ABAS.map(([k, n]) => '<button class="chip ' + (estCfgAba === k ? 'active' : '') + '" onclick="estCfgIr(\'' + k + '\')">' + n + '</button>').join('') + '</div>';
+    function estCfgIr(a){ estCfgAba = a; estGerenciarDepositos(); }
+
     function estGerenciarDepositos(){
-      vmlModal('Gerenciar depósitos', `
+      if(estCfgAba === 'regras') return estCfgRegras();
+      if(estCfgAba === 'mapa') return esoMapeamento();
+      vmlModal('Configurar estoque', estCfgTopo() + `
         <div class="text-muted" style="margin-bottom:12px;">Cada depósito tem o seu estoque. O do tipo Full é atualizado sozinho pelo Mercado Livre; os outros você atualiza por compra, venda, contagem ou planilha.</div>
         <table class="cp-tab"><thead><tr><th>Nome</th><th>Tipo</th><th class="num">Produtos com saldo</th><th></th></tr></thead><tbody>
           ${est.depositos.map(d => { const n = est.saldo.filter(s => Number(s.deposito_id) === d.id && Number(s.fisico) !== 0).length; return `<tr style="${d.ativo ? '' : 'opacity:.55;'}">
@@ -51,10 +67,67 @@
       est.dep = null; await estCarregar(true); estDesenhar(); estGerenciarDepositos();
     }
 
+    function estCfgRegras(){
+      const c = esoCfg();
+      vmlModal('Configurar estoque', estCfgTopo() + `
+        <div class="cpp-campo"><label>Envio ao Full ocupa o estoque enquanto está em preparação</label>
+          <select id="estcfg-ocupar"><option value="1" ${c.ocuparPadrao ? 'selected' : ''}>Sim, já sai do disponível (padrão ao importar o PDF)</option><option value="0" ${c.ocuparPadrao ? '' : 'selected'}>Não, só sai quando eu der a saída</option></select>
+          <small>Você ainda pode mudar em cada envio. O físico só baixa quando a saída é lançada.</small></div>
+        <div class="cpp-campo"><label>Venda recente sem envio conferido conta como ocupada por quantos dias</label>
+          <input type="number" id="estcfg-dias" min="0" max="15" value="${c.diasSemConferir}" style="max-width:140px;">
+          <small>A situação do envio é conferida no Mercado Livre a cada 15 minutos. Enquanto a conferência de uma venda não chega, ela é tratada como "ainda não enviada" por esse número de dias.</small></div>
+        <div class="cpp-ajuda">Como o estoque se movimenta: a <b>compra conferida</b> entra no depósito; a <b>venda</b> fica ocupada e só baixa quando o Mercado Livre marca o pedido como <b>enviado</b>; o <b>envio ao Full</b> baixa quando você dá a saída; a <b>contagem</b> acerta o saldo e vira o novo ponto de partida.</div>`,
+        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn" onclick="estCfgSalvar()">Salvar regras</button>`);
+    }
+    function estCfgSalvar(){
+      comprasCfg.estoque = { ocuparPadrao: document.getElementById('estcfg-ocupar').value === '1', diasSemConferir: Math.max(0, Number(document.getElementById('estcfg-dias').value) || 0) };
+      if(typeof comprasSalvarCfg === 'function') comprasSalvarCfg();
+      eso.lidoEm = 0; fecharModal('modal-vml'); esoLer(true).then(() => estDesenhar());
+    }
+
+    // lista os SKUs que chegam dos anúncios (vendas e Full) e para onde cada um vai no estoque
+    let esoMapaSo = 'sem';
+    function esoMapeamento(){
+      const kits = esoKits(), mapa = esoMapa();
+      const prods = new Map(); estoqueGalpao.forEach(e => prods.set(esN(e.sku), e.sku)); skus.forEach(s => { if(!prods.has(esN(s.sku))) prods.set(esN(s.sku), s.sku); });
+      const vistos = new Map(), ve = (sku, campo, q) => { if(!sku) return; const k = esN(sku), o = vistos.get(k) || { sku, vend: 0, full: 0 }; o[campo] += q; vistos.set(k, o); };
+      eso.vendas.forEach(v => ve(v.sku, 'vend', Number(v.qtd) || 0));
+      (Array.isArray(estoqueFullML) ? estoqueFullML : []).forEach(x => { if(x.sku && x.sku !== x.item_id) ve(x.sku, 'full', Number(x.total_geral) || 0); });
+      mapa.forEach((v, k) => { if(!vistos.has(k)) vistos.set(k, { sku: k.toUpperCase(), vend: 0, full: 0 }); });
+      const linhas = [...vistos.values()].map(o => { const k = esN(o.sku), eq = mapa.get(k);
+        const tipo = eq ? 'mapeado' : kits.has(k) ? 'kit' : prods.has(k) ? 'produto' : 'sem';
+        return { ...o, k, tipo, eq }; }).sort((a, b) => (a.tipo === 'sem' ? 0 : 1) - (b.tipo === 'sem' ? 0 : 1) || (b.vend + b.full) - (a.vend + a.full));
+      const sem = linhas.filter(l => l.tipo === 'sem').length;
+      const mostra = linhas.filter(l => esoMapaSo === 'todos' || l.tipo === 'sem' || l.tipo === 'mapeado');
+      const selo = { produto: ['Produto do estoque', 'cp-ok'], kit: ['Kit cadastrado', 'cp-ok'], mapeado: ['Mapeado por você', 'cp-comprar'], sem: ['Sem correspondência', 'cp-urgente'] };
+      vmlModal('Configurar estoque', estCfgTopo() + `
+        <div class="cpp-ajuda">O sistema casa sozinho o SKU do anúncio com o produto ou kit de mesmo código. Aqui ficam só os casos em que o código do anúncio é outro (digitado errado, código antigo, pacote com várias unidades): diga para qual produto ele vai e quantas unidades cada venda consome.</div>
+        <datalist id="eso-map-lista">${[...prods.values()].concat([...kits.keys()].map(k => (composicaoKit.find(c => esN(c.sku_comercial) === k) || {}).sku_comercial || k)).sort().map(p => `<option value="${esEsc(p)}">`).join('')}</datalist>
+        <div class="chips" style="margin-bottom:10px;"><button class="chip ${esoMapaSo === 'sem' ? 'active' : ''}" onclick="esoMapaSo='sem';esoMapeamento();">Sem correspondência e mapeados<span class="n">${sem + mapa.size}</span></button><button class="chip ${esoMapaSo === 'todos' ? 'active' : ''}" onclick="esoMapaSo='todos';esoMapeamento();">Todos os anúncios<span class="n">${linhas.length}</span></button></div>
+        <div style="overflow-x:auto;max-height:48vh;"><table class="cp-tab"><thead><tr><th>SKU do anúncio</th><th class="num" title="Unidades vendidas nos últimos 25 dias, fora do Full">Vendido</th><th class="num">No Full</th><th>Situação</th><th>Vai para o produto ou kit</th><th class="num" title="Quantas unidades do produto cada unidade vendida consome">× unidades</th></tr></thead><tbody>
+          ${mostra.length ? mostra.map(l => `<tr><td><b>${esEsc(l.sku)}</b></td><td class="num">${l.vend ? esInt(l.vend) : '—'}</td><td class="num">${l.full ? esInt(l.full) : '—'}</td><td><span class="cp-sit ${selo[l.tipo][1]}">${selo[l.tipo][0]}</span></td>
+            <td>${l.tipo === 'sem' || l.tipo === 'mapeado' ? `<input type="text" class="eso-map-para" data-de="${esEsc(l.sku)}" list="eso-map-lista" value="${esEsc(l.eq ? l.eq.para : '')}" placeholder="Escolha o produto" style="min-width:220px;">` : '<span class="text-muted">o próprio código</span>'}</td>
+            <td class="num">${l.tipo === 'sem' || l.tipo === 'mapeado' ? `<input type="number" class="eso-map-mult" data-de="${esEsc(l.sku)}" min="1" value="${l.eq ? l.eq.mult : 1}" style="width:80px;text-align:right;">` : ''}</td></tr>`).join('') : '<tr><td colspan="6" class="text-muted" style="padding:18px;text-align:center;">Todos os anúncios casam com um produto ou kit do estoque.</td></tr>'}
+        </tbody></table></div>`,
+        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn" onclick="esoMapaSalvar()">Salvar mapeamento</button>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '980px';
+    }
+    function esoMapaSalvar(){
+      const novo = [];
+      document.querySelectorAll('.eso-map-para').forEach(i => { const para = i.value.trim(), de = i.dataset.de; if(!para || esN(para) === esN(de)) return;
+        const m = document.querySelector('.eso-map-mult[data-de="' + de.replace(/"/g, '\\"') + '"]'); novo.push({ de, para, mult: Math.max(1, Number(m && m.value) || 1) }); });
+      // mantém os mapeamentos que não estavam na tela (filtro "sem correspondência" esconde nada, mas por segurança)
+      const naTela = new Set([...document.querySelectorAll('.eso-map-para')].map(i => esN(i.dataset.de)));
+      (comprasCfg.equivalentes || []).forEach(e => { if(!naTela.has(esN(e.de))) novo.push(e); });
+      comprasCfg.equivalentes = novo;
+      if(typeof comprasSalvarCfg === 'function') comprasSalvarCfg();
+      eso.lidoEm = 0; esoMapeamento(); estDesenhar();
+    }
+
     // ---------- 2) vendas: ocupado e baixa ----------
     async function esoLer(forcar){
       if(!forcar && eso.lidoEm && Date.now() - eso.lidoEm < 2 * 60 * 1000) return;
-      const d25 = new Date(Date.now() - 25 * 86400000).toISOString(), d3 = new Date(Date.now() - 3 * 86400000).toISOString(), d12 = new Date(Date.now() - 12 * 86400000).toISOString();
+      const d25 = new Date(Date.now() - 25 * 86400000).toISOString(), d3 = new Date(Date.now() - esoCfg().diasSemConferir * 86400000).toISOString(), d12 = new Date(Date.now() - 12 * 86400000).toISOString();
       const campos = 'order_id,sku,qtd,status,logistic_type,envio_status,enviado_em,data_venda';
       const base = () => supa.from('vendas_ml').select(campos).eq('usuario_id', usuarioAtual.id).neq('status', 'cancelled').or('logistic_type.is.null,logistic_type.neq.fulfillment');
       // o banco devolve no máximo 1000 linhas por consulta: lê em páginas
@@ -197,7 +270,7 @@
           <div class="form-group"><label class="form-label">Loja</label><select id="eso-conta">${contas.map(c => `<option value="${esEsc(c.id)}" ${String(c.id) === contaAuto ? 'selected' : ''}>${esEsc(c.apelido || c.id)}</option>`).join('') || '<option value="">—</option>'}</select></div>
           <div class="form-group"><label class="form-label">Saída prevista (deixe vazio se ainda não tem vaga)</label><input type="date" id="eso-data"></div>
         </div>
-        <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="eso-ocupar" checked style="margin-top:3px;"><span><b>Ocupar o estoque enquanto está em preparação</b><br><span class="text-muted">Marcado, as unidades saem do "disponível" desde já. O físico só baixa quando você der a saída.</span></span></label>
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="eso-ocupar" ${esoCfg().ocuparPadrao ? 'checked' : ''} style="margin-top:3px;"><span><b>Ocupar o estoque enquanto está em preparação</b><br><span class="text-muted">Marcado, as unidades saem do "disponível" desde já. O físico só baixa quando você der a saída.</span></span></label>
         <div style="overflow-x:auto;max-height:46vh;"><table class="cp-tab"><thead><tr><th>Anúncio (SKU do Mercado Livre)</th><th class="num">Unidades</th><th>Sai do galpão</th></tr></thead><tbody>
           ${r.itens.map((i, n) => { const comp = esoAbrir(i.anuncio_sku, i.qtd, kits), ok = conhecidos.has(esN(i.anuncio_sku));
             return `<tr><td><input type="text" class="eso-sku" data-n="${n}" value="${esEsc(i.anuncio_sku)}" style="min-width:230px;${ok ? '' : 'border-color:var(--danger);'}">${ok ? '' : '<div class="text-danger" style="font-size:11px;">SKU não cadastrado: corrija ou cadastre o kit</div>'}</td>

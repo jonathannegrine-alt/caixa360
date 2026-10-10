@@ -506,9 +506,10 @@
         padrao: { cob: cpNum(c.padrao.cob) || 90, prazo: cpNum(c.padrao.prazo), mult: cpNum(c.padrao.mult) || 1, base: t(c.padrao.base) || 'AUTO' },
         regras: (c.regras || []).filter(r => t(r.pat)).map(r => ({ pat: t(r.pat), cob: t(r.cob), prazo: t(r.prazo), mult: t(r.mult), manual: t(r.manual), base: t(r.base), obs: t(r.obs) })),
         sazonalidade: (c.sazonalidade || []).filter(r => t(r.pat)).map(r => ({ pat: t(r.pat), f: Array.from({ length: 12 }, (_, i) => (r.f && r.f[i] != null && r.f[i] !== '' ? cpNum(r.f[i]) : null)), obs: t(r.obs) })),
-        equivalentes: (c.equivalentes || []).filter(r => t(r.de) && t(r.para)).map(r => ({ de: t(r.de), para: t(r.para) })),
+        equivalentes: (c.equivalentes || []).filter(r => t(r.de) && t(r.para)).map(r => ({ de: t(r.de), para: t(r.para), mult: Number(r.mult) > 0 ? Number(r.mult) : 1 })),
         diasIgnorados: (c.diasIgnorados || []).filter(r => t(r.ini)).map(r => ({ ini: t(r.ini), fim: t(r.fim), motivo: t(r.motivo) })),
         fornecedores: comprasCfg.fornecedores || {},
+        estoque: comprasCfg.estoque || {},
       };
       comprasSalvarCfg();
       fecharModal('modal-vml');

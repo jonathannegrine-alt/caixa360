@@ -98,6 +98,27 @@ Deno.serve(async (req: Request) => {
       return resp({ ok: true, lista: { status: lista.status, corpo: JSON.stringify(lista.json).slice(0, 2500) }, detalhe: det ? { status: det.status, corpo: JSON.stringify(det.json).slice(0, 4000) } : null })
     }
 
+    // diagnóstico e data de pagamento das contas a pagar (a API v2 não informa quando a conta foi paga)
+    if (acao === 'bruto_conta') {
+      const lista = await api('/contas-pagar?situacao=pago&limit=2', a.token)
+      const id = body?.id || lista.json?.itens?.[0]?.id
+      const det = id ? await api(`/contas-pagar/${id}`, a.token) : null
+      return resp({ ok: true, lista: { status: lista.status, corpo: JSON.stringify(lista.json).slice(0, 1500) }, detalhe: det ? { status: det.status, corpo: JSON.stringify(det.json).slice(0, 2500) } : null })
+    }
+    if (acao === 'pagamentos') {
+      const ids: number[] = (Array.isArray(body?.ids) ? body.ids : []).map((x: unknown) => Number(x)).filter((x: number) => x > 0).slice(0, 25)
+      const out: any[] = []
+      let limite = false
+      for (const id of ids) {
+        const d = await api(`/contas-pagar/${id}`, a.token)
+        if (d.status === 429) { limite = true; break }
+        if (d.status !== 200 || !d.json) { out.push({ id, erro: d.status }); continue }
+        out.push({ id, pago_em: dia(d.json.dataLiquidacao), valor_pago: num(d.json.valorPago), competencia: (String(d.json.dataCompetencia || '').match(/^\d{4}-\d{2}/) || [null])[0], categoria: d.json.categoria?.descricao || d.json.categoria?.nome || null, forma: d.json.formaPagamento?.nome || null })
+        await new Promise(ok => setTimeout(ok, 300))
+      }
+      return resp({ ok: true, pagamentos: out, limite })
+    }
+
     if (acao === 'ordens') {
       // lista: em aberto (0), em andamento (3) e atendidas (1) recentes
       const desde = new Date(Date.now() - 90 * 86400000).toISOString().substring(0, 10)

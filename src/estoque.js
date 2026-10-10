@@ -9,7 +9,7 @@
 // primeiro depósito próprio; quem manda é o registro de movimentações.
 // Banco: supabase/migrations/20261011_estoque.sql
 
-    let est = { depositos: [], saldo: [], carregadoEm: 0, carregando: false, erro: '', dep: null, busca: '', so: '' };
+    let est = { depositos: [], saldo: [], carregadoEm: 0, carregando: false, erro: '', dep: null, busca: '', so: '', loja: '' };
     const esN = s => String(s == null ? '' : s).trim().toLowerCase();
     const esEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const esInt = n => Math.round(Number(n) || 0).toLocaleString('pt-BR');
@@ -122,13 +122,15 @@
       const host = document.getElementById('est-host'); if(!host) return;
       const dep = est.depositos.find(d => d.id === est.dep) || est.depositos[0];
       if(!dep){ host.innerHTML = `<div class="alert alert-danger">${esEsc(est.erro || 'Não consegui carregar os depósitos.')}</div>`; return; }
-      const abas = `<div class="chips" style="margin-bottom:14px;">${est.depositos.filter(d => d.ativo).map(d => `<button class="chip ${d.id === dep.id ? 'active' : ''}" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estGerenciarDepositos()" title="Criar, renomear ou excluir depósitos">Gerenciar depósitos</button></div>`;
+      const abas = `<div class="chips" style="margin-bottom:14px;">${est.depositos.filter(d => d.ativo).map(d => `<button class="chip ${d.id === dep.id ? 'active' : ''}" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estGerenciarDepositos()" title="Depósitos, regras do ocupado e mapeamento dos anúncios">Configurar estoque</button></div>`;
       const cab = `<div class="pg-head"><div><div class="pg-title">Estoque</div><div class="pg-sub">Quanto existe em cada depósito, o que está a caminho e o que já está vendido e ainda não saiu.</div></div>
         <div class="d-flex gap-1" style="flex-wrap:wrap;">${dep.tipo === 'full' ? `<button class="btn-out btn-sm" onclick="estAtualizarFull(this)">Atualizar do Mercado Livre</button>` : `<button class="btn-out btn-sm" onclick="estAjuste()">Ajuste manual</button><button class="btn-out btn-sm" onclick="esoEnvios()">Envios ao Full</button><button class="btn btn-sm" onclick="esoContagens()">Contagem de estoque</button>`}</div></div>`;
       const erro = est.erro ? `<div class="alert alert-danger">${esEsc(est.erro)}</div>` : '';
 
       if(dep.tipo === 'full'){
-        const itens = Array.isArray(estoqueFullML) ? estoqueFullML.slice() : [];
+        const lojas = [...new Set((Array.isArray(estoqueFullML) ? estoqueFullML : []).map(x => String(x._conta || '')).filter(Boolean))];
+        if(est.loja && !lojas.includes(est.loja)) est.loja = '';
+        const itens = (Array.isArray(estoqueFullML) ? estoqueFullML.slice() : []).filter(x => !est.loja || String(x._conta || '') === est.loja);
         const b = esN(est.busca), lista = itens.filter(x => !b || esN(x.sku).includes(b) || esN(x.titulo).includes(b)).sort((a, c) => (Number(c.total_geral) || 0) - (Number(a.total_geral) || 0));
         const tot = itens.reduce((s, x) => s + (Number(x.total_geral) || 0), 0), disp = itens.reduce((s, x) => s + (Number(x.aptos_venda) || 0), 0), transf = itens.reduce((s, x) => s + (Number(x.em_transito) || 0), 0);
         host.innerHTML = cab + erro + abas + `
@@ -138,7 +140,8 @@
             <div class="kpi k-frete"><div class="kpi-label">Em transferência</div><div class="kpi-value">${esInt(transf)}</div><div class="kpi-sub">entre centros do Mercado Livre</div></div>
             <div class="kpi k-neutro"><div class="kpi-label">Atualizado</div><div class="kpi-value" style="font-size:18px;">${estoqueFullML && estoqueFullML._syncAt ? new Date(estoqueFullML._syncAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}</div><div class="kpi-sub">${estoqueFullML && estoqueFullML._fonte === 'xls' ? 'planilha importada' : 'direto do Mercado Livre'}</div></div>
           </div>
-          <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou título" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)"></div>
+          <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou título" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)">
+            ${lojas.length > 1 ? `<div class="chips">${[['', 'As duas lojas']].concat(lojas.map(l => [l, (typeof contaNome === 'function' && contaNome(l)) || l])).map(([k, t]) => `<button class="chip ${est.loja === k ? 'active' : ''}" onclick="est.loja='${k}';estDesenhar();">${esEsc(t)}</button>`).join('')}</div>` : ''}</div>
           <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th>Conta</th><th class="num">Disponível</th><th class="num">Em transferência</th><th class="num">Sem condição de venda</th><th class="num">Total</th></tr></thead><tbody>
             ${lista.length ? lista.map(x => `<tr><td class="cp-prod" style="max-width:520px;"><b>${esEsc(x.sku)}</b><span title="${esEsc(x.titulo)}">${esEsc(x.titulo || '')}</span></td><td class="cp-forn">${esEsc((typeof contaNome === 'function' && x._conta && contaNome(x._conta)) || '—')}</td><td class="num"><b>${esInt(x.aptos_venda)}</b></td><td class="num">${esInt(x.em_transito)}</td><td class="num" title="${esEsc(x.detalhe || '')}">${esInt(x.nao_aptos)}</td><td class="num"><b>${esInt(x.total_geral)}</b></td></tr>`).join('') : '<tr><td colspan="6"><div class="vazio"><b>Sem estoque do Full carregado</b>Clique em Atualizar do Mercado Livre.</div></td></tr>'}
           </tbody></table></div></div>`;

@@ -122,6 +122,7 @@
         olistRedesenhar();
         const faltam = (j.contas || []).filter(c => !c.temDetalhe && !String(c.situacao).startsWith('cancel'));
         if(faltam.length) olistDetalhes(faltam);   // categoria e competência, em segundo plano
+        olistPagamentos();                          // data real de pagamento (API nova), em segundo plano
       } finally { olist.sincronizando = false; if(manual || document.getElementById('cfg-olist-card')) olistRenderCard(); }
     }
 
@@ -149,6 +150,37 @@
           if(ids.length) await olEspera(j.limite ? 65000 : 30000);
         }
       } finally { olist.detRodando = false; salvar(); olistRedesenhar(); }
+    }
+
+    // A API antiga não diz QUANDO a conta foi paga. Com o aplicativo novo autorizado, busca a data de liquidação
+    // e o valor pago de cada conta paga, uma vez por conta (ids conferidos ficam em mk_olist_pago_ok).
+    async function olistPagamentos(){
+      if(olist.pagRodando || !olist.v3 || typeof olistChamarCompras !== 'function') return;
+      olist.pagRodando = true;
+      try {
+        let feitos; try { feitos = new Set(JSON.parse(localStorage.getItem('mk_olist_pago_ok') || '[]')); } catch(e){ feitos = new Set(); }
+        const fila = pagamentos.filter(p => p.fonte === 'olist' && p.pago && p.tiny_key).map(p => Number(String(p.tiny_key).split(':')[1])).filter(id => id && !feitos.has(id));
+        olist.pagFaltam = fila.length;
+        let lotes = 0;
+        while(fila.length && typeof usuarioAtual !== 'undefined' && usuarioAtual){
+          const lote = fila.splice(0, 25);
+          const j = await olistChamarCompras({ acao: 'pagamentos', ids: lote });
+          if(j.error) break;
+          const vistos = new Set();
+          (j.pagamentos || []).forEach(d => {
+            vistos.add(d.id); feitos.add(d.id);
+            const p = pagamentos.find(x => x.tiny_key === 'olist:' + d.id); if(!p) return;
+            if(d.pago_em) p.dataPaga = d.pago_em;
+            if(d.valor_pago > 0) p.valorPago = d.valor_pago;
+            if(d.competencia && !p.competencia) p.competencia = d.competencia;
+          });
+          lote.filter(id => !vistos.has(id)).forEach(id => fila.unshift(id));
+          olist.pagFaltam = fila.length; lotes++;
+          try { localStorage.setItem('mk_olist_pago_ok', JSON.stringify([...feitos].slice(-5000))); } catch(e){}
+          if(lotes % 4 === 0 || !fila.length){ salvar(); olistRedesenhar(); }
+          if(fila.length) await olEspera(j.limite ? 65000 : 20000);
+        }
+      } finally { olist.pagRodando = false; }
     }
 
     // ----- Configurações: cartão do Olist -----
@@ -185,6 +217,7 @@
               <div><div class="text-muted" style="font-size:11px;">Contas vindas do Olist</div><div style="font-size:18px;font-weight:700;">${nOlist}</div></div>
               <div><div class="text-muted" style="font-size:11px;">Última sincronização</div><div style="font-size:18px;font-weight:700;">${olist.sincronizando ? 'agora…' : dt(olist.ultimo)}</div></div>
               <div><div class="text-muted" style="font-size:11px;">Categoria e competência</div><div style="font-size:18px;font-weight:700;">${olist.detFaltam ? 'faltam ' + olist.detFaltam : 'em dia'}</div></div>
+              <div><div class="text-muted" style="font-size:11px;">Data real de pagamento</div><div style="font-size:18px;font-weight:700;">${!olist.v3 ? 'falta autorizar' : olist.pagFaltam ? 'faltam ' + olist.pagFaltam : 'em dia'}</div></div>
             </div>
             ${partes ? `<div class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Na última sincronização: ${partes}.</div>` : ''}
             ${olist.detFaltam ? `<div class="alert alert-info">O Olist entrega categoria e competência uma conta por vez. Estou buscando em segundo plano (cerca de 50 por minuto); pode usar o sistema normalmente, mas deixe esta aba aberta.</div>` : ''}
