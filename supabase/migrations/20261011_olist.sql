@@ -32,3 +32,8 @@ drop policy if exists olist_contas_dono on public.olist_contas;
 create policy olist_contas_dono on public.olist_contas for select to authenticated using (usuario_id = auth.uid());
 
 alter table public.pagamentos add column if not exists competencia text;
+
+-- a Edge Function usa a service_role: neste projeto ela não recebe leitura/escrita por padrão em tabela nova
+grant select, insert, update, delete on public.olist_config to service_role;
+grant select, insert, update, delete on public.olist_contas to service_role;
+grant select on public.olist_contas to authenticated;
