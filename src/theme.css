@@ -912,3 +912,11 @@ input[type="checkbox"]{accent-color:var(--primary);}
   .cp-prod{max-width:240px;} .cp-forn{max-width:130px;} .cp-cob{min-width:120px;}
   .ap-row{grid-template-columns:20px 84px minmax(0,1fr) minmax(0,140px) 120px 92px 92px;gap:10px;}
 }
+
+/* ===== BALANÇO ===== */
+.bl-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px 36px;}
+.bl-tit{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);padding-bottom:6px;border-bottom:2px solid var(--ctl-border);}
+.bl-lin{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;}
+.bl-lin i{display:block;font-style:normal;font-size:11.5px;color:var(--text-muted);}
+.bl-lin b{white-space:nowrap;font-variant-numeric:tabular-nums;}
+.bl-lin.bl-tot{border-bottom:none;border-top:2px solid var(--ctl-border);font-weight:750;font-size:14.5px;}

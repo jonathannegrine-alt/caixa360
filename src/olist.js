@@ -42,7 +42,7 @@
       const n = String(nome || '').trim(); if(!n) return '';
       const ja = categorias.find(c => String(c.nome).trim().toLowerCase() === n.toLowerCase());
       if(ja) return ja.nome;
-      categorias.push({ nome: n, impactaDRE: true, tipoPassivo: 'divida' });
+      categorias.push({ nome: n, impactaDRE: true, tipoPassivo: /juros/i.test(n) ? 'operacional' : /amortiza|capital de giro|empr[eé]stimo|financiamento|mercadoria|fornecedor|simples nacional|imposto/i.test(n) ? 'divida' : 'operacional' });
       return n;
     }
 
