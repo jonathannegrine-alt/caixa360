@@ -765,11 +765,17 @@ Perfil do usuário:
       const btn = document.getElementById('btn-cfo'), modal = document.getElementById('cfo-modal');
       if(!btn || !modal || !btn.style.left) return;
       const r = btn.getBoundingClientRect();
-      const w = Math.min(380, window.innerWidth - 32), h = Math.min(560, window.innerHeight - 24);
+      const w = Math.min(380, window.innerWidth - 32);
       const x = Math.max(12, Math.min(window.innerWidth - w - 12, r.right - w));
-      const acima = r.top - h - 10;
-      const y = acima >= 12 ? acima : Math.min(window.innerHeight - h - 12, r.bottom + 10);
-      modal.style.left = x + 'px'; modal.style.top = Math.max(12, y) + 'px'; modal.style.right = 'auto'; modal.style.bottom = 'auto';
+      modal.style.left = x + 'px'; modal.style.right = 'auto';
+      // abre para cima quando há mais espaço acima do botão; senão, para baixo
+      if(r.top >= window.innerHeight - r.bottom){
+        modal.style.top = 'auto'; modal.style.bottom = (window.innerHeight - r.top + 10) + 'px';
+        modal.style.maxHeight = Math.min(560, r.top - 22) + 'px';
+      } else {
+        modal.style.bottom = 'auto'; modal.style.top = (r.bottom + 10) + 'px';
+        modal.style.maxHeight = Math.min(560, window.innerHeight - r.bottom - 22) + 'px';
+      }
     }
 
     flutuanteArrastavel('btn-cfo');
