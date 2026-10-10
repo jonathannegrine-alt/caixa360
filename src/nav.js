@@ -37,4 +37,6 @@
       else if(page === 'resultado'){ setResultadoTab('dre'); }
       else if(page === 'patrimonio'){ renderPatrimonio(); }
       else if(page === 'ordens-compra') renderOrdensCompra();
+      else if(page === 'vendas') renderVendas();
+      else if(page === 'resumo-fin') renderResumoFin();
     }
