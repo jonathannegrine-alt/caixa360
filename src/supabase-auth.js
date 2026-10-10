@@ -341,9 +341,9 @@
 
       if(rLib.data) liberacoes = rLib.data.map(l => ({data:l.data, val:l.val}));
 
-      if(rSku.data) skus = rSku.data.map(s => ({id:s.id, sku:s.sku, custo:s.custo, imposto:s.imposto}));
+      if(rSku.data) skus = rSku.data.map(s => ({id:s.id, sku:s.sku, custo:s.custo, imposto:s.imposto, titulo:s.titulo||''}));
 
-      if(rCat.data) categorias = rCat.data.map(c => ({id:c.id, nome:c.nome, impactaDRE:c.impacta_dre, tipoPassivo:c.tipo_passivo||'divida'}));
+      if(rCat.data) categorias = rCat.data.map(c => ({id:c.id, nome:c.nome, impactaDRE:c.impacta_dre, tipoPassivo:c.tipo_passivo||'divida', dreGrupo:c.dre_grupo||null}));
 
       if(rCfg.data && rCfg.data.cfg){
         const c = rCfg.data.cfg;
@@ -382,8 +382,8 @@
         data_paga: p.dataPaga||null, desconto: p.desconto||0, juros: p.juros||0,
         tiny_key: p.tiny_key||null, fonte: p.fonte||null
       }));
-      const snapCat = categorias.map(c => ({usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida'}));
-      const snapSku = skus.map(s => ({usuario_id: uid, sku: s.sku, custo: s.custo, imposto: s.imposto}));
+      const snapCat = categorias.map(c => ({usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida', dre_grupo: c.dreGrupo||null}));
+      const snapSku = skus.map(s => ({usuario_id: uid, sku: s.sku, custo: s.custo, imposto: s.imposto, titulo: s.titulo||null}));
 
       // Pagamentos: delete + insert em lotes de 200
       const { error: ePagDel } = await supa.from('pagamentos').delete().eq('usuario_id', uid);

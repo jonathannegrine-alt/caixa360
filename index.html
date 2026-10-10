@@ -1043,12 +1043,14 @@
 
       <!-- RESULTADO (DRE + COMPARATIVO) -->
       <div id="view-resultado" class="view">
-        <h1 style="margin-bottom:20px;">Resultado Financeiro</h1>
+        <h1 style="margin-bottom:20px;">DRE e resultado</h1>
         <div class="resultado-tabs">
-          <div class="resultado-tab active" id="res-tab-dre" onclick="setResultadoTab('dre')">DRE Simplificado</div>
+          <div class="resultado-tab active" id="res-tab-anual" onclick="setResultadoTab('anual')">DRE anual</div>
+          <div class="resultado-tab" id="res-tab-dre" onclick="setResultadoTab('dre')">DRE Simplificado</div>
           <div class="resultado-tab" id="res-tab-comp" onclick="setResultadoTab('comparativo')">Comparativo Mensal</div>
         </div>
-        <div id="res-dre-view">
+        <div id="res-anual-view"></div>
+        <div id="res-dre-view" style="display:none;">
           <div class="card">
             <div class="card-header">
               <div class="card-title">DRE — Demonstrativo de Resultado</div>
@@ -2337,6 +2339,7 @@
   <script src="src/contas-ml.js"></script>
   <script src="src/vendas-ml.js"></script>
   <script src="src/atendimento.js"></script>
+  <script src="src/dre-anual.js"></script>
   <script src="src/dash-painel.js"></script>
   <script src="src/inicio.js"></script>
   <script src="src/init.js"></script>

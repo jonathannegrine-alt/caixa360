@@ -585,3 +585,20 @@ a.v-id{text-decoration:none;}
 .rk-faixa span{font-size:12.5px;opacity:.92;}
 .abc{display:inline-block;min-width:34px;text-align:center;border-radius:6px;padding:1px 0;font-size:11px;font-weight:800;color:#fff;}
 .abc-A{background:#14b8a6;} .abc-B{background:#f59e0b;} .abc-C{background:#94a3b8;}
+
+/* ===== DRE ANUAL ===== */
+.dre-tab{min-width:1180px;font-variant-numeric:tabular-nums;}
+.dre-tab th{white-space:nowrap;text-transform:none;font-size:12px;letter-spacing:0;color:var(--text-2);}
+.dre-tab td{white-space:nowrap;font-size:12.5px;padding:9px 10px;}
+.dre-tab td:first-child,.dre-tab th:first-child{position:sticky;left:0;background:var(--surface);z-index:1;min-width:210px;font-weight:600;}
+.dre-tab .num{text-align:right;}
+.dre-tab tr.dre-entrada td{background:#17603b;color:#fff;font-weight:750;}
+.dre-tab tr.dre-saida td{background:#d83a52;color:#fff;font-weight:750;}
+.dre-tab tr.dre-res td{background:var(--surface-3);font-weight:800;color:var(--text);}
+.dre-tab tr.dre-lucro td{background:var(--primary-soft);}
+.dre-tab tr.dre-pct td{font-weight:650;color:var(--text-muted);font-size:12px;padding-top:4px;}
+.dre-tab tr.dre-entrada td:first-child,.dre-tab tr.dre-saida td:first-child,.dre-tab tr.dre-res td:first-child{background:inherit;}
+.dre-tab tr.dre-entrada:hover,.dre-tab tr.dre-saida:hover{background:none;}
+.dre-sync{border:1px solid var(--border);background:var(--surface);color:var(--text-muted);border-radius:6px;width:22px;height:22px;font-size:11px;cursor:pointer;margin-left:4px;padding:0;}
+.dre-sync:hover{border-color:var(--primary);color:var(--primary);}
+.dre-parcial{color:var(--warning);margin-left:4px;font-size:10px;cursor:help;}

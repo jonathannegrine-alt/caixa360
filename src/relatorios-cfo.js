@@ -99,11 +99,19 @@
 
     // ===== P5 — DRE SIMPLIFICADO =====
     function setResultadoTab(tab){
+      // 'anual' (DRE mês a mês, src/dre-anual.js) só existe quando o index.html novo está carregado
+      const temAnual = !!document.getElementById('res-anual-view') && typeof renderDREAnual === 'function';
+      if(tab === 'anual' && !temAnual) tab = 'dre';
+      if(temAnual){
+        document.getElementById('res-anual-view').style.display = tab === 'anual' ? '' : 'none';
+        document.getElementById('res-tab-anual').className = 'resultado-tab' + (tab === 'anual' ? ' active' : '');
+      }
       document.getElementById('res-dre-view').style.display  = tab === 'dre'         ? '' : 'none';
       document.getElementById('res-comp-view').style.display = tab === 'comparativo' ? '' : 'none';
       document.getElementById('res-tab-dre').className  = 'resultado-tab' + (tab === 'dre'         ? ' active' : '');
       document.getElementById('res-tab-comp').className = 'resultado-tab' + (tab === 'comparativo' ? ' active' : '');
-      if(tab === 'dre') renderDRE();
+      if(tab === 'anual') renderDREAnual();
+      else if(tab === 'dre') renderDRE();
       else renderComparativo();
     }
 

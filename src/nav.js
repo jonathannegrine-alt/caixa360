@@ -39,7 +39,7 @@
       else if(page === 'analise') renderAnalise();
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); }
-      else if(page === 'resultado'){ setResultadoTab('dre'); }
+      else if(page === 'resultado'){ setResultadoTab('anual'); }
       else if(page === 'patrimonio'){ renderPatrimonio(); }
       else if(page === 'ordens-compra') renderOrdensCompra();
       else if(page === 'vendas') renderVendas();
