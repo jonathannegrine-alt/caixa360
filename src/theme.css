@@ -527,3 +527,17 @@ a.v-id{text-decoration:none;}
 .ini-atalho b{display:block;font-size:12.5px;font-weight:650;} .ini-atalho small{font-size:11px;color:var(--text-muted);}
 @media (max-width:1000px){ .ini-grid{grid-template-columns:1fr;} .ini-hero-saldo{text-align:left;} .ini-hero-saldo>b{font-size:30px;} }
 @media (max-width:560px){ .ini-atalhos{grid-template-columns:1fr;} .ini-hero{padding:20px;} .ini-saud{font-size:22px;} .pc-graf svg{height:230px;} }
+
+/* ===== ATENDIMENTO (perguntas e mensagens) ===== */
+.nav-cont{margin-left:auto;flex:none;min-width:20px;height:20px;padding:0 6px;border-radius:20px;background:#ef4444;color:#fff;font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+.nav-item .nav-novo + .nav-cont{margin-left:6px;}
+.atd-perg{display:grid;grid-template-columns:minmax(220px,340px) minmax(0,1fr);gap:20px;padding:18px 20px;border-bottom:1px solid var(--border);}
+.atd-perg:last-of-type{border-bottom:none;}
+.atd-item{display:flex;gap:12px;min-width:0;align-items:flex-start;}
+.atd-corpo{display:flex;flex-direction:column;gap:9px;min-width:0;}
+.atd-balao{align-self:flex-start;max-width:86%;background:var(--surface-3);border-radius:4px 14px 14px 14px;padding:9px 13px;font-size:13.5px;line-height:1.5;color:var(--text);white-space:pre-wrap;word-break:break-word;}
+.atd-balao.minha{align-self:flex-end;background:var(--primary-soft);border-radius:14px 4px 14px 14px;}
+.atd-quem{font-size:11px;color:var(--text-muted);font-weight:650;margin-bottom:3px;}
+.atd-acoes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.atd-thread{display:flex;flex-direction:column;gap:9px;max-height:46vh;overflow-y:auto;padding:4px 4px 12px;margin-bottom:12px;}
+@media (max-width:760px){ .atd-perg{grid-template-columns:1fr;} }

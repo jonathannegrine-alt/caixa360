@@ -95,6 +95,7 @@
         await verificarConexaoML();
         renderDashboard();
         autoSyncML();
+        if(typeof verificarPermissoesML === 'function') setTimeout(verificarPermissoesML, 2500);
       }
     }
 
@@ -190,6 +191,7 @@
           await verificarConexaoML();
           init(); // popula inputs de saldo + renderDashboard
           autoSyncML(); // background, sem await
+          if(typeof verificarPermissoesML === 'function') setTimeout(verificarPermissoesML, 2500);
         }
       } catch(err) {
         console.error('entrarNoApp:', err);

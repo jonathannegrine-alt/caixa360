@@ -16,27 +16,15 @@
       if(inicioVendas && Date.now() - inicioVendas.em < 10 * 60 * 1000) return;
       inicioVendasCarregando = true;
       try {
-        const de = addDias(getToday(), -29);
-        const rows = [];
-        for(let from = 0; from < 40000; from += 1000){
-          const { data, error } = await supa.from('vendas_ml').select('data_venda,preco_unit,qtd,status,sku,titulo')
-            .eq('usuario_id', usuarioAtual.id).gte('data_venda', de + 'T00:00:00-03:00')
-            .order('data_venda', {ascending:false}).range(from, from + 999);
-          if(error || !data || !data.length) break;
-          rows.push(...data);
-          if(data.length < 1000) break;
-        }
-        const porDia = {}, sk = {};
-        rows.filter(r => r.status === 'paid').forEach(r => {
-          const dia = new Date(new Date(r.data_venda).getTime() - 3 * 3600000).toISOString().substring(0,10);
-          const qtd = Number(r.qtd) || 1, val = (Number(r.preco_unit) || 0) * qtd;
-          if(!porDia[dia]) porDia[dia] = { val:0, qtd:0 };
-          porDia[dia].val += val; porDia[dia].qtd += 1;
-          const k = r.sku || '(sem SKU)';
-          if(!sk[k]) sk[k] = { sku:k, titulo:r.titulo || '', un:0, val:0 };
-          sk[k].un += qtd; sk[k].val += val;
-        });
-        inicioVendas = { porDia, top: Object.values(sk).sort((a,b) => b.val - a.val).slice(0,5), em: Date.now(), tem: rows.length > 0 };
+        const hoje = getToday();
+        const [serie, rank] = await Promise.all([
+          supa.rpc('vendas_ml_por_dia', { p_de: addDias(hoje, -59), p_ate: hoje }),
+          supa.rpc('vendas_ml_ranking', { p_de: addDias(hoje, -29), p_ate: hoje, p_grupo: 'sku' })
+        ]);
+        const porDia = {};
+        (serie.data || []).forEach(r => { porDia[String(r.dia).substring(0,10)] = { val: Number(r.bruto) || 0, qtd: Number(r.vendas) || 0 }; });
+        const top = (rank.data || []).slice(0, 5).map(t => ({ sku: t.chave, titulo: t.titulo || '', un: Number(t.un) || 0, val: Number(t.bruto) || 0 }));
+        inicioVendas = { porDia, top, em: Date.now(), tem: (serie.data || []).length > 0 };
       } catch(e){
         inicioVendas = { porDia:{}, top:[], em: Date.now(), tem:false };
       }

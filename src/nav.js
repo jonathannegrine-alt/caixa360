@@ -44,6 +44,8 @@
       else if(page === 'ordens-compra') renderOrdensCompra();
       else if(page === 'vendas') renderVendas();
       else if(page === 'resumo-fin') renderResumoFin();
+      else if(page === 'perguntas') renderPerguntas();
+      else if(page === 'mensagens') renderMensagens();
     }
 
     // ===== MENU LATERAL — categorias recolhíveis =====
