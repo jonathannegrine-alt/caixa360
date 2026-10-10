@@ -10,6 +10,7 @@
     let vmlSemPermissao = false;       // token sem o escopo de vendas (mostra aviso de reconexão)
     let vmlSeq = 0;                    // descarta respostas de consultas antigas
     const VML_EXPORT_MAX_DIAS = 31, VML_EXPORT_MAX_LINHAS = 5000;
+    const VD_MAX_DIAS = 31;            // a página Vendas é operacional: períodos longos ficam no Resumo Financeiro
 
     // Vendas
     let vdFiltro = { de:null, ate:null, atalho:'hoje', status:'todas', envio:'todas', campo:'sku', termo:'', semCusto:false, pagina:1, porPagina:40 };
@@ -180,8 +181,11 @@
       const el = document.getElementById('view-vendas');
       if(!el) return;
       if(!vdFiltro.de){ const p = vmlAtalho('hoje'); vdFiltro.de = p.de; vdFiltro.ate = p.ate; }
+      vdFiltro.cortado = false;
+      if(vmlDiasEntre(vdFiltro.de, vdFiltro.ate) > VD_MAX_DIAS){ vdFiltro.de = addDias(vdFiltro.ate, -(VD_MAX_DIAS - 1)); vdFiltro.cortado = true; }
       if(!vdDados.carregado) el.innerHTML = '<div class="vazio"><b>Carregando vendas…</b></div>';
       vdCarregar();
+      vdGrafCarregar();
       vmlSincronizar(vdFiltro.de, vdFiltro.ate, false, () => { if(el.classList.contains('active')) vdCarregar(); });
     }
 
@@ -191,7 +195,7 @@
       const f = vdFiltro, d = vdDados, t = d.tot || {}, a = t.aprov || {}, c = t.canc || {};
       const paginas = Math.max(1, Math.ceil(d.total / f.porPagina));
       const envios = (t.envios_todos || []).slice().sort((x,y) => y.qtd - x.qtd);
-      const atalhos = [['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Mês atual'],['12m','12 meses']];
+      const atalhos = [['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Mês atual']];
       const nDias = vmlDiasEntre(f.de, f.ate);
       const podeExportar = nDias <= VML_EXPORT_MAX_DIAS && d.total <= VML_EXPORT_MAX_LINHAS;
 
@@ -209,6 +213,8 @@
         </div>
         ${vmlAvisoPermissao()}
         ${d.erro ? `<div class="alert alert-danger">Erro ao consultar as vendas: ${vmlEsc(d.erro)}</div>` : ''}
+        ${f.cortado ? `<div class="alert alert-info">A página Vendas mostra até ${VD_MAX_DIAS} dias por vez. Para períodos maiores, use o <a onclick="nav('resumo-fin')" style="cursor:pointer;font-weight:700;text-decoration:underline;">Resumo Financeiro</a>.</div>` : ''}
+        <div id="vd-graf">${vdGraficoHtml()}</div>
 
         <div class="kpi-grid">
           <div class="kpi k-venda"><div class="kpi-label">Vendas aprovadas</div><div class="kpi-value">${(a.qtd || 0).toLocaleString('pt-BR')}</div><div class="kpi-sub"><span><b>${(a.un || 0).toLocaleString('pt-BR')}</b> unidades</span><span><b>${c.qtd || 0}</b> canceladas</span></div></div>
@@ -381,7 +387,8 @@
           <div class="form-group"><label class="form-label">Custo unitário (R$)</label><input type="number" step="0.01" min="0" id="vml-custo" value="${Number(info.custo) || ''}"></div>
           <div class="form-group"><label class="form-label">Imposto (% sobre a venda)</label><input type="number" step="0.01" min="0" id="vml-imposto" value="${Number(info.imposto) || ''}"></div>
         </div>
-        <div class="alert alert-info">O valor fica salvo no cadastro de <b>Produtos</b> e vale para todas as vendas deste SKU.</div>`,
+        <div class="alert alert-info">O valor fica salvo no cadastro de <b>Produtos</b> e vale para as vendas <b>daqui para frente</b> e para as que ainda não tinham custo. Vendas antigas mantêm o custo da época.</div>
+        <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;line-height:1.45;"><input type="checkbox" id="vml-aplicar" style="width:auto;margin-top:3px;"> <span>Aplicar também às vendas deste SKU <b>no período exibido</b> (${ptDate((document.getElementById('view-resumo-fin').classList.contains('active') ? rfFiltro : vdFiltro).de)} a ${ptDate((document.getElementById('view-resumo-fin').classList.contains('active') ? rfFiltro : vdFiltro).ate)})</span></label>`,
         `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="vml-salvar-custo" onclick="vdSalvarCusto('${vmlEsc(v.sku)}','${orderId}')">Salvar</button>`);
     }
 
@@ -397,7 +404,13 @@
       const b = document.getElementById('vml-salvar-custo'); if(b){ b.textContent = 'Salvando…'; b.disabled = true; }
       localStorage.setItem('mk_skus', JSON.stringify(skus));
       // a margem é calculada no banco: espera o cadastro subir antes de recarregar
-      try { await salvarSupabase(); } catch(e){}
+      const aplicar = document.getElementById('vml-aplicar')?.checked;
+      const per = document.getElementById('view-resumo-fin').classList.contains('active') ? rfFiltro : vdFiltro;
+      try {
+        await salvarSupabase();
+        if(aplicar) await supa.rpc('vendas_ml_nivelar', { p_de: per.de, p_ate: per.ate, p_sku: sku, p_custo: custo || null, p_imposto: imposto || null, p_conta: contaParam() });
+        else await supa.rpc('vendas_ml_carimbar');   // grava o valor nas vendas que estavam sem custo
+      } catch(e){}
       fecharModal('modal-vml');
       vmlRecarregar();
     }
@@ -558,7 +571,7 @@
             <button class="btn-out btn btn-sm" onclick="rfLegenda()">Legendas</button>
             <button class="btn-out btn btn-sm" onclick="rfRanking()">🏆 Ranking de produtos</button>
             <div class="dd-wrap" style="position:relative;display:inline-block;">
-              <button class="btn btn-sm" ${podeExportar ? '' : 'disabled style="opacity:.5;cursor:not-allowed;"'} title="${podeExportar ? 'Exportar a tabela' : `Exportação disponível para até ${VML_EXPORT_MAX_DIAS} dias e ${VML_EXPORT_MAX_LINHAS.toLocaleString('pt-BR')} vendas. Reduza o período ou filtre.`}" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">⬇ Exportar ▾</button>
+              <button class="btn btn-sm" title="${podeExportar ? 'Exportar todas as vendas filtradas' : 'Período grande: exporta apenas a página atual'}" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">⬇ Exportar ▾</button>
               <div class="dd-menu" style="display:none;position:absolute;right:0;top:110%;z-index:20;min-width:150px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;">
                 <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfExportar('xlsx')">Excel (.xlsx)</div>
                 <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfExportar('csv')">CSV</div>
@@ -624,6 +637,18 @@
         </div>
 
         <div class="card">
+          ${podeExportar ? '' : `<div class="alert alert-info" style="margin:14px 16px 0;"><b>Visualização otimizada para muitas vendas.</b>&nbsp;Os totais consideram o período inteiro; a exportação em Excel ou CSV considera apenas a página atual.</div>`}
+          <div class="rf-ferr">
+            <div class="dd-wrap" style="position:relative;display:inline-block;">
+              <button class="btn btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">⚖ Nivelar custo &amp; imposto ▾</button>
+              <div class="dd-menu" style="display:none;position:absolute;left:0;top:110%;z-index:20;min-width:230px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;">
+                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfNivelar()"><b>Nivelar</b><br><small class="text-muted">informar custo e imposto de um SKU no período</small></div>
+                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfReprocessar()"><b>Reprocessar</b><br><small class="text-muted">regravar com o cadastro atual de Produtos</small></div>
+              </div>
+            </div>
+            <button class="btn-out btn btn-sm" onclick="rfNivelarSku()">Nivelar SKU</button>
+            <button class="btn-out btn btn-sm" onclick="rfRanking()">🏆 Ranking de produtos</button>
+          </div>
           <div class="card-header">
             <div class="card-title">${Math.min(f.porPagina, d.linhas.length)} de ${d.total.toLocaleString('pt-BR')} registro${d.total === 1 ? '' : 's'}</div>
             ${vmlPaginacao(f.pagina, paginas, 'rfIr')}
@@ -671,7 +696,19 @@
     function rfMoverDia(n){ rfFiltro.de = addDias(rfFiltro.de, n); rfFiltro.ate = addDias(rfFiltro.ate, n); rfFiltro.pagina = 1; renderResumoFin(); }
     function rfAtalho(k){ const p = vmlAtalho(k); rfFiltro.de = p.de; rfFiltro.ate = p.ate; rfFiltro.pagina = 1; renderResumoFin(); }
     function rfAtualizar(){ vmlSincronizar(rfFiltro.de, rfFiltro.ate, vmlDiasEntre(rfFiltro.de, rfFiltro.ate) <= 3, () => rfCarregar()); }
-    function rfExportar(formato){ vmlBaixar(() => rfConsulta('*'), rfFiltro.de, rfFiltro.ate, rfDados.total, `resumo_financeiro_${rfFiltro.de}_${rfFiltro.ate}`, formato); }
+    function rfExportar(formato){
+      const grande = vmlDiasEntre(rfFiltro.de, rfFiltro.ate) > VML_EXPORT_MAX_DIAS || rfDados.total > VML_EXPORT_MAX_LINHAS;
+      const nome = `resumo_financeiro_${rfFiltro.de}_${rfFiltro.ate}`;
+      if(!grande){ vmlBaixar(() => rfConsulta('*'), rfFiltro.de, rfFiltro.ate, rfDados.total, nome, formato); return; }
+      // período grande: só a página atual (os totais da tela continuam sendo do período inteiro)
+      vmlPlanilha(vmlLinhasExport(rfDados.linhas), 'Vendas', nome + `_pagina${rfFiltro.pagina}`, formato);
+    }
+    function vmlPlanilha(linhas, aba, nome, formato){
+      if(!linhas.length){ alert('Não há dados para exportar.'); return; }
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas), aba);
+      XLSX.writeFile(wb, nome + (formato === 'csv' ? '.csv' : '.xlsx'), formato === 'csv' ? { bookType:'csv' } : undefined);
+    }
 
     function rfLegenda(){
       vmlModal('Legendas da página', `
@@ -684,7 +721,7 @@
     }
 
     // Ranking de produtos do período (vendas aprovadas) — agrupado no banco
-    let rfRankAba = 'mcp', rfRankGrupo = 'sku', rfRankDados = null;
+    let rfRankAba = 'cons', rfRankGrupo = 'sku', rfRankDados = null;
     async function rfRanking(aba, grupo){
       if(aba) rfRankAba = aba;
       const mudouGrupo = grupo && grupo !== rfRankGrupo;
@@ -693,22 +730,193 @@
       if(!rfRankDados || rfRankDados.chave !== chave || mudouGrupo){
         vmlModal('Ranking de produtos', '<div class="vazio">Calculando…</div>');
         const { data, error } = await supa.rpc('vendas_ml_ranking', { p_de:rfFiltro.de, p_ate:rfFiltro.ate, p_grupo:rfRankGrupo, p_conta:contaParam() });
-        rfRankDados = { chave, linhas: (data || []).map(x => ({ ...x, bruto:Number(x.bruto), mc:Number(x.mc), mc_pct:Number(x.mc_pct), un:Number(x.un), vendas:Number(x.vendas) })), erro: error?.message };
+        rfRankDados = { chave, erro: error?.message, linhas: (data || []).map(x => ({ ...x, bruto:Number(x.bruto), custo:Number(x.custo), mc:Number(x.mc), mc_pct:Number(x.mc_pct), un:Number(x.un), vendas:Number(x.vendas) })) };
       }
+      const L = rfRankDados.linhas;
+      const T = L.reduce((a,x) => { a.un += x.un; a.vd += x.vendas; a.bruto += x.bruto; a.mc += x.mc; return a; }, {un:0, vd:0, bruto:0, mc:0});
+      const pct = (v, t) => t > 0 ? v / t * 100 : 0;
+      // curva ABC pela margem acumulada: A até 80%, B até 95%, C o restante
+      const porMargem = L.slice().sort((a,b) => b.mc - a.mc);
+      let ac = 0; const abc = {};
+      porMargem.forEach(x => { ac += Math.max(0, x.mc); const p = pct(ac, Math.max(1e-9, porMargem.reduce((s,y) => s + Math.max(0, y.mc), 0))); abc[x.chave] = p <= 80 ? 'A' : (p <= 95 ? 'B' : 'C'); });
       const ord = { mcp:'mc_pct', mc:'mc', fat:'bruto', un:'un', cons:'mc' }[rfRankAba];
-      const linhas = rfRankDados.linhas.slice().sort((a,b) => b[ord] - a[ord]);
-      const abas = [['mcp','Maior margem %'],['mc','Maior margem R$'],['fat','Mais geram faturamento'],['un','Mais unidades vendidas'],['cons','Consolidado']];
-      const un = linhas.reduce((s,x) => s + x.un, 0), vd = linhas.reduce((s,x) => s + x.vendas, 0);
+      const linhas = L.slice().sort((a,b) => b[ord] - a[ord]);
+      const abas = [['cons','Consolidado'],['mcp','Maior margem %'],['mc','Maior margem R$'],['fat','Mais geram faturamento'],['un','Mais unidades vendidas']];
+      const cor = v => v >= 0 ? 'mc-pos' : 'mc-neg';
+      const rot = rfRankGrupo === 'sku' ? 'SKU' : 'MLB';
+      const tabela = rfRankAba === 'cons'
+        ? `<table class="rf-table"><thead><tr><th>Índice</th><th>${rot}</th><th>Título</th><th class="num">Unid. vendidas</th><th class="num" title="Participação nas unidades vendidas">Contrib. %</th><th class="num">Vendas aprovadas (R$)</th><th class="num" title="Participação no faturamento">Contrib. %</th><th class="num">Custo (R$)</th><th class="num" title="Margem de contribuição ÷ custo">Margem s/ custo %</th><th class="num">Margem contrib. (=)</th><th class="num">Margem contrib. %</th><th class="num" title="Participação na margem total">Contrib. %</th></tr></thead>
+            <tbody>${linhas.map(x => `<tr><td><span class="abc abc-${abc[x.chave]}">${abc[x.chave]}</span></td><td><b>${vmlEsc(x.chave)}</b></td><td style="max-width:230px;white-space:normal;">${vmlEsc(x.titulo)}</td><td class="num">${x.un}</td><td class="num">${vmlPct(pct(x.un, T.un))}</td><td class="num">${vmlNum(x.bruto)}</td><td class="num">${vmlPct(pct(x.bruto, T.bruto))}</td><td class="num">${vmlNum(x.custo)}</td><td class="num">${x.custo > 0 ? vmlPct(x.mc / x.custo * 100) : '—'}</td><td class="num"><b class="${cor(x.mc)}">${vmlNum(x.mc)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(x.mc_pct)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(pct(x.mc, T.mc))}</b></td></tr>`).join('')}</tbody></table>`
+        : `<table class="rf-table"><thead><tr><th>#</th><th>${rot}</th><th>Título</th><th class="num">Unid.</th><th class="num">Vendas aprovadas (R$)</th><th class="num">Margem contrib. (=)</th><th class="num">Margem contrib. %</th></tr></thead>
+            <tbody>${linhas.map((x,i) => `<tr><td>${i + 1}</td><td><b>${vmlEsc(x.chave)}</b></td><td style="max-width:260px;white-space:normal;">${vmlEsc(x.titulo)}</td><td class="num">${x.un}</td><td class="num">${vmlNum(x.bruto)}</td><td class="num"><b class="${cor(x.mc)}">${vmlNum(x.mc)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(x.mc_pct)}</b></td></tr>`).join('')}</tbody></table>`;
+      const faixa = rfRankAba === 'cons'
+        ? `<div class="rk-faixa verde"><b>R$ ${vmlNum(T.mc)}</b><span>Margem de contribuição total</span></div>`
+        : `<div class="rk-faixa"><b>${T.un.toLocaleString('pt-BR')} unidades</b><span>em ${T.vd.toLocaleString('pt-BR')} vendas aprovadas</span></div>`;
       vmlModal(`Ranking de produtos — ${ptDate(rfFiltro.de)} a ${ptDate(rfFiltro.ate)}`, `
         <div class="chips" style="margin-bottom:12px;">${abas.map(([k,l]) => `<button class="chip ${rfRankAba === k ? 'active' : ''}" onclick="rfRanking('${k}')">${l}</button>`).join('')}</div>
-        <div class="d-flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
+        ${faixa}
+        <div class="d-flex" style="justify-content:space-between;align-items:center;margin:12px 0;gap:10px;flex-wrap:wrap;">
           <div class="chips"><button class="chip ${rfRankGrupo === 'sku' ? 'active' : ''}" onclick="rfRanking(null,'sku')">SKU</button><button class="chip ${rfRankGrupo === 'mlb' ? 'active' : ''}" onclick="rfRanking(null,'mlb')">MLB</button></div>
-          <div class="text-muted"><b style="color:var(--text);font-size:15px;">${un.toLocaleString('pt-BR')} unidades</b> em ${vd.toLocaleString('pt-BR')} vendas aprovadas</div>
+          <button class="btn-out btn btn-sm" onclick="rfRankExportar()">⬇ Exportar ranking</button>
         </div>
-        <div style="max-height:48vh;overflow:auto;">
-          <table class="rf-table"><thead><tr><th>#</th><th>${rfRankGrupo === 'sku' ? 'SKU' : 'MLB'}</th><th>Título</th><th class="num">Unid.</th><th class="num">Vendas (R$)</th><th class="num">Margem (R$)</th><th class="num">Margem %</th></tr></thead>
-          <tbody>${linhas.length ? linhas.map((x,i) => `<tr><td>${i + 1}</td><td><b>${vmlEsc(x.chave)}</b></td><td style="max-width:240px;white-space:normal;">${vmlEsc(x.titulo)}</td><td class="num">${x.un}</td><td class="num">${vmlNum(x.bruto)}</td><td class="num"><b class="${x.mc >= 0 ? 'mc-pos' : 'mc-neg'}">${vmlNum(x.mc)}</b></td><td class="num"><b class="${x.mc >= 0 ? 'mc-pos' : 'mc-neg'}">${vmlPct(x.mc_pct)}</b></td></tr>`).join('') : `<tr><td colspan="7"><div class="vazio">${rfRankDados.erro ? vmlEsc(rfRankDados.erro) : 'Sem vendas aprovadas no período.'}</div></td></tr>`}</tbody></table>
+        <div style="max-height:46vh;overflow:auto;">${L.length ? tabela : `<div class="vazio">${rfRankDados.erro ? vmlEsc(rfRankDados.erro) : 'Sem vendas aprovadas no período.'}</div>`}</div>
+        <div class="text-muted" style="font-size:11px;margin-top:10px;line-height:1.5;">* Somente vendas aprovadas do período. ** Vendas sem SKU ficam agrupadas em "(sem SKU)". *** Vendas sem custo ou imposto distorcem o ranking: use o filtro "Custo &amp; imposto" do Resumo para encontrá-las.</div>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1180px';
+      rfRankDados.abc = abc; rfRankDados.tot = T;
+    }
+
+    function rfRankExportar(){
+      if(!rfRankDados) return;
+      const T = rfRankDados.tot, abc = rfRankDados.abc || {}, pct = (v,t) => t > 0 ? Math.round(v / t * 10000) / 100 : 0;
+      vmlPlanilha(rfRankDados.linhas.slice().sort((a,b) => b.mc - a.mc).map(x => ({
+        'Índice': abc[x.chave] || '', [rfRankGrupo === 'sku' ? 'SKU' : 'MLB']: x.chave, 'Título': x.titulo, 'Unidades': x.un, 'Contrib. unidades %': pct(x.un, T.un),
+        'Vendas aprovadas': x.bruto, 'Contrib. faturamento %': pct(x.bruto, T.bruto), 'Custo': x.custo, 'Margem s/ custo %': x.custo > 0 ? Math.round(x.mc / x.custo * 10000) / 100 : '',
+        'Margem contrib.': x.mc, 'Margem contrib. %': x.mc_pct, 'Contrib. margem %': pct(x.mc, T.mc)
+      })), 'Ranking', `ranking_${rfRankGrupo}_${rfFiltro.de}_${rfFiltro.ate}`, 'xlsx');
+    }
+
+    // ----- custo por venda: nivelar / reprocessar / nivelar SKU -----
+    function rfPeriodoTxt(){ return `${ptDate(rfFiltro.de)} a ${ptDate(rfFiltro.ate)}${contaAtiva ? ' · conta ' + vmlEsc(contaNome(contaAtiva)) : ''}`; }
+    function rfFecharMenus(){ document.querySelectorAll('#view-resumo-fin .dd-menu').forEach(m => { m.style.display = 'none'; }); }
+
+    function rfNivelar(){
+      rfFecharMenus();
+      vmlModal('Nivelar custo & imposto', `
+        <div class="text-muted" style="margin-bottom:14px;line-height:1.5;">Grava nas vendas de um SKU, no período <b style="color:var(--text)">${rfPeriodoTxt()}</b>, o custo e o imposto que você informar. Não altera o cadastro de Produtos. Deixe um campo em branco para não mexer nele.</div>
+        <div class="form-group"><label class="form-label">SKU</label><input type="text" id="niv-sku" value="${vmlEsc(rfFiltro.sku)}" placeholder="Ex.: J-2010-Vermelho"></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Custo unitário (R$)</label><input type="number" step="0.01" min="0" id="niv-custo"></div>
+          <div class="form-group"><label class="form-label">Imposto (% sobre a venda)</label><input type="number" step="0.01" min="0" id="niv-imp"></div>
         </div>
-        <div class="text-muted" style="font-size:11px;margin-top:10px;">Somente vendas aprovadas do período. Vendas sem custo ou imposto cadastrado distorcem o ranking de margem.</div>`);
-      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '960px';
+        <div id="niv-msg"></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="niv-ok" onclick="rfNivelarOk()">Nivelar vendas</button>`);
+    }
+    async function rfNivelarOk(){
+      const sku = document.getElementById('niv-sku').value.trim();
+      const c = document.getElementById('niv-custo').value, i = document.getElementById('niv-imp').value;
+      const msg = document.getElementById('niv-msg');
+      if(!sku || (c === '' && i === '')){ msg.innerHTML = '<div class="alert alert-warning">Informe o SKU e pelo menos um valor.</div>'; return; }
+      document.getElementById('niv-ok').disabled = true;
+      const { data, error } = await supa.rpc('vendas_ml_nivelar', { p_de: rfFiltro.de, p_ate: rfFiltro.ate, p_sku: sku, p_custo: c === '' ? null : Number(c), p_imposto: i === '' ? null : Number(i), p_conta: contaParam() });
+      if(error){ msg.innerHTML = `<div class="alert alert-danger">${vmlEsc(error.message)}</div>`; document.getElementById('niv-ok').disabled = false; return; }
+      vmlModal('Nivelar custo & imposto', `<div class="alert alert-info"><b>${data || 0}</b>&nbsp;venda(s) do SKU ${vmlEsc(sku)} atualizada(s) no período.</div>`);
+      rfRankDados = null; rfCarregar();
+    }
+
+    function rfReprocessar(){
+      rfFecharMenus();
+      vmlModal('Reprocessar custo & imposto', `
+        <div style="line-height:1.6;">Regrava o custo e o imposto das vendas do período <b>${rfPeriodoTxt()}</b> com os valores <b>atuais</b> do cadastro de Produtos.</div>
+        <div class="alert alert-warning" style="margin-top:12px;">Isso altera o resultado passado dessas vendas. Use quando o custo da época estava errado.</div>
+        <div class="form-group"><label class="form-label">Somente este SKU (opcional)</label><input type="text" id="rep-sku" value="${vmlEsc(rfFiltro.sku)}" placeholder="Em branco = todos os SKUs do período"></div>
+        <div id="rep-msg"></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="rep-ok" onclick="rfReprocessarOk()">Reprocessar</button>`);
+    }
+    async function rfReprocessarOk(){
+      const sku = document.getElementById('rep-sku').value.trim();
+      document.getElementById('rep-ok').disabled = true;
+      const { data, error } = await supa.rpc('vendas_ml_reprocessar', { p_de: rfFiltro.de, p_ate: rfFiltro.ate, p_sku: sku || null, p_conta: contaParam() });
+      if(error){ document.getElementById('rep-msg').innerHTML = `<div class="alert alert-danger">${vmlEsc(error.message)}</div>`; document.getElementById('rep-ok').disabled = false; return; }
+      vmlModal('Reprocessar custo & imposto', `<div class="alert alert-info"><b>${data || 0}</b>&nbsp;venda(s) regravada(s) com o cadastro atual.</div>`);
+      rfRankDados = null; rfCarregar();
+    }
+
+    function rfNivelarSku(){
+      vmlModal('Nivelar SKU', `
+        <div class="text-muted" style="margin-bottom:14px;line-height:1.5;">Aplica um SKU a <b style="color:var(--text)">todas as vendas</b> de um anúncio (MLB). Útil quando o anúncio ficou sem SKU ou com o SKU errado no Mercado Livre. As próximas sincronizações mantêm o SKU definido aqui.</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">ID do anúncio (MLB)</label><input type="text" id="nsk-mlb" placeholder="MLB1234567890"></div>
+          <div class="form-group"><label class="form-label">SKU</label><input type="text" id="nsk-sku" placeholder="J-2010-Vermelho"></div>
+        </div>
+        <div id="nsk-msg"></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="nsk-ok" onclick="rfNivelarSkuOk()">Aplicar SKU</button>`);
+    }
+    async function rfNivelarSkuOk(){
+      const mlb = document.getElementById('nsk-mlb').value.trim().replace(/^MLB-?/i, 'MLB'), sku = document.getElementById('nsk-sku').value.trim();
+      const msg = document.getElementById('nsk-msg');
+      if(!mlb || !sku){ msg.innerHTML = '<div class="alert alert-warning">Informe o anúncio e o SKU.</div>'; return; }
+      document.getElementById('nsk-ok').disabled = true;
+      const { data, error } = await supa.rpc('vendas_ml_nivelar_sku', { p_mlb: mlb, p_sku: sku });
+      if(error){ msg.innerHTML = `<div class="alert alert-danger">${vmlEsc(error.message)}</div>`; document.getElementById('nsk-ok').disabled = false; return; }
+      try { await supa.rpc('vendas_ml_carimbar'); } catch(e){}
+      vmlModal('Nivelar SKU', `<div class="alert alert-info"><b>${data || 0}</b>&nbsp;venda(s) do anúncio ${vmlEsc(mlb)} agora usam o SKU ${vmlEsc(sku)}.</div>`);
+      rfRankDados = null; rfCarregar();
+    }
+
+    // ===================================================================
+    // GRÁFICO DA PÁGINA VENDAS — mês passado x mês atual, dia a dia
+    // ===================================================================
+    let vdGraf = { carregado:false, dias:{}, chave:'' };
+
+    async function vdGrafCarregar(){
+      if(!usuarioAtual) return;
+      const hoje = getToday(), chave = hoje + contaAtiva;
+      if(vdGraf.carregado && vdGraf.chave === chave && Date.now() - vdGraf.em < 5 * 60 * 1000) return;
+      const iniAtual = hoje.substring(0,8) + '01';
+      const iniAnt = addDias(iniAtual, -1).substring(0,8) + '01';
+      const { data, error } = await supa.rpc('vendas_ml_por_dia', { p_de: iniAnt, p_ate: hoje, p_conta: contaParam() });
+      const dias = {};
+      (data || []).forEach(r => { dias[String(r.dia).substring(0,10)] = { qtd:Number(r.vendas) || 0, val:Number(r.bruto) || 0, frete:Number(r.frete_comp) || 0 }; });
+      vdGraf = { carregado:!error, dias, chave, em:Date.now(), iniAtual, iniAnt, hoje };
+      const el = document.getElementById('vd-graf');
+      if(el) el.innerHTML = vdGraficoHtml();
+    }
+
+    function vdGrafSerie(ini, ate){
+      const out = [];
+      for(let d = ini; d <= ate; d = addDias(d, 1)){ const x = vdGraf.dias[d] || {qtd:0, val:0, frete:0}; out.push({ data:d, dia:parseInt(d.substring(8,10)), qtd:x.qtd, val:x.val + (vmlFreteComprador ? x.frete : 0) }); }
+      return out;
+    }
+
+    function vdGraficoHtml(){
+      if(!vdGraf.carregado) return '';
+      const fimAnt = addDias(vdGraf.iniAtual, -1);
+      const ant = vdGrafSerie(vdGraf.iniAnt, fimAnt), atu = vdGrafSerie(vdGraf.iniAtual, vdGraf.hoje);
+      const bloco = (tipo, titulo, fmtV) => {
+        const max = Math.max(1, ...ant.map(x => x[tipo]), ...atu.map(x => x[tipo]));
+        const tot = a => a.reduce((s,x) => s + x[tipo], 0);
+        const barras = (serie, cls, mes) => serie.map(x => `<i class="${cls}" style="height:${Math.max(3, x[tipo] / max * 100).toFixed(1)}%" onmouseenter="vdGrafHover(this,'${tipo}','${mes}',${x.dia})" onmouseleave="vdGrafHover(null)"></i>`).join('');
+        return `<div class="card vg-card">
+          <div class="vg-tit">${titulo}${tipo === 'val' ? `<label class="vg-frete"><input type="checkbox" ${vmlFreteComprador ? 'checked' : ''} onchange="vdGrafFrete(this.checked)" style="width:auto;"> Incluir frete comprador</label>` : ''}</div>
+          <div class="vg-meses">
+            <div><span>Mês passado</span><b>${fmtV(tot(ant))}</b><div class="vg-bars">${barras(ant, 'ant', 'ant')}</div></div>
+            <div><span>Mês atual</span><b>${fmtV(tot(atu))}</b><div class="vg-bars">${barras(atu, 'atu', 'atu')}</div></div>
+          </div>
+        </div>`;
+      };
+      return `<div class="vg-grid">${bloco('qtd', 'Vendas aprovadas (qtd)', v => v.toLocaleString('pt-BR'))}${bloco('val', 'Vendas aprovadas (R$)', v => 'R$ ' + vmlNum(v))}</div><div class="vg-tip" id="vg-tip" style="display:none;"></div>`;
+    }
+
+    function vdGrafFrete(on){ vmlFreteComprador = on; localStorage.setItem('mk_vml_frete_comp', on ? '1' : '0'); const el = document.getElementById('vd-graf'); if(el) el.innerHTML = vdGraficoHtml(); }
+
+    // Ao passar o mouse: o dia contra o mesmo dia do outro mês, e o acumulado do mês até aquele dia
+    function vdGrafHover(el, tipo, mes, dia){
+      const tip = document.getElementById('vg-tip');
+      if(!tip) return;
+      if(!el){ tip.style.display = 'none'; return; }
+      const MES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+      const fimAnt = addDias(vdGraf.iniAtual, -1);
+      const ant = vdGrafSerie(vdGraf.iniAnt, fimAnt), atu = vdGrafSerie(vdGraf.iniAtual, vdGraf.hoje);
+      const nomeAnt = MES[parseInt(vdGraf.iniAnt.substring(5,7)) - 1], nomeAtu = MES[parseInt(vdGraf.iniAtual.substring(5,7)) - 1];
+      const v = (serie, d) => (serie.find(x => x.dia === d) || {})[tipo];
+      const acum = (serie, d) => serie.filter(x => x.dia <= d).reduce((s,x) => s + x[tipo], 0);
+      const fmtV = x => x == null ? '—' : (tipo === 'qtd' ? x.toLocaleString('pt-BR') + ' pedidos' : 'R$ ' + vmlNum(x));
+      const selo = (a, b) => (a == null || b == null || !b) ? '' : `<span class="ini-var ${a >= b ? 'up' : 'down'}">${a >= b ? '▲' : '▼'} ${Math.abs((a - b) / b * 100).toFixed(0)}%</span>`;
+      const dd = String(dia).padStart(2, '0');
+      const temAtu = dia <= atu.length;
+      // o primeiro bloco é sempre o mês da barra sob o mouse
+      const [n1, s1, n2, s2] = mes === 'atu' ? [nomeAtu, atu, nomeAnt, ant] : [nomeAnt, ant, nomeAtu, atu];
+      const d1 = v(s1, dia), d2 = (mes === 'ant' && !temAtu) ? null : v(s2, dia);
+      const a1 = acum(s1, dia), a2 = (mes === 'ant' && !temAtu) ? null : acum(s2, dia);
+      tip.innerHTML = `
+        <div class="l">Dia ${dd} de ${n1}</div><div class="v">${fmtV(d1)} ${selo(d1, d2)}</div>
+        <div class="l" style="margin-top:8px;">Dia ${dd} de ${n2}</div><div class="v">${fmtV(d2)}</div>
+        <hr>
+        <div class="l">período de 1 a ${dd} de ${n1}</div><div class="v">${fmtV(a1)} ${selo(a1, a2)}</div>
+        <div class="l" style="margin-top:8px;">período de 1 a ${dd} de ${n2}</div><div class="v">${fmtV(a2)}</div>`;
+      tip.style.display = 'block';
+      const host = document.getElementById('vd-graf').getBoundingClientRect(), r = el.getBoundingClientRect();
+      const x = Math.min(Math.max(8, r.left - host.left - 20), host.width - 250);
+      tip.style.left = x + 'px';
+      tip.style.top = (r.bottom - host.top + 10) + 'px';
     }
