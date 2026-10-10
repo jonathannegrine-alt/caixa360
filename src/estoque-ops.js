@@ -268,9 +268,10 @@
     }
 
     // ---------- 4) contagem de estoque ----------
-    let esoCont = null;
+    let esoCont = null, esoCtDep = null, esoCtVolta = false;   // depósito da contagem em andamento
     function esoContagens(){
-      const dep = est.depositos.find(d => d.id === est.dep); if(!dep || dep.tipo === 'full') return;
+      const aberto = est.depositos.find(d => d.id === est.dep); if(!aberto || aberto.tipo === 'full') return;
+      if(!esoCtVolta) esoCtDep = aberto.id; esoCtVolta = false; const dep = est.depositos.find(d => d.id === esoCtDep) || aberto;
       const dt = t => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
       const minhas = eso.contagens.filter(c => Number(c.deposito_id) === dep.id);
       vmlModal('Contagem de estoque — ' + esEsc(dep.nome), `
@@ -287,13 +288,13 @@
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '920px';
     }
     function esoContagemModelo(){
-      const dep = est.depositos.find(d => d.id === est.dep);
+      const dep = est.depositos.find(d => d.id === esoCtDep);
       const linhas = estLinhas(dep).sort((a, b) => a.k.localeCompare(b.k)).map(l => ({ SKU: l.sku, 'Produto': l.nome, 'Quantidade contada': '' }));
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas.length ? linhas : [{ SKU: '', 'Produto': '', 'Quantidade contada': '' }]), 'Contagem');
       XLSX.writeFile(wb, 'contagem_de_estoque_modelo.xlsx');
     }
     function esoContagemPlanilha(){
-      const dep = est.depositos.find(d => d.id === est.dep);
+      const dep = est.depositos.find(d => d.id === esoCtDep);
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.xlsx,.xls,.csv'; inp.id = 'eso-planilha';
       inp.onchange = () => { const f = inp.files[0]; if(!f) return; const rd = new FileReader(); rd.onload = e => {
         try {
@@ -316,7 +317,7 @@
       inp.click();
     }
     function esoContagemDigitar(){
-      const dep = est.depositos.find(d => d.id === est.dep);
+      const dep = est.depositos.find(d => d.id === esoCtDep);
       const linhas = estLinhas(dep).sort((a, b) => a.k.localeCompare(b.k));
       vmlModal('Digitar contagem — ' + esEsc(dep.nome), `
         <div class="text-muted" style="margin-bottom:10px;">Preencha só os produtos que foram contados; os que ficarem em branco não entram.</div>
@@ -327,7 +328,7 @@
     }
     // confronto: o que o sistema tinha x o que foi contado
     function esoContagemRevisar(itens, origem, arquivo, quando){
-      const dep = est.depositos.find(d => d.id === est.dep);
+      const dep = est.depositos.find(d => d.id === esoCtDep);
       if(!itens.length){ alert('Nenhum produto com quantidade.'); return; }
       const lista = itens.map(i => ({ ...i, sistema: estSaldoDe(dep.id, i.sku) })).map(i => ({ ...i, dif: i.real - i.sistema })).sort((a, b) => Math.abs(b.dif) - Math.abs(a.dif));
       esoCont = { lista, origem, arquivo, quando, dep: dep.id };
