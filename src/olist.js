@@ -5,7 +5,7 @@
 // da planilha do Tiny (fonte 'tiny') são reaproveitados quando são a mesma conta, para não duplicar.
 // Lançamentos manuais do Caixa 360 (sem fonte) nunca são tocados.
 
-    let olist = { conectado: null, desde: null, sincronizando: false, ultimo: null, resumo: null, erro: '', detFaltam: 0, detRodando: false };
+    let olist = { v3: null, v3Erro: '', clientId: '', ordens: null, conectado: null, desde: null, sincronizando: false, ultimo: null, resumo: null, erro: '', detFaltam: 0, detRodando: false };
     try { olist.ultimo = localStorage.getItem('mk_olist_ultimo') || null; } catch(e){}
 
     const olEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -24,9 +24,10 @@
 
     async function olistStatus(){
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return false;
-      const { data, error } = await supa.from('olist_config').select('usuario_id,atualizado_em').eq('usuario_id', usuarioAtual.id).maybeSingle();
+      const { data, error } = await supa.from('olist_config').select('usuario_id,atualizado_em,v3_em,v3_erro,client_id').eq('usuario_id', usuarioAtual.id).maybeSingle();
       if(error){ olist.conectado = false; return false; }
       olist.conectado = !!data; olist.desde = data ? data.atualizado_em : null;
+      olist.v3 = data ? data.v3_em : null; olist.v3Erro = data ? (data.v3_erro || '') : ''; olist.clientId = data ? (data.client_id || '') : '';
       return olist.conectado;
     }
 
@@ -192,11 +193,79 @@
               <button class="btn" onclick="olistSincronizar(true)" ${olist.sincronizando ? 'disabled' : ''}>${olist.sincronizando ? 'Sincronizando…' : 'Sincronizar agora'}</button>
               <button class="btn-out" onclick="olistDesconectar()">Desconectar</button>
             </div>
-            <div class="text-muted" style="font-size:12px;margin-top:8px;">A sincronização roda sozinha ao abrir o sistema e a cada 15 minutos. Lançamentos criados à mão no Caixa 360 não são alterados.</div>`}
+            <div class="text-muted" style="font-size:12px;margin-top:8px;">A sincronização roda sozinha ao abrir o sistema e a cada 15 minutos. Lançamentos criados à mão no Caixa 360 não são alterados.</div>
+            ${olistBlocoCompras(dt)}`}
           ${olist.erro ? `<div class="alert alert-danger" style="margin-top:12px;">${olEsc(olist.erro)}</div>` : ''}
         </div>`;
       if(typeof cfgMontarAbas === 'function') cfgMontarAbas();
     }
+
+    // Ordens de compra: precisam do "aplicativo" do Olist (API nova), com duas chaves e uma autorização
+    function olistBlocoCompras(dt){
+      const cab = '<div style="border-top:1px solid var(--border);margin:18px 0 14px;"></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><b>Ordens de compra do Olist</b>' + (olist.v3 && !olist.v3Erro ? '<span class="badge badge-success">Autorizado</span>' : '<span class="badge badge-warning">Falta autorizar</span>') + '</div>';
+      if(olist.v3 && !olist.v3Erro) return cab + `
+        <div class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Autorizado em ${dt(olist.v3)}. O acesso é renovado sozinho a cada 2 horas.${olist.ordens ? ' Última busca: ' + olist.ordens + '.' : ''}</div>
+        <div class="d-flex" style="gap:8px;flex-wrap:wrap;"><button class="btn-out" onclick="olistBuscarOrdens(this)">Buscar ordens de compra agora</button><button class="btn-out" onclick="olistAutorizar(true)">Autorizar de novo</button></div>`;
+      return cab + `
+        ${olist.v3Erro ? '<div class="alert alert-warning">' + olEsc(olist.v3Erro) + '</div>' : ''}
+        <ol style="margin:6px 0 12px 18px;font-size:13px;">
+          <li>No Olist, em <b>Configurações → Aplicativos API</b>, salve o aplicativo <b>Caixa 360</b> (o formulário já está preenchido).</li>
+          <li>Depois de salvar, o Olist mostra o <b>Client ID</b> e o <b>Client Secret</b>. Cole os dois aqui.</li>
+          <li>Clique em Autorizar e, na tela do Olist que abrir, confirme o acesso.</li>
+        </ol>
+        <div class="d-flex" style="gap:8px;flex-wrap:wrap;">
+          <input type="text" id="olist-cid" placeholder="Client ID" autocomplete="off" value="${olEsc(olist.clientId)}" style="flex:1 1 240px;max-width:360px;font-family:monospace;">
+          <input type="password" id="olist-sec" placeholder="Client Secret" autocomplete="off" style="flex:1 1 240px;max-width:360px;font-family:monospace;">
+          <button class="btn" onclick="olistAutorizar(false)">Autorizar</button>
+        </div>
+        <div class="text-muted" style="font-size:12px;margin-top:8px;">As chaves ficam guardadas no servidor. O aplicativo só tem permissão de leitura.</div>`;
+    }
+
+    // guarda as chaves (se foram digitadas) e manda para a tela de autorização do Olist
+    async function olistAutorizar(reutilizar){
+      const cid = reutilizar ? olist.clientId : (document.getElementById('olist-cid')?.value || '').trim();
+      const sec = reutilizar ? '' : (document.getElementById('olist-sec')?.value || '').trim();
+      if(!cid || (!reutilizar && sec.length < 8)){ olist.erro = 'Cole o Client ID e o Client Secret do aplicativo do Olist.'; olistRenderCard(); return; }
+      const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      const state = [...crypto.getRandomValues(new Uint8Array(40))].map(x => abc[x % abc.length]).join('');
+      const campos = reutilizar ? { oauth_state: state, v3_erro: null } : { client_id: cid, client_secret: sec, oauth_state: state, v3_erro: null };
+      const { error } = await supa.from('olist_config').update(campos).eq('usuario_id', usuarioAtual.id);
+      if(error){ olist.erro = 'Não consegui guardar as chaves: ' + error.message; olistRenderCard(); return; }
+      const retorno = SUPA_URL + '/functions/v1/olist-callback';
+      location.href = 'https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/auth?client_id=' + encodeURIComponent(cid) + '&redirect_uri=' + encodeURIComponent(retorno) + '&scope=openid&response_type=code&state=' + state;
+    }
+
+    async function olistChamarCompras(corpo){
+      const sd = await supa.auth.getSession(), sess = sd && sd.data && sd.data.session;
+      if(!sess) return { error: 'Sessão expirada: entre de novo.' };
+      try {
+        const r = await fetch(SUPA_URL + '/functions/v1/olist-compras', { method: 'POST', headers: { Authorization: 'Bearer ' + sess.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+        return await r.json().catch(() => ({ error: 'resposta inesperada (http ' + r.status + ')' }));
+      } catch(e){ return { error: 'sem conexão com o servidor' }; }
+    }
+    async function olistBuscarOrdens(btn){
+      if(btn){ btn.disabled = true; btn.textContent = 'Buscando…'; }
+      const j = await olistChamarCompras({ acao: 'ordens' });
+      if(j.error){ olist.erro = j.error; olist.ordens = null; }
+      else { olist.erro = ''; const ab = (j.ordens || []).filter(o => o.situacao === 0 || o.situacao === 3).length; olist.ordens = (j.total || 0) + ' ordens (' + ab + ' em aberto ou em andamento)' + (j.faltaDetalhe ? ', faltam os itens de ' + j.faltaDetalhe : ''); }
+      await olistStatus(); olistRenderCard();
+    }
+
+    // volta da tela de autorização do Olist (?olist=ok | recusado | erro)
+    (function(){
+      const m = location.search.match(/[?&]olist=(ok|recusado|erro)/);
+      if(!m) return;
+      try { history.replaceState(null, '', location.pathname); } catch(e){}
+      const abrir = setInterval(() => {
+        if(typeof usuarioAtual === 'undefined' || !usuarioAtual || typeof nav !== 'function') return;
+        clearInterval(abrir);
+        olist.conectado = null;
+        if(m[1] !== 'ok') olist.erro = m[1] === 'recusado' ? 'O Olist não concluiu a autorização. Confira o Client ID e o Client Secret e tente de novo.' : 'A autorização do Olist não foi concluída. Tente de novo.';
+        try { sessionStorage.setItem('mk_cfg_aba', 'fin'); if(typeof cfgAbaAtiva !== 'undefined') cfgAbaAtiva = 'fin'; } catch(e){}
+        nav('config');
+        if(m[1] === 'ok') setTimeout(() => olistBuscarOrdens(null), 1500);
+      }, 500);
+    })();
 
     async function olistConectar(btn){
       const inp = document.getElementById('olist-token'), token = inp ? inp.value.trim() : '';
