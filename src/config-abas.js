@@ -7,6 +7,7 @@
       ['fin',    'Financeiro',     ['parâmetros financeiros', 'categorias de despesa']],
       ['estoque','Estoque',        ['motor de reposição', 'reposição']],
       ['dados',  'Dados',          ['backup', 'importar xls', 'tiny']],
+      ['ia',     'IA',             ['conectar sua ia']],
       ['conta',  'Conta',          ['minha conta', 'feedbacks', 'zona de perigo']],
     ];
     let cfgAbaAtiva = sessionStorage.getItem('mk_cfg_aba') || 'ml';
