@@ -28,7 +28,7 @@
     try { const l = JSON.parse(localStorage.getItem('mk_compras_cfg') || 'null'); if(l) comprasCfg = { ...comprasCfg, ...l }; } catch(e){}
     let comprasVendas = { chave:'', dados:null, em:0, erro:null };
     let comprasSim = {};                  // dias de estoque simulados por SKU (não é salvo)
-    let comprasFiltro = { sit:'comprar', busca:'', forn:'' };
+    let comprasFiltro = { sit:'comprar', busca:'', forn:'', fam:'', extra:'' };
     let comprasCalc = null;
 
     function comprasCarregarCfg(c){ if(c && typeof c === 'object'){ comprasCfg = { ...JSON.parse(JSON.stringify(CP_PADRAO)), ...c }; localStorage.setItem('mk_compras_cfg', JSON.stringify(comprasCfg)); } }
@@ -172,6 +172,9 @@
     }
 
     // ----- tela -----
+    let comprasOrd = { col: '', dir: 1 };   // '' = ordem padrão (situação, depois valor)
+    let comprasFontesAbertas = null;        // painel "De onde vêm os números": abre sozinho se faltar dado
+
     async function renderCompras(){
       const el = document.getElementById('view-compras');
       if(!el) return;
@@ -180,83 +183,169 @@
       comprasDesenhar();
     }
 
+    const CP_ORDEM_SIT = { URGENTE: 0, Comprar: 1, OK: 2, Excesso: 3, 'Sem venda': 4 };
+    const cpEstoque = l => l.it.galpao + l.it.transito + l.it.full;
+    const cpFamilia = sku => String(sku || '').split('-').slice(0, 2).join('-');
+    // colunas: [chave, título, valor para ordenar, numérica?, dica]
+    const CP_COLS = [
+      ['sit', 'Situação', l => CP_ORDEM_SIT[l.sit], false, 'Urgente: o estoque acaba antes de chegar uma compra nova'],
+      ['sku', 'Produto', l => cpNorm(l.it.sku), false, ''],
+      ['forn', 'Fornecedor', l => cpNorm(l.it.forn), false, ''],
+      ['cons', 'Venda por dia', l => l.cons, true, 'Venda por dia usada na conta (passe o mouse no número para ver o critério)'],
+      ['est', 'Estoque', l => cpEstoque(l), true, 'Galpão + Full + o que está a caminho'],
+      ['cob', 'Dura quantos dias', l => (l.cob == null ? -1 : l.cob), true, 'Quantos dias o estoque de hoje aguenta no ritmo de venda atual, comparado ao desejado'],
+      ['alvo', 'Dias desejados', l => l.alvoUsado, true, 'Para quantos dias você quer ter estoque. Altere para simular'],
+      ['sug', 'Comprar', l => l.sug, true, 'Unidades a comprar para chegar aos dias desejados'],
+      ['valor', 'Valor', l => l.valor, true, 'Unidades a comprar × custo unitário'],
+    ];
+
+    function comprasOrdenar(col){
+      if(comprasOrd.col === col){ if(comprasOrd.dir === 1) comprasOrd.dir = -1; else comprasOrd = { col: '', dir: 1 }; }
+      else comprasOrd = { col, dir: CP_COLS.find(c => c[0] === col)[3] ? -1 : 1 };   // números começam do maior
+      comprasDesenhar();
+    }
+
+    // De onde vêm os números: cada fonte com a situação e o que fazer
+    function comprasFontes(C){
+      const kitsN = new Set(composicaoKit.map(c => c.sku_comercial)).size;
+      const fullUn = C.linhas.reduce((s, l) => s + l.it.full, 0);
+      const semCusto = C.linhas.filter(l => l.cons > 0 && !l.custo).length;
+      const comForn = C.linhas.filter(l => l.it.forn).length;
+      const dias = comprasVendas.diasImportados || 0;
+      const dataGalpao = estoqueGalpao.reduce((m, e) => (e.data_atualizacao && e.data_atualizacao > m ? e.data_atualizacao : m), '');
+      const nContas = typeof contasML !== 'undefined' ? contasML.length : 0;
+      return [
+        { nome: 'Vendas do Mercado Livre', st: dias >= 100 ? 'ok' : 'parcial', txt: dias + ' de 120 dias importados' + (dias >= 100 ? '' : '. A média fica mais precisa quando o histórico terminar de carregar') },
+        { nome: 'Contas do Mercado Livre', st: nContas > 1 ? 'ok' : 'parcial', txt: nContas > 1 ? nContas + ' contas conectadas' : 'Só uma conta conectada. Produtos vendidos em outra conta ficam com venda zero aqui' },
+        { nome: 'Estoque do galpão', st: estoqueGalpao.length ? 'ok' : 'falta', txt: estoqueGalpao.length ? estoqueGalpao.length + ' produtos' + (dataGalpao ? ', atualizado em ' + ptDate(dataGalpao) : '') : 'Não importado: a conta considera galpão zerado', acao: "nav('estoque')", botao: 'Importar' },
+        { nome: 'Estoque no Full', st: fullUn > 0 ? 'ok' : 'falta', txt: fullUn > 0 ? cpInt(fullUn) + ' unidades' : 'Zerado: a conta considera que não há nada no Full', acao: 'comprasBuscarFull(this)', botao: 'Buscar no Mercado Livre' },
+        { nome: 'Kits', st: kitsN ? 'ok' : 'falta', txt: kitsN ? kitsN + ' kits: a venda do kit desconta cada componente' : 'Nenhum kit cadastrado: cada kit aparece como um produto à parte e os componentes ficam com venda de menos', acao: "nav('skus');setSkuTab('composicoes')", botao: 'Cadastrar kits' },
+        { nome: 'Custos', st: semCusto ? 'parcial' : 'ok', txt: semCusto ? semCusto + ' produtos com venda e sem custo: o valor da compra deles fica zerado' : 'Todos os produtos com venda têm custo', acao: semCusto ? "nav('skus');skuFiltrarCusto('sem')" : '', botao: 'Preencher' },
+        { nome: 'Fornecedores', st: comForn ? 'ok' : 'falta', txt: comForn ? comForn + ' produtos com fornecedor' : 'Nenhum produto tem fornecedor informado: não dá para separar a compra por fornecedor' },
+      ];
+    }
+
     function comprasDesenhar(){
       const el = document.getElementById('view-compras');
       if(!el || !el.classList.contains('active')) return;
       const C = comprasCalcular(), g = C.giro, f = comprasFiltro;
-      const semEstoque = !estoqueGalpao.length;
       const fornecedores = [...new Set(C.linhas.map(l => l.it.forn).filter(Boolean))].sort();
+      const familias = [...new Set(C.linhas.map(l => cpFamilia(l.it.sku)).filter(Boolean))].sort();
       const cont = s => C.linhas.filter(l => l.sit === s).length;
       const lista = C.linhas.filter(l => {
         if(f.sit === 'comprar' && !(l.sug > 0)) return false;
         if(f.sit !== 'comprar' && f.sit !== 'todos' && l.sit !== f.sit) return false;
         if(f.forn && l.it.forn !== f.forn) return false;
+        if(f.fam && cpFamilia(l.it.sku) !== f.fam) return false;
+        if(f.extra === 'semcusto' && l.custo) return false;
+        if(f.extra === 'ruptura' && !l.zeros) return false;
+        if(f.extra === 'sim' && !(comprasSim[l.k] > 0)) return false;
         if(f.busca && !(cpNorm(l.it.sku).includes(cpNorm(f.busca)) || cpNorm(l.it.nome).includes(cpNorm(f.busca)))) return false;
         return true;
       });
-      const totalLista = lista.reduce((s,l) => s + l.valor, 0);
+      if(comprasOrd.col){
+        const fn = CP_COLS.find(c => c[0] === comprasOrd.col)[2];
+        lista.sort((a, b) => { const x = fn(a), y = fn(b); return (x < y ? -1 : x > y ? 1 : 0) * comprasOrd.dir; });
+      }
+      const totalLista = lista.reduce((s,l) => s + l.valor, 0), unLista = lista.reduce((s,l) => s + l.sug, 0);
       const selo = s => `<span class="cp-sit cp-${cpNorm(s).replace(/\s/g,'')}">${s}</span>`;
       const d1 = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 });
+
+      const fontes = comprasFontes(C), pend = fontes.filter(x => x.st !== 'ok').length;
+      if(comprasFontesAbertas === null) comprasFontesAbertas = fontes.some(x => x.st === 'falta');
+      const stTxt = { ok: 'Em dia', parcial: 'Atenção', falta: 'Faltando' };
+
+      // barra "dura quantos dias": verde quando cobre o desejado, vermelha quando acaba antes da compra chegar
+      const barra = l => {
+        if(l.cob == null) return '<span class="text-muted">sem venda</span>';
+        const pct = Math.max(3, Math.min(100, Math.round(l.cob / (l.alvo || 1) * 100)));
+        const cor = l.cob < l.prazo + 7 ? 'r' : l.cob < l.alvo ? 'a' : l.cob > l.alvo * 2 ? 'x' : 'v';
+        return `<div class="cp-cob"><div class="cp-cob-n"><b>${cpInt(l.cob)}</b> de ${cpInt(l.alvo)} dias</div><div class="cp-cob-t"><span class="cp-cob-${cor}" style="width:${pct}%;"></span></div></div>`;
+      };
+      const tend = l => l.tend == null || Math.abs(l.tend) < 0.1 ? '' : `<span class="cp-tend ${l.tend > 0 ? 'up' : 'dn'}" title="Últimos 30 dias contra os 30 anteriores">${l.tend > 0 ? '▲' : '▼'} ${Math.abs(Math.round(l.tend * 100))}%</span>`;
+      const seta = c => comprasOrd.col === c ? (comprasOrd.dir === 1 ? ' ▲' : ' ▼') : '';
 
       el.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Sugestão de compras</div>
-            <div class="pg-sub">Quanto comprar de cada produto para cobrir os dias de estoque desejados, com a venda real do Mercado Livre.</div></div>
+            <div class="pg-sub">Quanto comprar de cada produto para ter estoque pelos dias que você deseja, com a venda real do Mercado Livre.</div></div>
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
-            <button class="btn-out btn btn-sm" onclick="comprasAtualizar(this)">↻ Atualizar vendas</button>
-            <button class="btn-out btn btn-sm" onclick="comprasParametros()">⚙ Parâmetros</button>
-            <button class="btn btn-sm" onclick="comprasExportar()">⬇ Exportar</button>
+            <button class="btn-out btn-sm" onclick="comprasAtualizar(this)">Atualizar vendas</button>
+            <button class="btn-out btn-sm" onclick="comprasParametros()">Regras de compra</button>
+            <button class="btn btn-sm" onclick="comprasExportar()">Exportar planilha</button>
           </div>
         </div>
         ${comprasVendas.erro ? `<div class="alert alert-danger">${cpEsc(comprasVendas.erro)}</div>` : ''}
-        ${semEstoque ? `<div class="alert alert-warning" style="justify-content:space-between;flex-wrap:wrap;"><span><b>Estoque do galpão não importado.</b> Sem ele a sugestão considera estoque zero no galpão. Importe a lista de estoque do UpSeller em Estoque e reposição.</span><button class="btn btn-sm" onclick="nav('estoque')">Ir para Estoque</button></div>` : ''}
-        ${!C.temFullAPI ? `<div class="alert alert-info" style="justify-content:space-between;flex-wrap:wrap;"><span>Estoque do Full ainda não foi buscado no Mercado Livre nesta sessão.</span><button class="btn-out btn btn-sm" onclick="comprasBuscarFull(this)">Buscar estoque Full</button></div>` : ''}
-        ${(comprasVendas.diasImportados || 0) < 100 ? `<div class="alert alert-info">As vendas ainda estão sendo importadas do Mercado Livre: <b>&nbsp;${comprasVendas.diasImportados || 0} de 120 dias&nbsp;</b> disponíveis. A venda por dia fica mais precisa quando o histórico terminar de carregar.</div>` : ''}
+
+        <div class="card cp-fontes">
+          <div class="cp-fontes-cab" onclick="comprasFontesAbertas=!comprasFontesAbertas;comprasDesenhar();">
+            <div><b>De onde vêm os números</b> <span class="text-muted">${pend ? '· ' + pend + (pend === 1 ? ' ponto pede atenção' : ' pontos pedem atenção') : '· tudo em dia'}</span></div>
+            <div class="cp-fontes-pills">${fontes.map(x => `<span class="cp-pill cp-pill-${x.st}" title="${cpEsc(x.txt)}">${x.nome}</span>`).join('')}<span class="cp-fontes-seta">${comprasFontesAbertas ? '▲' : '▼'}</span></div>
+          </div>
+          ${comprasFontesAbertas ? `<div class="cp-fontes-lista">${fontes.map(x => `<div class="cp-fonte">
+              <span class="cp-pill cp-pill-${x.st}">${stTxt[x.st]}</span>
+              <div class="cp-fonte-t"><b>${x.nome}</b><span>${cpEsc(x.txt)}</span></div>
+              ${x.acao && x.st !== 'ok' ? `<button class="btn-out btn-sm" onclick="event.stopPropagation();${x.acao}">${x.botao}</button>` : ''}
+            </div>`).join('')}</div>` : ''}
+        </div>
 
         <div class="kpi-grid">
           <div class="kpi k-venda"><div class="kpi-label">Compra sugerida</div><div class="kpi-value">${fmt(g.sugerido)}</div><div class="kpi-sub"><span><b>${C.linhas.filter(l => l.sug > 0).length}</b> produtos</span><span style="color:var(--danger)"><b style="color:inherit">${g.urgentes}</b> urgentes</span></div></div>
           <div class="kpi k-frete"><div class="kpi-label">Estoque a custo</div><div class="kpi-value">${fmt(g.estoqueValor)}</div><div class="kpi-sub"><span>${g.dias != null ? `<b>${cpInt(g.dias)}</b> dias de venda` : 'sem venda para medir'}</span></div></div>
-          <div class="kpi k-custo"><div class="kpi-label" title="Estoque a custo × juros ao mês dos parâmetros">Custo de carregar o estoque</div><div class="kpi-value">${fmt(g.jurosMes)}</div><div class="kpi-sub"><span>por mês, a <b>${(C.taxa * 100).toLocaleString('pt-BR')}%</b> a.m.</span></div></div>
+          <div class="kpi k-custo"><div class="kpi-label" title="Estoque a custo × juros ao mês das regras">Custo de carregar o estoque</div><div class="kpi-value">${fmt(g.jurosMes)}</div><div class="kpi-sub"><span>por mês, a <b>${(C.taxa * 100).toLocaleString('pt-BR')}%</b> a.m.</span></div></div>
           <div class="kpi k-tarifa"><div class="kpi-label">Custo das vendas</div><div class="kpi-value">${fmt(g.custoDia * 30)}</div><div class="kpi-sub"><span>por mês (<b>${fmt(g.custoDia)}</b> por dia)</span></div></div>
         </div>
 
-        <div class="card"><div class="card-body">
-          <div class="chips" style="align-items:center;">
-            ${[['comprar','A comprar',C.linhas.filter(l => l.sug > 0).length],['URGENTE','Urgente',cont('URGENTE')],['OK','OK',cont('OK')],['Excesso','Excesso',cont('Excesso')],['Sem venda','Sem venda',cont('Sem venda')],['todos','Todos',C.linhas.length]]
+        <div class="card"><div class="card-body cp-filtros">
+          <div class="chips">
+            ${[['comprar','A comprar',C.linhas.filter(l => l.sug > 0).length],['URGENTE','Urgente',cont('URGENTE')],['Comprar','Comprar',cont('Comprar')],['OK','OK',cont('OK')],['Excesso','Excesso',cont('Excesso')],['Sem venda','Sem venda',cont('Sem venda')],['todos','Todos',C.linhas.length]]
               .map(([k,l,n]) => `<button class="chip ${f.sit === k ? 'active' : ''}" onclick="comprasFiltro.sit='${k}';comprasDesenhar();">${l}<span class="n">${n}</span></button>`).join('')}
-            <span style="flex:1;"></span>
-            <select style="width:auto;" onchange="comprasFiltro.forn=this.value;comprasDesenhar();"><option value="">Todos os fornecedores</option>${fornecedores.map(x => `<option ${f.forn === x ? 'selected' : ''}>${cpEsc(x)}</option>`).join('')}</select>
-            <input type="text" placeholder="Buscar SKU ou produto" value="${cpEsc(f.busca)}" style="width:220px;" onchange="comprasFiltro.busca=this.value;comprasDesenhar();">
+          </div>
+          <div class="cp-filtros-l2">
+            <input type="text" id="cp-busca" placeholder="Buscar por SKU ou nome" value="${cpEsc(f.busca)}" oninput="comprasBuscar(this.value)">
+            <select onchange="comprasFiltro.fam=this.value;comprasDesenhar();"><option value="">Todas as famílias</option>${familias.map(x => `<option ${f.fam === x ? 'selected' : ''}>${cpEsc(x)}</option>`).join('')}</select>
+            <select onchange="comprasFiltro.forn=this.value;comprasDesenhar();"><option value="">Todos os fornecedores</option>${fornecedores.map(x => `<option ${f.forn === x ? 'selected' : ''}>${cpEsc(x)}</option>`).join('')}</select>
+            <select onchange="comprasFiltro.extra=this.value;comprasDesenhar();">
+              ${[['','Mostrar tudo'],['semcusto','Só sem custo'],['ruptura','Só com dias de ruptura ignorados'],['sim','Só os que eu simulei']].map(([v,t]) => `<option value="${v}" ${(f.extra || '') === v ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+            ${f.busca || f.fam || f.forn || f.extra || comprasOrd.col || Object.keys(comprasSim).length ? `<button class="btn-out btn-sm" onclick="comprasLimpar()">Limpar</button>` : ''}
           </div>
         </div></div>
 
         <div class="card">
-          <div class="card-header"><div class="card-title">${lista.length} produto${lista.length === 1 ? '' : 's'} · ${fmt(totalLista)}</div>
-            <span class="text-muted" style="font-size:12px;">Altere os <b>dias considerados</b> para simular; ao recarregar volta ao padrão.</span></div>
+          <div class="card-header"><div class="card-title">${lista.length} produto${lista.length === 1 ? '' : 's'} · ${cpInt(unLista)} unidades · ${fmt(totalLista)}</div>
+            <span class="text-muted" style="font-size:12px;">Clique no título de uma coluna para ordenar e arraste a borda para mudar a largura. Altere os <b>dias desejados</b> para simular.</span></div>
           <div style="overflow-x:auto;">
-            <table class="rf-table cp-tab">
-              <thead><tr><th>Situação</th><th>SKU</th><th>Produto</th><th>Fornecedor</th><th class="num" title="Venda por dia considerada no cálculo">Venda/dia</th><th class="num">Galpão</th><th class="num">Full</th><th class="num">Em trânsito</th><th class="num">Dias de estoque hoje</th><th class="num">Dias considerados</th><th class="num">Comprar (un.)</th><th class="num">Valor</th><th></th></tr></thead>
-              <tbody>
-                ${lista.length ? lista.map(l => `<tr>
+            <table class="cp-tab">
+              <thead><tr>${CP_COLS.map(c => `<th class="${c[3] ? 'num' : ''} ${comprasOrd.col === c[0] ? 'ord' : ''}" title="${cpEsc(c[4])}" onclick="comprasOrdenar('${c[0]}')">${c[1]}${seta(c[0])}</th>`).join('')}<th></th></tr></thead>
+              <tbody id="tbody-compras">
+                ${lista.length ? lista.map(l => `<tr class="cp-l-${cpNorm(l.sit).replace(/\s/g,'')}">
                   <td>${selo(l.sit)}</td>
-                  <td><b>${cpEsc(l.it.sku)}</b>${l.vende ? `<div class="text-muted" style="font-size:11px;">${cpEsc(l.vende)}</div>` : ''}</td>
-                  <td style="max-width:240px;white-space:normal;">${cpEsc(l.it.nome || '—')}</td>
-                  <td>${cpEsc(l.it.forn || '—')}</td>
-                  <td class="num" title="${cpEsc(l.criterio)}">${d1(l.cons)}${l.zeros ? ' <span class="sem-custo" title="dias de ruptura ou parada ignorados">●</span>' : ''}</td>
-                  <td class="num">${cpInt(l.it.galpao)}</td><td class="num">${cpInt(l.it.full)}</td><td class="num">${cpInt(l.it.transito)}</td>
-                  <td class="num">${l.cob == null ? '—' : cpInt(l.cob)}</td>
+                  <td class="cp-prod"><b>${cpEsc(l.it.sku)}</b><span title="${cpEsc(l.it.nome)}">${cpEsc(l.it.nome || '—')}</span>${l.vende ? `<i>${cpEsc(l.vende)}</i>` : ''}</td>
+                  <td class="cp-forn">${cpEsc(l.it.forn || '—')}</td>
+                  <td class="num" title="${cpEsc(l.criterio)}"><b>${d1(l.cons)}</b>${l.zeros ? ` <span class="sem-custo" title="${l.zeros} dias de ruptura ou parada ficaram fora da média">●</span>` : ''}<div class="cp-sub">${tend(l) || '&nbsp;'}</div></td>
+                  <td class="num"><b>${cpInt(cpEstoque(l))}</b><div class="cp-sub">galpão ${cpInt(l.it.galpao)} · Full ${cpInt(l.it.full)}${l.it.transito ? ' · a caminho ' + cpInt(l.it.transito) : ''}</div></td>
+                  <td>${barra(l)}</td>
                   <td class="num"><input type="number" min="0" step="5" class="cp-dias ${comprasSim[l.k] > 0 ? 'sim' : ''}" value="${l.alvoUsado}" onchange="comprasSimular('${cpEsc(l.k)}', this.value)"></td>
-                  <td class="num"><b>${cpInt(l.sug)}</b>${l.mult > 1 ? `<div class="text-muted" style="font-size:10.5px;">caixa de ${l.mult}</div>` : ''}</td>
-                  <td class="num"><b>${l.custo ? fmt(l.valor) : '<span class="sem-custo">sem custo</span>'}</b></td>
-                  <td><button class="ico-btn" title="Ver o cálculo" onclick="comprasDetalhe('${cpEsc(l.k)}')">≡</button></td>
-                </tr>`).join('') : `<tr><td colspan="13"><div class="vazio"><b>Nada nesta lista</b>Troque o filtro acima.</div></td></tr>`}
+                  <td class="num cp-comprar">${l.sug > 0 ? `<b>${cpInt(l.sug)}</b>` : '<span class="text-muted">—</span>'}${l.mult > 1 ? `<div class="cp-sub">caixa de ${l.mult}</div>` : ''}</td>
+                  <td class="num">${l.sug > 0 ? (l.custo ? `<b>${fmt(l.valor)}</b><div class="cp-sub">${fmt(l.custo)} cada</div>` : '<span class="badge badge-warning">sem custo</span>') : '<span class="text-muted">—</span>'}</td>
+                  <td><button class="btn-out btn-sm" title="Ver como este número foi calculado" onclick="comprasDetalhe('${cpEsc(l.k)}')">Ver conta</button></td>
+                </tr>`).join('') : `<tr><td colspan="10"><div class="vazio"><b>Nada nesta lista</b>Troque os filtros acima.</div></td></tr>`}
               </tbody>
             </table>
           </div>
         </div>
         ${C.fora.size ? `<div class="alert alert-warning">Vendas sem SKU no anúncio ficaram fora do cálculo (${[...C.fora.values()].reduce((s,v) => s + v, 0)} unidades em 120 dias). Use "Nivelar SKU" no Resumo Financeiro para corrigir.</div>` : ''}`;
+      if(typeof initResizableCols === 'function') initResizableCols('tbody-compras');
     }
 
+    let cpBuscaT = null;
+    function comprasBuscar(v){
+      comprasFiltro.busca = v;
+      clearTimeout(cpBuscaT);
+      cpBuscaT = setTimeout(() => { comprasDesenhar(); const i = document.getElementById('cp-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250);
+    }
+    function comprasLimpar(){ comprasFiltro = { sit: comprasFiltro.sit, busca:'', forn:'', fam:'', extra:'' }; comprasOrd = { col:'', dir:1 }; comprasSim = {}; comprasDesenhar(); }
     function comprasSimular(k, v){ const n = Number(v); if(n > 0) comprasSim[k] = n; else delete comprasSim[k]; comprasDesenhar(); }
     async function comprasAtualizar(btn){ if(btn){ btn.disabled = true; btn.textContent = 'Atualizando…'; } await comprasCarregarVendas(true); comprasDesenhar(); }
     async function comprasBuscarFull(btn){
@@ -265,70 +354,119 @@
       comprasDesenhar();
     }
 
+    // A conta de um produto, passo a passo
     function comprasDetalhe(k){
       const l = (comprasCalc?.linhas || []).find(x => x.k === k); if(!l) return;
       const d1 = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 });
       const r = (a,b) => `<div style="display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--border);"><span class="text-muted">${a}</span><b style="text-align:right;">${b}</b></div>`;
+      const dias = l.alvoUsado + l.prazo, precisa = l.cons * dias * l.fator, tem = cpEstoque(l);
       vmlModal(`${cpEsc(l.it.sku)} — como a sugestão foi calculada`, `
         <div class="v-tit" style="margin-bottom:12px;">${cpEsc(l.it.nome || l.it.sku)}</div>
+        <div class="cp-conta">
+          <div><span>Venda por dia</span><b>${d1(l.cons)}</b></div><i>×</i>
+          <div><span>Dias desejados${l.prazo ? ' + prazo' : ''}</span><b>${cpInt(dias)}</b></div>
+          ${Math.abs(l.fator - 1) > 0.005 ? `<i>×</i><div><span>Sazonalidade</span><b>${l.fator.toLocaleString('pt-BR', { maximumFractionDigits:2 })}</b></div>` : ''}
+          <i>−</i><div><span>Estoque que já tem</span><b>${cpInt(tem)}</b></div>
+          <i>=</i><div class="res"><span>Comprar${l.mult > 1 ? ' (caixa de ' + l.mult + ')' : ''}</span><b>${cpInt(l.sug)}</b></div>
+        </div>
+        <div class="text-muted" style="font-size:12px;margin:8px 0 16px;">Precisa de ${cpInt(precisa)} unidades para o período e tem ${cpInt(tem)}.${l.mult > 1 ? ' O resultado é arredondado para cima em caixas de ' + l.mult + '.' : ''}</div>
         <div class="responsive-grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:0 28px;">
           <div>
-            ${r('Venda/dia — 14 dias', d1(l.d14))}${r('Venda/dia — 30 dias', d1(l.d30))}${r('Venda/dia — 90 dias', d1(l.d90))}
-            ${r('Tendência (30d x 30d anteriores)', l.tend == null ? '—' : (l.tend >= 0 ? '+' : '') + Math.round(l.tend * 100) + '%')}
-            ${r('Dias de ruptura/parada ignorados', l.zeros)}
-            ${r('Venda/dia considerada', d1(l.cons))}
+            ${r('Venda por dia nos últimos 14 dias', d1(l.d14))}${r('Venda por dia nos últimos 30 dias', d1(l.d30))}${r('Venda por dia nos últimos 90 dias', d1(l.d90))}
+            ${r('Tendência (30 dias contra os 30 anteriores)', l.tend == null ? '—' : (l.tend >= 0 ? '+' : '') + Math.round(l.tend * 100) + '%')}
+            ${r('Dias de ruptura ou parada fora da média', l.zeros)}
           </div>
           <div>
-            ${r('Galpão + em trânsito + Full', `${cpInt(l.it.galpao)} + ${cpInt(l.it.transito)} + ${cpInt(l.it.full)}`)}
-            ${r('Alvo de estoque / prazo', `${l.alvo} dias / ${l.prazo} dias`)}
-            ${r('Fator sazonal no período', l.fator.toLocaleString('pt-BR', { maximumFractionDigits:2 }))}
-            ${r('Compra para 60 / 90 / 120 dias', `${cpInt(l.c60)} / ${cpInt(l.c90)} / ${cpInt(l.c120)}`)}
+            ${r('Galpão', cpInt(l.it.galpao))}${r('Full', cpInt(l.it.full))}${r('A caminho (compra feita)', cpInt(l.it.transito))}
+            ${r('Se quisesse 60 / 90 / 120 dias', `${cpInt(l.c60)} / ${cpInt(l.c90)} / ${cpInt(l.c120)}`)}
             ${r('Custo unitário', l.custo ? fmt(l.custo) : 'não cadastrado')}
-            ${r('Sugestão', `${cpInt(l.sug)} un. · ${fmt(l.valor)}`)}
           </div>
         </div>
-        <div class="alert alert-info" style="margin-top:14px;"><b>Critério:</b>&nbsp;${cpEsc(l.criterio)}</div>`);
+        <div class="alert alert-info" style="margin-top:14px;"><b>Como a venda por dia foi medida:</b>&nbsp;${cpEsc(l.criterio)}</div>`);
     }
 
-    // Parâmetros: regra geral + padrão + regras por SKU/família + listas em texto (uma por linha)
-    function comprasParametros(){
-      const c = comprasCfg, p = c.padrao || {};
-      const linhasRegras = (c.regras || []).map(r => [r.pat, r.cob, r.prazo, r.mult, r.manual, r.base, r.obs].map(x => x == null ? '' : x).join(';')).join('\n');
-      const linhasSaz = (c.sazonalidade || []).map(r => [r.pat, ...(r.f || []).map(x => x == null ? '' : String(x).replace('.', ',')), r.obs || ''].join(';')).join('\n');
-      const linhasEq = (c.equivalentes || []).map(e => e.de + ';' + e.para).join('\n');
-      const linhasIgn = (c.diasIgnorados || []).map(g => [g.ini ? ptDate(g.ini) : '', g.fim ? ptDate(g.fim) : '', g.motivo || ''].join(';')).join('\n');
-      vmlModal('Parâmetros de compras', `
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Regra geral</label><select id="cp-regra"><option value="TOTAL" ${cpNorm(c.regra) !== 'galpao' ? 'selected' : ''}>TOTAL — o alvo vale para galpão + Full + em trânsito</option><option value="GALPAO" ${cpNorm(c.regra) === 'galpao' ? 'selected' : ''}>GALPÃO — o alvo vale só para o galpão</option></select></div>
-          <div class="form-group"><label class="form-label">Juros ao mês (%) — custo de carregar o estoque</label><input type="number" step="0.1" id="cp-juros" value="${cpNum(c.jurosMes) || 3}"></div>
+    // ----- Regras de compra (formulário em abas; nada é salvo até clicar em Salvar) -----
+    let cpEd = null, cpEdAba = 'geral';
+    const CP_MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    function comprasParametros(){ cpEd = JSON.parse(JSON.stringify(comprasCfg)); cpEd.padrao = cpEd.padrao || {}; cpEdAba = 'geral'; cpEdDesenhar(); }
+    function cpEdIr(a){ cpEdAba = a; cpEdDesenhar(); }
+    function cpEdSet(lista, i, campo, v){ if(cpEd[lista] && cpEd[lista][i]) cpEd[lista][i][campo] = v; }
+    function cpEdSaz(i, m, v){ const r = cpEd.sazonalidade[i]; if(!r) return; r.f = r.f || []; r.f[m] = String(v).trim() === '' ? null : cpNum(v); }
+    function cpEdAdd(lista){
+      const novo = { regras: { pat:'', cob:'', prazo:'', mult:'', manual:'', base:'', obs:'' }, sazonalidade: { pat:'', f: new Array(12).fill(null), obs:'' }, equivalentes: { de:'', para:'' }, diasIgnorados: { ini:'', fim:'', motivo:'' } }[lista];
+      cpEd[lista] = cpEd[lista] || []; cpEd[lista].push(novo); cpEdDesenhar();
+    }
+    function cpEdDel(lista, i){ cpEd[lista].splice(i, 1); cpEdDesenhar(); }
+
+    function cpEdDesenhar(){
+      const c = cpEd, p = c.padrao, v = x => cpEsc(x == null ? '' : x);
+      const abas = [['geral','Regra geral'],['produto','Por produto', (c.regras || []).length],['saz','Sazonalidade', (c.sazonalidade || []).length],['equiv','Produtos que mudaram de código', (c.equivalentes || []).length],['ign','Dias ignorados', (c.diasIgnorados || []).length]];
+      const inp = (lista, i, campo, val, extra) => `<input ${extra || 'type="text"'} value="${v(val)}" onchange="cpEdSet('${lista}',${i},'${campo}',this.value)">`;
+      const del = (lista, i) => `<button class="ico-btn" title="Remover esta linha" onclick="cpEdDel('${lista}',${i})">✕</button>`;
+      const mais = (lista, t) => `<button class="btn-out btn-sm" style="margin-top:10px;" onclick="cpEdAdd('${lista}')">+ ${t}</button>`;
+      const bases = sel => [['AUTO','Automático'],['30','Últimos 30 dias'],['90','Últimos 90 dias'],['MISTA','Média de 30 e 90']].map(([k,t]) => `<option value="${k}" ${String(sel || '').toUpperCase() === k ? 'selected' : ''}>${t}</option>`).join('');
+      let corpo = '';
+
+      if(cpEdAba === 'geral') corpo = `
+        <div class="cpp-ajuda"><b>A conta:</b> comprar = venda por dia × (dias de estoque desejados + prazo de entrega) − estoque que você já tem. Aqui ficam os valores que valem para todos os produtos; as exceções ficam na aba "Por produto".</div>
+        <div class="cpp-campo"><label>O que conta como "estoque que você já tem"</label>
+          <select onchange="cpEd.regra=this.value"><option value="TOTAL" ${cpNorm(c.regra) !== 'galpao' ? 'selected' : ''}>Tudo: galpão + Full + o que está a caminho (recomendado)</option><option value="GALPAO" ${cpNorm(c.regra) === 'galpao' ? 'selected' : ''}>Só o galpão (ignora o que está no Full)</option></select>
+          <small>Com "Tudo", os dias desejados valem para o estoque inteiro. Com "Só o galpão", o Full fica de fora e a sugestão sai maior.</small></div>
+        <div class="cpp-grid">
+          <div class="cpp-campo"><label>Dias de estoque desejados</label><input type="number" value="${cpNum(p.cob) || 90}" onchange="cpEd.padrao.cob=this.value"><small>Para quantos dias de venda você quer ter produto depois da compra.</small></div>
+          <div class="cpp-campo"><label>Prazo de entrega (dias)</label><input type="number" value="${cpNum(p.prazo)}" onchange="cpEd.padrao.prazo=this.value"><small>Dias entre fazer o pedido e a mercadoria chegar. É somado aos dias desejados.</small></div>
+          <div class="cpp-campo"><label>Comprar em múltiplos de</label><input type="number" value="${cpNum(p.mult) || 1}" onchange="cpEd.padrao.mult=this.value"><small>Tamanho da caixa fechada. Com 1, compra qualquer quantidade.</small></div>
+          <div class="cpp-campo"><label>Juros ao mês (%)</label><input type="number" step="0.1" value="${cpNum(c.jurosMes) || 3}" onchange="cpEd.jurosMes=this.value"><small>Usado só para mostrar quanto custa manter o estoque parado.</small></div>
         </div>
-        <div class="form-label" style="margin-top:6px;">Padrão (vale para todo SKU sem regra própria)</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
-          <div><label class="form-label">Dias de estoque</label><input type="number" id="cp-cob" value="${cpNum(p.cob) || 90}"></div>
-          <div><label class="form-label">Prazo de entrega</label><input type="number" id="cp-prazo" value="${cpNum(p.prazo)}"></div>
-          <div><label class="form-label">Múltiplo de compra</label><input type="number" id="cp-mult" value="${cpNum(p.mult) || 1}"></div>
-          <div><label class="form-label">Base da venda</label><select id="cp-base">${['AUTO','30','90','MISTA'].map(b => `<option ${String(p.base || 'AUTO').toUpperCase() === b ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
-        </div>
-        <div class="form-group"><label class="form-label">Regras por SKU ou família — SKU;DIAS;PRAZO;MÚLTIPLO;VENDA/DIA MANUAL;BASE;OBSERVAÇÃO (use * para a família, ex.: J-2010*)</label><textarea id="cp-regras" rows="4" style="font-family:monospace;font-size:12px;">${cpEsc(linhasRegras)}</textarea></div>
-        <div class="form-group"><label class="form-label">Sazonalidade — SKU;JAN;FEV;MAR;ABR;MAI;JUN;JUL;AGO;SET;OUT;NOV;DEZ;OBSERVAÇÃO (1 = mês normal; PADRAO vale para todos)</label><textarea id="cp-saz" rows="4" style="font-family:monospace;font-size:12px;">${cpEsc(linhasSaz)}</textarea></div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">SKUs equivalentes — ANTIGO;ATUAL</label><textarea id="cp-eq" rows="3" style="font-family:monospace;font-size:12px;">${cpEsc(linhasEq)}</textarea></div>
-          <div class="form-group"><label class="form-label">Dias ignorados — INÍCIO;FIM;MOTIVO (dd/mm/aaaa)</label><textarea id="cp-ign" rows="3" style="font-family:monospace;font-size:12px;">${cpEsc(linhasIgn)}</textarea></div>
-        </div>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="comprasSalvarParametros()">Salvar</button>`);
-      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
+        <div class="cpp-campo"><label>Como medir a venda por dia</label>
+          <select onchange="cpEd.padrao.base=this.value">${bases(p.base || 'AUTO')}</select>
+          <small><b>Automático</b> usa os últimos 30 dias de venda normal. Se o produto é estável e a venda caiu um pouco, faz a média com os 90 dias, para não comprar de menos por causa de uma queda passageira ("sobe rápido, desce devagar"). Em qualquer opção, dias seguidos sem venda por falta de estoque ficam fora da média.</small></div>`;
+
+      if(cpEdAba === 'produto') corpo = `
+        <div class="cpp-ajuda">Exceções à regra geral. Preencha só o que for diferente; o que ficar em branco segue a regra geral. Para valer para uma família inteira, termine com <b>*</b>: <b>J-2010*</b> vale para todo produto que começa com J-2010. Se duas linhas servem para o mesmo produto, vale a mais específica.</div>
+        <div style="overflow-x:auto;"><table class="cpp-tab"><thead><tr><th>Produto ou família</th><th title="Dias de estoque desejados">Dias desejados</th><th title="Prazo de entrega em dias">Prazo</th><th title="Tamanho da caixa">Múltiplo</th><th title="Preencha para ignorar o histórico e usar este número de vendas por dia">Venda por dia fixa</th><th>Como medir a venda</th><th>Observação</th><th></th></tr></thead><tbody>
+          ${(c.regras || []).map((r, i) => `<tr><td>${inp('regras', i, 'pat', r.pat, 'type="text" placeholder="J-2010*" style="min-width:130px;"')}</td><td>${inp('regras', i, 'cob', r.cob, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'prazo', r.prazo, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'mult', r.mult, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'manual', r.manual, 'type="text" placeholder="—"')}</td>
+            <td><select onchange="cpEdSet('regras',${i},'base',this.value)"><option value="">Regra geral</option>${bases(r.base)}</select></td><td>${inp('regras', i, 'obs', r.obs, 'type="text" style="min-width:220px;"')}</td><td>${del('regras', i)}</td></tr>`).join('') || '<tr><td colspan="8" class="text-muted" style="padding:16px;text-align:center;">Nenhuma exceção: todos os produtos seguem a regra geral.</td></tr>'}
+        </tbody></table></div>${mais('regras', 'Adicionar produto ou família')}`;
+
+      if(cpEdAba === 'saz') corpo = `
+        <div class="cpp-ajuda">Ajusta a venda prevista de cada mês. <b>1</b> é um mês normal, <b>1,25</b> vende 25% a mais, <b>0,7</b> vende 30% a menos. A linha <b>PADRAO</b> vale para todos os produtos. As outras linhas valem para um produto ou família (use * no fim, ou no começo: <b>*-Rosa</b>); o mês que ficar em branco segue o PADRAO.</div>
+        <div style="overflow-x:auto;"><table class="cpp-tab cpp-saz"><thead><tr><th>Produto ou família</th>${CP_MESES.map(m => `<th>${m}</th>`).join('')}<th>Observação</th><th></th></tr></thead><tbody>
+          ${(c.sazonalidade || []).map((r, i) => `<tr><td>${inp('sazonalidade', i, 'pat', r.pat, 'type="text" placeholder="PADRAO" style="min-width:110px;"')}</td>
+            ${CP_MESES.map((m, j) => `<td><input type="text" class="cpp-mes ${r.f && r.f[j] != null && r.f[j] !== 1 ? (r.f[j] > 1 ? 'up' : 'dn') : ''}" value="${r.f && r.f[j] != null ? String(r.f[j]).replace('.', ',') : ''}" placeholder="—" onchange="cpEdSaz(${i},${j},this.value)"></td>`).join('')}
+            <td>${inp('sazonalidade', i, 'obs', r.obs, 'type="text" style="min-width:220px;"')}</td><td>${del('sazonalidade', i)}</td></tr>`).join('') || '<tr><td colspan="15" class="text-muted" style="padding:16px;text-align:center;">Sem sazonalidade: todos os meses contam igual.</td></tr>'}
+        </tbody></table></div>${mais('sazonalidade', 'Adicionar linha')}`;
+
+      if(cpEdAba === 'equiv') corpo = `
+        <div class="cpp-ajuda">Quando um produto mudou de código (SKU), as vendas feitas com o código antigo passam a contar para o código atual, para a média não começar do zero.</div>
+        <table class="cpp-tab" style="max-width:560px;"><thead><tr><th>Código antigo</th><th>Código atual</th><th></th></tr></thead><tbody>
+          ${(c.equivalentes || []).map((r, i) => `<tr><td>${inp('equivalentes', i, 'de', r.de)}</td><td>${inp('equivalentes', i, 'para', r.para)}</td><td>${del('equivalentes', i)}</td></tr>`).join('') || '<tr><td colspan="3" class="text-muted" style="padding:16px;text-align:center;">Nenhum produto mudou de código.</td></tr>'}
+        </tbody></table>${mais('equivalentes', 'Adicionar par')}`;
+
+      if(cpEdAba === 'ign') corpo = `
+        <div class="cpp-ajuda">Períodos que não devem entrar na média de vendas de nenhum produto, porque a venda foi anormal por um motivo que não vai se repetir (erro do Mercado Livre, conta suspensa, férias).</div>
+        <table class="cpp-tab" style="max-width:760px;"><thead><tr><th>De</th><th>Até</th><th>Motivo</th><th></th></tr></thead><tbody>
+          ${(c.diasIgnorados || []).map((r, i) => `<tr><td>${inp('diasIgnorados', i, 'ini', r.ini, 'type="date"')}</td><td>${inp('diasIgnorados', i, 'fim', r.fim, 'type="date"')}</td><td>${inp('diasIgnorados', i, 'motivo', r.motivo, 'type="text" style="min-width:300px;"')}</td><td>${del('diasIgnorados', i)}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted" style="padding:16px;text-align:center;">Nenhum período ignorado.</td></tr>'}
+        </tbody></table>${mais('diasIgnorados', 'Adicionar período')}`;
+
+      vmlModal('Regras de compra', `
+        <div class="chips" style="margin-bottom:16px;">${abas.map(([k, t, n]) => `<button class="chip ${cpEdAba === k ? 'active' : ''}" onclick="cpEdIr('${k}')">${t}${n ? `<span class="n">${n}</span>` : ''}</button>`).join('')}</div>
+        <div class="cpp-corpo">${corpo}</div>`,
+        `<button class="btn-out" style="margin-right:auto;" onclick="if(confirm('Voltar todas as regras para o padrão do sistema?')){cpEd=JSON.parse(JSON.stringify(CP_PADRAO));cpEdDesenhar();}">Restaurar padrão</button><button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="comprasSalvarParametros()">Salvar regras</button>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1080px';
     }
 
     function comprasSalvarParametros(){
-      const linhas = id => document.getElementById(id).value.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => l.split(';').map(x => x.trim()));
-      const dmyISO = t => { const m = String(t || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : ''; };
+      const c = cpEd; if(!c) return;
+      if(document.activeElement && document.activeElement.blur) document.activeElement.blur();   // grava o campo que ainda está em edição
+      const t = x => String(x == null ? '' : x).trim();
       comprasCfg = {
-        regra: document.getElementById('cp-regra').value, jurosMes: cpNum(document.getElementById('cp-juros').value) || 3,
-        padrao: { cob: cpNum(document.getElementById('cp-cob').value) || 90, prazo: cpNum(document.getElementById('cp-prazo').value), mult: cpNum(document.getElementById('cp-mult').value) || 1, base: document.getElementById('cp-base').value },
-        regras: linhas('cp-regras').map(c => ({ pat: c[0], cob: c[1] || '', prazo: c[2] || '', mult: c[3] || '', manual: c[4] || '', base: c[5] || '', obs: c[6] || '' })),
-        sazonalidade: linhas('cp-saz').map(c => ({ pat: c[0], f: Array.from({ length: 12 }, (_, i) => c[i + 1] ? cpNum(c[i + 1]) : null), obs: c[13] || '' })),
-        equivalentes: linhas('cp-eq').filter(c => c[0] && c[1]).map(c => ({ de: c[0], para: c[1] })),
-        diasIgnorados: linhas('cp-ign').map(c => ({ ini: dmyISO(c[0]), fim: dmyISO(c[1]), motivo: c[2] || '' })).filter(g => g.ini),
+        regra: cpNorm(c.regra) === 'galpao' ? 'GALPAO' : 'TOTAL', jurosMes: cpNum(c.jurosMes) || 3,
+        padrao: { cob: cpNum(c.padrao.cob) || 90, prazo: cpNum(c.padrao.prazo), mult: cpNum(c.padrao.mult) || 1, base: t(c.padrao.base) || 'AUTO' },
+        regras: (c.regras || []).filter(r => t(r.pat)).map(r => ({ pat: t(r.pat), cob: t(r.cob), prazo: t(r.prazo), mult: t(r.mult), manual: t(r.manual), base: t(r.base), obs: t(r.obs) })),
+        sazonalidade: (c.sazonalidade || []).filter(r => t(r.pat)).map(r => ({ pat: t(r.pat), f: Array.from({ length: 12 }, (_, i) => (r.f && r.f[i] != null && r.f[i] !== '' ? cpNum(r.f[i]) : null)), obs: t(r.obs) })),
+        equivalentes: (c.equivalentes || []).filter(r => t(r.de) && t(r.para)).map(r => ({ de: t(r.de), para: t(r.para) })),
+        diasIgnorados: (c.diasIgnorados || []).filter(r => t(r.ini)).map(r => ({ ini: t(r.ini), fim: t(r.fim), motivo: t(r.motivo) })),
       };
       comprasSalvarCfg();
       fecharModal('modal-vml');
