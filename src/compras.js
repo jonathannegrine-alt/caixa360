@@ -209,6 +209,7 @@
     function comprasFontes(C){
       const kitsN = new Set(composicaoKit.map(c => c.sku_comercial)).size;
       const fullUn = C.linhas.reduce((s, l) => s + l.it.full, 0);
+      const nFull = Array.isArray(estoqueFullML) ? estoqueFullML.length : 0, fonteFull = (Array.isArray(estoqueFullML) && estoqueFullML._fonte) || '';
       const semCusto = C.linhas.filter(l => l.cons > 0 && !l.custo).length;
       const comForn = C.linhas.filter(l => l.it.forn).length;
       const dias = comprasVendas.diasImportados || 0;
@@ -218,7 +219,7 @@
         { nome: 'Vendas do Mercado Livre', st: dias >= 100 ? 'ok' : 'parcial', txt: dias + ' de 120 dias importados' + (dias >= 100 ? '' : '. A média fica mais precisa quando o histórico terminar de carregar') },
         { nome: 'Contas do Mercado Livre', st: nContas > 1 ? 'ok' : 'parcial', txt: nContas > 1 ? nContas + ' contas conectadas' : 'Só uma conta conectada. Produtos vendidos em outra conta ficam com venda zero aqui' },
         { nome: 'Estoque do galpão', st: estoqueGalpao.length ? 'ok' : 'falta', txt: estoqueGalpao.length ? estoqueGalpao.length + ' produtos' + (dataGalpao ? ', atualizado em ' + ptDate(dataGalpao) : '') : 'Não importado: a conta considera galpão zerado', acao: "nav('estoque')", botao: 'Importar' },
-        { nome: 'Estoque no Full', st: fullUn > 0 ? 'ok' : 'falta', txt: fullUn > 0 ? cpInt(fullUn) + ' unidades' : 'Zerado: a conta considera que não há nada no Full', acao: 'comprasBuscarFull(this)', botao: 'Buscar no Mercado Livre' },
+        { nome: 'Estoque no Full', st: fullUn > 0 ? 'ok' : 'falta', txt: fullUn > 0 ? cpInt(fullUn) + ' unidades em ' + nFull + (nFull === 1 ? ' anúncio' : ' anúncios') + (fonteFull === 'xls' ? ', vindas de planilha importada. Com duas contas, importe a planilha de cada uma (a segunda é somada)' : ', buscadas no Mercado Livre') : 'Zerado: a conta considera que não há nada no Full', acao: "nav('estoque');setEstoqueTab('full')", botao: 'Abrir estoque Full', sempre: true },
         { nome: 'Kits', st: kitsN ? 'ok' : 'falta', txt: kitsN ? kitsN + ' kits: a venda do kit desconta cada componente' : 'Nenhum kit cadastrado: cada kit aparece como um produto à parte e os componentes ficam com venda de menos', acao: "nav('skus');setSkuTab('composicoes')", botao: 'Cadastrar kits' },
         { nome: 'Custos', st: semCusto ? 'parcial' : 'ok', txt: semCusto ? semCusto + ' produtos com venda e sem custo: o valor da compra deles fica zerado' : 'Todos os produtos com venda têm custo', acao: semCusto ? "nav('skus');skuFiltrarCusto('sem')" : '', botao: 'Preencher' },
         { nome: 'Fornecedores', st: comForn ? 'ok' : 'falta', txt: comForn ? comForn + ' produtos com fornecedor' : 'Nenhum produto tem fornecedor informado: não dá para separar a compra por fornecedor' },
@@ -285,7 +286,7 @@
           ${comprasFontesAbertas ? `<div class="cp-fontes-lista">${fontes.map(x => `<div class="cp-fonte">
               <span class="cp-pill cp-pill-${x.st}">${stTxt[x.st]}</span>
               <div class="cp-fonte-t"><b>${x.nome}</b><span>${cpEsc(x.txt)}</span></div>
-              ${x.acao && x.st !== 'ok' ? `<button class="btn-out btn-sm" onclick="event.stopPropagation();${x.acao}">${x.botao}</button>` : ''}
+              ${x.acao && (x.st !== 'ok' || x.sempre) ? `<button class="btn-out btn-sm" onclick="event.stopPropagation();${x.acao}">${x.botao}</button>` : ''}
             </div>`).join('')}</div>` : ''}
         </div>
 
