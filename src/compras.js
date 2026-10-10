@@ -94,7 +94,7 @@
       // Full: estoque por SKU do anúncio; kits abrem nos componentes
       const addFull = (sku, q) => { const k = cpNorm(sku); if(!q) return; if(kits.has(k)) kits.get(k).forEach(c => { const it = item(c.sku); if(it) it.full += q * c.qtd; }); else { const it = item(sku); if(it) it.full += q; } };
       const temFullAPI = Array.isArray(estoqueFullML) && estoqueFullML.length > 0;
-      if(temFullAPI) estoqueFullML.forEach(f => addFull(f.sku, cpNum(f.aptos_venda) + cpNum(f.em_transito) + cpNum(f.pendente)));
+      if(temFullAPI) estoqueFullML.forEach(f => addFull(f.sku, cpNum(f.aptos_venda) + cpNum(f.em_transito) + cpNum(f.pendente) + cpNum(f.em_separacao)));   // em_separacao = entrada pendente (a caminho do Full) na planilha do ML
       else estoqueGalpao.forEach(e => addFull(e.sku, cpNum(e.qtd_full) + cpNum(e.qtd_full_pendente)));
 
       // vendas por SKU único e por dia

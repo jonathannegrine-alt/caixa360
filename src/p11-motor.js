@@ -190,7 +190,13 @@
             itens.push({ sku, titulo, aptos_venda: aptos, em_separacao, em_transito, nao_aptos, estoque_medio_30d, total_geral, vendas_30d, item_id: itemId, status, prazo });
           }
           if(itens.length === 0){ alert('Nenhum SKU encontrado no arquivo.\nVerifique se o arquivo é o relatório "Estoque Full" do Mercado Livre.'); if(st) st.textContent = 'Importação cancelada — arquivo inválido'; return; }
-          estoqueFullML = itens;
+          // Duas contas do ML = dois arquivos. Se nenhum anúncio do arquivo novo está no que já foi importado,
+          // ele é de outra conta: oferece juntar em vez de substituir.
+          const anteriores = Array.isArray(estoqueFullML) && estoqueFullML._fonte === 'xls' ? estoqueFullML.slice() : [];
+          const idsAntes = new Set(anteriores.map(x => x.item_id).filter(Boolean));
+          const outraConta = anteriores.length > 0 && !itens.some(x => x.item_id && idsAntes.has(x.item_id));
+          const juntar = outraConta && confirm('Este arquivo parece ser de outra conta do Mercado Livre (nenhum anúncio repete o que já está importado).\n\nOK = juntar com os ' + anteriores.length + ' anúncios já importados\nCancelar = substituir pelo arquivo novo');
+          estoqueFullML = juntar ? anteriores.concat(itens) : itens;
           estoqueFullML._syncAt = new Date().toISOString();
           estoqueFullML._fonte = 'xls';
           localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt, fonte: 'xls' }));
