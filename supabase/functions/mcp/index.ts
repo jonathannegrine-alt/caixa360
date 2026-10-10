@@ -40,7 +40,15 @@ const FERRAMENTAS = [
   { name: 'recebimentos_historico', description: 'Valor líquido de vendas liberado pelo Mercado Pago em cada dia do período (histórico de recebimentos).', inputSchema: { type: 'object', properties: { ...periodo } } },
   { name: 'produtos', description: 'Cadastro de produtos (SKU, título, custo unitário e % de imposto).', inputSchema: { type: 'object', properties: { busca: { type: 'string', description: 'Trecho do SKU ou do título' } } } },
   { name: 'caixa', description: 'Posição de caixa: saldos informados (Mercado Pago e outros bancos), reserva mínima, a receber confirmado do ML, contas em aberto nos próximos 30 dias e contas em atraso.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'estoque', description: 'Estoque físico dos depósitos próprios (ex.: galpão), por produto. Não inclui o Full, que é lido direto do Mercado Livre.', inputSchema: { type: 'object', properties: { sku: { type: 'string', description: 'Filtra por SKU (aceita % como coringa, ex.: J-2010%)' } } } },
+  { name: 'estoque_movimentacoes', description: 'Histórico de entradas e saídas do estoque (carga inicial, chegada de compra, venda enviada, envio ao Full, contagem, ajuste), do mais recente para o mais antigo.',
+    inputSchema: { type: 'object', properties: { sku: { type: 'string', description: 'Filtra por SKU (aceita %)' }, motivo: { type: 'string', enum: ['carga_inicial', 'compra', 'venda', 'envio_full', 'contagem', 'ajuste', 'transferencia', 'devolucao'] }, limite: { type: 'integer', description: 'Padrão 100, até 500' } } } },
+  { name: 'ordens_de_compra', description: 'Ordens de compra (vindas do Olist ou criadas no Caixa 360) com os itens, o que foi comprado e o que já foi conferido na chegada. Comprado menos recebido é o estoque a caminho.',
+    inputSchema: { type: 'object', properties: { so_pendentes: { type: 'string', enum: ['true', 'false'], description: 'true = só as em aberto ou em andamento' } } } },
+  { name: 'envios_ao_full', description: 'Envios ao Full do Mercado Livre lançados no Caixa 360: em preparação, que saíram do galpão ou recebidos, com os produtos de cada um (kits abertos nos componentes).', inputSchema: { type: 'object', properties: {} } },
+  { name: 'emprestimos', description: 'Contratos de empréstimo cadastrados (credor, valor, juros, parcelas) e o trecho que identifica as parcelas de cada um em contas_a_pagar.', inputSchema: { type: 'object', properties: {} } },
 ].map(t => ({ ...t, annotations: { readOnlyHint: true } }))
+const DO_ESTOQUE = new Set(['estoque', 'estoque_movimentacoes', 'ordens_de_compra', 'envios_ao_full', 'emprestimos'])
 
 const INSTRUCOES = 'Dados do Caixa 360, sistema de gestão financeira de um vendedor do Mercado Livre. Tudo é somente leitura. Valores em reais (BRL), datas em AAAA-MM-DD no fuso de Brasília. ' +
   'Margem de contribuição = valor dos produtos − custo − imposto − tarifa de venda − frete pago pelo vendedor. Custo e imposto ficam gravados em cada venda (valor da época). ' +
@@ -94,7 +102,7 @@ Deno.serve(async (req) => {
   if (method === 'tools/call') {
     const nome = String(params?.name || '')
     if (!FERRAMENTAS.some(t => t.name === nome)) return erro(-32602, `Ferramenta desconhecida: ${nome}`)
-    const r = await fetch(`${supaUrl}/rest/v1/rpc/ia_consulta`, {
+    const r = await fetch(`${supaUrl}/rest/v1/rpc/${DO_ESTOQUE.has(nome) ? 'ia_consulta_estoque' : 'ia_consulta'}`, {
       method: 'POST', headers: dbH,
       body: JSON.stringify({ p_usuario: dono.usuario_id, p_ferramenta: nome, p: params?.arguments || {} })
     })
