@@ -86,11 +86,14 @@
       composicaoKit.forEach(c => { const k = cpNorm(c.sku_comercial); if(!kits.has(k)) kits.set(k, []); kits.get(k).push({ sku: c.sku_componente, qtd: cpNum(c.qty) || 1 }); });
 
       // universo de SKUs únicos + estoque
+      // com as ordens de compra do Olist carregadas, o "a caminho" vem delas (comprado menos conferido); senão, da Lista de Estoque
+      const ocUsa = typeof ocTemDados === 'function' && ocTemDados();
       const itens = new Map();
       const item = (sku) => { const k = cpNorm(sku); if(!k) return null; if(!itens.has(k)) itens.set(k, { sku: String(sku).trim(), nome: '', galpao: 0, transito: 0, full: 0, custo: 0, forn: '' }); return itens.get(k); };
       componentes.forEach(c => { const it = item(c.codigo); if(!it) return; it.nome = it.nome || c.descricao || ''; it.custo = cpNum(c.custo_unitario) || it.custo; it.forn = c.fornecedor || it.forn; });
-      estoqueGalpao.forEach(e => { if(kits.has(cpNorm(e.sku))) return; const it = item(e.sku); if(!it) return; it.nome = it.nome || e.descricao || ''; it.galpao += cpNum(e.qtd_galpao); it.transito += cpNum(e.em_transito); if(cpNum(e.custo_medio) > 0) it.custo = cpNum(e.custo_medio); });   // custo médio do galpão vale mais que o do cadastro
+      estoqueGalpao.forEach(e => { if(kits.has(cpNorm(e.sku))) return; const it = item(e.sku); if(!it) return; it.nome = it.nome || e.descricao || ''; it.galpao += cpNum(e.qtd_galpao); if(!ocUsa) it.transito += cpNum(e.em_transito); if(cpNum(e.custo_medio) > 0) it.custo = cpNum(e.custo_medio); });   // custo médio do galpão vale mais que o do cadastro
       skus.forEach(s => { if(kits.has(cpNorm(s.sku))) return; const it = item(s.sku); if(!it) return; it.nome = it.nome || s.titulo || ''; if(!it.custo) it.custo = cpNum(s.custo); });
+      if(ocUsa) ocTransitoPorSku().forEach((q, k) => { const it = itens.get(k) || item(k.toUpperCase()); if(it) it.transito += q; });
       // Full: estoque por SKU do anúncio; kits abrem nos componentes
       const addFull = (sku, q) => { const k = cpNorm(sku); if(!q) return; if(kits.has(k)) kits.get(k).forEach(c => { const it = item(c.sku); if(it) it.full += q * c.qtd; }); else { const it = item(sku); if(it) it.full += q; } };
       const temFullAPI = Array.isArray(estoqueFullML) && estoqueFullML.length > 0;
@@ -185,6 +188,7 @@
       const buscaFull = (!Array.isArray(estoqueFullML) || estoqueFullML._fonte !== 'xls') && idadeFull > 30 * 60 * 1000 ? comprasFullAPI() : null;
       await comprasCarregarVendas(false);
       if(buscaFull) await buscaFull;
+      if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
       comprasDesenhar();
     }
 
@@ -235,7 +239,7 @@
         { nome: 'Kits', st: kitsN ? 'ok' : 'falta', txt: kitsN ? kitsN + ' kits: a venda do kit desconta cada componente' : 'Nenhum kit cadastrado: cada kit aparece como um produto à parte e os componentes ficam com venda de menos', acao: "nav('skus');setSkuTab('composicoes')", botao: 'Cadastrar kits' },
         { nome: 'Custos', st: semCusto ? 'parcial' : 'ok', txt: semCusto ? semCusto + ' produtos com venda e sem custo: o valor da compra deles fica zerado' : 'Todos os produtos com venda têm custo', acao: semCusto ? "nav('skus');skuFiltrarCusto('sem')" : '', botao: 'Preencher' },
         { nome: 'Fornecedores', st: comForn ? 'ok' : 'falta', txt: comForn ? comForn + ' produtos com fornecedor (o da última compra)' : 'Nenhum produto tem fornecedor: importe o Relatório de Compras da UpSeller para trazer o fornecedor da última compra', acao: 'comprasImportarPO()', botao: 'Importar relatório de compras', sempre: true },
-        { nome: 'Compras a caminho', st: 'ok', txt: cpInt(C.linhas.reduce((s, l) => s + l.it.transito, 0)) + ' unidades compradas e ainda não recebidas (vem da Lista de Estoque da UpSeller, coluna Em Trânsito)' },
+        { nome: 'Compras a caminho', st: 'ok', txt: cpInt(C.linhas.reduce((s, l) => s + l.it.transito, 0)) + ' unidades compradas e ainda não recebidas ' + (typeof ocTemDados === 'function' && ocTemDados() ? '(ordens de compra do Olist menos o que já foi conferido aqui)' : '(vem da Lista de Estoque da UpSeller, coluna Em Trânsito)'), acao: "nav('ordens-compra')", botao: 'Ver ordens', sempre: true },
       ];
     }
 

@@ -56,3 +56,6 @@ grant select, insert, update, delete on public.compras_recebimentos to service_r
 
 -- o Client ID nao e segredo: o navegador precisa dele para montar o endereco de autorizacao
 grant select (client_id) on public.olist_config to authenticated;
+
+-- se a chegada somou no estoque do galpao (false = chegada antiga, ja contada na lista importada)
+alter table public.compras_recebimentos add column if not exists somou boolean not null default true;

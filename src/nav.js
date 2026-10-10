@@ -41,7 +41,7 @@
       else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); if(typeof olistRenderCard === 'function') olistRenderCard(); if(typeof iaRenderCard === 'function') iaRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }
       else if(page === 'resultado'){ setResultadoTab('anual'); }
       else if(page === 'patrimonio'){ renderPatrimonio(); }
-      else if(page === 'ordens-compra') renderOrdensCompra();
+      else if(page === 'ordens-compra'){ if(typeof ocRender === 'function') ocRender(); else renderOrdensCompra(); }
       else if(page === 'vendas') renderVendas();
       else if(page === 'resumo-fin') renderResumoFin();
       else if(page === 'perguntas') renderPerguntas();
