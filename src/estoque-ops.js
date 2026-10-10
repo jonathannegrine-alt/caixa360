@@ -155,7 +155,9 @@
       const unidades = emOrdem.filter(i => ehNum(i.s) && (cab ? Math.abs(i.x - cab.x) < 45 && i.y < cab.y : true)).map(i => ({ y: i.y, n: Number(i.s.replace(/[.,]/g, '')) }));
       // cada produto começa em "Código ML:"; o SKU vem depois de "SKU:" (pode quebrar de linha)
       const blocos = [], re = /Código ML:\s*([A-Z0-9]+)([\s\S]*?)(?=Código ML:|$)/g; let m;
-      while((m = re.exec(texto))) { const sku = ((m[2].match(/SKU:\s*(\S+)/) || [])[1] || '').trim(); blocos.push({ codigo_ml: m[1], anuncio_sku: sku }); }
+      // só o texto da coluna PRODUTO: o SKU pode quebrar de linha e, lido na horizontal, viria misturado com as outras colunas
+      const textoProd = (cab ? emOrdem.filter(i => i.x < cab.x - 10) : emOrdem).map(i => i.s).join(' ');
+      while((m = re.exec(textoProd))) { const sku = ((m[2].match(/SKU:\s*(\S+)/) || [])[1] || '').trim(); blocos.push({ codigo_ml: m[1], anuncio_sku: sku }); }
       // posição vertical de cada bloco, para casar com a unidade da mesma linha da tabela
       const ys = emOrdem.filter(i => /Código ML:/.test(i.s)).map(i => i.y);
       blocos.forEach((b, n) => { const y = ys[n]; const u = y == null ? unidades[n] : unidades.slice().sort((a, c) => Math.abs(a.y - y) - Math.abs(c.y - y))[0]; b.qtd = u ? u.n : 0; });
