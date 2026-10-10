@@ -46,21 +46,32 @@ async function emParalelo<T>(lista: T[], conc: number, fn: (x: T) => Promise<voi
 
 type Ctx = { supaUrl: string; dbH: Record<string, string>; clientId: string; secret: string }
 
-// Token ML do usuário (renova se expirado)
-async function tokenDe(ctx: Ctx, userId: string) {
-  const tokens = await fetch(`${ctx.supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&limit=1`, { headers: ctx.dbH }).then(r => r.json())
-  const row = Array.isArray(tokens) ? tokens[0] : null
-  if (!row) return { erro: 'ML não conectado. Conecte sua conta primeiro.' }
-  let accessToken = row.access_token
-  if (new Date(row.expires_at) <= new Date()) {
+// Contas ML do usuário, já com token válido (renova as expiradas). contaFiltro restringe a uma conta.
+type Conta = { mlUserId: string; apelido: string | null; accessToken: string | null; erro: string | null }
+async function contasDe(ctx: Ctx, userId: string, contaFiltro?: string): Promise<Conta[]> {
+  const rows = await fetch(`${ctx.supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}${contaFiltro ? '&ml_user_id=eq.' + contaFiltro : ''}&order=updated_at.asc`, { headers: ctx.dbH })
+    .then(r => r.json()).catch(() => [])
+  if (!Array.isArray(rows)) return []
+  return Promise.all(rows.map(async (row: any): Promise<Conta> => {
+    const base = { mlUserId: String(row.ml_user_id), apelido: row.apelido || null }
+    if (new Date(row.expires_at) > new Date()) {
+      // contas conectadas antes do seletor de contas ainda não têm apelido gravado
+      if (!base.apelido) {
+        const me = await fetch('https://api.mercadolibre.com/users/me', { headers: { Authorization: `Bearer ${row.access_token}` } }).then(r => r.json()).catch(() => null)
+        if (me?.nickname) {
+          base.apelido = me.nickname
+          await fetch(`${ctx.supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&ml_user_id=eq.${base.mlUserId}`, { method: 'PATCH', headers: { ...ctx.dbH, Prefer: 'return=minimal' }, body: JSON.stringify({ apelido: me.nickname }) })
+        }
+      }
+      return { ...base, accessToken: row.access_token, erro: null }
+    }
     const novo = await fetch('https://api.mercadolibre.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'refresh_token', client_id: ctx.clientId, client_secret: ctx.secret, refresh_token: row.refresh_token })
     }).then(r => r.json()).catch(() => ({}))
-    if (novo.error || !novo.access_token) return { erro: 'Token ML expirado. Reconecte sua conta.' }
-    accessToken = novo.access_token
-    await fetch(`${ctx.supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}`, {
+    if (novo.error || !novo.access_token) return { ...base, accessToken: null, erro: 'Token ML expirado. Reconecte a conta.' }
+    await fetch(`${ctx.supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&ml_user_id=eq.${base.mlUserId}`, {
       method: 'PATCH', headers: { ...ctx.dbH, Prefer: 'return=minimal' },
       body: JSON.stringify({
         access_token: novo.access_token, refresh_token: novo.refresh_token,
@@ -68,8 +79,13 @@ async function tokenDe(ctx: Ctx, userId: string) {
         updated_at: new Date().toISOString()
       })
     })
-  }
-  return { erro: null, accessToken, mlUserId: row.ml_user_id as string }
+    return { ...base, accessToken: novo.access_token, erro: null }
+  }))
+}
+
+// Grava nas vendas ainda sem custo/imposto o valor atual do cadastro de produtos (o passado não muda depois)
+async function carimbarCustos(ctx: Ctx, userId: string) {
+  await fetch(`${ctx.supaUrl}/rest/v1/rpc/vendas_ml_carimbar`, { method: 'POST', headers: ctx.dbH, body: JSON.stringify({ p_usuario: userId }) }).catch(() => null)
 }
 
 // Sincroniza UM dia. Devolve { ok, vendas, pendentes, semPermissao, erro }
@@ -93,7 +109,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   const jaTem = new Map<number, any>()
   const thumbs = new Map<string, string>()
   const existentes = await fetch(
-    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,item_id,thumbnail&limit=10000`,
+    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,item_id,thumbnail,sku,sku_fixo&limit=10000`,
     { headers: ctx.dbH }
   ).then(r => r.json()).catch(() => [])
   if (Array.isArray(existentes)) for (const e of existentes) {
@@ -147,6 +163,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
     if (freteVend == null) pendentes++
     return {
       usuario_id: userId,
+      ml_user_id: String(mlUserId),
       order_id: o.id,
       pack_id: o.pack_id || null,
       data_venda: o.date_created,
@@ -156,7 +173,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       comprador_nome: [o.buyer?.first_name, o.buyer?.last_name].filter(Boolean).join(' ') || null,
       item_id: it.id || null,
       titulo: it.title || null,
-      sku: it.seller_sku || it.seller_custom_field || null,
+      sku: ant?.sku_fixo ? ant.sku : (it.seller_sku || it.seller_custom_field || null),   // SKU nivelado à mão não é trocado
       variacao: (it.variation_attributes || []).map((v: any) => `${v.name}: ${v.value_name}`).join(', ') || null,
       qtd,
       preco_unit: Number(oi.unit_price) || 0,
@@ -178,18 +195,18 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
     })
     if (!up.ok) return { ok: false, vendas: 0, pendentes: 0, semPermissao: false, erro: 'gravação: ' + (await up.text()).slice(0, 200) }
   }
-  await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?on_conflict=usuario_id,dia`, {
+  await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?on_conflict=usuario_id,ml_user_id,dia`, {
     method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ usuario_id: userId, dia, vendas: rows.length, completo: pendentes === 0, sincronizado_em: new Date().toISOString() })
+    body: JSON.stringify({ usuario_id: userId, ml_user_id: String(mlUserId), dia, vendas: rows.length, completo: pendentes === 0, sincronizado_em: new Date().toISOString() })
   })
   return { ok: true, vendas: rows.length, pendentes, semPermissao: false, erro: null as string | null }
 }
 
 // Dias do período que precisam ir ao ML (mais recentes primeiro)
-async function diasPendentes(ctx: Ctx, userId: string, de: string, ate: string, forcar: boolean) {
+async function diasPendentes(ctx: Ctx, userId: string, conta: string, de: string, ate: string, forcar: boolean) {
   const hoje = diaBRT(), ontem = diaBRT(-1)
   const cache = new Map<string, { completo: boolean; em: number }>()
-  const rows = await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?usuario_id=eq.${userId}&dia=gte.${de}&dia=lte.${ate}&select=dia,completo,sincronizado_em&limit=2000`, { headers: ctx.dbH })
+  const rows = await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&dia=gte.${de}&dia=lte.${ate}&select=dia,completo,sincronizado_em&limit=2000`, { headers: ctx.dbH })
     .then(r => r.json()).catch(() => [])
   if (Array.isArray(rows)) for (const r of rows) cache.set(String(r.dia).substring(0, 10), { completo: !!r.completo, em: new Date(r.sincronizado_em).getTime() })
   const lista: string[] = []
@@ -201,13 +218,12 @@ async function diasPendentes(ctx: Ctx, userId: string, de: string, ate: string, 
   return lista
 }
 
-async function sincronizarLista(ctx: Ctx, userId: string, dias: string[], prazoMs: number) {
-  const tk = await tokenDe(ctx, userId)
-  if (tk.erro) return { error: tk.erro }
+async function sincronizarLista(ctx: Ctx, userId: string, conta: Conta, dias: string[], prazoMs: number): Promise<any> {
+  if (!conta.accessToken) return { error: conta.erro || 'Conta sem token' }
   let feitos = 0, vendas = 0, pendentes = 0
   for (const dia of dias) {
     if (Date.now() > prazoMs - 20000) break   // reserva tempo para terminar com folga
-    const r = await sincronizarDia(ctx, userId, tk.mlUserId!, tk.accessToken!, dia, prazoMs)
+    const r = await sincronizarDia(ctx, userId, conta.mlUserId, conta.accessToken, dia, prazoMs)
     if (r.semPermissao) {
       return { error: 'O aplicativo ainda não tem a permissão "Venda e envios de um produto" no Mercado Livre, ou a conta precisa ser reconectada.', detail: r.erro, sem_permissao: true }
     }
@@ -236,21 +252,24 @@ Deno.serve(async (req) => {
     if (body?.cron === true) {
       const cronSecret = Deno.env.get('CRON_SECRET')
       if (cronSecret && body?.secret !== cronSecret) return resp({ error: 'Unauthorized' })
-      const tokens = await fetch(`${supaUrl}/rest/v1/ml_tokens?select=usuario_id`, { headers: ctx.dbH }).then(r => r.json())
-      const userIds: string[] = Array.isArray(tokens) ? tokens.map((t: any) => t.usuario_id) : []
-      const resultados = await Promise.all(userIds.map(async (userId) => {
+      const tokens = await fetch(`${supaUrl}/rest/v1/ml_tokens?select=usuario_id,ml_user_id`, { headers: ctx.dbH }).then(r => r.json())
+      const pares: { u: string; c: string }[] = Array.isArray(tokens) ? tokens.map((t: any) => ({ u: t.usuario_id, c: String(t.ml_user_id) })) : []
+      const resultados = await Promise.all(pares.map(async ({ u, c }) => {
         try {
+          const conta = (await contasDe(ctx, u, c))[0]
+          if (!conta) return { usuario_id: u, ml_user_id: c, error: 'conta não encontrada' }
           // hoje/ontem (se o cache venceu) + o próximo trecho do histórico ainda não importado
-          const recentes = await diasPendentes(ctx, userId, diaBRT(-1), diaBRT(), false)
-          const antigos = await diasPendentes(ctx, userId, diaBRT(-HISTORICO_DIAS), diaBRT(-2), false)
-          const r = await sincronizarLista(ctx, userId, [...recentes, ...antigos], prazoMs)
-          return { usuario_id: userId, ...r }
+          const recentes = await diasPendentes(ctx, u, c, diaBRT(-1), diaBRT(), false)
+          const antigos = await diasPendentes(ctx, u, c, diaBRT(-HISTORICO_DIAS), diaBRT(-2), false)
+          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos], prazoMs)
+          return { usuario_id: u, ml_user_id: c, ...r }
         } catch (e) {
-          return { usuario_id: userId, error: String(e) }
+          return { usuario_id: u, ml_user_id: c, error: String(e) }
         }
       }))
+      await Promise.all([...new Set(pares.map(x => x.u))].map(u => carimbarCustos(ctx, u)))
       console.log('ml-vendas cron', JSON.stringify(resultados))
-      return resp({ success: true, usuarios: userIds.length, resultados })
+      return resp({ success: true, contas: pares.length, resultados })
     }
 
     // ── MODO USUÁRIO ────────────────────────────────────────────────────────
@@ -260,15 +279,20 @@ Deno.serve(async (req) => {
     if (!jwtRes.ok) return resp({ error: 'Não autenticado' })
     const { id: userId } = await jwtRes.json()
 
-    // Escopos do token: vendas (pedidos) e comunicação (perguntas/mensagens)
+    const contas = await contasDe(ctx, userId, body?.conta ? String(body.conta) : undefined)
+    if (contas.length === 0) return resp({ conectado: false, error: 'ML não conectado. Conecte sua conta primeiro.' })
+
+    // Escopos do token de cada conta: vendas (pedidos) e comunicação (perguntas/mensagens)
     if (body?.checar === true) {
-      const tk = await tokenDe(ctx, userId)
-      if (tk.erro) return resp({ conectado: false, error: tk.erro })
-      const [v, q] = await Promise.all([
-        mlGet(`https://api.mercadolibre.com/orders/search?seller=${tk.mlUserId}&limit=1`, tk.accessToken!, prazoMs),
-        mlGet(`https://api.mercadolibre.com/questions/search?seller_id=${tk.mlUserId}&limit=1&api_version=4`, tk.accessToken!, prazoMs),
-      ])
-      return resp({ conectado: true, tem_vendas: v.ok, tem_comunicacao: q.ok, detalhe: { vendas: v.erro, comunicacao: q.erro } })
+      const det = await Promise.all(contas.map(async (c) => {
+        if (!c.accessToken) return { ml_user_id: c.mlUserId, apelido: c.apelido, tem_vendas: false, tem_comunicacao: false, erro: c.erro }
+        const [v, q] = await Promise.all([
+          mlGet(`https://api.mercadolibre.com/orders/search?seller=${c.mlUserId}&limit=1`, c.accessToken, prazoMs),
+          mlGet(`https://api.mercadolibre.com/questions/search?seller_id=${c.mlUserId}&limit=1&api_version=4`, c.accessToken, prazoMs),
+        ])
+        return { ml_user_id: c.mlUserId, apelido: c.apelido, tem_vendas: v.ok, tem_comunicacao: q.ok, erro: v.erro || q.erro }
+      }))
+      return resp({ conectado: true, tem_vendas: det.every(d => d.tem_vendas), tem_comunicacao: det.every(d => d.tem_comunicacao), contas: det })
     }
 
     const reData = /^\d{4}-\d{2}-\d{2}$/
@@ -276,9 +300,20 @@ Deno.serve(async (req) => {
     let ate = reData.test(body?.ate || '') ? body.ate : de
     if (ate < de) ate = de
     const deMin = diaBRT(-HISTORICO_DIAS)
-    const dias = await diasPendentes(ctx, userId, de < deMin ? deMin : de, ate, body?.forcar === true)
-    if (dias.length === 0) return resp({ success: true, feitos: 0, vendas: 0, pendentes: 0, restantes: 0, em_cache: true })
-    return resp({ de, ate, ...(await sincronizarLista(ctx, userId, dias, prazoMs)) })
+    const res: any[] = await Promise.all(contas.map(async (c) => {
+      const dias = await diasPendentes(ctx, userId, c.mlUserId, de < deMin ? deMin : de, ate, body?.forcar === true)
+      if (dias.length === 0) return { success: true, feitos: 0, vendas: 0, pendentes: 0, restantes: 0, em_cache: true }
+      return sincronizarLista(ctx, userId, c, dias, prazoMs)
+    }))
+    await carimbarCustos(ctx, userId)
+    const ok = res.filter(r => r.success)
+    if (ok.length === 0) return resp({ de, ate, ...res[0] })
+    const soma = (k: string) => ok.reduce((t, r) => t + (Number(r[k]) || 0), 0)
+    const avisos = [...res.map((r, i) => r.error ? `${contas[i].apelido || contas[i].mlUserId}: ${r.error}` : null), ...ok.map(r => r.aviso)].filter(Boolean)
+    return resp({
+      success: true, de, ate, feitos: soma('feitos'), vendas: soma('vendas'), pendentes: soma('pendentes'), restantes: soma('restantes'),
+      em_cache: ok.every(r => r.em_cache), sem_permissao: res.some(r => r.sem_permissao) || undefined, aviso: avisos.join(' · ') || null
+    })
 
   } catch (e) {
     return resp({ error: 'Exceção interna', detail: String(e) })

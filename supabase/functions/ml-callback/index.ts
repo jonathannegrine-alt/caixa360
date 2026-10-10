@@ -43,37 +43,33 @@ Deno.serve(async (req) => {
 
     const newMlUserId = String(tokens.user_id)
 
-    // Se já tem conta conectada com ID diferente → ignorar silenciosamente
-    const existing = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${user_id}&select=ml_user_id`, { headers })
-      .then(r => r.json()).then(d => d[0])
+    // Apelido da conta no ML (para o seletor de contas do app)
+    let apelido: string | null = null
+    try {
+      const me = await fetch('https://api.mercadolibre.com/users/me', { headers: { Authorization: `Bearer ${tokens.access_token}` } }).then(r => r.json())
+      apelido = me?.nickname || null
+    } catch (_) {}
 
-    if (existing?.ml_user_id && existing.ml_user_id !== newMlUserId) {
-      return resp({ ignored: true, kept_ml_user_id: existing.ml_user_id })
-    }
-
-    // Sem conflito: salva os tokens
+    // Um usuário pode ter várias contas ML: grava/atualiza a linha desta conta (usuario_id + ml_user_id)
     const tokenData = {
       usuario_id:    user_id,
       access_token:  tokens.access_token,
       refresh_token: tokens.refresh_token,
       expires_at:    new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
       ml_user_id:    newMlUserId,
+      apelido,
       updated_at:    new Date().toISOString()
     }
+    const existentes = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${user_id}&select=ml_user_id`, { headers })
+      .then(r => r.json()).catch(() => [])
+    const jaTinha = Array.isArray(existentes) && existentes.some((e: any) => String(e.ml_user_id) === newMlUserId)
+    const grava = await fetch(`${supaUrl}/rest/v1/ml_tokens?on_conflict=usuario_id,ml_user_id`, {
+      method: 'POST', headers: { ...headers, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(tokenData)
+    })
+    if (!grava.ok) return resp({ error: 'Erro ao salvar a conta', detail: (await grava.text()).slice(0, 200) })
 
-    if (existing) {
-      await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${user_id}`, {
-        method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
-        body: JSON.stringify(tokenData)
-      })
-    } else {
-      await fetch(`${supaUrl}/rest/v1/ml_tokens`, {
-        method: 'POST', headers: { ...headers, Prefer: 'return=minimal' },
-        body: JSON.stringify(tokenData)
-      })
-    }
-
-    return resp({ success: true, ml_user_id: tokens.user_id })
+    return resp({ success: true, ml_user_id: tokens.user_id, apelido, nova_conta: !jaTinha, total_contas: (Array.isArray(existentes) ? existentes.length : 0) + (jaTinha ? 0 : 1) })
 
   } catch (e) {
     return resp({ error: 'Exceção interna', detail: String(e) })

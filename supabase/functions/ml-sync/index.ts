@@ -99,28 +99,9 @@ async function fetchJanelas(baseUrl: string, accessToken: string, janelas: { de:
   return out
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
-
-  try {
-    const supaUrl  = Deno.env.get('SUPABASE_URL')!
-    const supaKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const clientId = Deno.env.get('ML_CLIENT_ID')!
-    const secret   = Deno.env.get('ML_CLIENT_SECRET')!
-
-    // Identificar usuário pelo JWT
-    const authHeader = req.headers.get('Authorization') || ''
-    const jwtRes = await fetch(`${supaUrl}/auth/v1/user`, {
-      headers: { 'apikey': Deno.env.get('SUPABASE_ANON_KEY')!, 'Authorization': authHeader }
-    })
-    if (!jwtRes.ok) return resp({ error: 'Não autenticado' })
-    const { id: userId } = await jwtRes.json()
-
-    // Buscar token ML
-    const tokens = await dbGet(supaUrl, supaKey, 'ml_tokens', `usuario_id=eq.${userId}&limit=1`)
-    const tokenRow = Array.isArray(tokens) ? tokens[0] : null
-    if (!tokenRow) return resp({ error: 'ML não conectado. Conecte sua conta primeiro.' })
-
+// Sincroniza os recebíveis de UMA conta do Mercado Livre
+async function sincronizarConta(supaUrl: string, supaKey: string, clientId: string, secret: string, userId: string, tokenRow: any): Promise<any> {
+    const conta = String(tokenRow.ml_user_id)
     let accessToken = tokenRow.access_token
 
     // Renovar token se expirado
@@ -134,13 +115,13 @@ Deno.serve(async (req) => {
         })
       })
       const newTok = await refreshRes.json()
-      if (newTok.error || !newTok.access_token) return resp({ error: 'Token ML expirado. Reconecte sua conta.', detail: newTok.error || newTok.message })
+      if (newTok.error || !newTok.access_token) return ({ error: 'Token ML expirado. Reconecte sua conta.', detail: newTok.error || newTok.message })
       accessToken = newTok.access_token
       await dbRun(supaUrl, supaKey, 'PATCH', 'ml_tokens', {
         access_token: newTok.access_token, refresh_token: newTok.refresh_token,
         expires_at: new Date(Date.now() + (Number(newTok.expires_in) || 21600) * 1000).toISOString(),
         updated_at: new Date().toISOString()
-      }, `usuario_id=eq.${userId}`)
+      }, `usuario_id=eq.${userId}&ml_user_id=eq.${conta}`)
     }
 
     prazoMs = Date.now() + 110000
@@ -164,7 +145,7 @@ Deno.serve(async (req) => {
     const falhas = resJanelas.filter(j => !j.completo)
     // Nada veio: mantém as liberações já salvas em vez de apagar tudo
     if (falhas.length === resJanelas.length) {
-      return resp({ error: 'Mercado Livre não devolveu os recebimentos. Dados anteriores mantidos — tente de novo em alguns minutos.', detail: falhas[0].erro })
+      return ({ error: 'Mercado Livre não devolveu os recebimentos. Dados anteriores mantidos — tente de novo em alguns minutos.', detail: falhas[0].erro })
     }
     const diasFalhos = new Set(falhas.filter(j => j.de === j.ate).map(j => j.de))
     const caudaFalhou = falhas.some(j => j.de !== j.ate)
@@ -190,7 +171,7 @@ Deno.serve(async (req) => {
       byDate[date] = (byDate[date] || 0) + (item.net_received_amount || 0)
     }
     const liberacoes = Object.entries(byDate).map(([data, val]) => ({
-      usuario_id: userId, data, val: Math.round((val as number) * 100) / 100
+      usuario_id: userId, ml_user_id: conta, data, val: Math.round((val as number) * 100) / 100
     }))
 
     // Buscar releases de HOJE por hora (released=no = ainda não creditado)
@@ -225,24 +206,24 @@ Deno.serve(async (req) => {
     } catch (_) {}
 
     // Salvar liberações (delete + insert) — dias que o ML não devolveu ficam como estavam
-    let filtroDel = `usuario_id=eq.${userId}`
+    let filtroDel = `usuario_id=eq.${userId}&ml_user_id=eq.${conta}`
     if (diasFalhos.size > 0 || caudaFalhou) {
       const manter = [...diasFalhos].map(d => `data.eq.${d}`)
       if (caudaFalhou) manter.push(`data.gte.${caudaDe}`)
       filtroDel += `&not.or=(${manter.join(',')})`
     }
     const del = await dbRun(supaUrl, supaKey, 'DELETE', 'liberacoes', undefined, filtroDel)
-    if (!del.ok) return resp({ error: 'Erro ao gravar liberações', detail: del.text })
+    if (!del.ok) return ({ error: 'Erro ao gravar liberações', detail: del.text })
     if (liberacoes.length > 0) {
       const ins = await dbRun(supaUrl, supaKey, 'POST', 'liberacoes', liberacoes as any, undefined, 'return=minimal')
-      if (!ins.ok) return resp({ error: 'Erro ao gravar liberações', detail: ins.text })
+      if (!ins.ok) return ({ error: 'Erro ao gravar liberações', detail: ins.text })
     }
 
     // Atualizar updated_at do token
-    await dbRun(supaUrl, supaKey, 'PATCH', 'ml_tokens', { updated_at: new Date().toISOString() }, `usuario_id=eq.${userId}`)
+    await dbRun(supaUrl, supaKey, 'PATCH', 'ml_tokens', { updated_at: new Date().toISOString() }, `usuario_id=eq.${userId}&ml_user_id=eq.${conta}`)
 
     // liberacoesHoje só vai se a busca de hoje veio completa (senão o app mantém o valor anterior)
-    return resp({
+    return ({
       success: true, liberacoes: liberacoes.length, pagamentos: all.length,
       liberacoesHoje: hojeRes.completo ? liberacoesHoje : null,
       aviso: [
@@ -251,6 +232,66 @@ Deno.serve(async (req) => {
       ].filter(Boolean).join(' · ') || null,
       detalheFalha: falhas[0]?.erro || hojeRes.erro || null,
       saldoMP, atualizado_em: new Date().toISOString()
+    })
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+
+  try {
+    const supaUrl  = Deno.env.get('SUPABASE_URL')!
+    const supaKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const clientId = Deno.env.get('ML_CLIENT_ID')!
+    const secret   = Deno.env.get('ML_CLIENT_SECRET')!
+
+    // Identificar usuário pelo JWT
+    const authHeader = req.headers.get('Authorization') || ''
+    const jwtRes = await fetch(`${supaUrl}/auth/v1/user`, {
+      headers: { 'apikey': Deno.env.get('SUPABASE_ANON_KEY')!, 'Authorization': authHeader }
+    })
+    if (!jwtRes.ok) return resp({ error: 'Não autenticado' })
+    const { id: userId } = await jwtRes.json()
+
+    // Buscar token ML
+    const tokens = await dbGet(supaUrl, supaKey, 'ml_tokens', `usuario_id=eq.${userId}&order=updated_at.asc`)
+
+    const corpoReq = await req.json().catch(() => ({}))
+    let contas: any[] = Array.isArray(tokens) ? tokens : []
+    if (corpoReq?.conta) contas = contas.filter(t => String(t.ml_user_id) === String(corpoReq.conta))
+    if (contas.length === 0) return resp({ error: 'ML não conectado. Conecte sua conta primeiro.' })
+
+    // Cada conta é sincronizada em paralelo; a falha de uma não derruba as outras
+    const res: any[] = await Promise.all(contas.map(t =>
+      sincronizarConta(supaUrl, supaKey, clientId, secret, userId, t).catch(e => ({ error: 'Exceção interna', detail: String(e) }))
+    ))
+    const detalhe = res.map((r, i) => ({
+      ml_user_id: String(contas[i].ml_user_id), apelido: contas[i].apelido || null,
+      liberacoes: r.liberacoes ?? null, erro: r.error || null, aviso: r.aviso || null,
+      hoje: Array.isArray(r.liberacoesHoje) ? r.liberacoesHoje : null   // liberações de hoje por hora, desta conta
+    }))
+    const ok = res.filter(r => r.success)
+    if (ok.length === 0) return resp({ ...res[0], contas: detalhe })
+
+    const porHora: Record<string, number> = {}
+    let temHoje = false
+    for (const r of ok) if (Array.isArray(r.liberacoesHoje)) {
+      temHoje = true
+      for (const h of r.liberacoesHoje) porHora[h.hora] = (porHora[h.hora] || 0) + h.val
+    }
+    const saldos = ok.map(r => r.saldoMP).filter((v: unknown) => v !== null && v !== undefined)
+    const avisos = [
+      ...res.map((r, i) => r.error ? `${contas[i].apelido || contas[i].ml_user_id}: ${r.error}` : null),
+      ...ok.map(r => r.aviso)
+    ].filter(Boolean)
+    return resp({
+      success: true,
+      liberacoes: ok.reduce((t, r) => t + (r.liberacoes || 0), 0),
+      pagamentos: ok.reduce((t, r) => t + (r.pagamentos || 0), 0),
+      liberacoesHoje: temHoje ? Object.entries(porHora).sort(([a], [b]) => a.localeCompare(b)).map(([hora, val]) => ({ hora, val: Math.round(val * 100) / 100 })) : null,
+      aviso: avisos.join(' · ') || null,
+      detalheFalha: ok.map(r => r.detalheFalha).find(Boolean) || null,
+      saldoMP: saldos.length ? saldos.reduce((t: number, v: number) => t + v, 0) : null,
+      contas: detalhe, atualizado_em: new Date().toISOString()
     })
 
   } catch (e) {

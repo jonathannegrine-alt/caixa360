@@ -214,6 +214,8 @@
           return;
         }
         if(statusEl){ statusEl.className='ml-status-info'; statusEl.textContent='✅ Conectado! Buscando histórico (pode levar ~30s)...'; }
+        if(typeof carregarContasML === 'function') await carregarContasML();
+        sessionStorage.removeItem('mk_ml_perm_ok');
         await capturarSnapshotML();
         await sincronizarML();
       } catch(e){
@@ -233,11 +235,12 @@
       // Recarregar extrato histórico e contagem de snapshots
       const corte = addDias(getToday(), -90);
       const { data: ext } = await supa.from('extrato_historico')
-        .select('data,val_liquido,qtd_pedidos')
+        .select('data,val_liquido,qtd_pedidos,ml_user_id')
         .eq('usuario_id', usuarioAtual.id)
         .gte('data', corte)
         .order('data', {ascending:false});
       if(ext) extratoHistorico = ext.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
+      if(ext && typeof definirDadosML === 'function') definirDadosML(null, ext);
       const { data: snapRows } = await supa.from('snapshots_ml').select('data_captura').eq('usuario_id', usuarioAtual.id).limit(9999);
       diasPipeline = new Set((snapRows || []).map(r => r.data_captura)).size;
       return fnData;
@@ -260,6 +263,11 @@
         const { data: libs } = await supa.from('liberacoes').select('*').eq('usuario_id', usuarioAtual.id);
         if(libs) liberacoes = libs.map(l => ({ data: l.data, val: l.val }));
         localStorage.setItem('mk_liberacoes', JSON.stringify(liberacoes));
+        // liberações de hoje por conta (para o seletor de contas)
+        if(Array.isArray(data.contas) && data.contas.every(x => Array.isArray(x.hoje))){
+          localStorage.setItem('mk_liberacoes_hoje_contas', JSON.stringify(Object.fromEntries(data.contas.map(x => [x.ml_user_id, x.hoje]))));
+        }
+        if(libs && typeof definirDadosML === 'function') definirDadosML(libs, null);
 
         // Atualizar saldo MP se veio da API
         if(data.saldoMP !== null && data.saldoMP !== undefined){
@@ -271,7 +279,7 @@
         }
 
         localStorage.setItem('mk_ultimo_sync_ml', Date.now().toString());
-        if(data.liberacoesHoje) localStorage.setItem('mk_liberacoes_hoje', JSON.stringify(data.liberacoesHoje));
+        if(data.liberacoesHoje && !(typeof contaAtiva !== 'undefined' && contaAtiva)) localStorage.setItem('mk_liberacoes_hoje', JSON.stringify(data.liberacoesHoje));
         const msg = '✅ ' + data.liberacoes + ' liberações importadas'
           + (data.saldoMP ? ' · Saldo MP: R$ ' + fmt(data.saldoMP) : '')
           + (data.aviso ? ' · ⚠️ ' + data.aviso : '');
@@ -290,7 +298,7 @@
       const ultimo = parseInt(localStorage.getItem('mk_ultimo_sync_ml') || '0');
       const THROTTLE_MS = 2 * 60 * 1000; // 2 minutos (evita duplo-sync em F5 rápido)
       if(Date.now() - ultimo < THROTTLE_MS) return;
-      const { data } = await supa.from('ml_tokens').select('usuario_id').eq('usuario_id', usuarioAtual.id).maybeSingle();
+      const { data } = await supa.from('ml_tokens').select('usuario_id').eq('usuario_id', usuarioAtual.id).limit(1).maybeSingle();
       if(!data) return;
       sincronizarML(); // fire-and-forget, atualiza em background
     }
@@ -303,13 +311,14 @@
       if(!naoConectado) return;
       try {
         // maybeSingle() não dá erro para 0 rows (diferente de .single())
-        const { data } = await supa.from('ml_tokens').select('ml_user_id,updated_at').eq('usuario_id', usuarioAtual.id).maybeSingle();
+        const { data } = await supa.from('ml_tokens').select('ml_user_id,updated_at').eq('usuario_id', usuarioAtual.id).order('updated_at', {ascending:false}).limit(1).maybeSingle();
         if(data){
           naoConectado.style.display = 'none';
           conectado.style.display = 'block';
           if(infoEl){
             const dt = data.updated_at ? new Date(data.updated_at).toLocaleString('pt-BR') : '';
-            infoEl.textContent = '✅ Conectado' + (dt ? ' — última sync: ' + dt : '');
+            const nc = (typeof contasML !== 'undefined') ? contasML.length : 1;
+            infoEl.textContent = '✅ ' + (nc > 1 ? nc + ' contas conectadas (' + contasML.map(x => x.apelido || x.id).join(', ') + ')' : 'Conectado') + (dt ? ' — última sync: ' + dt : '');
           }
         } else {
           naoConectado.style.display = 'block';
@@ -329,10 +338,11 @@
       if(!statusEl) return;
       if(!usuarioAtual){ statusEl.textContent = 'Faça login para ver o status.'; return; }
       try {
-        const { data } = await supa.from('ml_tokens').select('ml_user_id,updated_at').eq('usuario_id', usuarioAtual.id).maybeSingle();
+        const { data } = await supa.from('ml_tokens').select('ml_user_id,updated_at').eq('usuario_id', usuarioAtual.id).order('updated_at', {ascending:false}).limit(1).maybeSingle();
         if(data){
           const dt = data.updated_at ? new Date(data.updated_at).toLocaleString('pt-BR') : '';
-          statusEl.innerHTML = '<span style="color:var(--success);font-weight:600;">✅ Conectado</span>' + (dt ? ' — última sync: ' + dt : '');
+          const nc = (typeof contasML !== 'undefined') ? contasML.length : 1;
+          statusEl.innerHTML = '<span style="color:var(--success);font-weight:600;">✅ ' + (nc > 1 ? nc + ' contas conectadas' : 'Conectado') + '</span>' + (nc > 1 ? ' (' + contasML.map(x => x.apelido || x.id).join(', ') + ')' : '') + (dt ? ' — última sync: ' + dt : '');
           if(btnDesc) btnDesc.style.display = 'inline-flex';
         } else {
           statusEl.innerHTML = '<span style="color:var(--danger);font-weight:600;">❌ Não conectado</span> — clique em "Conectar / Reconectar" abaixo.';
@@ -430,8 +440,14 @@
     }
 
     async function desconectarML(){
-      if(!confirm('Desconectar o Mercado Livre desta conta?')) return;
-      await supa.from('ml_tokens').delete().eq('usuario_id', usuarioAtual.id);
+      // com várias contas, desconecta só a conta selecionada no seletor
+      const varias = typeof contasML !== 'undefined' && contasML.length > 1;
+      if(varias && !contaAtiva){ alert('Você tem mais de uma conta conectada. Selecione no menu lateral a conta que deseja desconectar.'); return; }
+      if(!confirm(varias ? 'Desconectar a conta ' + contaNome(contaAtiva) + ' do Mercado Livre?' : 'Desconectar o Mercado Livre desta conta?')) return;
+      let qDel = supa.from('ml_tokens').delete().eq('usuario_id', usuarioAtual.id);
+      if(varias) qDel = qDel.eq('ml_user_id', contaAtiva);
+      await qDel;
+      if(typeof carregarContasML === 'function'){ if(varias) trocarContaML(''); await carregarContasML(); if(contasML.length){ atualizarStatusMLConfig(); return; } }
       document.getElementById('ml-nao-conectado').style.display = 'block';
       document.getElementById('ml-conectado').style.display = 'none';
       const st = document.getElementById('ml-status');

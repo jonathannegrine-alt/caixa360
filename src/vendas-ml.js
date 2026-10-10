@@ -68,14 +68,14 @@
         const maxChamadas = vmlDiasEntre(de, ate) > 3 ? 4 : 8;
         for(let i = 0; i < maxChamadas; i++){
           const { data, error } = await supa.functions.invoke('ml-vendas', {
-            headers: jwt ? { Authorization: 'Bearer ' + jwt } : {}, body: { de, ate, forcar: !!forcar && i === 0 }
+            headers: jwt ? { Authorization: 'Bearer ' + jwt } : {}, body: { de, ate, forcar: !!forcar && i === 0, conta: contaParam() || undefined }
           });
           if(error || data?.error){
             vmlSemPermissao = !!data?.sem_permissao;
             msg = vmlSemPermissao ? '⚠️ Conta do ML precisa ser reconectada' : '❌ ' + (data?.error || error?.message);
             break;
           }
-          vmlSemPermissao = false;
+          vmlSemPermissao = !!data.sem_permissao;
           if(data.aviso){ msg = '⚠️ ' + data.aviso; break; }
           if(!data.restantes){ msg = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); break; }
           msg = `Importando histórico em segundo plano — faltam ${data.restantes} dia${data.restantes > 1 ? 's' : ''}`;
@@ -143,6 +143,7 @@
     function vdConsulta(sel, opts){
       const f = vdFiltro;
       let q = supa.from('vendas_ml_calc').select(sel, opts).eq('usuario_id', usuarioAtual.id).gte('dia', f.de).lte('dia', f.ate);
+      if(contaAtiva) q = q.eq('ml_user_id', contaAtiva);
       if(f.status === 'aprovadas') q = q.eq('situacao', 'aprovada');
       if(f.status === 'canceladas') q = q.eq('situacao', 'cancelada');
       if(f.status === 'pendentes') q = q.eq('situacao', 'pendente');
@@ -159,7 +160,7 @@
       const ini = (f.pagina - 1) * f.porPagina;
       const [pag, tot] = await Promise.all([
         vdConsulta('*', { count:'exact' }).order('data_venda', {ascending:false}).range(ini, ini + f.porPagina - 1),
-        supa.rpc('vendas_ml_totais', { p_de:f.de, p_ate:f.ate })
+        supa.rpc('vendas_ml_totais', { p_de:f.de, p_ate:f.ate, p_conta:contaParam() })
       ]);
       if(seq !== vmlSeq) return;
       const linhas = pag.data || [];
@@ -286,6 +287,7 @@
                 <button class="ico-btn" title="Alterar custo e imposto deste SKU" onclick="vdEditarCusto('${v.order_id}')">⚖</button>
               </div>
               <div class="v-meta">
+                ${contasML.length > 1 && !contaAtiva ? `<span class="v-tag conta">${vmlEsc(contaNome(v.ml_user_id) || v.ml_user_id)}</span>` : ''}
                 <span class="v-tag">${vmlEsc(v.modalidade)}</span>
                 <span class="v-tag ${log === 'Full' ? 'full' : (log === 'Flex' ? 'flex' : '')}">${log === 'Full' ? '⚡ ' : ''}${vmlEsc(log)}</span>
                 ${nCart > 1 ? `<span class="v-tag cart" onclick="vdCarrinho('${v.pack_id}')">🛒 +${nCart - 1} produto${nCart > 2 ? 's' : ''}</span>` : ''}
@@ -307,7 +309,7 @@
 
           <div class="v-acoes">
             <div class="v-status ${st === 'aprovada' ? 'ok' : (st === 'cancelada' ? 'canc' : 'pend')}">${st === 'aprovada' ? 'Aprovada' : (st === 'cancelada' ? 'Cancelada' : 'Pagamento pendente')}</div>
-            <button class="btn-out btn btn-sm" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}')">💬 Mensagens</button>
+            <button class="btn-out btn btn-sm" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}','${v.ml_user_id || ''}')">💬 Mensagens</button>
             <button class="btn-out btn btn-sm" onclick="vdPagamento('${v.order_id}')">Detalhes</button>
             <a class="btn-out btn btn-sm" style="text-align:center;text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${v.order_id}/detalhe" target="_blank" rel="noopener">Abrir no ML ↗</a>
           </div>
@@ -467,11 +469,12 @@
     function rfParams(){
       const f = rfFiltro;
       return { p_de:f.de, p_ate:f.ate, p_pedido:f.pedido.trim() || null, p_titulo:f.titulo.trim() || null, p_sku:f.sku.trim() || null,
-        p_modalidade: f.modalidade === 'todas' ? null : f.modalidade, p_envio: f.frete === 'todos' ? null : f.frete, p_custo: f.custo === 'todos' ? null : f.custo };
+        p_modalidade: f.modalidade === 'todas' ? null : f.modalidade, p_envio: f.frete === 'todos' ? null : f.frete, p_custo: f.custo === 'todos' ? null : f.custo, p_conta: contaParam() };
     }
     function rfConsulta(sel, opts){
       const f = rfFiltro, limpa = s => s.trim().replace(/[%,()]/g, ' ');
       let q = supa.from('vendas_ml_calc').select(sel, opts).eq('usuario_id', usuarioAtual.id).gte('dia', f.de).lte('dia', f.ate);
+      if(contaAtiva) q = q.eq('ml_user_id', contaAtiva);
       if(f.status === 'aprovadas') q = q.eq('situacao', 'aprovada');
       if(f.status === 'canceladas') q = q.eq('situacao', 'cancelada');
       if(f.pedido.trim()) q = q.or(`order_txt.ilike.%${limpa(f.pedido)}%,pack_txt.ilike.%${limpa(f.pedido)}%`);
@@ -686,10 +689,10 @@
       if(aba) rfRankAba = aba;
       const mudouGrupo = grupo && grupo !== rfRankGrupo;
       if(grupo) rfRankGrupo = grupo;
-      const chave = rfFiltro.de + rfFiltro.ate + rfRankGrupo;
+      const chave = rfFiltro.de + rfFiltro.ate + rfRankGrupo + contaAtiva;
       if(!rfRankDados || rfRankDados.chave !== chave || mudouGrupo){
         vmlModal('Ranking de produtos', '<div class="vazio">Calculando…</div>');
-        const { data, error } = await supa.rpc('vendas_ml_ranking', { p_de:rfFiltro.de, p_ate:rfFiltro.ate, p_grupo:rfRankGrupo });
+        const { data, error } = await supa.rpc('vendas_ml_ranking', { p_de:rfFiltro.de, p_ate:rfFiltro.ate, p_grupo:rfRankGrupo, p_conta:contaParam() });
         rfRankDados = { chave, linhas: (data || []).map(x => ({ ...x, bruto:Number(x.bruto), mc:Number(x.mc), mc_pct:Number(x.mc_pct), un:Number(x.un), vendas:Number(x.vendas) })), erro: error?.message };
       }
       const ord = { mcp:'mc_pct', mc:'mc', fat:'bruto', un:'un', cons:'mc' }[rfRankAba];

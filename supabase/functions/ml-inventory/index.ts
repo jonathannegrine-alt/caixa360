@@ -12,9 +12,9 @@ async function safeJson(res: Response) {
   try { return JSON.parse(text) } catch { return { error: true, status: res.status } }
 }
 
-async function getTokenML(supaUrl: string, supaKey: string, userId: string, clientId: string, secret: string) {
+async function getTokenML(supaUrl: string, supaKey: string, userId: string, clientId: string, secret: string, conta?: string) {
   const rows = await safeJson(await fetch(
-    `${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&select=access_token,refresh_token,expires_at,ml_user_id`,
+    `${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}${conta ? '&ml_user_id=eq.' + conta : ''}&select=access_token,refresh_token,expires_at,ml_user_id&order=updated_at.asc`,
     { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, Accept: 'application/json' } }
   ))
   const token = Array.isArray(rows) ? rows[0] : null
@@ -28,7 +28,7 @@ async function getTokenML(supaUrl: string, supaKey: string, userId: string, clie
     }))
     if (ref.error) return null
     token.access_token = ref.access_token
-    await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}`, {
+    await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&ml_user_id=eq.${token.ml_user_id}`, {
       method: 'PATCH',
       headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ access_token: ref.access_token, refresh_token: ref.refresh_token, expires_at: new Date(Date.now() + ref.expires_in * 1000).toISOString(), updated_at: new Date().toISOString() })

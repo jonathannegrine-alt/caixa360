@@ -18,8 +18,8 @@
       try {
         const hoje = getToday();
         const [serie, rank] = await Promise.all([
-          supa.rpc('vendas_ml_por_dia', { p_de: addDias(hoje, -59), p_ate: hoje }),
-          supa.rpc('vendas_ml_ranking', { p_de: addDias(hoje, -29), p_ate: hoje, p_grupo: 'sku' })
+          supa.rpc('vendas_ml_por_dia', { p_de: addDias(hoje, -59), p_ate: hoje, p_conta: contaParam() }),
+          supa.rpc('vendas_ml_ranking', { p_de: addDias(hoje, -29), p_ate: hoje, p_grupo: 'sku', p_conta: contaParam() })
         ]);
         const porDia = {};
         (serie.data || []).forEach(r => { porDia[String(r.dia).substring(0,10)] = { val: Number(r.bruto) || 0, qtd: Number(r.vendas) || 0 }; });

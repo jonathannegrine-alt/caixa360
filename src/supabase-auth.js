@@ -327,7 +327,7 @@
         supa.from('skus').select('*').eq('usuario_id', uid),
         supa.from('categorias').select('*').eq('usuario_id', uid),
         supa.from('configuracoes').select('*').eq('usuario_id', uid).single(),
-        supa.from('extrato_historico').select('data,val_liquido,qtd_pedidos').eq('usuario_id', uid).gte('data', dataCorte90).order('data', {ascending:false}),
+        supa.from('extrato_historico').select('data,val_liquido,qtd_pedidos,ml_user_id').eq('usuario_id', uid).gte('data', dataCorte90).order('data', {ascending:false}),
         supa.from('snapshots_ml').select('data_captura').eq('usuario_id', uid).limit(9999)
       ]);
 
@@ -359,6 +359,8 @@
       }
 
       if(rExt.data) extratoHistorico = rExt.data.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
+      // recorta recebíveis e extrato pela conta ML ativa (grupos de contas)
+      if(typeof definirDadosML === 'function'){ definirDadosML(rLib.data, rExt.data); carregarContasML(); }
 
       diasPipeline = new Set((rSnap.data || []).map(r => r.data_captura)).size;
       atualizarRegressao();
@@ -435,9 +437,10 @@
     async function salvarLiberacoesSupabase(){
       if(!usuarioAtual) return;
       const uid = usuarioAtual.id;
-      await supa.from('liberacoes').delete().eq('usuario_id', uid);
-      if(liberacoes.length > 0){
-        const rows = liberacoes.map(l => ({usuario_id: uid, data: l.data, val: l.val}));
+      await supa.from('liberacoes').delete().eq('usuario_id', uid).eq('ml_user_id', '');
+      const manuais = liberacoes.filter(l => !l.conta);
+      if(manuais.length > 0){
+        const rows = manuais.map(l => ({usuario_id: uid, ml_user_id: '', data: l.data, val: l.val}));
         await supa.from('liberacoes').insert(rows);
       }
     }

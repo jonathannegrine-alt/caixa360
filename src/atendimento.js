@@ -21,6 +21,7 @@
     async function atdChamar(body){
       const { data: sessao } = await supa.auth.getSession();
       const jwt = sessao?.session?.access_token;
+      if(body.conta == null && typeof contaAtiva !== 'undefined' && contaAtiva) body = { ...body, conta: contaAtiva };
       const { data, error } = await supa.functions.invoke('ml-atendimento', { headers: jwt ? { Authorization: 'Bearer ' + jwt } : {}, body });
       if(error) return { error: error.message };
       return data || { error: 'Sem resposta' };
@@ -130,7 +131,7 @@
           </div>
         </div>
         <div class="atd-corpo">
-          <div class="atd-balao"><div class="atd-quem">${atdEsc(q.comprador || 'Comprador')} · ${atdQuando(q.data)}</div>${atdEsc(q.texto)}</div>
+          <div class="atd-balao"><div class="atd-quem">${atdEsc(q.comprador || 'Comprador')} · ${atdQuando(q.data)}${q.conta_apelido && typeof contasML !== 'undefined' && contasML.length > 1 ? ' · conta ' + atdEsc(q.conta_apelido) : ''}</div>${atdEsc(q.texto)}</div>
           ${q.resposta ? `<div class="atd-balao minha"><div class="atd-quem">Sua resposta · ${atdQuando(q.resposta.data)}${atdDuracao(q.data, q.resposta.data) ? ' · respondida em ' + atdDuracao(q.data, q.resposta.data) : ''}</div>${atdEsc(q.resposta.texto)}</div>` : `
             <textarea id="${idTxt}" rows="2" maxlength="2000" placeholder="Escreva a resposta…" oninput="atdContar(this, 2000)"></textarea>
             <div class="atd-acoes">
@@ -149,6 +150,7 @@
       if(c){ c.textContent = t.value.length + '/' + max; c.style.color = t.value.length > max ? 'var(--danger)' : ''; }
     }
     function atdPergStatus(s){ atdPerg.status = s; atdPergCarregar(0); }
+    function atdContaDaPergunta(id){ const q = atdPerg.lista.find(x => String(x.id) === String(id)); return q && q.conta ? q.conta : undefined; }
 
     // tempo entre a pergunta e a resposta
     function atdMinutos(a, b){ const m = (new Date(b).getTime() - new Date(a).getTime()) / 60000; return isFinite(m) && m >= 0 ? m : null; }
@@ -183,7 +185,7 @@
       const t = document.getElementById('atd-resp-' + id), texto = (t?.value || '').trim();
       if(!texto){ t?.focus(); return; }
       btn.disabled = true; btn.textContent = 'Enviando…';
-      const r = await atdChamar({ acao:'responder', question_id: id, text: atdMontarResposta(texto) });
+      const r = await atdChamar({ acao:'responder', conta: atdContaDaPergunta(id), question_id: id, text: atdMontarResposta(texto) });
       if(r.error){ btn.disabled = false; btn.textContent = 'Responder'; alert(r.error + (r.detail ? '\n' + r.detail : '')); return; }
       const card = document.getElementById('atd-perg-' + id); if(card) card.remove();
       atdPerg.lista = atdPerg.lista.filter(q => String(q.id) !== String(id));
@@ -194,7 +196,7 @@
 
     async function atdExcluirPergunta(id){
       if(!confirm('Excluir esta pergunta? O comprador não será avisado e ela some do anúncio.')) return;
-      const r = await atdChamar({ acao:'excluir_pergunta', question_id: id });
+      const r = await atdChamar({ acao:'excluir_pergunta', conta: atdContaDaPergunta(id), question_id: id });
       if(r.error){ alert(r.error + (r.detail ? '\n' + r.detail : '')); return; }
       atdPergCarregar(atdPerg.offset);
     }
@@ -244,7 +246,7 @@
           ${m.carregando ? '<div class="vazio"><b>Buscando conversas…</b></div>'
             : (m.conversas.length ? m.conversas.map(c => {
                 const v = c.venda || {};
-                return `<div class="ini-venc" style="padding:12px 20px;" onclick="abrirMensagensVenda('${c.pack_id}','${v.order_id || c.pack_id}')">
+                return `<div class="ini-venc" style="padding:12px 20px;" onclick="abrirMensagensVenda('${c.pack_id}','${v.order_id || c.pack_id}','${c.conta || ''}')">
                   ${v.thumbnail ? `<img class="v-thumb" style="width:46px;height:46px;" src="${atdEsc(v.thumbnail)}" alt="">` : '<div class="dt"><b>💬</b></div>'}
                   <div class="ds"><b>${atdEsc(v.comprador_nome || v.comprador_apelido || 'Venda #' + c.pack_id)}</b><small>${atdEsc(v.titulo || 'Venda #' + c.pack_id)}</small></div>
                   <span class="badge badge-danger">${c.nao_lidas} nova${c.nao_lidas > 1 ? 's' : ''}</span>
@@ -254,10 +256,10 @@
     }
 
     // Conversa de uma venda (aberta pela página Vendas ou pela lista de não lidas)
-    async function abrirMensagensVenda(packId, orderId){
-      atdConversa = { pack: packId, order: orderId, buyer: null, mensagens: [], carregando: true };
+    async function abrirMensagensVenda(packId, orderId, conta){
+      atdConversa = { pack: packId, order: orderId, conta: conta || undefined, buyer: null, mensagens: [], carregando: true };
       atdConversaDesenhar();
-      const r = await atdChamar({ acao:'mensagens', pack_id: packId });
+      const r = await atdChamar({ acao:'mensagens', conta: conta || undefined, pack_id: packId });
       if(!atdConversa || atdConversa.pack !== packId) return;
       atdConversa.carregando = false;
       atdConversa.erro = r.error || null; atdConversa.semPermissao = !!r.sem_permissao;
@@ -293,9 +295,9 @@
       if(!c || !texto){ t?.focus(); return; }
       if(!c.buyer){ alert('Não foi possível identificar o comprador desta venda. Abra a conversa pelo Mercado Livre.'); return; }
       const b = document.getElementById('atd-msg-enviar'); b.disabled = true; b.textContent = 'Enviando…';
-      const r = await atdChamar({ acao:'enviar_mensagem', pack_id: c.pack, buyer_id: c.buyer, text: texto });
+      const r = await atdChamar({ acao:'enviar_mensagem', conta: c.conta, pack_id: c.pack, buyer_id: c.buyer, text: texto });
       if(r.error){ b.disabled = false; b.textContent = 'Enviar'; alert(r.error + (r.detail ? '\n' + r.detail : '')); return; }
-      abrirMensagensVenda(c.pack, c.order);
+      abrirMensagensVenda(c.pack, c.order, c.conta);
     }
 
     // Contador no menu lateral
@@ -316,7 +318,7 @@
       try {
         // já conferido e OK nesta sessão do navegador
         if(sessionStorage.getItem('mk_ml_perm_ok') === usuarioAtual.id) return;
-        const { data: tk } = await supa.from('ml_tokens').select('usuario_id').eq('usuario_id', usuarioAtual.id).maybeSingle();
+        const { data: tk } = await supa.from('ml_tokens').select('usuario_id').eq('usuario_id', usuarioAtual.id).limit(1).maybeSingle();
         if(!tk) return;   // ML não conectado: o fluxo normal de conexão já cuida disso
         const { data: sessao } = await supa.auth.getSession();
         const jwt = sessao?.session?.access_token;

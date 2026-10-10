@@ -12,8 +12,8 @@ function dataBRT(offsetDias = 0): string {
     .toISOString().substring(0, 10)
 }
 
-async function getTokenML(supaUrl: string, supaKey: string, clientId: string, secret: string, userId: string) {
-  const rows = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&select=access_token,refresh_token,expires_at,ml_user_id`, {
+async function getTokenML(supaUrl: string, supaKey: string, clientId: string, secret: string, userId: string, conta: string) {
+  const rows = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&select=access_token,refresh_token,expires_at,ml_user_id`, {
     headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, Accept: 'application/json' }
   }).then(r => r.json())
   const token = Array.isArray(rows) ? rows[0] : null
@@ -28,7 +28,7 @@ async function getTokenML(supaUrl: string, supaKey: string, clientId: string, se
     }).then(r => r.json())
     if (ref.error || !ref.access_token) return null
     token.access_token = ref.access_token
-    await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}`, {
+    await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&ml_user_id=eq.${conta}`, {
       method: 'PATCH',
       headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ access_token: ref.access_token, refresh_token: ref.refresh_token, expires_at: new Date(Date.now() + (Number(ref.expires_in) || 21600) * 1000).toISOString(), updated_at: new Date().toISOString() })
@@ -118,9 +118,9 @@ async function fetchJanelas(baseUrl: string, accessToken: string, janelas: { de:
   return out
 }
 
-async function processarUsuario(userId: string, supaUrl: string, supaKey: string, clientId: string, secret: string, origem: string, refazer?: { de: string; ate: string }) {
-  const token = await getTokenML(supaUrl, supaKey, clientId, secret, userId)
-  if (!token) return { usuario_id: userId, erro: 'sem token ML' }
+async function processarUsuario(userId: string, supaUrl: string, supaKey: string, clientId: string, secret: string, origem: string, refazer: { de: string; ate: string } | undefined, conta: string) {
+  const token = await getTokenML(supaUrl, supaKey, clientId, secret, userId, conta)
+  if (!token) return { usuario_id: userId, ml_user_id: conta, erro: 'sem token ML' }
 
   // Extrato pode ser refeito depois; o snapshot do dia não — por isso o extrato
   // tem orçamento próprio e sempre sobra tempo para o pipeline
@@ -133,7 +133,7 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
   // ─── 1. EXTRATO HISTÓRICO (released=yes, últimos 90 dias) ────────────────
   // Uma consulta por dia. Rebusca sempre os últimos 10 dias e, dos mais antigos,
   // só os dias que ainda não estão gravados (dia já creditado não muda mais).
-  const jaTem = await fetch(`${supaUrl}/rest/v1/extrato_historico?usuario_id=eq.${userId}&data=gte.${noventaDiasAtras}&select=data,so_vendas`, {
+  const jaTem = await fetch(`${supaUrl}/rest/v1/extrato_historico?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&data=gte.${noventaDiasAtras}&select=data,so_vendas`, {
     headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, Accept: 'application/json' }
   }).then(r => r.json()).catch(() => [])
   const diasGravados = new Set<string>(Array.isArray(jaTem) ? jaTem.map((r: any) => String(r.data).substring(0, 10)) : [])
@@ -179,13 +179,14 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
   // Upsert no extrato_historico
   const extratoRows = Object.entries(byDataExtrato).map(([data, { val, qtd }]) => ({
     usuario_id: userId,
+    ml_user_id: conta,
     data,
     val_liquido: Math.round(val * 100) / 100,
     qtd_pedidos: qtd,
     so_vendas: true
   }))
   if (extratoRows.length > 0) {
-    const upRes = await fetch(`${supaUrl}/rest/v1/extrato_historico?on_conflict=usuario_id,data`, {
+    const upRes = await fetch(`${supaUrl}/rest/v1/extrato_historico?on_conflict=usuario_id,ml_user_id,data`, {
       method: 'POST',
       headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify(extratoRows)
@@ -195,7 +196,7 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
 
   // Modo refazer: só o extrato, sem tocar no snapshot do dia
   if (refazer) {
-    return { usuario_id: userId, extrato_dias: extratoRows.length, snapshot_datas: null, snapshot_erro: null, extrato_erro: extratoErro, ok: extratoErro === null }
+    return { usuario_id: userId, ml_user_id: conta, extrato_dias: extratoRows.length, snapshot_datas: null, snapshot_erro: null, extrato_erro: extratoErro, ok: extratoErro === null }
   }
 
   // ─── 2. SNAPSHOT DO PIPELINE ATUAL (released=no, datas futuras) ──────────
@@ -212,7 +213,7 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
   if (falhasFuturo.length > 0) {
     // Pipeline incompleto: mantém o snapshot que já existe para hoje
     return {
-      usuario_id: userId, extrato_dias: extratoRows.length, snapshot_datas: 0,
+      usuario_id: userId, ml_user_id: conta, extrato_dias: extratoRows.length, snapshot_datas: 0,
       snapshot_erro: `pipeline incompleto: ${falhasFuturo.length} janela(s) (${falhasFuturo[0].erro})`,
       extrato_erro: extratoErro, ok: false
     }
@@ -237,6 +238,7 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
   // Inserir snapshot — apenas colunas que existem na tabela
   const snapshotRows = Object.entries(byDataFuturo).map(([dataRecebimento, { val, qtd }]) => ({
     usuario_id: userId,
+    ml_user_id: conta,
     data_captura: hoje,
     data_recebimento: dataRecebimento,
     val: Math.round(val * 100) / 100,
@@ -244,7 +246,7 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
   }))
 
   // Deletar snapshots do dia atual deste usuário (cron duplo ou reconexão)
-  await fetch(`${supaUrl}/rest/v1/snapshots_ml?usuario_id=eq.${userId}&data_captura=eq.${hoje}`, {
+  await fetch(`${supaUrl}/rest/v1/snapshots_ml?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&data_captura=eq.${hoje}`, {
     method: 'DELETE',
     headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
   })
@@ -263,6 +265,7 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
 
   return {
     usuario_id: userId,
+    ml_user_id: conta,
     extrato_dias: extratoRows.length,
     snapshot_datas: snapshotRows.length,
     snapshot_erro: snapshotErro,
@@ -291,20 +294,20 @@ Deno.serve(async (req) => {
       }
 
       // ── MODO CRON: processa todos os usuários com token ML ────────────────
-      const tokens = await fetch(`${supaUrl}/rest/v1/ml_tokens?select=usuario_id`, {
+      const tokens = await fetch(`${supaUrl}/rest/v1/ml_tokens?select=usuario_id,ml_user_id`, {
         headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, Accept: 'application/json' }
       }).then(r => r.json())
 
-      const userIds: string[] = Array.isArray(tokens) ? tokens.map((t: any) => t.usuario_id) : []
+      const pares: { u: string; c: string }[] = Array.isArray(tokens) ? tokens.map((t: any) => ({ u: t.usuario_id, c: String(t.ml_user_id) })) : []
       // Em paralelo e isolado por usuário: a falha de uma conta não derruba as outras
       // e o tempo total cabe no limite da Edge Function
-      const resultados = await Promise.all(userIds.map(userId =>
-        processarUsuario(userId, supaUrl, supaKey, clientId, secret, 'cron')
-          .catch(e => ({ usuario_id: userId, erro: String(e), ok: false }))
+      const resultados = await Promise.all(pares.map(p =>
+        processarUsuario(p.u, supaUrl, supaKey, clientId, secret, 'cron', undefined, p.c)
+          .catch(e => ({ usuario_id: p.u, ml_user_id: p.c, erro: String(e), ok: false }))
       ))
       // O pg_net desiste da resposta em 5s — o resultado fica nos logs da função
       console.log('ml-snapshot cron', JSON.stringify(resultados))
-      return resp({ success: true, usuarios: userIds.length, resultados })
+      return resp({ success: true, contas: pares.length, resultados })
 
     } else {
       // ── MODO MANUAL: processa apenas o usuário autenticado ────────────────
@@ -315,10 +318,21 @@ Deno.serve(async (req) => {
       if (!jwtRes.ok) return resp({ error: 'Não autenticado' })
       const { id: userId } = await jwtRes.json()
 
-      const resultado = await processarUsuario(userId, supaUrl, supaKey, clientId, secret, 'manual',
-        // { refazer_extrato: { de, ate } } recalcula esses dias do extrato mesmo já gravados
-        body?.refazer_extrato?.de && body?.refazer_extrato?.ate ? body.refazer_extrato : undefined)
-      return resp({ success: true, ...resultado })
+      const linhas = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&select=ml_user_id&order=updated_at.asc`, {
+        headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, Accept: 'application/json' }
+      }).then(r => r.json()).catch(() => [])
+      let contas: string[] = Array.isArray(linhas) ? linhas.map((t: any) => String(t.ml_user_id)) : []
+      if (body?.conta) contas = contas.filter(c => c === String(body.conta))
+      if (contas.length === 0) return resp({ error: 'ML não conectado. Conecte sua conta primeiro.' })
+      // { refazer_extrato: { de, ate } } recalcula esses dias do extrato mesmo já gravados
+      const refazer = body?.refazer_extrato?.de && body?.refazer_extrato?.ate ? body.refazer_extrato : undefined
+      const resultados = await Promise.all(contas.map(c =>
+        processarUsuario(userId, supaUrl, supaKey, clientId, secret, 'manual', refazer, c)
+          .catch(e => ({ usuario_id: userId, ml_user_id: c, erro: String(e), ok: false }))
+      ))
+      const resultado: any = resultados[0]
+      const junta = (k: string) => resultados.map((r: any) => r[k]).filter(Boolean).join(' · ') || null
+      return resp({ success: true, ...resultado, extrato_erro: junta('extrato_erro'), snapshot_erro: junta('snapshot_erro'), contas: resultados })
     }
 
   } catch (e) {
