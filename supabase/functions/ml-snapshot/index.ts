@@ -133,17 +133,21 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
   // ─── 1. EXTRATO HISTÓRICO (released=yes, últimos 90 dias) ────────────────
   // Uma consulta por dia. Rebusca sempre os últimos 10 dias e, dos mais antigos,
   // só os dias que ainda não estão gravados (dia já creditado não muda mais).
-  const jaTem = await fetch(`${supaUrl}/rest/v1/extrato_historico?usuario_id=eq.${userId}&data=gte.${noventaDiasAtras}&select=data`, {
+  const jaTem = await fetch(`${supaUrl}/rest/v1/extrato_historico?usuario_id=eq.${userId}&data=gte.${noventaDiasAtras}&select=data,so_vendas`, {
     headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, Accept: 'application/json' }
   }).then(r => r.json()).catch(() => [])
   const diasGravados = new Set<string>(Array.isArray(jaTem) ? jaTem.map((r: any) => String(r.data).substring(0, 10)) : [])
+  // Dias antigos gravados antes do filtro "só vendas": o cron refaz alguns por execução (mais recentes primeiro)
+  const diasARefazer = new Set<string>((Array.isArray(jaTem) ? jaTem : [])
+    .filter((r: any) => r.so_vendas === false).map((r: any) => String(r.data).substring(0, 10))
+    .sort().reverse().slice(0, 15))
   const dezDiasAtras = dataBRT(-10)
   const janelasExtrato: { de: string; ate: string }[] = []
   for (let i = -90; i <= 0; i++) {
     const d = dataBRT(i)
     const forcado = !!refazer && d >= refazer.de && d <= refazer.ate
     // No modo refazer só os dias pedidos são buscados (poupa o limite de chamadas do ML)
-    if (refazer ? forcado : (d >= dezDiasAtras || !diasGravados.has(d))) janelasExtrato.push({ de: d, ate: d })
+    if (refazer ? forcado : (d >= dezDiasAtras || !diasGravados.has(d) || diasARefazer.has(d))) janelasExtrato.push({ de: d, ate: d })
   }
   const resExtrato = await fetchJanelas(
     'https://api.mercadolibre.com/collections/search?status=approved&released=yes&sort=money_release_date&criteria=desc&range=money_release_date',
@@ -177,7 +181,8 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
     usuario_id: userId,
     data,
     val_liquido: Math.round(val * 100) / 100,
-    qtd_pedidos: qtd
+    qtd_pedidos: qtd,
+    so_vendas: true
   }))
   if (extratoRows.length > 0) {
     const upRes = await fetch(`${supaUrl}/rest/v1/extrato_historico?on_conflict=usuario_id,data`, {
