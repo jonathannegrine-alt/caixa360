@@ -1,5 +1,6 @@
 // ===== RENDERS =====
     function renderDashboard(){
+      renderPainelCaixa();
       const score = calcScore();
       document.getElementById('score-value').textContent = score;
       const needle = document.getElementById('score-needle');

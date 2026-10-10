@@ -22,10 +22,15 @@
       // Ativar página
       document.getElementById('view-' + page).classList.add('active');
       const navEl = document.querySelector(`[onclick="nav('${page}')"]`);
-      if(navEl) navEl.classList.add('active');
+      if(navEl){
+        navEl.classList.add('active');
+        // abre a categoria do menu que contém a página
+        if(navEl.dataset.sec && !navSecsAbertas().includes(navEl.dataset.sec)) toggleNavSec(navEl.dataset.sec);
+      }
 
       // Renderizar
-      if(page === 'dashboard') renderDashboard();
+      if(page === 'inicio') renderInicio();
+      else if(page === 'dashboard') renderDashboard();
       else if(page === 'planilha'){ if(planilhaViewMode==='cal') renderPlanilhaCal(); else renderPlanilha(); }
       else if(page === 'pagar') renderPagar();
       else if(page === 'simulador') renderFormSimulador();
@@ -40,3 +45,23 @@
       else if(page === 'vendas') renderVendas();
       else if(page === 'resumo-fin') renderResumoFin();
     }
+
+    // ===== MENU LATERAL — categorias recolhíveis =====
+    function navSecsAbertas(){
+      try { return JSON.parse(localStorage.getItem('mk_nav_secs') || '[]'); } catch(e){ return []; }
+    }
+
+    function aplicarNavSecs(){
+      const abertas = navSecsAbertas();
+      document.querySelectorAll('.nav-sec[data-sec]').forEach(s => s.classList.toggle('aberta', abertas.includes(s.dataset.sec)));
+      document.querySelectorAll('.nav-item[data-sec]').forEach(i => i.classList.toggle('sec-oculta', !abertas.includes(i.dataset.sec)));
+    }
+
+    function toggleNavSec(sec){
+      let abertas = navSecsAbertas();
+      abertas = abertas.includes(sec) ? abertas.filter(s => s !== sec) : abertas.concat(sec);
+      localStorage.setItem('mk_nav_secs', JSON.stringify(abertas));
+      aplicarNavSecs();
+    }
+
+    document.addEventListener('DOMContentLoaded', aplicarNavSecs);

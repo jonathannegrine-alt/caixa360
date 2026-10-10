@@ -52,7 +52,9 @@
       renderConfig();
 
       // Restaurar última página visitada (ou dashboard como padrão)
-      const lastPage = localStorage.getItem('mk_last_page') || 'dashboard';
+      // Primeira vez após a criação da página Início: abre nela
+      const lastPage = localStorage.getItem('mk_viu_inicio') ? (localStorage.getItem('mk_last_page') || 'inicio') : 'inicio';
+      localStorage.setItem('mk_viu_inicio', '1');
       nav(['calendario'].includes(lastPage) ? 'dashboard' : lastPage);
     }
     
@@ -79,7 +81,7 @@
     // ===== BOTÃO VOLTAR DO BROWSER — intercepta para navegar entre páginas do app =====
     window.addEventListener('popstate', function(e){
       if(!usuarioAtual) return; // não logado: deixa o browser agir normalmente
-      const page = (e.state && e.state.page) ? e.state.page : (localStorage.getItem('mk_last_page') || 'dashboard');
+      const page = (e.state && e.state.page) ? e.state.page : (localStorage.getItem('mk_last_page') || 'inicio');
       nav(page, true); // fromPopState=true evita loop de pushState
     });
 

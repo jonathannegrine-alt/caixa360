@@ -48,26 +48,26 @@
       </div>
 
       <ul class="nav-menu">
-        <li class="nav-sec">Visão geral</li>
-        <li class="nav-item active" onclick="nav('dashboard')"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Dashboard</span></li>
-        <li class="nav-sec">Financeiro</li>
-        <li class="nav-item" onclick="nav('planilha')"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg><span>Fluxo de Caixa</span></li>
-        <li class="nav-item" onclick="nav('pagar')"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/></svg><span>Contas a pagar</span></li>
-        <li class="nav-item" onclick="nav('receber')"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg><span>A receber ML</span></li>
-        <li class="nav-item" onclick="nav('simulador')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg><span>Simulador</span></li>
-        <li class="nav-sec">Vendas</li>
-        <li class="nav-item" onclick="nav('vendas')"><svg viewBox="0 0 24 24"><path d="M3 4h2.5l2.2 11h10.6l2-8H7"/><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="17.5" cy="19.5" r="1.4"/></svg><span>Vendas</span><span class="nav-novo">NOVO</span></li>
-        <li class="nav-item" onclick="nav('resumo-fin')"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M12 3a9 9 0 0 1 9 9h-9z"/></svg><span>Resumo Financeiro</span><span class="nav-novo">NOVO</span></li>
-        <li class="nav-sec">Operação</li>
-        <li class="nav-item" onclick="nav('skus')"><svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg><span>Produtos</span></li>
-        <li class="nav-item" onclick="nav('estoque')"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-5 9 5v12"/><path d="M8 21v-7h8v7"/><path d="M8 17.5h8"/></svg><span>Estoque</span></li>
-        <li class="nav-item" onclick="nav('ordens-compra')"><svg viewBox="0 0 24 24"><path d="M8 3h8l1 4H7l1-4z"/><rect x="5" y="7" width="14" height="14" rx="2"/><path d="M9 12h6M9 16h4"/></svg><span>Ordens de Compra</span></li>
-        <li class="nav-sec">Análises</li>
-        <li class="nav-item" onclick="nav('analise')"><svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg><span>Análise</span></li>
-        <li class="nav-item" onclick="nav('resultado')"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Resultado</span></li>
-        <li class="nav-item" onclick="nav('patrimonio')"><svg viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 21h18"/></svg><span>Saúde Patrimonial</span></li>
-        <li class="nav-sec">Sistema</li>
-        <li class="nav-item" onclick="nav('config')"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Configurações</span></li>
+        <li class="nav-item active" onclick="nav('inicio')"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg><span>Início</span></li>
+        <li class="nav-sec" data-sec="fin" onclick="toggleNavSec('fin')"><span>Financeiro</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></li>
+        <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('dashboard')"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Painel financeiro</span></li>
+        <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('planilha')"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg><span>Fluxo de Caixa</span></li>
+        <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('pagar')"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6.5 15h4"/></svg><span>Contas a pagar</span></li>
+        <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('receber')"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg><span>A receber ML</span></li>
+        <li class="nav-item sec-oculta" data-sec="fin" onclick="nav('simulador')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg><span>Simulador</span></li>
+        <li class="nav-sec" data-sec="ven" onclick="toggleNavSec('ven')"><span>Vendas</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></li>
+        <li class="nav-item sec-oculta" data-sec="ven" onclick="nav('vendas')"><svg viewBox="0 0 24 24"><path d="M3 4h2.5l2.2 11h10.6l2-8H7"/><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="17.5" cy="19.5" r="1.4"/></svg><span>Vendas</span><span class="nav-novo">NOVO</span></li>
+        <li class="nav-item sec-oculta" data-sec="ven" onclick="nav('resumo-fin')"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M12 3a9 9 0 0 1 9 9h-9z"/></svg><span>Resumo Financeiro</span><span class="nav-novo">NOVO</span></li>
+        <li class="nav-sec" data-sec="ope" onclick="toggleNavSec('ope')"><span>Operação</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></li>
+        <li class="nav-item sec-oculta" data-sec="ope" onclick="nav('skus')"><svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg><span>Produtos</span></li>
+        <li class="nav-item sec-oculta" data-sec="ope" onclick="nav('estoque')"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-5 9 5v12"/><path d="M8 21v-7h8v7"/><path d="M8 17.5h8"/></svg><span>Estoque</span></li>
+        <li class="nav-item sec-oculta" data-sec="ope" onclick="nav('ordens-compra')"><svg viewBox="0 0 24 24"><path d="M8 3h8l1 4H7l1-4z"/><rect x="5" y="7" width="14" height="14" rx="2"/><path d="M9 12h6M9 16h4"/></svg><span>Ordens de Compra</span></li>
+        <li class="nav-sec" data-sec="ana" onclick="toggleNavSec('ana')"><span>Análises</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></li>
+        <li class="nav-item sec-oculta" data-sec="ana" onclick="nav('analise')"><svg viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></svg><span>Análise</span></li>
+        <li class="nav-item sec-oculta" data-sec="ana" onclick="nav('resultado')"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Resultado</span></li>
+        <li class="nav-item sec-oculta" data-sec="ana" onclick="nav('patrimonio')"><svg viewBox="0 0 24 24"><path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 21h18"/></svg><span>Saúde Patrimonial</span></li>
+        <li class="nav-sec" data-sec="sis" onclick="toggleNavSec('sis')"><span>Sistema</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></li>
+        <li class="nav-item sec-oculta" data-sec="sis" onclick="nav('config')"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Configurações</span></li>
       </ul>
       <div class="side-foot">
         <button class="tema-toggle" onclick="alternarTema()" title="Alternar entre tema claro e escuro">
@@ -202,11 +202,17 @@
     <div class="main">
       
       <!-- DASHBOARD -->
+      <!-- INÍCIO -->
+      <div id="view-inicio" class="view"></div>
+
       <div id="view-dashboard" class="view active">
         <h1 style="margin-bottom:20px;">Dashboard Financeiro</h1>
         
-        <!-- Score -->
-        <div class="card">
+        <!-- Caixa projetado (src/dash-painel.js) -->
+        <div class="pc-host"></div>
+
+        <!-- Score (oculto — substituído pelo painel acima) -->
+        <div class="card" style="display:none;">
           <div class="card-body text-center">
             <div class="score-gauge">
               <div class="score-arc">
@@ -2322,6 +2328,8 @@
   <script src="src/simulador-views.js"></script>
   <script src="src/relatorios-cfo.js"></script>
   <script src="src/vendas-ml.js"></script>
+  <script src="src/dash-painel.js"></script>
+  <script src="src/inicio.js"></script>
   <script src="src/init.js"></script>
   <script src="src/p11-motor.js"></script>
   <script src="src/p11-galpao.js"></script>
