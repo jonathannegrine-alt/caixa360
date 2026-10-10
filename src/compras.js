@@ -46,8 +46,12 @@
       const hoje = getToday(), chave = hoje + '|' + (typeof contaAtiva !== 'undefined' ? contaAtiva : '');
       if(!forcar && comprasVendas.chave === chave && comprasVendas.dados && Date.now() - comprasVendas.em < 10 * 60 * 1000) return;
       const { data, error } = await supa.rpc('vendas_ml_sku_dia', { p_de: addDias(hoje, -121), p_ate: addDias(hoje, -1), p_conta: typeof contaParam === 'function' ? contaParam() : null });
-      const cob = await supa.from('vendas_ml_dias').select('dia', { count:'exact', head:true }).eq('usuario_id', usuarioAtual.id).eq('completo', true).gte('dia', addDias(hoje, -121));
-      comprasVendas = { chave, dados: data || {}, em: Date.now(), erro: error?.message || null, diasImportados: cob.count || 0 };
+      // dias já importados do ML: os que faltam não podem contar como 'dia sem venda'
+      let qd = supa.from('vendas_ml_dias').select('dia').eq('usuario_id', usuarioAtual.id).eq('completo', true).gte('dia', addDias(hoje, -121)).limit(1000);
+      if(typeof contaAtiva !== 'undefined' && contaAtiva) qd = qd.eq('ml_user_id', contaAtiva);
+      const cob = await qd;
+      const importados = new Set((cob.data || []).map(r => String(r.dia).substring(0,10)));
+      comprasVendas = { chave, dados: data || {}, em: Date.now(), erro: error?.message || null, importados, diasImportados: [...importados].filter(d => d < hoje).length };
     }
 
     // ----- cálculo (porta de gerarCompras) -----
@@ -73,7 +77,8 @@
       // dias válidos (fora dos períodos ignorados); índice 0 = ontem
       const ign = (cfg.diasIgnorados || []).filter(g => g.ini).map(g => ({ ini: g.ini, fim: g.fim || '9999-12-31' }));
       const validos = [];
-      for(let i = 0; i < 120; i++){ const d = addDias(fim, -i); if(!ign.some(g => d >= g.ini && d <= g.fim)) validos.push(i); }
+      const imp = comprasVendas.importados;
+      for(let i = 0; i < 120; i++){ const d = addDias(fim, -i); if(imp && imp.size && !imp.has(d)) continue; if(!ign.some(g => d >= g.ini && d <= g.fim)) validos.push(i); }
       const disp = validos.length, N = n => Math.min(n, disp);
 
       // kits: SKU comercial → componentes
