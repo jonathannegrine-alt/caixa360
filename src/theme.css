@@ -713,3 +713,24 @@ a.v-id{text-decoration:none;}
   .ap-row .ap-acao{grid-column:3;grid-row:2;}
   .ap-selbar{flex-wrap:wrap;justify-content:center;bottom:12px;}
 }
+
+/* ===== DEMARCAÇÃO DOS CONTROLES =====
+   Botões, campos e etiquetas usam uma linha um tom acima da borda dos cards, para não se perderem no fundo. */
+:root{--ctl-border:#bfc7d6;}
+:root[data-theme="dark"]{--ctl-border:#4a568c;}
+/* .btn-out funciona sozinho (antes só ficava com cara de botão junto de .btn) */
+.btn-out{
+  padding:8px 16px;border-radius:9px;font:600 13px var(--font);cursor:pointer;transition:all .15s;
+  border:1px solid var(--ctl-border);
+}
+.btn-sm{padding:6px 12px;font-size:12px;}
+input[type="text"],input[type="number"],input[type="date"],input[type="email"],input[type="password"],input[type="search"],input[type="month"],select,textarea{border-color:var(--ctl-border);}
+.chip{border-color:var(--ctl-border);}
+.chip.active{border-color:var(--primary);}
+.seg{border:1px solid var(--ctl-border);}
+.badge,.cp-sit{border:1px solid color-mix(in srgb,currentColor 30%,transparent);}
+.ap-cat,.ap-parc{border:1px solid var(--ctl-border);background:var(--surface-2);}
+.ico-btn{border-color:var(--ctl-border);}
+input[type="checkbox"]{accent-color:var(--primary);}
+.ap-selbar{border-color:var(--ctl-border);}
+@media (max-width:768px){ .btn-out{padding:7px 12px;font-size:12px;} .btn-sm{padding:5px 8px;font-size:11px;} }
