@@ -775,3 +775,42 @@ input[type="checkbox"]{accent-color:var(--primary);}
 .rc-acum{color:var(--text-2);font-weight:600;}
 .rc-conexao{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
 @media (max-width:768px){ .rc-val{min-width:130px;} }
+
+/* ===== PADRÃO DAS DEMAIS PÁGINAS ===== */
+.view > div:first-child:has(> div > .pg-title){margin-bottom:18px !important;}
+/* indicadores antigos (.stat-card) no mesmo desenho dos novos (.kpi) */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px;margin-bottom:14px;}
+.stat-card{
+  position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-left:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 17px;
+}
+.stat-card::before{content:'';position:absolute;inset:0 0 auto 0;height:4px;background:var(--border-strong);}
+.stat-card.success{border-color:var(--border);} .stat-card.success::before{background:#10b981;}
+.stat-card.warning{border-color:var(--border);} .stat-card.warning::before{background:#f59e0b;}
+.stat-card.danger{border-color:var(--border);}  .stat-card.danger::before{background:#ef4444;}
+.stat-label{font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0;}
+.stat-value{font-size:23px;font-weight:750;letter-spacing:-.02em;margin-top:6px;}
+/* saldos em caixa (Painel financeiro) */
+.saldo-row{gap:14px;}
+.saldo-field{gap:10px;}
+.saldo-label{font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);}
+.saldo-input{border-color:var(--ctl-border);border-radius:9px;padding:7px 10px;}
+.saldo-op{font-size:18px;color:var(--text-muted);}
+.saldo-total{font-size:20px;letter-spacing:-.02em;}
+.resumo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:18px;}
+/* estados vazios */
+.vazio-ico{width:56px;height:56px;border-radius:16px;background:var(--primary-soft);margin:0 auto 14px;position:relative;}
+.vazio-ico::before{content:'';position:absolute;inset:17px 15px 15px;border:2px solid var(--primary);border-radius:5px;opacity:.75;}
+.vazio-ico::after{content:'';position:absolute;left:15px;right:15px;top:25px;border-top:2px solid var(--primary);opacity:.75;}
+/* abas */
+.resultado-tab,.estoque-tab{padding:10px 16px;font-size:13px;}
+.resultado-tab:hover,.estoque-tab:hover{color:var(--text);}
+/* simulador: formulário em largura confortável */
+#view-simulador > .card:first-of-type{max-width:880px;}
+/* calendários antigos */
+.cal-grid{border-radius:0 0 var(--radius) var(--radius);overflow:hidden;}
+.cal-header{font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;padding:9px 8px;}
+.cal-day{padding:8px;}
+.cal-day-num{font-weight:650;}
+.opt-ico{flex:0 0 34px;width:34px;height:34px;border-radius:10px;background:var(--primary-soft);position:relative;display:inline-block;}
+.opt-ico::before{content:"";position:absolute;inset:11px;border:2px solid var(--primary);border-radius:4px;opacity:.75;}

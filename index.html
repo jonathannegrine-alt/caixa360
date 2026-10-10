@@ -210,8 +210,30 @@
       <div id="view-inicio" class="view"></div>
 
       <div id="view-dashboard" class="view active">
-        <h1 style="margin-bottom:20px;">Painel financeiro</h1>
+        <div class="pg-head"><div><div class="pg-title">Painel financeiro</div><div class="pg-sub">Projeção do caixa, saldos e o que merece decisão hoje.</div></div></div>
         
+        <!-- Saldo atual -->
+        <div class="card" style="margin-bottom:15px;">
+          <div class="card-body" style="padding:12px 20px;">
+            <div class="saldo-row">
+              <div class="saldo-field">
+                <span class="saldo-label">Mercado Pago</span>
+                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="if(this.value.trim()!==''){saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
+              </div>
+              <span class="saldo-op">+</span>
+              <div class="saldo-field">
+                <span class="saldo-label">Outros bancos</span>
+                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="if(this.value.trim()!==''){saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
+              </div>
+              <span class="saldo-op">=</span>
+              <div class="saldo-field">
+                <span class="saldo-label">Total em caixa</span>
+                <span class="saldo-total" id="saldo-total-label">R$ 0,00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Caixa projetado (src/dash-painel.js) -->
         <div class="pc-host"></div>
 
@@ -238,28 +260,6 @@
           </div>
         </div>
         
-        <!-- Saldo atual -->
-        <div class="card" style="margin-bottom:15px;">
-          <div class="card-body" style="padding:12px 20px;">
-            <div class="saldo-row">
-              <div class="saldo-field">
-                <span class="saldo-label">Mercado Pago</span>
-                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="if(this.value.trim()!==''){saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
-              </div>
-              <span style="font-size:18px;color:#ccc;">+</span>
-              <div class="saldo-field">
-                <span class="saldo-label">Outros bancos</span>
-                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="if(this.value.trim()!==''){saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
-              </div>
-              <span style="font-size:18px;color:#ccc;">=</span>
-              <div class="saldo-field">
-                <span class="saldo-label">Total em caixa</span>
-                <span class="saldo-total" id="saldo-total-label">R$ 0,00</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Stats -->
         <div class="stats-grid">
           <div class="stat-card success">
@@ -297,7 +297,7 @@
         <!-- Resumo período -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">🎯 Centro de Decisão</div>
+            <div class="card-title">Centro de Decisão</div>
             <span style="font-size:11px;color:#999;">Atualizado automaticamente</span>
           </div>
           <div class="card-body" style="display:flex;flex-direction:column;gap:10px;" id="centro-decisao-body">
@@ -323,7 +323,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:15px;">
+            <div class="resumo-grid">
               <div>
                 <div class="text-muted mb-1" style="font-size:11px;">Entrada Confirmada ML
                   <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Valor total importado diretamente do relatório do Mercado Livre para o período selecionado. 100% confirmado.</span></span>
@@ -653,7 +653,7 @@
 
       <!-- SIMULADOR -->
       <div id="view-simulador" class="view">
-        <h1 style="margin-bottom:20px;">Simulador de Compras</h1>
+        <div class="pg-head"><div><div class="pg-title">Simulador de compras</div><div class="pg-sub">Teste uma compra antes de fechar e veja o efeito no caixa.</div></div></div>
         
         <div class="card">
           <div class="card-header">
@@ -717,7 +717,7 @@
                 </div>
               </div>
 
-              <button class="btn" onclick="simular()" style="width:100%;margin-top:10px;">🎯 Simular</button>
+              <button class="btn" onclick="simular()" style="width:100%;margin-top:10px;">Simular</button>
             </div>
             
             <!-- Resultado -->
@@ -730,26 +730,26 @@
       <!-- SKUS -->
       <div id="view-skus" class="view">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h1>Produtos</h1>
+          <div><div class="pg-title">Produtos</div><div class="pg-sub">Cadastro de produtos, custos e kits.</div></div>
           <div class="d-flex gap-1" id="sku-header-btns-lista">
             <button class="btn" onclick="abrirModalSKU()">+ Novo SKU</button>
-            <button class="btn-out" onclick="abrirModalImportarProdutos()">📥 Importar dados</button>
-            <button class="btn-out" onclick="exportarSKUs()">📤 Exportar CSV</button>
+            <button class="btn-out" onclick="abrirModalImportarProdutos()">Importar dados</button>
+            <button class="btn-out" onclick="exportarSKUs()">Exportar CSV</button>
             <input type="file" id="import-skus-csv" accept=".csv" style="display:none" onchange="importarSKUs()">
             <input type="file" id="import-upseller-estoque" accept=".xlsx,.xls" style="display:none" onchange="importarUpsellerEstoque(this)">
           </div>
           <div class="d-flex gap-1" id="sku-header-btns-composicoes" style="display:none!important;">
             <button class="btn btn-sm" onclick="abrirModalComposicao(null)">+ Novo Kit</button>
-            <button class="btn-out btn-sm" onclick="abrirModalImportarKits()">📥 Importar dados</button>
-            <button class="btn-out btn-sm" onclick="exportarKitsCSV()">📤 Exportar CSV</button>
+            <button class="btn-out btn-sm" onclick="abrirModalImportarKits()">Importar dados</button>
+            <button class="btn-out btn-sm" onclick="exportarKitsCSV()">Exportar CSV</button>
             <input type="file" id="import-csv-kit" accept=".csv" style="display:none" onchange="importarCSVKit(this)">
             <input type="file" id="import-upseller-kits" accept=".xlsx,.xls" style="display:none" onchange="importarUpsellerKits(this)">
           </div>
         </div>
 
         <div class="resultado-tabs" style="margin-bottom:16px;">
-          <div class="resultado-tab active" id="sku-tab-lista" onclick="setSkuTab('lista')">📋 SKU</div>
-          <div class="resultado-tab" id="sku-tab-composicoes" onclick="setSkuTab('composicoes')">📦 Kits</div>
+          <div class="resultado-tab active" id="sku-tab-lista" onclick="setSkuTab('lista')">SKU</div>
+          <div class="resultado-tab" id="sku-tab-composicoes" onclick="setSkuTab('composicoes')">Kits</div>
         </div>
 
         <!-- Tab: Lista -->
@@ -758,7 +758,7 @@
           <div class="card mb-2">
             <div class="card-body">
               <div class="d-flex gap-1">
-                <input type="text" id="filtro-sku" placeholder="🔍 Buscar SKU..." style="flex:1;" oninput="renderSKUs()">
+                <input type="text" id="filtro-sku" placeholder="Buscar SKU..." style="flex:1;" oninput="renderSKUs()">
               </div>
             </div>
           </div>
@@ -768,8 +768,8 @@
             <div class="card-body" style="overflow-x:auto;padding:0;">
               <table>
                 <div style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;align-items:center;">
-                  <button class="btn-out btn-sm" style="color:var(--danger);" onclick="abrirModalApagarSKUs()">🗑 Apagar</button>
-                  <button class="btn-out btn-sm" onclick="abrirModalLoteSKU()">✏️ Editar custo em lote</button>
+                  <button class="btn-out btn-sm" style="color:var(--danger);" onclick="abrirModalApagarSKUs()">Apagar</button>
+                  <button class="btn-out btn-sm" onclick="abrirModalLoteSKU()">Editar custo em lote</button>
                   <span id="sku-sel-count" style="font-size:12px;color:#666;margin-left:4px;"></span>
                 </div>
                 <thead>
@@ -797,14 +797,14 @@
           <div class="card mb-2">
             <div class="card-body">
               <div class="d-flex gap-1">
-                <input type="text" id="filtro-kits" placeholder="🔍 Buscar kit..." style="flex:1;" oninput="filtroKits=this.value.toLowerCase();renderComposicoesTab()">
+                <input type="text" id="filtro-kits" placeholder="Buscar kit..." style="flex:1;" oninput="filtroKits=this.value.toLowerCase();renderComposicoesTab()">
               </div>
             </div>
           </div>
           <!-- Lista -->
           <div class="card">
             <div class="card-body" style="padding:10px 15px;border-bottom:1px solid var(--gray-200);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <button class="btn-out btn-sm" style="color:var(--danger);" onclick="abrirModalApagarKits()">🗑 Apagar</button>
+              <button class="btn-out btn-sm" style="color:var(--danger);" onclick="abrirModalApagarKits()">Apagar</button>
               <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
                 <input type="checkbox" id="kits-sel-all" onchange="toggleTodosKits(this.checked)"> Selecionar todos
               </label>
@@ -813,7 +813,7 @@
             </div>
             <div class="card-body" style="padding:12px 15px;">
               <div id="composicoes-vazio" style="display:none;text-align:center;padding:30px;color:#999;">
-                <div style="font-size:32px;margin-bottom:10px;">📦</div>
+                <div class="vazio-ico"></div>
                 <div style="font-weight:600;margin-bottom:6px;">Nenhum kit cadastrado</div>
                 <div style="font-size:12px;">Importe via template CSV ou do Upseller, ou adicione manualmente.</div>
               </div>
@@ -829,12 +829,12 @@
 
         <!-- Mercado Livre -->
         <div class="card mb-2">
-          <div class="card-header"><div class="card-title">🤝 Mercado Livre</div></div>
+          <div class="card-header"><div class="card-title">Mercado Livre</div></div>
           <div class="card-body">
             <div id="cfg-ml-status" style="font-size:13px;margin-bottom:14px;color:var(--text-muted);">Verificando conexão...</div>
             <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
               <button type="button" class="btn-ml" style="font-size:13px;padding:9px 18px;" onclick="conectarML()">
-                🛒 Conectar / Reconectar no Mercado Livre
+                Conectar / Reconectar no Mercado Livre
               </button>
               <button type="button" class="btn-out" id="cfg-btn-desconectar" onclick="desconectarML()" style="display:none;">Desconectar</button>
             </div>
@@ -846,7 +846,7 @@
 
         <!-- Pipeline Histórico -->
         <div class="card mb-2">
-          <div class="card-header"><div class="card-title">📈 Pipeline Histórico ML</div></div>
+          <div class="card-header"><div class="card-title">Pipeline Histórico ML</div></div>
           <div class="card-body">
             <div id="pipeline-maturidade" style="margin-bottom:14px;padding:10px 14px;border-radius:8px;background:var(--gray-100);font-size:13px;">—</div>
 
@@ -864,7 +864,7 @@
             </div>
 
             <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
-              <button class="btn-out btn-sm" onclick="atualizarHistoricoML()" id="btn-atualizar-hist">🔄 Atualizar histórico agora</button>
+              <button class="btn-out btn-sm" onclick="atualizarHistoricoML()" id="btn-atualizar-hist">Atualizar histórico agora</button>
               <span id="hist-status" style="font-size:12px;color:#666;"></span>
             </div>
             <div style="font-size:11px;color:#999;margin-top:8px;">O cron atualiza automaticamente às 06h BRT. Use o botão para atualizar fora do horário.</div>
@@ -943,7 +943,7 @@
         
         <!-- Motor de Reposição (P11) -->
         <div class="card mb-2">
-          <div class="card-header"><div class="card-title">🏭 Motor de Reposição — Regras Globais</div></div>
+          <div class="card-header"><div class="card-title">Motor de Reposição — Regras Globais</div></div>
           <div class="card-body">
             <div style="font-size:11px;color:#666;margin-bottom:12px;">Estas são as regras padrão para todos os componentes. Você pode sobrescrevê-las individualmente em cada componente.</div>
             <div class="form-row">
@@ -977,8 +977,8 @@
           </div>
           <div class="card-body">
             <div class="d-flex gap-1">
-              <button class="btn-out" onclick="exportarTudo()">📥 Exportar tudo (JSON)</button>
-              <button class="btn-out" onclick="document.getElementById('import-json').click()">📤 Importar JSON</button>
+              <button class="btn-out" onclick="exportarTudo()">Exportar tudo (JSON)</button>
+              <button class="btn-out" onclick="document.getElementById('import-json').click()">Importar JSON</button>
               <input type="file" id="import-json" accept=".json" style="display:none" onchange="importarTudo()">
             </div>
           </div>
@@ -1010,7 +1010,7 @@
 
         <!-- Import Tiny -->
         <div class="card">
-          <div class="card-header"><div class="card-title">📊 Importar XLS Tiny ERP</div></div>
+          <div class="card-header"><div class="card-title">Importar XLS Tiny ERP</div></div>
           <div class="card-body">
             <p style="font-size:12px;color:#666;margin-bottom:10px;">Colunas do Tiny: Vencimento | Fornecedor | Histórico | Nº doc | Data emissão | Valor | Saldo | Pago</p>
             <p style="font-size:11px;color:#999;margin-bottom:8px;">Parcelamentos são detectados automaticamente pelo padrão "Parcela (X/Y)" no histórico.</p>
@@ -1024,7 +1024,7 @@
         <div class="card mb-2" id="card-feedbacks" style="display:none;">
           <div class="card-header">
             <div class="card-title">💬 Feedbacks Enviados</div>
-            <button class="btn-out btn-sm" onclick="carregarFeedbacks()">🔄 Atualizar</button>
+            <button class="btn-out btn-sm" onclick="carregarFeedbacks()">Atualizar</button>
           </div>
           <div id="lista-feedbacks" class="card-body" style="padding:0;max-height:320px;overflow-y:auto;">
             <div style="padding:20px;text-align:center;color:#999;">Clique em Atualizar para carregar</div>
@@ -1059,7 +1059,7 @@
           </div>
           <div class="card-body">
             <p style="font-size:13px;color:var(--gray-700);margin:0 0 12px;">Apagar todos os dados remove permanentemente todos os registros (pagamentos, recebíveis, SKUs, categorias e configurações) do armazenamento local e do servidor.</p>
-            <button class="btn" style="background:var(--danger);border-color:var(--danger);" onclick="confirmarApagarTudo()">🗑 Apagar todos os dados</button>
+            <button class="btn" style="background:var(--danger);border-color:var(--danger);" onclick="confirmarApagarTudo()">Apagar todos os dados</button>
           </div>
         </div>
 
@@ -1067,7 +1067,7 @@
 
       <!-- RESULTADO (DRE + COMPARATIVO) -->
       <div id="view-resultado" class="view">
-        <h1 style="margin-bottom:20px;">DRE e resultado</h1>
+        <div class="pg-head"><div><div class="pg-title">DRE e resultado</div><div class="pg-sub">Lucro mês a mês e comparação entre períodos.</div></div></div>
         <div class="resultado-tabs">
           <div class="resultado-tab active" id="res-tab-anual" onclick="setResultadoTab('anual')">DRE anual</div>
           <div class="resultado-tab" id="res-tab-dre" onclick="setResultadoTab('dre')">DRE Simplificado</div>
@@ -1105,8 +1105,8 @@
       <!-- SAÚDE PATRIMONIAL (P12) -->
       <div id="view-patrimonio" class="view">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-          <h1>Saúde Patrimonial</h1>
-          <button class="btn-out btn-sm" onclick="salvarSnapshotPatrimonio()">📸 Snapshot manual</button>
+          <div><div class="pg-title">Saúde patrimonial</div><div class="pg-sub">O que a empresa tem, o que deve e a folga entre os dois.</div></div>
+          <button class="btn-out btn-sm" onclick="salvarSnapshotPatrimonio()">Snapshot manual</button>
         </div>
 
         <!-- Alertas -->
@@ -1261,11 +1261,11 @@
       <!-- ESTOQUE / MOTOR DE REPOSIÇÃO -->
       <div id="view-estoque" class="view">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-          <h1>Estoque e reposição</h1>
+          <div><div class="pg-title">Estoque e reposição</div><div class="pg-sub">Estoque do galpão e do Full, vendas por produto e o que repor.</div></div>
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
-            <button class="btn-out btn-sm" onclick="abrirModalImportarEstoque()">📥 Importar dados</button>
-            <button class="btn-out btn-sm" onclick="mostrarUltimosCadastrados()" title="Ver últimos SKUs e Kits cadastrados com data/hora">🕐 Últimos cadastrados</button>
-            <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="abrirModalLimparDados()">🗑 Limpar</button>
+            <button class="btn-out btn-sm" onclick="abrirModalImportarEstoque()">Importar dados</button>
+            <button class="btn-out btn-sm" onclick="mostrarUltimosCadastrados()" title="Ver últimos SKUs e Kits cadastrados com data/hora">Últimos cadastrados</button>
+            <button class="btn-out btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="abrirModalLimparDados()">Limpar</button>
             <input type="file" id="import-vendas-ml-est" accept=".xlsx,.xls" style="display:none" onchange="onImportVendasML(this)">
             <input type="file" id="import-kit-upseller" accept=".xlsx,.xls" style="display:none" onchange="onImportKitUpseller(this)">
             <input type="file" id="import-estoque-upseller" accept=".xlsx,.xls,.csv" style="display:none" onchange="onImportEstoqueUpseller(this)">
@@ -1306,12 +1306,12 @@
 
         <!-- Tabs -->
         <div class="resultado-tabs" style="margin-bottom:16px;">
-          <div class="resultado-tab active" id="estoque-tab-galpao" onclick="setEstoqueTab('galpao')" title="Estoque físico armazenado no seu galpão. Mostra quantidade, custo cadastrado e valor total por SKU.">🏠 Galpão</div>
-          <div class="resultado-tab" id="estoque-tab-full" onclick="setEstoqueTab('full')" title="Estoque enviado ao Centro de Distribuição do Mercado Livre. Importado via XLS ou sincronizado pelo painel ML.">🏭 Full ML</div>
-          <div class="resultado-tab" id="estoque-tab-vendas" onclick="setEstoqueTab('vendas')" title="Relatório de vendas importado do ML. Mostra unidades vendidas, giro, ADS e receita por SKU ou kit comercial.">📦 Venda ML</div>
-          <div class="resultado-tab" id="estoque-tab-reposicao" onclick="setEstoqueTab('reposicao')" title="Reposição por produto comercial (SKU ou Kit). Consolida kits montáveis e SKUs isolados com status de cobertura e sugestão de compra.">📋 Rep. Produto</div>
-          <div class="resultado-tab" id="estoque-tab-skuunit" onclick="setEstoqueTab('skuunit')" title="Reposição por componente físico. Mostra o consumo real de cada SKU unitário (vendas diretas + consumo via kits).">📊 Rep. por SKU</div>
-          <div class="resultado-tab" id="estoque-tab-excesso" onclick="setEstoqueTab('excesso')" title="SKUs com estoque acima da meta configurada — capital imobilizado além do necessário para cobrir a demanda.">🗄 Estoque Parado</div>
+          <div class="resultado-tab active" id="estoque-tab-galpao" onclick="setEstoqueTab('galpao')" title="Estoque físico armazenado no seu galpão. Mostra quantidade, custo cadastrado e valor total por SKU.">Galpão</div>
+          <div class="resultado-tab" id="estoque-tab-full" onclick="setEstoqueTab('full')" title="Estoque enviado ao Centro de Distribuição do Mercado Livre. Importado via XLS ou sincronizado pelo painel ML.">Full ML</div>
+          <div class="resultado-tab" id="estoque-tab-vendas" onclick="setEstoqueTab('vendas')" title="Relatório de vendas importado do ML. Mostra unidades vendidas, giro, ADS e receita por SKU ou kit comercial.">Venda ML</div>
+          <div class="resultado-tab" id="estoque-tab-reposicao" onclick="setEstoqueTab('reposicao')" title="Reposição por produto comercial (SKU ou Kit). Consolida kits montáveis e SKUs isolados com status de cobertura e sugestão de compra.">Rep. Produto</div>
+          <div class="resultado-tab" id="estoque-tab-skuunit" onclick="setEstoqueTab('skuunit')" title="Reposição por componente físico. Mostra o consumo real de cada SKU unitário (vendas diretas + consumo via kits).">Rep. por SKU</div>
+          <div class="resultado-tab" id="estoque-tab-excesso" onclick="setEstoqueTab('excesso')" title="SKUs com estoque acima da meta configurada — capital imobilizado além do necessário para cobrir a demanda.">Estoque Parado</div>
         </div>
 
         <!-- Tab: Rep. por Produto -->
@@ -1350,15 +1350,15 @@
                 </select>
               </div>
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-                <button class="btn-out btn-sm" id="btn-criar-oc-rep" style="display:none;" onclick="criarOCdeSelecionados('reposicao')">🛒 Criar OC</button>
-                <button class="btn-out btn-sm" onclick="abrirConfigReposicao()">⚙️ Config</button>
+                <button class="btn-out btn-sm" id="btn-criar-oc-rep" style="display:none;" onclick="criarOCdeSelecionados('reposicao')">Criar OC</button>
+                <button class="btn-out btn-sm" onclick="abrirConfigReposicao()">Config</button>
               </div>
             </div>
             <div id="rep-periodo-aviso" style="display:none;padding:6px 14px 8px;font-size:11px;color:#92400e;background:#fef3c7;border-top:1px solid #fde68a;border-radius:0 0 8px 8px;"></div>
           </div>
           <div id="estoque-reposicao-vazio" class="card" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">📦</div>
+              <div class="vazio-ico"></div>
               <div style="font-weight:600;margin-bottom:6px;">Sem dados de estoque</div>
               <div style="font-size:12px;">Importe o estoque do galpão (Upseller) e as vendas ML para calcular a reposição.</div>
             </div>
@@ -1394,14 +1394,14 @@
         <div id="estoque-view-excesso" style="display:none;">
           <div id="excesso-vazio" class="card" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">✅</div>
+              <div class="vazio-ico"></div>
               <div style="font-weight:600;">Nenhum SKU em excesso</div>
               <div style="font-size:12px;margin-top:4px;">Todos os componentes estão dentro da meta de cobertura.</div>
             </div>
           </div>
           <div class="card" id="excesso-card" style="display:none;">
             <div class="card-header">
-              <div class="card-title">🗄 Estoque Parado — capital imobilizado</div>
+              <div class="card-title">Estoque Parado — capital imobilizado</div>
             </div>
             <div class="card-body" style="padding:0;overflow-x:auto;">
               <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -1468,15 +1468,15 @@
           </div>
           <div class="card" id="estoque-vendas-vazio" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">📊</div>
+              <div class="vazio-ico"></div>
               <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas</div>
               <div style="font-size:12px;">Importe o relatório de vendas ML (.xlsx) para ver o ranking.</div>
             </div>
           </div>
           <div class="card" id="estoque-vendas-card" style="display:none;">
             <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-              <div class="card-title">📦 Vendas ML — todos os SKUs <span style="font-size:11px;font-weight:400;color:#999;">(kits e unitários como aparecem no ML)</span></div>
-              <button class="btn-out btn-sm" onclick="exportarVendasSkuCSV()">⬇ Exportar CSV</button>
+              <div class="card-title">Vendas ML — todos os SKUs <span style="font-size:11px;font-weight:400;color:#999;">(kits e unitários como aparecem no ML)</span></div>
+              <button class="btn-out btn-sm" onclick="exportarVendasSkuCSV()">Exportar CSV</button>
             </div>
             <div class="card-body" style="padding:0;overflow-x:auto;">
               <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -1537,23 +1537,23 @@
                 </select>
               </div>
               <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
-                <button class="btn-out btn-sm" onclick="renderSkuUnitarioTab()" title="Reaplica todos os filtros e atualiza a tabela">🔍 Filtrar</button>
-                <button class="btn-out btn-sm" id="btn-criar-oc-skuunit" style="display:none;" onclick="criarOCdeSelecionados('skuunit')">🛒 Criar OC</button>
+                <button class="btn-out btn-sm" onclick="renderSkuUnitarioTab()" title="Reaplica todos os filtros e atualiza a tabela">Filtrar</button>
+                <button class="btn-out btn-sm" id="btn-criar-oc-skuunit" style="display:none;" onclick="criarOCdeSelecionados('skuunit')">Criar OC</button>
               </div>
             </div>
             <div id="skuunit-periodo-aviso" style="display:none;padding:6px 14px 8px;font-size:11px;color:#92400e;background:#fef3c7;border-top:1px solid #fde68a;border-radius:0 0 8px 8px;"></div>
           </div>
           <div class="card" id="estoque-skuunit-vazio" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">🔩</div>
+              <div class="vazio-ico"></div>
               <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas ou estoque</div>
               <div style="font-size:12px;">Importe o relatório ML e o estoque do Upseller para ver o consolidado por SKU físico.</div>
             </div>
           </div>
           <div class="card" id="estoque-skuunit-card" style="display:none;">
             <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-              <div class="card-title">🔩 Vendas por SKU Unitário <span style="font-size:11px;font-weight:400;color:#999;">(demanda real = direto + via kits)</span></div>
-              <button class="btn-out btn-sm" onclick="exportarSkuUnitarioCSV()">⬇ Exportar CSV</button>
+              <div class="card-title">Vendas por SKU Unitário <span style="font-size:11px;font-weight:400;color:#999;">(demanda real = direto + via kits)</span></div>
+              <button class="btn-out btn-sm" onclick="exportarSkuUnitarioCSV()">Exportar CSV</button>
             </div>
             <div class="card-body" style="padding:0;overflow-x:auto;">
               <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -1589,20 +1589,20 @@
           <div class="card" style="margin-bottom:12px;">
             <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
               <div>
-                <div style="font-weight:600;font-size:13px;">🏭 Estoque Full (Mercado Livre)</div>
+                <div style="font-weight:600;font-size:13px;">Estoque Full (Mercado Livre)</div>
                 <div id="estoque-full-status" style="font-size:11px;color:#64748b;margin-top:3px;">Use o botão Importar no cabeçalho para carregar o XLS</div>
               </div>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                <button class="btn-out btn-sm" onclick="exportarEstoqueFullCSV()" id="btn-export-full" style="display:none;">⬇ Exportar CSV</button>
+                <button class="btn-out btn-sm" onclick="exportarEstoqueFullCSV()" id="btn-export-full" style="display:none;">Exportar CSV</button>
                 <input type="file" id="input-full-xls" accept=".xlsx,.xls" style="display:none;" onchange="importarEstoqueFullXLS(this)">
               </div>
             </div>
           </div>
           <div class="card" id="estoque-full-vazio" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">🏭</div>
+              <div class="vazio-ico"></div>
               <div style="font-weight:600;margin-bottom:6px;">Sem dados de estoque Full</div>
-              <div style="font-size:12px;">Clique em <strong>📥 Importar XLS</strong> e selecione o relatório "Estoque Geral Full" baixado do painel do Mercado Livre.</div>
+              <div style="font-size:12px;">Clique em <strong>Importar XLS</strong> e selecione o relatório "Estoque Geral Full" baixado do painel do Mercado Livre.</div>
             </div>
           </div>
           <div class="card" id="estoque-full-card" style="display:none;">
@@ -1631,20 +1631,20 @@
           <div class="card" style="margin-bottom:12px;">
             <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
               <div>
-                <div style="font-weight:600;font-size:13px;">🏠 Estoque Galpão</div>
+                <div style="font-weight:600;font-size:13px;">Estoque Galpão</div>
                 <div id="estoque-galpao-aba-status" style="font-size:11px;color:#64748b;margin-top:3px;">Importe via CSV manual ou Upseller (JSON/XLS)</div>
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button class="btn-out btn-sm" onclick="baixarTemplateGalpao()">⬇ Baixar modelo CSV</button>
-                <button class="btn-out btn-sm" onclick="document.getElementById('import-galpao-csv').click()">📥 Importar CSV</button>
+                <button class="btn-out btn-sm" onclick="baixarTemplateGalpao()">Baixar modelo CSV</button>
+                <button class="btn-out btn-sm" onclick="document.getElementById('import-galpao-csv').click()">Importar CSV</button>
                 <input type="file" id="import-galpao-csv" accept=".csv" style="display:none" onchange="importarGalpaoCSV(this)">
-                <button class="btn-out btn-sm" onclick="exportarEstoqueGalpaoCSV()" id="btn-export-galpao" style="display:none;">⬇ Exportar CSV</button>
+                <button class="btn-out btn-sm" onclick="exportarEstoqueGalpaoCSV()" id="btn-export-galpao" style="display:none;">Exportar CSV</button>
               </div>
             </div>
           </div>
           <div class="card" id="estoque-galpao-aba-vazio" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">🏠</div>
+              <div class="vazio-ico"></div>
               <div style="font-weight:600;margin-bottom:6px;">Sem dados de galpão</div>
               <div style="font-size:12px;">Importe o estoque do galpão pelo menu de importação (JSON Upseller).</div>
             </div>
@@ -1674,23 +1674,23 @@
       <div id="view-analise" class="view">
         <div class="d-flex" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
           <div>
-            <div style="font-size:18px;font-weight:700;color:var(--gray-900);">📊 Análise</div>
-            <div style="font-size:12px;color:#64748b;margin-top:2px;">Rentabilidade, cancelamentos e ADS por SKU</div>
+            <div class="pg-title">Análise de vendas</div>
+            <div class="pg-sub">Rentabilidade, cancelamentos e anúncios pagos por produto.</div>
           </div>
         </div>
 
         <!-- Tabs -->
         <div class="resultado-tabs" style="margin-bottom:16px;">
-          <div class="resultado-tab active" id="analise-tab-rentabilidade" onclick="setAnaliseTab('rentabilidade')">💰 Rentabilidade</div>
-          <div class="resultado-tab" id="analise-tab-cancelamentos" onclick="setAnaliseTab('cancelamentos')">↩️ Cancelamentos</div>
-          <div class="resultado-tab" id="analise-tab-ads" onclick="setAnaliseTab('ads')">📣 ADS</div>
+          <div class="resultado-tab active" id="analise-tab-rentabilidade" onclick="setAnaliseTab('rentabilidade')">Rentabilidade</div>
+          <div class="resultado-tab" id="analise-tab-cancelamentos" onclick="setAnaliseTab('cancelamentos')">Cancelamentos</div>
+          <div class="resultado-tab" id="analise-tab-ads" onclick="setAnaliseTab('ads')">ADS</div>
         </div>
 
         <!-- Tab: Rentabilidade -->
         <div id="analise-view-rentabilidade">
           <div id="estoque-rent-vazio" class="card" style="display:none;">
             <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-              <div style="font-size:32px;margin-bottom:10px;">💰</div>
+              <div class="vazio-ico"></div>
               <div style="font-weight:600;margin-bottom:6px;">Sem dados de vendas</div>
               <div style="font-size:12px;">Importe o relatório de vendas ML para ver a rentabilidade por SKU.</div>
             </div>
@@ -1766,12 +1766,12 @@
       <!-- VIEW: ORDENS DE COMPRA -->
       <div id="view-ordens-compra" class="view">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-          <h1>Ordens de Compra</h1>
+          <div><div class="pg-title">Ordens de compra</div><div class="pg-sub">Pedidos feitos aos fornecedores e o que ainda está para chegar.</div></div>
           <button class="btn" onclick="abrirModalNovaOC(null)">+ Nova OC</button>
         </div>
         <div id="oc-vazio" class="card" style="display:none;">
           <div class="card-body" style="text-align:center;padding:40px;color:#999;">
-            <div style="font-size:32px;margin-bottom:10px;">🛒</div>
+            <div class="vazio-ico"></div>
             <div style="font-weight:600;margin-bottom:6px;">Nenhuma ordem de compra</div>
             <div style="font-size:12px;">Crie uma OC manualmente ou selecione itens na aba Reposição.</div>
           </div>
@@ -2134,7 +2134,7 @@
   <div class="modal" id="modal-ultimos-cadastrados">
     <div class="modal-content" style="max-width:640px;">
       <div class="modal-header">
-        <div class="modal-title">🕐 Últimos Cadastrados</div>
+        <div class="modal-title">Últimos Cadastrados</div>
         <button class="btn-out btn-sm" onclick="document.getElementById('modal-ultimos-cadastrados').classList.remove('open')">✕</button>
       </div>
       <div class="modal-body" style="max-height:480px;overflow-y:auto;">
@@ -2150,24 +2150,24 @@
   <div class="modal" id="modal-importar">
     <div class="modal-content" style="max-width:480px;">
       <div class="modal-header">
-        <div class="modal-title">📥 Importar dados</div>
+        <div class="modal-title">Importar dados</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-importar')">✕</button>
       </div>
       <div class="modal-body" style="padding:10px 0;">
         <div onclick="document.getElementById('import-tiny-pagar').click();fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">📊</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Importar XLS Tiny ERP</div><div style="font-size:11px;color:#666;">Importa contas a pagar do Tiny ERP (.xls/.xlsx)</div></div>
         </div>
         <div onclick="document.getElementById('import-pagar-csv').click();fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">📋</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Importar planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">Colunas: data | descrição | fornecedor | valor | categoria | pago</div></div>
         </div>
         <div onclick="baixarPlanilhaModelo()" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">⬇️</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Baixar planilha modelo</div><div style="font-size:11px;color:#666;">Baixa CSV com exemplos e instruções de preenchimento</div></div>
         </div>
         <div onclick="document.getElementById('import-json').click();fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">💾</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Importar backup completo (JSON)</div><div style="font-size:11px;color:#666;">Restaura todos os dados de um backup exportado</div></div>
         </div>
         <div onclick="nav('receber');fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
@@ -2182,7 +2182,7 @@
   <div class="modal" id="modal-imposto-lote">
     <div class="modal-content" style="max-width:380px;">
       <div class="modal-header">
-        <div class="modal-title">✏️ Editar Custo em Lote</div>
+        <div class="modal-title">Editar Custo em Lote</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-imposto-lote')">✕</button>
       </div>
       <div class="modal-body">
@@ -2211,20 +2211,20 @@
   <div class="modal" id="modal-importar-estoque">
     <div class="modal-content" style="max-width:480px;">
       <div class="modal-header">
-        <div class="modal-title">📥 Importar dados</div>
+        <div class="modal-title">Importar dados</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-importar-estoque')">✕</button>
       </div>
       <div class="modal-body" style="padding:10px 0;">
         <div onclick="document.getElementById('input-full-xls').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">🏭</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Estoque Full ML (XLS)</div><div style="font-size:11px;color:#666;">Relatório de Estoque Geral Full do Mercado Livre</div></div>
         </div>
         <div onclick="document.getElementById('import-galpao-only').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">🏠</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Estoque Galpão — Lista Upseller (XLS)</div><div style="font-size:11px;color:#666;">Atualiza apenas quantidades — não cria nem altera produtos</div></div>
         </div>
         <div onclick="document.getElementById('import-vendas-ml-est').click();fecharModal('modal-importar-estoque')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">📊</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Vendas ML (XLS)</div><div style="font-size:11px;color:#666;">Relatório de vendas do Mercado Livre por SKU</div></div>
         </div>
       </div>
@@ -2235,7 +2235,7 @@
   <div class="modal" id="modal-importar-produtos">
     <div class="modal-content" style="max-width:480px;">
       <div class="modal-header">
-        <div class="modal-title">📥 Importar produtos</div>
+        <div class="modal-title">Importar produtos</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-importar-produtos')">✕</button>
       </div>
       <div class="modal-body" style="padding:10px 0;">
@@ -2248,7 +2248,7 @@
           <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV exportado pelo sistema com SKU, título e custo</div></div>
         </div>
         <div onclick="exportarSKUs();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">📤</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Exportar SKUs (CSV)</div><div style="font-size:11px;color:#666;">Baixar planilha atual com todos os SKUs e custos</div></div>
         </div>
       </div>
@@ -2259,7 +2259,7 @@
   <div class="modal" id="modal-importar-kits-prod">
     <div class="modal-content" style="max-width:480px;">
       <div class="modal-header">
-        <div class="modal-title">📥 Importar kits</div>
+        <div class="modal-title">Importar kits</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-importar-kits-prod')">✕</button>
       </div>
       <div class="modal-body" style="padding:10px 0;">
@@ -2272,11 +2272,11 @@
           <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV no formato do sistema</div></div>
         </div>
         <div onclick="baixarTemplateKit();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">⬇️</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Baixar template (CSV)</div><div style="font-size:11px;color:#666;">Modelo vazio para preencher manualmente</div></div>
         </div>
         <div onclick="exportarKitsCSV();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">📤</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Exportar Kits (CSV)</div><div style="font-size:11px;color:#666;">Baixar planilha atual com todos os kits</div></div>
         </div>
       </div>
@@ -2314,7 +2314,7 @@
   <div class="modal" id="modal-limpar-dados">
     <div class="modal-content" style="max-width:400px;">
       <div class="modal-header">
-        <div class="modal-title">🗑 Limpar dados importados</div>
+        <div class="modal-title">Limpar dados importados</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-limpar-dados')">✕</button>
       </div>
       <div class="modal-body">
@@ -2322,15 +2322,15 @@
         <div style="display:flex;flex-direction:column;gap:12px;">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;">
             <input type="checkbox" id="limpar-cb-galpao" style="width:16px;height:16px;">
-            <span>🏠 <b>Galpão</b> — estoque importado do Upseller</span>
+            <span><b>Galpão</b> — estoque importado do Upseller</span>
           </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;">
             <input type="checkbox" id="limpar-cb-full" style="width:16px;height:16px;">
-            <span>🏭 <b>Full ML</b> — estoque no centro de distribuição ML</span>
+            <span><b>Full ML</b> — estoque no centro de distribuição ML</span>
           </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;">
             <input type="checkbox" id="limpar-cb-vendas" style="width:16px;height:16px;">
-            <span>📦 <b>Vendas ML</b> — relatório de vendas por SKU</span>
+            <span><b>Vendas ML</b> — relatório de vendas por SKU</span>
           </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--danger);border-top:1px solid var(--gray-200);padding-top:10px;">
             <input type="checkbox" id="limpar-cb-todos" style="width:16px;height:16px;" onchange="toggleLimparTodos(this.checked)">
@@ -2446,7 +2446,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-out btn-sm" id="btn-del-oc" style="color:var(--danger);margin-right:auto;display:none;" onclick="deletarOC()">🗑 Excluir OC</button>
+        <button class="btn-out btn-sm" id="btn-del-oc" style="color:var(--danger);margin-right:auto;display:none;" onclick="deletarOC()">Excluir OC</button>
         <button class="btn-out" onclick="fecharModal('modal-oc')">Cancelar</button>
         <button class="btn" onclick="salvarOC()">Salvar OC</button>
       </div>
@@ -2457,7 +2457,7 @@
   <div class="modal" id="modal-config-reposicao">
     <div class="modal-content" style="max-width:380px;">
       <div class="modal-header">
-        <div class="modal-title">⚙️ Configurações de Reposição</div>
+        <div class="modal-title">Configurações de Reposição</div>
         <button class="btn-out btn-sm" onclick="fecharModal('modal-config-reposicao')">✕</button>
       </div>
       <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
