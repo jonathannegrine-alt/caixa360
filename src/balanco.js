@@ -14,16 +14,14 @@
     const blEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const blN = s => String(s == null ? '' : s).trim().toLowerCase();
 
-    // primeira vez: categorias vindas do Olist entram todas como "dívida"; aqui ganham um palpite pelo nome
-    function balClassificarCategorias(){
-      if(bal.classOk) return; bal.classOk = true;
-      if(localStorage.getItem('mk_bal_class')) return;
-      const divida = /amortiza|capital de giro|empr[eé]stimo|financiamento|mercadoria|fornecedor|^compras?$|simples nacional|\bdas\b|imposto/i, juros = /juros/i;
-      let mudou = false;
-      categorias.forEach(c => { const t = !juros.test(c.nome) && divida.test(c.nome) ? 'divida' : 'operacional'; if(c.tipoPassivo !== t){ c.tipoPassivo = t; mudou = true; } });
-      localStorage.setItem('mk_bal_class', '1');
-      if(mudou && typeof salvar === 'function') salvar();
+    // Dívida ou despesa? Vale a escolha do usuário (comprasCfg.balanco.tipos); sem escolha, um palpite pelo nome.
+    function balTipoDe(nome){
+      const esc = (typeof comprasCfg !== 'undefined' && comprasCfg.balanco && comprasCfg.balanco.tipos) || {};
+      const k = blN(nome); if(esc[k]) return esc[k];
+      if(/juros/i.test(nome)) return 'operacional';
+      return /amortiza|capital de giro|empr[eé]stimo|financiamento|mercadoria|fornecedor|^compras?$|simples nacional|\bdas\b|imposto/i.test(nome || '') ? 'divida' : 'operacional';
     }
+    function balClassificarCategorias(){}
 
     // participação de cada loja na venda de cada produto (90 dias), com o kit aberto nos componentes
     function balParticipacao(){
@@ -55,8 +53,7 @@
       const ativo = caixa + receber + galpao + full + caminhoFull;
 
       // PASSIVO
-      const tipo = new Map(categorias.map(c => [blN(c.nome), c.tipoPassivo || 'divida']));
-      const linhas = pagamentos.filter(p => !p.pago).map(p => { const t = tipo.get(blN(p.cat)) || 'operacional', vencida = p.data <= hoje; return { p, t, entra: vencida || t === 'divida', motivo: vencida ? 'já venceu' : t === 'divida' ? 'dívida a vencer' : 'despesa futura (fora)' }; });
+      const linhas = pagamentos.filter(p => !p.pago).map(p => { const t = balTipoDe(p.cat || ''), vencida = p.data <= hoje; return { p, t, entra: vencida || t === 'divida', motivo: vencida ? 'já venceu' : t === 'divida' ? 'dívida a vencer' : 'despesa futura (fora)' }; });
       const grupos = {};
       linhas.filter(l => l.entra).forEach(l => { const g = l.p.cat || 'Sem categoria'; grupos[g] = (grupos[g] || 0) + (Number(l.p.val) || 0); });
       const passivo = Object.values(grupos).reduce((s, v) => s + v, 0);
@@ -122,13 +119,18 @@
             ${bal.aberto ? `<div style="margin-top:14px;"><div class="text-muted" style="font-size:12.5px;margin-bottom:8px;">Cada categoria é <b>dívida</b> (parcelas futuras entram) ou <b>despesa</b> (só entra o que já venceu). Troque aqui se alguma estiver errada.</div>
               <div style="overflow-x:auto;max-height:420px;"><table class="cp-tab"><thead><tr><th>Categoria</th><th>Tratamento</th><th class="num">Em aberto</th><th class="num">Entra no passivo</th><th class="num">Fica fora</th></tr></thead><tbody>
               ${(() => { const porCat = {}; B.linhas.forEach(l => { const g = l.p.cat || 'Sem categoria'; porCat[g] = porCat[g] || { ab: 0, en: 0, fo: 0 }; const v = Number(l.p.val) || 0; porCat[g].ab += v; if(l.entra) porCat[g].en += v; else porCat[g].fo += v; });
-                return Object.entries(porCat).sort((a, b) => b[1].ab - a[1].ab).map(([g, x]) => { const c = categorias.find(k => blN(k.nome) === blN(g)), t = c ? (c.tipoPassivo || 'divida') : 'operacional';
+                return Object.entries(porCat).sort((a, b) => b[1].ab - a[1].ab).map(([g, x]) => { const c = true, t = balTipoDe(g);
                   return `<tr><td><b>${blEsc(g)}</b></td><td>${c ? `<select onchange="balTipo('${blEsc(g).replace(/'/g, '&#39;')}', this.value)" style="width:auto;"><option value="divida" ${t === 'divida' ? 'selected' : ''}>Dívida: parcelas futuras entram</option><option value="operacional" ${t !== 'divida' ? 'selected' : ''}>Despesa: só o que já venceu</option></select>` : 'Despesa'}</td><td class="num">${fmt(x.ab)}</td><td class="num"><b>${fmt(x.en)}</b></td><td class="num text-muted">${fmt(x.fo)}</td></tr>`; }).join(''); })()}
               </tbody></table></div></div>` : ''}
           </div>
         </div>`;
     }
-    function balTipo(nome, tipo){ const c = categorias.find(k => blN(k.nome) === blN(nome)); if(!c) return; c.tipoPassivo = tipo; if(typeof salvar === 'function') salvar(); balDesenhar(); }
+    function balTipo(nome, tipo){
+      comprasCfg.balanco = comprasCfg.balanco || {}; comprasCfg.balanco.tipos = comprasCfg.balanco.tipos || {};
+      comprasCfg.balanco.tipos[blN(nome)] = tipo;
+      if(typeof comprasSalvarCfg === 'function') comprasSalvarCfg();
+      balDesenhar();
+    }
 
     function balExportar(){
       const B = balCalcular(), nome = bal.conta ? ((typeof contaNome === 'function' && contaNome(bal.conta)) || bal.conta) : 'consolidado';

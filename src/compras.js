@@ -510,6 +510,7 @@
         diasIgnorados: (c.diasIgnorados || []).filter(r => t(r.ini)).map(r => ({ ini: t(r.ini), fim: t(r.fim), motivo: t(r.motivo) })),
         fornecedores: comprasCfg.fornecedores || {},
         estoque: comprasCfg.estoque || {},
+        balanco: comprasCfg.balanco || {},
       };
       comprasSalvarCfg();
       fecharModal('modal-vml');
