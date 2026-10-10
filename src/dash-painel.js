@@ -43,7 +43,9 @@
       const n = serie.length;
       const tot = serie.reduce((a,d) => { a.conf += d.conf; a.proj += d.proj; a.saida += d.saida; return a; }, {conf:0, proj:0, saida:0});
       const fim = serie[n - 1].saldo;
-      const pior = serie.reduce((m,d) => d.saldo < m.saldo ? d : m, serie[0]);
+      // menor saldo do período — o saldo de agora também conta
+      const piorDia = serie.reduce((m,d) => d.saldo < m.saldo ? d : m, serie[0]);
+      const pior = saldoAtual < piorDia.saldo ? { data: serie[0].data, saldo: saldoAtual, agora: true } : piorDia;
       const variacao = fim - saldoAtual;
       const reserva = Number(reservaMinima) || 0;
       const abaixoReserva = reserva > 0 ? serie.find(d => d.saldo < reserva) : null;
@@ -82,7 +84,7 @@
       }).join('');
       const cada = Math.max(1, Math.ceil(n / 10));
       const eixoX = serie.map((d,i) => (i % cada === 0 || i === n - 1) ? `<text class="pc-eixo" x="${xs(i).toFixed(1)}" y="${H - 4}" text-anchor="middle">${d.data.substring(8,10)}/${d.data.substring(5,7)}</text>` : '').join('');
-      const iPior = serie.indexOf(pior);
+      const iPior = Math.max(0, serie.indexOf(pior));
 
       const atalhos = [15, 30, 60, 90];
       const cor = v => v >= 0 ? 'var(--success)' : 'var(--danger)';
@@ -101,7 +103,7 @@
               <div><span>Entradas previstas</span><b style="color:var(--success)">+ ${fmt(tot.conf + tot.proj)}</b><small>${fmt(tot.conf)} confirmado${tot.proj > 0 ? ' · ' + fmt(tot.proj) + ' projetado' : ''}</small></div>
               <div><span>Contas a pagar</span><b style="color:var(--danger)">− ${fmt(tot.saida)}</b></div>
               <div><span>Saldo em ${ptDate(serie[n - 1].data).substring(0,5)}</span><b style="color:${cor(fim)}">${fmt(fim)}</b><small style="color:${cor(variacao)}">${variacao >= 0 ? '▲' : '▼'} ${fmt(Math.abs(variacao))} no período</small></div>
-              <div><span>Menor saldo</span><b style="color:${pior.saldo < 0 ? 'var(--danger)' : (reserva > 0 && pior.saldo < reserva ? 'var(--warning)' : 'var(--text)')}">${fmt(pior.saldo)}</b><small>em ${ptDate(pior.data).substring(0,5)}</small></div>
+              <div><span>Menor saldo</span><b style="color:${pior.saldo < 0 ? 'var(--danger)' : (reserva > 0 && pior.saldo < reserva ? 'var(--warning)' : 'var(--text)')}">${fmt(pior.saldo)}</b><small>${pior.agora ? 'é o saldo de hoje' : 'em ' + ptDate(pior.data).substring(0,5)}</small></div>
             </div>
             ${negativo ? `<div class="alert alert-danger" style="margin:14px 0 0;">O caixa fica <b>negativo em ${ptDate(negativo.data)}</b>. Antecipe recebíveis ou renegocie contas antes dessa data.</div>`
               : (abaixoReserva ? `<div class="alert alert-warning" style="margin:14px 0 0;">O saldo fica <b>abaixo da reserva mínima (${fmt(reserva)}) em ${ptDate(abaixoReserva.data)}</b>.</div>` : '')}
@@ -113,7 +115,7 @@
                 ${temNegativo ? `<line class="pc-zero" x1="${mL}" x2="${W - mR}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}"/>` : ''}
                 <path d="${area}" fill="url(#pc-grad)"/>
                 <path class="pc-linha" d="${linha}"/>
-                <circle class="pc-ponto-pior" cx="${xs(iPior).toFixed(1)}" cy="${y(pior.saldo).toFixed(1)}" r="5"/>
+                ${pior.agora ? '' : `<circle class="pc-ponto-pior" cx="${xs(iPior).toFixed(1)}" cy="${y(pior.saldo).toFixed(1)}" r="5"/>`}
                 <line class="pc-grade" x1="${mL}" x2="${W - mR}" y1="${yBar0 + 1}" y2="${yBar0 + 1}"/>
                 ${barras}
                 ${eixoX}
