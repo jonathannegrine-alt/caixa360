@@ -2,7 +2,7 @@
 // Tudo passa pela Edge Function ml-atendimento. Respostas prontas ficam em localStorage (mk_respostas_prontas).
 // Também cuida do pop-up que pede a reconexão da conta quando o token não tem os escopos novos.
 
-    let atdPerg = { status:'UNANSWERED', lista:[], total:0, offset:0, carregando:false, erro:null, semPermissao:false };
+    let atdPerg = { status:'UNANSWERED', mlb:'', lista:[], total:0, offset:0, carregando:false, erro:null, semPermissao:false };
     let atdMsg = { conversas:[], carregando:false, erro:null, semPermissao:false };
     let atdConversa = null;   // { pack, order, buyer, mensagens, bloqueio }
     const ATD_MAX_MSG = 350;
@@ -79,7 +79,7 @@
 
     async function atdPergCarregar(offset){
       atdPerg.carregando = true; atdPerg.offset = offset || 0; atdPergDesenhar();
-      const r = await atdChamar({ acao:'perguntas', status: atdPerg.status, offset: atdPerg.offset, limit: 30 });
+      const r = await atdChamar({ acao:'perguntas', status: atdPerg.status, item_id: atdPerg.mlb.trim().replace(/^MLB-?/i, 'MLB'), offset: atdPerg.offset, limit: 30 });
       atdPerg.carregando = false;
       atdPerg.erro = r.error || null; atdPerg.semPermissao = !!r.sem_permissao;
       atdPerg.lista = r.perguntas || []; atdPerg.total = r.total || 0;
@@ -97,17 +97,23 @@
           <div class="d-flex gap-1" style="flex-wrap:wrap;">
             <button class="btn-out btn btn-sm" onclick="atdPergCarregar(0)">↻ Atualizar</button>
             <button class="btn-out btn btn-sm" onclick="atdGerenciarProntas()">⚙ Respostas prontas</button>
+            <button class="btn-out btn btn-sm" onclick="atdConfigSaudacao()">✍ Saudação e assinatura</button>
           </div>
         </div>
         ${p.semPermissao ? atdAvisoPermissao() : (p.erro ? `<div class="alert alert-danger">${atdEsc(p.erro)}</div>` : '')}
         <div class="chips" style="margin-bottom:14px;">
           <button class="chip ${p.status === 'UNANSWERED' ? 'active' : ''}" onclick="atdPergStatus('UNANSWERED')">Sem resposta${p.status === 'UNANSWERED' && !p.carregando ? `<span class="n">${p.total}</span>` : ''}</button>
           <button class="chip ${p.status === 'ANSWERED' ? 'active' : ''}" onclick="atdPergStatus('ANSWERED')">Respondidas</button>
+          <span style="display:inline-flex;gap:6px;align-items:center;margin-left:8px;">
+            <input type="text" id="atd-mlb" placeholder="Filtrar por anúncio (MLB…)" value="${atdEsc(p.mlb)}" style="width:210px;" onkeydown="if(event.key==='Enter'){atdPerg.mlb=this.value;atdPergCarregar(0);}">
+            <button class="btn-out btn btn-sm" onclick="atdPerg.mlb=document.getElementById('atd-mlb').value;atdPergCarregar(0);">Filtrar</button>
+          </span>
+          ${p.status === 'ANSWERED' && !p.carregando && atdTempoMedio(p.lista) ? `<span class="text-muted" style="margin-left:auto;align-self:center;">Tempo médio de resposta nesta página: <b style="color:var(--text)">${atdTempoMedio(p.lista)}</b></span>` : ''}
         </div>
         <div class="card">
           ${p.carregando ? '<div class="vazio"><b>Carregando perguntas…</b></div>'
             : (p.lista.length ? p.lista.map(q => atdPergCard(q)).join('')
-              : `<div class="vazio"><b>${p.status === 'UNANSWERED' ? 'Nenhuma pergunta aguardando resposta 🎉' : 'Nenhuma pergunta respondida encontrada'}</b></div>`)}
+              : (p.erro ? '<div class="vazio">Não foi possível carregar as perguntas.</div>' : `<div class="vazio"><b>${p.status === 'UNANSWERED' ? 'Nenhuma pergunta aguardando resposta 🎉' : 'Nenhuma pergunta respondida encontrada'}</b></div>`))}
           ${paginas > 1 ? `<div class="card-header" style="border-bottom:none;border-top:1px solid var(--border);"><span class="text-muted">Página ${pagAtual} de ${paginas}</span>
             <div class="pag"><button ${pagAtual === 1 ? 'disabled' : ''} onclick="atdPergCarregar(${p.offset - 30})">‹ Anterior</button><button ${pagAtual >= paginas ? 'disabled' : ''} onclick="atdPergCarregar(${p.offset + 30})">Próxima ›</button></div></div>` : ''}
         </div>`;
@@ -125,7 +131,7 @@
         </div>
         <div class="atd-corpo">
           <div class="atd-balao"><div class="atd-quem">${atdEsc(q.comprador || 'Comprador')} · ${atdQuando(q.data)}</div>${atdEsc(q.texto)}</div>
-          ${q.resposta ? `<div class="atd-balao minha"><div class="atd-quem">Sua resposta · ${atdQuando(q.resposta.data)}</div>${atdEsc(q.resposta.texto)}</div>` : `
+          ${q.resposta ? `<div class="atd-balao minha"><div class="atd-quem">Sua resposta · ${atdQuando(q.resposta.data)}${atdDuracao(q.data, q.resposta.data) ? ' · respondida em ' + atdDuracao(q.data, q.resposta.data) : ''}</div>${atdEsc(q.resposta.texto)}</div>` : `
             <textarea id="${idTxt}" rows="2" maxlength="2000" placeholder="Escreva a resposta…" oninput="atdContar(this, 2000)"></textarea>
             <div class="atd-acoes">
               ${atdSelectProntas(idTxt)}
@@ -144,11 +150,40 @@
     }
     function atdPergStatus(s){ atdPerg.status = s; atdPergCarregar(0); }
 
+    // tempo entre a pergunta e a resposta
+    function atdMinutos(a, b){ const m = (new Date(b).getTime() - new Date(a).getTime()) / 60000; return isFinite(m) && m >= 0 ? m : null; }
+    function atdFmtMin(m){
+      if(m == null) return '';
+      if(m < 60) return Math.max(1, Math.round(m)) + ' min';
+      if(m < 60 * 24) return Math.floor(m / 60) + 'h ' + String(Math.round(m % 60)).padStart(2, '0') + 'min';
+      return Math.round(m / 60 / 24) + ' dia(s)';
+    }
+    function atdDuracao(a, b){ return atdFmtMin(atdMinutos(a, b)); }
+    function atdTempoMedio(lista){
+      const t = lista.filter(q => q.resposta).map(q => atdMinutos(q.data, q.resposta.data)).filter(m => m != null);
+      return t.length ? atdFmtMin(t.reduce((s,m) => s + m, 0) / t.length) : '';
+    }
+
+    // saudação e assinatura acrescentadas automaticamente às respostas de perguntas
+    function atdSaudacao(){ try { return JSON.parse(localStorage.getItem('mk_atd_saudacao') || '{}'); } catch(e){ return {}; } }
+    function atdMontarResposta(texto){
+      const s = atdSaudacao();
+      return [s.saudacao, texto, s.assinatura].map(x => String(x || '').trim()).filter(Boolean).join(' ');
+    }
+    function atdConfigSaudacao(){
+      const s = atdSaudacao();
+      vmlModal('Saudação e assinatura', `
+        <div class="text-muted" style="margin-bottom:14px;">Colocadas automaticamente no começo e no fim de cada resposta de pergunta. Deixe em branco para não usar.</div>
+        <div class="form-group"><label class="form-label">Saudação (início da resposta)</label><input type="text" id="atd-saud" maxlength="200" placeholder="Olá, tudo bem?" value="${atdEsc(s.saudacao || '')}"></div>
+        <div class="form-group"><label class="form-label">Assinatura (fim da resposta)</label><input type="text" id="atd-assin" maxlength="200" placeholder="Qualquer dúvida estamos à disposição. Equipe MK Store" value="${atdEsc(s.assinatura || '')}"></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="localStorage.setItem('mk_atd_saudacao', JSON.stringify({saudacao:document.getElementById('atd-saud').value, assinatura:document.getElementById('atd-assin').value}));fecharModal('modal-vml');">Salvar</button>`);
+    }
+
     async function atdResponder(id, btn){
       const t = document.getElementById('atd-resp-' + id), texto = (t?.value || '').trim();
       if(!texto){ t?.focus(); return; }
       btn.disabled = true; btn.textContent = 'Enviando…';
-      const r = await atdChamar({ acao:'responder', question_id: id, text: texto });
+      const r = await atdChamar({ acao:'responder', question_id: id, text: atdMontarResposta(texto) });
       if(r.error){ btn.disabled = false; btn.textContent = 'Responder'; alert(r.error + (r.detail ? '\n' + r.detail : '')); return; }
       const card = document.getElementById('atd-perg-' + id); if(card) card.remove();
       atdPerg.lista = atdPerg.lista.filter(q => String(q.id) !== String(id));
@@ -214,7 +249,7 @@
                   <div class="ds"><b>${atdEsc(v.comprador_nome || v.comprador_apelido || 'Venda #' + c.pack_id)}</b><small>${atdEsc(v.titulo || 'Venda #' + c.pack_id)}</small></div>
                   <span class="badge badge-danger">${c.nao_lidas} nova${c.nao_lidas > 1 ? 's' : ''}</span>
                 </div>`;
-              }).join('') : '<div class="vazio"><b>Nenhuma mensagem não lida 🎉</b>As conversas com mensagens novas aparecem aqui.</div>')}
+              }).join('') : (m.erro ? '<div class="vazio">Não foi possível carregar as mensagens.</div>' : '<div class="vazio"><b>Nenhuma mensagem não lida 🎉</b>As conversas com mensagens novas aparecem aqui.</div>'))}
         </div>`;
     }
 

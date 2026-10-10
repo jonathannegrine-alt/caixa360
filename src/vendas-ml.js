@@ -72,7 +72,7 @@
           });
           if(error || data?.error){
             vmlSemPermissao = !!data?.sem_permissao;
-            msg = '❌ ' + (data?.error || error?.message);
+            msg = vmlSemPermissao ? '⚠️ Conta do ML precisa ser reconectada' : '❌ ' + (data?.error || error?.message);
             break;
           }
           vmlSemPermissao = false;

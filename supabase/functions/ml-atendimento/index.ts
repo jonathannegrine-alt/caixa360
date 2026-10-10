@@ -83,9 +83,10 @@ Deno.serve(async (req) => {
     // ── PERGUNTAS ───────────────────────────────────────────────────────────
     if (acao === 'perguntas') {
       const status = body.status === 'ANSWERED' ? 'ANSWERED' : 'UNANSWERED'
+      const item = /^MLB\d+$/i.test(String(body.item_id || '').trim()) ? String(body.item_id).trim().toUpperCase() : ''
       const limit = Math.min(50, Math.max(1, Number(body.limit) || 30))
       const offset = Math.max(0, Number(body.offset) || 0)
-      const r = await ml(`https://api.mercadolibre.com/questions/search?seller_id=${seller}&status=${status}&sort_fields=date_created&sort_types=DESC&limit=${limit}&offset=${offset}&api_version=4`, token)
+      const r = await ml(`https://api.mercadolibre.com/questions/search?seller_id=${seller}&status=${status}&sort_fields=date_created&sort_types=DESC&limit=${limit}&offset=${offset}&api_version=4${item ? '&item=' + item : ''}`, token)
       if (!r.ok) return resp(semPermissao(r))
       const perguntas = r.data.questions || []
       // dados dos anúncios (título, foto, preço, estoque)

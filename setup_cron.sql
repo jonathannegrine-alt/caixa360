@@ -9,3 +9,8 @@ SELECT cron.schedule(
   ) AS request_id;
   $$
 );
+
+-- Vendas ML: hoje/ontem + preenchimento do historico (365 dias), a cada 15 minutos.
+-- Criado em 2026-10-10 copiando o comando (com o segredo) do job ml-snapshot-diario:
+--   select cron.schedule('ml-vendas-sync', '*/15 * * * *', replace(command, 'ml-snapshot', 'ml-vendas'))
+--   from cron.job where jobname = 'ml-snapshot-diario';
