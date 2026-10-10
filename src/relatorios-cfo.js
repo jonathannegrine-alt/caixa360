@@ -467,6 +467,7 @@
       const modal = document.getElementById('cfo-modal');
       if(cfoAberto){
         modal.classList.add('open');
+        if(typeof cfoPosicionarModal === 'function') cfoPosicionarModal();
         if(cfoHistorico.length === 0) iniciarCFO();
       } else {
         modal.classList.remove('open');
@@ -711,3 +712,65 @@ Perfil do usuário:
         console.error('CFO error:', err);
       }
     }
+
+    // ===== BOTÕES FLUTUANTES ARRASTÁVEIS (robô e feedback) =====
+    // Segurar e arrastar muda o botão de lugar; a posição fica salva neste navegador (mk_pos_<id>).
+    function flutuanteArrastavel(id){
+      const el = document.getElementById(id);
+      if(!el || el.dataset.arrastavel) return;
+      el.dataset.arrastavel = '1';
+      el.style.touchAction = 'none';
+      const chave = 'mk_pos_' + id;
+      const aplicar = (x, y) => {
+        const w = el.offsetWidth || 52, h = el.offsetHeight || 52;
+        x = Math.max(6, Math.min(window.innerWidth - w - 6, x));
+        y = Math.max(6, Math.min(window.innerHeight - h - 6, y));
+        el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.right = 'auto'; el.style.bottom = 'auto';
+        return [x, y];
+      };
+      let salvo = null;
+      try { salvo = JSON.parse(localStorage.getItem(chave) || 'null'); } catch(e){}
+      if(Array.isArray(salvo)) aplicar(salvo[0], salvo[1]);
+      window.addEventListener('resize', () => { if(el.style.left) aplicar(parseFloat(el.style.left), parseFloat(el.style.top)); });
+
+      let ini = null, moveu = false;
+      el.addEventListener('pointerdown', e => {
+        const r = el.getBoundingClientRect();
+        ini = { px: e.clientX, py: e.clientY, x: r.left, y: r.top };
+        moveu = false;
+        try { el.setPointerCapture(e.pointerId); } catch(err){}
+      });
+      el.addEventListener('pointermove', e => {
+        if(!ini) return;
+        const dx = e.clientX - ini.px, dy = e.clientY - ini.py;
+        if(!moveu && Math.abs(dx) + Math.abs(dy) < 6) return;
+        moveu = true;
+        el.style.cursor = 'grabbing';
+        aplicar(ini.x + dx, ini.y + dy);
+        if(id === 'btn-cfo') cfoPosicionarModal();
+      });
+      const soltar = () => {
+        if(!ini) return;
+        ini = null; el.style.cursor = '';
+        if(moveu) try { localStorage.setItem(chave, JSON.stringify([parseFloat(el.style.left), parseFloat(el.style.top)])); } catch(e){}
+      };
+      el.addEventListener('pointerup', soltar);
+      el.addEventListener('pointercancel', soltar);
+      // arrastar não conta como clique
+      el.addEventListener('click', e => { if(moveu){ e.stopImmediatePropagation(); e.preventDefault(); moveu = false; } }, true);
+    }
+
+    // A janela do robô abre ao lado do botão, onde ele estiver
+    function cfoPosicionarModal(){
+      const btn = document.getElementById('btn-cfo'), modal = document.getElementById('cfo-modal');
+      if(!btn || !modal || !btn.style.left) return;
+      const r = btn.getBoundingClientRect();
+      const w = Math.min(380, window.innerWidth - 32), h = Math.min(560, window.innerHeight - 24);
+      const x = Math.max(12, Math.min(window.innerWidth - w - 12, r.right - w));
+      const acima = r.top - h - 10;
+      const y = acima >= 12 ? acima : Math.min(window.innerHeight - h - 12, r.bottom + 10);
+      modal.style.left = x + 'px'; modal.style.top = Math.max(12, y) + 'px'; modal.style.right = 'auto'; modal.style.bottom = 'auto';
+    }
+
+    flutuanteArrastavel('btn-cfo');
+    flutuanteArrastavel('btn-feedback');
