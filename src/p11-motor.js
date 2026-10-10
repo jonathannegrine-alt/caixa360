@@ -117,7 +117,8 @@
         if(!res.ok || json.error) throw new Error(json.error || `HTTP ${res.status}`);
         estoqueFullML = json.itens || [];
         estoqueFullML._syncAt = new Date().toISOString();
-        localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt }));
+        estoqueFullML._fonte = 'api';
+        localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: estoqueFullML, syncAt: estoqueFullML._syncAt, fonte: 'api' }));
         renderEstoqueFullTab();
       } catch(err){
         if(st) st.textContent = 'Erro: ' + err.message;

@@ -181,7 +181,10 @@
       const el = document.getElementById('view-compras');
       if(!el) return;
       if(!comprasVendas.dados) el.innerHTML = '<div class="vazio"><b>Calculando a sugestão de compras…</b></div>';
+      const idadeFull = Array.isArray(estoqueFullML) && estoqueFullML._syncAt ? Date.now() - new Date(estoqueFullML._syncAt).getTime() : Infinity;
+      const buscaFull = (!Array.isArray(estoqueFullML) || estoqueFullML._fonte !== 'xls') && idadeFull > 30 * 60 * 1000 ? comprasFullAPI() : null;
       await comprasCarregarVendas(false);
+      if(buscaFull) await buscaFull;
       comprasDesenhar();
     }
 
@@ -223,7 +226,12 @@
           : [{ nome: 'Vendas do Mercado Livre', st: dias >= 100 ? 'ok' : 'parcial', txt: dias + ' de 120 dias importados' + (dias >= 100 ? '' : '. A média fica mais precisa quando o histórico terminar de carregar') },
              { nome: 'Contas do Mercado Livre', st: 'parcial', txt: 'Só uma conta conectada. Produtos vendidos em outra conta ficam com venda zero aqui' }]),
         { nome: 'Estoque do galpão', st: estoqueGalpao.length ? 'ok' : 'falta', txt: estoqueGalpao.length ? estoqueGalpao.length + ' produtos' + (dataGalpao ? ', atualizado em ' + ptDate(dataGalpao) : '') : 'Não importado: a conta considera galpão zerado', acao: "nav('estoque')", botao: 'Importar' },
-        { nome: 'Estoque no Full', st: fullUn > 0 ? 'ok' : 'falta', txt: fullUn > 0 ? cpInt(fullUn) + ' unidades em ' + nFull + (nFull === 1 ? ' anúncio' : ' anúncios') + (fonteFull === 'xls' ? ', vindas de planilha importada. Com duas contas, importe a planilha de cada uma (a segunda é somada)' : ', buscadas no Mercado Livre') : 'Zerado: a conta considera que não há nada no Full', acao: "nav('estoque');setEstoqueTab('full')", botao: 'Abrir estoque Full', sempre: true },
+        { nome: 'Estoque no Full', st: comprasFullInfo && comprasFullInfo.erro ? 'falta' : fullUn > 0 ? 'ok' : 'falta', sempre: true,
+          txt: comprasFullInfo && comprasFullInfo.erro ? 'Não consegui buscar no Mercado Livre: ' + comprasFullInfo.erro
+            : fullUn <= 0 ? 'Zerado: a conta considera que não há nada no Full'
+            : fonteFull === 'xls' ? cpInt(fullUn) + ' unidades em ' + nFull + ' anúncios, vindas de planilha importada. Clique para trocar pela busca automática'
+            : cpInt(fullUn) + ' unidades, buscadas no Mercado Livre' + (estoqueFullML._syncAt ? ' às ' + new Date(estoqueFullML._syncAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '') + (comprasFullInfo && comprasFullInfo.contas ? ' (' + comprasFullInfo.contas.map(x => (x.apelido || x.conta) + ' ' + cpInt(x.unidades)).join(' + ') + ' antes de abrir os kits)' : '') + '. Não inclui envio criado que a transportadora ainda não coletou',
+          acao: 'comprasBuscarFull(this)', botao: 'Buscar agora no Mercado Livre' },
         { nome: 'Kits', st: kitsN ? 'ok' : 'falta', txt: kitsN ? kitsN + ' kits: a venda do kit desconta cada componente' : 'Nenhum kit cadastrado: cada kit aparece como um produto à parte e os componentes ficam com venda de menos', acao: "nav('skus');setSkuTab('composicoes')", botao: 'Cadastrar kits' },
         { nome: 'Custos', st: semCusto ? 'parcial' : 'ok', txt: semCusto ? semCusto + ' produtos com venda e sem custo: o valor da compra deles fica zerado' : 'Todos os produtos com venda têm custo', acao: semCusto ? "nav('skus');skuFiltrarCusto('sem')" : '', botao: 'Preencher' },
         { nome: 'Fornecedores', st: comForn ? 'ok' : 'falta', txt: comForn ? comForn + ' produtos com fornecedor (o da última compra)' : 'Nenhum produto tem fornecedor: importe o Relatório de Compras da UpSeller para trazer o fornecedor da última compra', acao: 'comprasImportarPO()', botao: 'Importar relatório de compras', sempre: true },
@@ -354,9 +362,29 @@
     function comprasLimpar(){ comprasFiltro = { sit: comprasFiltro.sit, busca:'', forn:'', fam:'', extra:'' }; comprasOrd = { col:'', dir:1 }; comprasSim = {}; comprasDesenhar(); }
     function comprasSimular(k, v){ const n = Number(v); if(n > 0) comprasSim[k] = n; else delete comprasSim[k]; comprasDesenhar(); }
     async function comprasAtualizar(btn){ if(btn){ btn.disabled = true; btn.textContent = 'Atualizando…'; } await comprasCarregarVendas(true); comprasDesenhar(); }
+    // Estoque do Full pela API do Mercado Livre, de todas as contas (Edge Function ml-inventory)
+    let comprasFullInfo = null, comprasFullBuscando = false;
+    async function comprasFullAPI(){
+      if(comprasFullBuscando) return false;
+      comprasFullBuscando = true;
+      try {
+        const sd = await supa.auth.getSession(), sess = sd && sd.data && sd.data.session;
+        if(!sess) return false;
+        const r = await fetch(SUPA_URL + '/functions/v1/ml-inventory', { method: 'POST', headers: { Authorization: 'Bearer ' + sess.access_token, 'Content-Type': 'application/json' }, body: '{}' });
+        const j = await r.json();
+        if(!r.ok || j.error || !Array.isArray(j.itens)){ comprasFullInfo = { erro: j.error || ('http ' + r.status) }; return false; }
+        estoqueFullML = j.itens;
+        estoqueFullML._syncAt = new Date().toISOString();
+        estoqueFullML._fonte = 'api';
+        try { localStorage.setItem('mk_estoque_full_ml', JSON.stringify({ itens: j.itens, syncAt: estoqueFullML._syncAt, fonte: 'api' })); } catch(e){}
+        comprasFullInfo = { contas: j.contas || [] };
+        return true;
+      } catch(e){ comprasFullInfo = { erro: e.message }; return false; }
+      finally { comprasFullBuscando = false; }
+    }
     async function comprasBuscarFull(btn){
       if(btn){ btn.disabled = true; btn.textContent = 'Buscando…'; }
-      try { if(typeof sincronizarEstoqueFull === 'function') await sincronizarEstoqueFull(); } catch(e){}
+      await comprasFullAPI();
       comprasDesenhar();
     }
 
