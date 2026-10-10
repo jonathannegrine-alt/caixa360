@@ -765,3 +765,5 @@ input[type="checkbox"]{accent-color:var(--primary);}
 .fx-rodape{padding:10px 16px;font-size:11.5px;color:var(--text-muted);border-top:1px solid var(--border);}
 #plan-kpis .kpi-sub{display:block;}
 @media (max-width:768px){ .fx-controles .fx-modo{margin-left:0;} .fx-table th,.fx-table td{padding:9px 10px;} .fx-acum{min-width:120px;} }
+.fx-table th{padding:11px 12px;} .fx-table td{padding:10px 12px;} .fx-table tfoot td{padding:12px;} .fx-acum{min-width:150px;}
+.fx-table th:first-child,.fx-table td:first-child{padding-left:16px;} .fx-table th:last-child,.fx-table td:last-child{padding-right:16px;}

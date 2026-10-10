@@ -162,8 +162,8 @@
       const itens = pagamentos.filter(p => p.data === d && !p.pago).sort((a,b) => b.val - a.val);
       const total = itens.reduce((s,p) => s + p.val, 0);
       vmlModal('Contas de ' + ptDate(d) + ' · ' + nomeDia(d), `<table><thead><tr><th>Descrição</th><th>Fornecedor</th><th>Categoria</th><th style="text-align:right;">Valor</th></tr></thead><tbody>
-          ${itens.map(p => `<tr><td>${esc(p.desc)}${p.parcela ? ' <span class="ap-parc">' + esc(p.parcela) + '</span>' : ''}</td><td>${esc(p.forn || '—')}</td><td>${esc(p.cat || '—')}</td><td style="text-align:right;font-weight:650;">${fmt(p.val)}</td></tr>`).join('')}
-          </tbody><tfoot><tr><td colspan="3" style="font-weight:700;">Total do dia</td><td style="text-align:right;font-weight:750;">${fmt(total)}</td></tr></tfoot></table>`,
+          ${itens.map(p => `<tr><td>${esc(p.desc)}${p.parcela ? ' <span class="ap-parc">' + esc(p.parcela) + '</span>' : ''}</td><td>${esc(p.forn || '—')}</td><td>${esc(p.cat || '—')}</td><td style="text-align:right;font-weight:650;white-space:nowrap;">${fmt(p.val)}</td></tr>`).join('')}
+          </tbody><tfoot><tr><td colspan="3" style="font-weight:700;">Total do dia</td><td style="text-align:right;font-weight:750;white-space:nowrap;">${fmt(total)}</td></tr></tfoot></table>`,
         `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn" onclick="fecharModal('modal-vml');planVerNoPagar('${d}')">Abrir em Contas a pagar</button>`);
     }
 
@@ -240,7 +240,7 @@
         return `<tr class="fx-row${cls}">
           <td>${ptDate(x.d)}${x.d === hoje ? ' <span class="fx-tag">hoje</span>' : ''}</td>
           <td class="fx-dia">${nomeDia(x.d)}</td>
-          <td class="num fx-ent">${x.e.conf > 0 ? fmt(x.e.conf) : '—'}</td>
+          <td class="num ${x.e.conf > 0 ? 'fx-ent' : 'fx-zero'}">${x.e.conf > 0 ? fmt(x.e.conf) : '—'}</td>
           ${showProj ? `<td class="num fx-proj">${x.e.proj > 0 ? fmt(x.e.proj) : '—'}</td><td class="num" style="font-weight:600;">${fmt(x.entrada)}</td>` : ''}
           <td class="num">${x.pag > 0 ? `<a class="fx-link" onclick="planDiaDetalhe('${x.d}')" title="Ver as contas deste dia">${fmt(x.pag)}</a>` : '—'}</td>
           <td class="num ${x.saldoDia < 0 ? 'text-danger' : x.saldoDia > 0 ? 'text-success' : 'fx-zero'}">${fmt(x.saldoDia)}</td>
