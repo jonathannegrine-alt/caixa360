@@ -89,12 +89,12 @@
       const itens = new Map();
       const item = (sku) => { const k = cpNorm(sku); if(!k) return null; if(!itens.has(k)) itens.set(k, { sku: String(sku).trim(), nome: '', galpao: 0, transito: 0, full: 0, custo: 0, forn: '' }); return itens.get(k); };
       componentes.forEach(c => { const it = item(c.codigo); if(!it) return; it.nome = it.nome || c.descricao || ''; it.custo = cpNum(c.custo_unitario) || it.custo; it.forn = c.fornecedor || it.forn; });
-      estoqueGalpao.forEach(e => { if(kits.has(cpNorm(e.sku))) return; const it = item(e.sku); if(!it) return; it.nome = it.nome || e.descricao || ''; it.galpao += cpNum(e.qtd_galpao); it.transito += cpNum(e.em_transito); if(!it.custo) it.custo = cpNum(e.custo_medio); });
+      estoqueGalpao.forEach(e => { if(kits.has(cpNorm(e.sku))) return; const it = item(e.sku); if(!it) return; it.nome = it.nome || e.descricao || ''; it.galpao += cpNum(e.qtd_galpao); it.transito += cpNum(e.em_transito); if(cpNum(e.custo_medio) > 0) it.custo = cpNum(e.custo_medio); });   // custo médio do galpão vale mais que o do cadastro
       skus.forEach(s => { if(kits.has(cpNorm(s.sku))) return; const it = item(s.sku); if(!it) return; it.nome = it.nome || s.titulo || ''; if(!it.custo) it.custo = cpNum(s.custo); });
       // Full: estoque por SKU do anúncio; kits abrem nos componentes
       const addFull = (sku, q) => { const k = cpNorm(sku); if(!q) return; if(kits.has(k)) kits.get(k).forEach(c => { const it = item(c.sku); if(it) it.full += q * c.qtd; }); else { const it = item(sku); if(it) it.full += q; } };
       const temFullAPI = Array.isArray(estoqueFullML) && estoqueFullML.length > 0;
-      if(temFullAPI) estoqueFullML.forEach(f => addFull(f.sku, cpNum(f.aptos_venda) + cpNum(f.em_transito) + cpNum(f.pendente) + cpNum(f.em_separacao)));   // em_separacao = entrada pendente (a caminho do Full) na planilha do ML
+      if(temFullAPI) estoqueFullML.forEach(f => addFull(f.sku, cpNum(f.total_geral) || (cpNum(f.aptos_venda) + cpNum(f.em_transito) + cpNum(f.pendente) + cpNum(f.em_separacao))));   // total_geral = "unidades que ocupam espaço" da planilha do ML (inclui o que está a caminho)   // em_separacao = entrada pendente (a caminho do Full) na planilha do ML
       else estoqueGalpao.forEach(e => addFull(e.sku, cpNum(e.qtd_full) + cpNum(e.qtd_full_pendente)));
 
       // vendas por SKU único e por dia
@@ -112,8 +112,10 @@
       });
       const vendeEm = k => { const m = Object.entries(porConta.get(k) || {}).sort((a,b) => b[1] - a[1]); if(m.length < 2) return m.length && typeof contaNome === 'function' ? (contaNome(m[0][0]) || '') : ''; const t = m.reduce((a,x) => a + x[1], 0); return m.map(([c,v]) => `${(typeof contaNome === 'function' && contaNome(c)) || c} ${Math.round(100 * v / t)}%`).join(' + '); };
 
+      const fornUlt = cfg.fornecedores || {};   // fornecedor da última compra (Relatório de Compras da UpSeller)
       const linhas = [];
       for(const [k, it] of itens){
+        if(!it.forn && fornUlt[k]) it.forn = fornUlt[k];
         const bruto = porSku.get(k) || new Float64Array(120), s = Float64Array.from(validos, i => bruto[i]);
         const soma = (a, b) => { let t = 0; for(let i = a; i < b; i++) t += s[i]; return t; };
         const n14 = N(14), n30 = N(30), n90 = N(90);
@@ -224,7 +226,8 @@
         { nome: 'Estoque no Full', st: fullUn > 0 ? 'ok' : 'falta', txt: fullUn > 0 ? cpInt(fullUn) + ' unidades em ' + nFull + (nFull === 1 ? ' anúncio' : ' anúncios') + (fonteFull === 'xls' ? ', vindas de planilha importada. Com duas contas, importe a planilha de cada uma (a segunda é somada)' : ', buscadas no Mercado Livre') : 'Zerado: a conta considera que não há nada no Full', acao: "nav('estoque');setEstoqueTab('full')", botao: 'Abrir estoque Full', sempre: true },
         { nome: 'Kits', st: kitsN ? 'ok' : 'falta', txt: kitsN ? kitsN + ' kits: a venda do kit desconta cada componente' : 'Nenhum kit cadastrado: cada kit aparece como um produto à parte e os componentes ficam com venda de menos', acao: "nav('skus');setSkuTab('composicoes')", botao: 'Cadastrar kits' },
         { nome: 'Custos', st: semCusto ? 'parcial' : 'ok', txt: semCusto ? semCusto + ' produtos com venda e sem custo: o valor da compra deles fica zerado' : 'Todos os produtos com venda têm custo', acao: semCusto ? "nav('skus');skuFiltrarCusto('sem')" : '', botao: 'Preencher' },
-        { nome: 'Fornecedores', st: comForn ? 'ok' : 'falta', txt: comForn ? comForn + ' produtos com fornecedor' : 'Nenhum produto tem fornecedor informado: não dá para separar a compra por fornecedor' },
+        { nome: 'Fornecedores', st: comForn ? 'ok' : 'falta', txt: comForn ? comForn + ' produtos com fornecedor (o da última compra)' : 'Nenhum produto tem fornecedor: importe o Relatório de Compras da UpSeller para trazer o fornecedor da última compra', acao: 'comprasImportarPO()', botao: 'Importar relatório de compras', sempre: true },
+        { nome: 'Compras a caminho', st: 'ok', txt: cpInt(C.linhas.reduce((s, l) => s + l.it.transito, 0)) + ' unidades compradas e ainda não recebidas (vem da Lista de Estoque da UpSeller, coluna Em Trânsito)' },
       ];
     }
 
@@ -470,10 +473,38 @@
         sazonalidade: (c.sazonalidade || []).filter(r => t(r.pat)).map(r => ({ pat: t(r.pat), f: Array.from({ length: 12 }, (_, i) => (r.f && r.f[i] != null && r.f[i] !== '' ? cpNum(r.f[i]) : null)), obs: t(r.obs) })),
         equivalentes: (c.equivalentes || []).filter(r => t(r.de) && t(r.para)).map(r => ({ de: t(r.de), para: t(r.para) })),
         diasIgnorados: (c.diasIgnorados || []).filter(r => t(r.ini)).map(r => ({ ini: t(r.ini), fim: t(r.fim), motivo: t(r.motivo) })),
+        fornecedores: comprasCfg.fornecedores || {},
       };
       comprasSalvarCfg();
       fecharModal('modal-vml');
       comprasDesenhar();
+    }
+
+    // Relatório de Compras da UpSeller: fornecedor da última compra de cada SKU
+    function comprasImportarPO(){
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = '.xlsx,.xls';
+      inp.onchange = () => {
+        const file = inp.files[0]; if(!file) return;
+        const rd = new FileReader();
+        rd.onload = e => {
+          try {
+            const wb = XLSX.read(e.target.result, { type: 'array' });
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+            if(!rows.length || !('SKU' in rows[0]) || !('Fornecedores' in rows[0])){ alert('Este arquivo não parece ser o Relatório de Compras da UpSeller (faltam as colunas SKU e Fornecedores).'); return; }
+            const dataDe = t => { const m = String(t || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/); return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)) : 0; };
+            const ult = {};
+            rows.forEach(r => { const k = cpNorm(r.SKU), f = String(r.Fornecedores || '').trim(); if(!k || !f) return; const d = dataDe(r['Data de Criação']); if(!ult[k] || d >= ult[k].d) ult[k] = { d, f }; });
+            const mapa = {}; Object.keys(ult).forEach(k => { mapa[k] = ult[k].f; });
+            comprasCfg.fornecedores = mapa;
+            comprasSalvarCfg();
+            comprasDesenhar();
+            alert('Fornecedor da última compra carregado para ' + Object.keys(mapa).length + ' produtos.');
+          } catch(err){ alert('Não consegui ler o arquivo: ' + err.message); }
+        };
+        rd.readAsArrayBuffer(file);
+      };
+      inp.click();
     }
 
     function comprasExportar(){

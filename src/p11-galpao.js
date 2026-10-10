@@ -1437,10 +1437,12 @@
             const idx = estoqueGalpao.findIndex(x => x.sku === eg.sku);
             if(idx >= 0){
               estoqueGalpao[idx].qtd_galpao = eg.qtd_galpao;
+              estoqueGalpao[idx].em_transito = eg.em_transito || 0;
+              if(eg.custo_medio > 0) estoqueGalpao[idx].custo_medio = eg.custo_medio;
               estoqueGalpao[idx].data_atualizacao = hoje;
               atualizados++;
             } else {
-              estoqueGalpao.push({ sku: eg.sku, descricao: eg.descricao, qtd_galpao: eg.qtd_galpao, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje, created_at: ts });
+              estoqueGalpao.push({ sku: eg.sku, descricao: eg.descricao, qtd_galpao: eg.qtd_galpao, qtd_full: 0, qtd_full_pendente: 0, em_transito: eg.em_transito || 0, custo_medio: eg.custo_medio || 0, data_atualizacao: hoje, created_at: ts });
               novosArr.push({ sku: eg.sku, titulo: eg.descricao });
               novos++;
             }
@@ -1580,8 +1582,8 @@
           sku, descricao: r[1] ? String(r[1]).trim() : '',
           qtd_galpao: Number(r[8]) || 0,  // col[8] = Disponível (não Estoque Atual col[9])
           qtd_full: 0,
-          em_transito: Number(r[5]) || 0,
-          custo_medio: 0,
+          em_transito: Number(r[5]) || 0,   // col[5] = Em Trânsito (Compra): pedido feito ao fornecedor que ainda não chegou
+          custo_medio: Number(r[10]) || 0,  // col[10] = Custo Médio
           data_atualizacao: today
         });
       });
