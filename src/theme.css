@@ -893,3 +893,22 @@ input[type="checkbox"]{accent-color:var(--primary);}
 .cpp-saz .cpp-mes{min-width:50px;width:54px;text-align:center;padding:7px 2px;}
 .cpp-mes.up{background:var(--tint-green);color:var(--tint-green-fg);font-weight:700;}
 .cpp-mes.dn{background:var(--tint-red);color:var(--tint-red-fg);font-weight:700;}
+
+/* ===== REVISÃO DE LARGURA: tabelas que pediam rolagem lateral ===== */
+.rf-table th,.rf-table td{padding-left:8px;padding-right:8px;}
+.rf-table td:first-child{min-width:180px;}
+.dre-tab{min-width:1040px;}
+.dre-tab td{padding:8px 7px;font-size:12px;}
+.dre-tab td:first-child,.dre-tab th:first-child{min-width:180px;}
+#oc-olist .cp-tab th,#oc-olist .cp-tab td{padding-left:9px;padding-right:9px;}
+#oc-olist .cp-cob{min-width:118px;}
+#oc-olist .cp-tab input[type="date"]{width:130px !important;padding:6px;}
+#oc-olist .cp-forn{max-width:190px !important;}
+#oc-olist td.cp-prod{max-width:200px !important;}
+#est-host .cp-tab th,#est-host .cp-tab td{padding-left:10px;padding-right:10px;}
+.cp-tab td:last-child{white-space:nowrap;}
+@media (max-width:1500px){
+  .cp-tab th,.cp-tab td{padding-left:8px;padding-right:8px;}
+  .cp-prod{max-width:240px;} .cp-forn{max-width:130px;} .cp-cob{min-width:120px;}
+  .ap-row{grid-template-columns:20px 84px minmax(0,1fr) minmax(0,140px) 120px 92px 92px;gap:10px;}
+}
