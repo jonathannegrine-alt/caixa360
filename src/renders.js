@@ -272,59 +272,156 @@
       });
     }
 
+    function apEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    // Filtros rápidos (botões e cartões do topo): gravam nos <select> ocultos, que seguem sendo a fonte dos filtros
+    function pagarFiltro(periodo, status){
+      const sp = document.getElementById('filtro-periodo'), ss = document.getElementById('filtro-status');
+      if(periodo && sp) sp.value = periodo;
+      if(status && ss) ss.value = status;
+      onFiltroPeridoChange();
+      if(typeof pagarViewMode !== 'undefined' && pagarViewMode === 'kanban') renderKanbanPagar();
+    }
+
+    function pagarLimparFiltros(){
+      const b = document.getElementById('filtro-busca'), c = document.getElementById('filtro-cat');
+      if(b) b.value = '';
+      if(c) c.value = '';
+      pagarFiltro('todos', 'todas');
+    }
+
+    // Cartões de resumo e botões de filtro (não dependem do filtro aplicado)
+    function renderPagarTopo(){
+      const hoje = getToday(), d7 = addDias(hoje, 7), d30 = addDias(hoje, 30), mes = hoje.substring(0, 7);
+      const g = { atr:[0,0], hoje:[0,0], d7:[0,0], d30:[0,0], pago:[0,0], aberto:[0,0] };
+      const soma = (k, v) => { g[k][0] += v; g[k][1]++; };
+      pagamentos.forEach(p => {
+        const v = Number(p.val) || 0;
+        if(p.pago){
+          if(String(p.dataPaga || p.data).substring(0, 7) === mes) soma('pago', p.valorPago != null ? Number(p.valorPago) || 0 : v);
+          return;
+        }
+        soma('aberto', v);
+        if(p.data < hoje){ soma('atr', v); return; }
+        if(p.data === hoje) soma('hoje', v);
+        if(p.data <= d7) soma('d7', v);
+        if(p.data <= d30) soma('d30', v);
+      });
+      const qtd = n => n + (n === 1 ? ' conta' : ' contas');
+      const card = (cls, rot, k, per, st) => `<div class="kpi ${cls}" onclick="pagarFiltro('${per}','${st}')" title="Mostrar na lista">
+          <div class="kpi-label">${rot}</div><div class="kpi-value">${fmt(g[k][0])}</div><div class="kpi-sub">${qtd(g[k][1])}</div></div>`;
+      const kp = document.getElementById('pagar-kpis');
+      if(kp) kp.innerHTML = card('k-atraso', 'Atrasadas', 'atr', 'todos', 'atrasado') + card('k-hoje', 'Vence hoje', 'hoje', 'dia', 'abertas') +
+        card('k-frete', 'Próximos 7 dias', 'd7', 'semana', 'abertas') + card('k-venda', 'Próximos 30 dias', 'd30', 'mes', 'abertas') +
+        card('k-mc', 'Pago neste mês', 'pago', 'mes', 'pagas');
+      const sub = document.getElementById('pagar-sub');
+      if(sub) sub.textContent = g.aberto[1] ? qtd(g.aberto[1]) + ' em aberto, somando ' + fmt(g.aberto[0]) : 'Nenhuma conta em aberto';
+
+      const per = document.getElementById('filtro-periodo')?.value || 'mes', st = document.getElementById('filtro-status')?.value || 'abertas';
+      const chips = (id, atual, ops, arg) => {
+        const el = document.getElementById(id);
+        if(el) el.innerHTML = ops.map(([v, n]) => `<button class="chip ${v === atual ? 'active' : ''}" onclick="pagarFiltro(${arg(v)})">${n}</button>`).join('');
+      };
+      chips('pagar-chips-periodo', per, [['dia','Hoje'],['semana','7 dias'],['mes','30 dias'],['todos','Tudo'],['custom','Período']], v => `'${v}',''`);
+      chips('pagar-chips-status', st, [['abertas','Em aberto'],['atrasado','Atrasadas'],['pagas','Pagas'],['todas','Todas']], v => `'','${v}'`);
+    }
+
     function renderPagar(){
       const lista = document.getElementById('lista-pagar');
       const hoje = getToday();
 
       const filtrados = getPagamentosFiltrados();
       const sortOpt = document.getElementById('pagar-sort')?.value || 'data';
-      if(sortOpt === 'data') filtrados.sort((a,b) => a.data.localeCompare(b.data));
+      const atrasada = p => !p.pago && p.data < hoje;
+      // por vencimento: atrasadas primeiro, depois na ordem das datas
+      if(sortOpt === 'data') filtrados.sort((a,b) => (atrasada(b) ? 1 : 0) - (atrasada(a) ? 1 : 0) || a.data.localeCompare(b.data));
       else if(sortOpt === 'valor_desc') filtrados.sort((a,b) => b.val - a.val);
       else if(sortOpt === 'valor_asc') filtrados.sort((a,b) => a.val - b.val);
       else if(sortOpt === 'forn') filtrados.sort((a,b) => (a.forn||'').localeCompare(b.forn||'','pt-BR'));
       else if(sortOpt === 'desc') filtrados.sort((a,b) => (a.desc||'').localeCompare(b.desc||'','pt-BR'));
       else if(sortOpt === 'status') filtrados.sort((a,b) => (a.pago?1:0) - (b.pago?1:0) || a.data.localeCompare(b.data));
 
-      // Total do filtro (sem seleção)
+      renderPagarTopo();
+
+      // Total em aberto do filtro
       const totalFiltro = filtrados.filter(p => !p.pago).reduce((s,p) => s + p.val, 0);
       document.getElementById('total-filtrado').textContent = fmt(totalFiltro);
+      const qtdEl = document.getElementById('pagar-qtd');
+      if(qtdEl) qtdEl.textContent = filtrados.length + (filtrados.length === 1 ? ' conta' : ' contas');
 
       if(filtrados.length === 0){
-        lista.innerHTML = '<div style="padding:40px;text-align:center;color:#999;">Nenhuma conta encontrada</div>';
+        lista.innerHTML = `<div class="ap-vazio"><b>Nenhuma conta neste filtro</b><span>Mude o vencimento ou a situação acima, ou veja tudo.</span>
+          <button class="btn-out btn-sm" onclick="pagarLimparFiltros()">Mostrar todas</button></div>`;
+        if(typeof atualizarContPagar === 'function') atualizarContPagar();
         return;
       }
 
-      let html = '';
-      filtrados.forEach(p => {
+      const valorDe = p => p.valorPago != null && p.pago ? Number(p.valorPago) || 0 : p.val;
+      const semana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+      const dm = d => d.substring(8, 10) + '/' + d.substring(5, 7) + (d.substring(0, 4) !== hoje.substring(0, 4) ? '/' + d.substring(0, 4) : '');
+      const quando = p => {
+        if(p.pago) return p.dataPaga ? 'pago em ' + dm(p.dataPaga) : 'pago';
+        const n = diasDif(hoje, p.data);
+        if(n === 0) return 'hoje';
+        if(n === 1) return 'amanhã';
+        if(n === -1) return 'ontem';
+        return n < 0 ? 'há ' + (-n) + ' dias' : 'em ' + n + ' dias';
+      };
+
+      const linha = p => {
         const idx = pagamentos.indexOf(p);
-        const isAtrasado = !p.pago && p.data < hoje;
+        const atr = atrasada(p);
         const badge = p.pago
           ? '<span class="badge badge-success">Pago</span>'
-          : isAtrasado
+          : atr
             ? '<span class="badge badge-danger">Atrasado</span>'
             : '<span class="badge badge-warning">Em aberto</span>';
+        const extra = p.pago && (p.desconto > 0 || p.juros > 0)
+          ? `<div class="ap-extra">${p.desconto > 0 ? 'desc. ' + fmt(p.desconto) : ''}${p.desconto > 0 && p.juros > 0 ? ' · ' : ''}${p.juros > 0 ? 'juros ' + fmt(p.juros) : ''}</div>` : '';
+        const acao = !p.pago
+          ? `<button class="btn-out btn-sm" onclick="event.stopPropagation();abrirModalBaixa([${idx}])">Dar baixa</button>` : '';
 
-        const btnBaixa = !p.pago
-          ? `<button class="btn-out btn-sm" style="font-size:11px;padding:3px 8px;margin-top:4px;" onclick="event.stopPropagation();abrirModalBaixa([${idx}])">✓ Baixar</button>`
-          : `<div style="font-size:11px;color:#999;margin-top:2px;">${p.dataPaga ? ptDate(p.dataPaga) : ''}${p.desconto > 0 ? ' · desc '+fmt(p.desconto) : ''}${p.juros > 0 ? ' · juros '+fmt(p.juros) : ''}</div>`;
-
-        html += `<div class="entry" onclick="editarLanc(${idx})">
+        return `<div class="entry ap-row${atr ? ' ap-atr' : ''}${p.pago ? ' ap-pago' : ''}" onclick="editarLanc(${idx})">
           <input type="checkbox" class="cb-pagar" data-idx="${idx}" data-val="${p.val}" onclick="event.stopPropagation();atualizarContPagar()">
-          <div class="entry-main">
-            <div class="entry-title">${p.desc}${p.parcela ? ' <span style="font-size:10px;color:#999;">('+p.parcela+')</span>' : ''}</div>
-            <div class="entry-meta">${ptDate(p.data)} • ${p.forn || 'Sem fornecedor'} • ${p.cat}</div>
+          <div class="ap-data"><b>${dm(p.data)}</b><span>${quando(p)}</span></div>
+          <div class="entry-main ap-main">
+            <div class="entry-title">${apEsc(p.desc)}${p.parcela ? ' <span class="ap-parc">' + apEsc(p.parcela) + '</span>' : ''}</div>
+            <div class="entry-meta">${apEsc(p.forn || 'Sem fornecedor')}</div>
           </div>
-          <div style="text-align:right;">
-            <div class="entry-value">${p.valorPago != null && p.pago ? fmt(p.valorPago) : fmt(p.val)}</div>
-            ${badge}
-            ${btnBaixa}
-          </div>
+          <span class="ap-cat">${apEsc(p.cat || 'Sem categoria')}</span>
+          <div class="ap-val"><div class="entry-value">${fmt(valorDe(p))}</div>${extra}</div>
+          <div class="ap-sit">${badge}</div>
+          <div class="ap-acao">${acao}</div>
         </div>`;
-      });
+      };
+
+      let html = '';
+      if(sortOpt === 'data'){
+        // agrupado por vencimento, com o total de cada dia
+        const grupos = [];
+        filtrados.forEach(p => {
+          const chave = atrasada(p) ? 'atr' : p.data;
+          let g = grupos[grupos.length - 1];
+          if(!g || g.chave !== chave){ g = { chave, itens: [] }; grupos.push(g); }
+          g.itens.push(p);
+        });
+        grupos.forEach(g => {
+          const n = g.chave === 'atr' ? null : diasDif(hoje, g.chave);
+          const nome = g.chave === 'atr' ? 'Atrasadas'
+            : n === 0 ? 'Hoje' : n === 1 ? 'Amanhã' : semana[parseDate(g.chave).getDay()] + ', ' + dm(g.chave);
+          const total = g.itens.reduce((s, p) => s + valorDe(p), 0);
+          html += `<div class="ap-grupo${g.chave === 'atr' ? ' ap-g-atr' : n === 0 ? ' ap-g-hoje' : ''}"><span class="ap-g-nome">${nome}</span>
+            <span class="ap-g-n">${g.itens.length} ${g.itens.length === 1 ? 'conta' : 'contas'}</span><b>${fmt(total)}</b></div>`;
+          html += g.itens.map(linha).join('');
+        });
+      } else {
+        html = filtrados.map(linha).join('');
+      }
 
       lista.innerHTML = html;
+      if(typeof atualizarContPagar === 'function') atualizarContPagar();
     }
-    
+
     function renderCalendario(){
       const grid = document.getElementById('calendario-grid');
       const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];

@@ -322,21 +322,16 @@
       const sel = checks.length;
       const total = document.querySelectorAll('.cb-pagar').length;
 
-      const el = document.getElementById('pagar-sel-count');
-      if(el) el.textContent = sel > 0 ? sel + ' selecionado(s)' : '';
-
       const cbTodos = document.getElementById('cb-todos');
       if(cbTodos){ cbTodos.indeterminate = sel > 0 && sel < total; cbTodos.checked = sel === total && total > 0; }
 
-      // Total dinâmico: selecionados > 0 → total dos selecionados; senão → total do filtro
-      const totalEl = document.getElementById('total-filtrado');
-      if(totalEl && sel > 0){
-        const somasel = Array.from(checks).reduce((s, cb) => s + (parseFloat(cb.dataset.val) || 0), 0);
-        totalEl.textContent = fmt(somasel) + ' (selecionados)';
-      } else if(totalEl && sel === 0){
-        // Restaurar total do filtro
-        renderPagar();
-      }
+      // Barra flutuante com as ações da seleção
+      const barra = document.getElementById('pagar-barra-sel');
+      if(barra) barra.classList.toggle('open', sel > 0);
+      const el = document.getElementById('pagar-sel-count');
+      if(el) el.textContent = sel === 1 ? '1 conta selecionada' : sel + ' contas selecionadas';
+      const totalEl = document.getElementById('pagar-sel-total');
+      if(totalEl) totalEl.textContent = fmt(Array.from(checks).reduce((s, cb) => s + (parseFloat(cb.dataset.val) || 0), 0));
     }
 
     function getIdxsSelecionadosPagar(){

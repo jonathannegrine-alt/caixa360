@@ -438,87 +438,97 @@
       
       <!-- CONTAS A PAGAR -->
       <div id="view-pagar" class="view">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-          <h1>Contas a Pagar</h1>
-          <div class="d-flex gap-1" style="flex-wrap:wrap;">
-            <div class="d-flex gap-1" style="border:1px solid var(--gray-200);border-radius:6px;overflow:hidden;">
-              <button class="btn-toggle active" id="pagar-view-lista" onclick="setPagarView('lista')" style="border-radius:0;border:none;">☰ Lista</button>
-              <button class="btn-toggle" id="pagar-view-kanban" onclick="setPagarView('kanban')" style="border-radius:0;border:none;">⬛ Colunas</button>
-              <button class="btn-toggle" id="pagar-view-cal" onclick="setPagarView('cal')" style="border-radius:0;border:none;">📅 Calendário</button>
+        <div class="pg-head">
+          <div>
+            <div class="pg-title">Contas a pagar</div>
+            <div class="pg-sub" id="pagar-sub"></div>
+          </div>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
+            <div class="seg">
+              <button class="btn-toggle active" id="pagar-view-lista" onclick="setPagarView('lista')">Lista</button>
+              <button class="btn-toggle" id="pagar-view-kanban" onclick="setPagarView('kanban')">Colunas</button>
+              <button class="btn-toggle" id="pagar-view-cal" onclick="setPagarView('cal')">Calendário</button>
             </div>
-            <button class="btn" onclick="abrirModalLanc()">+ Novo</button>
-            <button class="btn-out" onclick="abrirModalImportar()">📥 Importar dados</button>
-            <button class="btn-out" onclick="exportarCSV()">📤 Exportar CSV</button>
+            <button class="btn-out" onclick="abrirModalImportar()">Importar</button>
+            <button class="btn-out" onclick="exportarCSV()">Exportar</button>
+            <button class="btn" onclick="abrirModalLanc()">+ Nova conta</button>
             <!-- inputs ocultos para compatibilidade -->
             <input type="file" id="import-pagar-csv" accept=".csv" style="display:none" onchange="importarCSV()">
             <input type="file" id="import-tiny-pagar" accept=".xls,.xlsx" style="display:none" onchange="importarTinyXLSPagar()">
           </div>
         </div>
 
+        <!-- Resumo (clicar filtra a lista) -->
+        <div class="kpi-grid k5" id="pagar-kpis"></div>
+
         <!-- Filtros -->
         <div class="card mb-2">
-          <div class="card-body">
-            <div class="d-flex gap-1" style="flex-wrap:wrap;margin-bottom:8px;">
-              <input type="text" id="filtro-busca" placeholder="🔍 Buscar..." style="max-width:260px;" oninput="renderPagar()">
-
-              <select id="filtro-periodo" onchange="onFiltroPeridoChange()">
-                <option value="mes">Mês atual (30d)</option>
-                <option value="semana">Esta semana (7d)</option>
-                <option value="dia">Hoje</option>
-                <option value="todos">Todos</option>
-                <option value="custom">Personalizado</option>
-              </select>
-
-              <select id="filtro-status" onchange="renderPagar()">
-                <option value="abertas">Em aberto</option>
-                <option value="todas">Todas</option>
-                <option value="pagas">Pagas</option>
-                <option value="atrasado">Atrasado</option>
-              </select>
-
+          <div class="card-body ap-filtros">
+            <div class="ap-filtros-l1">
+              <input type="text" id="filtro-busca" class="ap-busca" placeholder="Buscar por descrição ou fornecedor" oninput="renderPagar()">
               <select id="filtro-cat" onchange="renderPagar()">
                 <option value="">Todas categorias</option>
               </select>
+              <select id="pagar-sort" onchange="renderPagar()">
+                <option value="data">Ordenar: vencimento</option>
+                <option value="valor_desc">Ordenar: maior valor</option>
+                <option value="valor_asc">Ordenar: menor valor</option>
+                <option value="forn">Ordenar: fornecedor</option>
+                <option value="desc">Ordenar: descrição</option>
+                <option value="status">Ordenar: situação</option>
+              </select>
             </div>
-            <div id="filtro-custom-range" style="display:none;" class="d-flex gap-1" style="align-items:center;">
-              <input type="date" id="filtro-de" style="font-size:12px;" onchange="renderPagar()">
-              <span style="font-size:12px;align-self:center;">até</span>
-              <input type="date" id="filtro-ate" style="font-size:12px;" onchange="renderPagar()">
+            <div class="ap-filtros-l2">
+              <div class="ap-chipgrupo"><span class="ap-rot">Vencimento</span><div class="chips" id="pagar-chips-periodo"></div></div>
+              <div class="ap-chipgrupo"><span class="ap-rot">Situação</span><div class="chips" id="pagar-chips-status"></div></div>
             </div>
-            <div id="filtro-label-ativo" style="font-size:11px;color:#666;margin-top:4px;"></div>
+            <!-- os <select> continuam sendo a fonte dos filtros; os botões acima só escolhem o valor -->
+            <select id="filtro-periodo" onchange="onFiltroPeridoChange()" style="display:none;">
+              <option value="mes">Mês atual (30d)</option>
+              <option value="semana">Esta semana (7d)</option>
+              <option value="dia">Hoje</option>
+              <option value="todos">Todos</option>
+              <option value="custom">Personalizado</option>
+            </select>
+            <select id="filtro-status" onchange="renderPagar()" style="display:none;">
+              <option value="abertas">Em aberto</option>
+              <option value="todas">Todas</option>
+              <option value="pagas">Pagas</option>
+              <option value="atrasado">Atrasado</option>
+            </select>
+            <div id="filtro-custom-range" style="display:none;gap:8px;align-items:center;margin-top:10px;">
+              <input type="date" id="filtro-de" onchange="renderPagar()">
+              <span class="text-muted" style="font-size:12px;">até</span>
+              <input type="date" id="filtro-ate" onchange="renderPagar()">
+            </div>
+            <div id="filtro-label-ativo" style="display:none;"></div>
           </div>
         </div>
-        
+
         <!-- Lista -->
         <div class="card">
-          <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
-                <input type="checkbox" id="cb-todos" onchange="selecionarTodosPagar(this.checked)">
-                Selecionar todos
-              </label>
-              <span id="pagar-sel-count" style="font-size:12px;color:#666;"></span>
-            </div>
-            <div class="d-flex gap-1" style="align-items:center;">
-              <select id="pagar-sort" onchange="renderPagar()" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;background:#fff;">
-                <option value="data">↕ Data</option>
-                <option value="valor_desc">↓ Maior valor</option>
-                <option value="valor_asc">↑ Menor valor</option>
-                <option value="forn">↕ Fornecedor</option>
-                <option value="desc">↕ Descrição</option>
-                <option value="status">↕ Status</option>
-              </select>
-              <button class="btn-out btn-sm" onclick="marcarSelecionadosPagos()">✓ Marcar pagos</button>
-              <button class="btn-del btn-sm" onclick="deletarSelecionadosPagar()">🗑️ Deletar</button>
-              <span style="align-self:center;font-size:13px;font-weight:600;color:var(--danger);">Total: <span id="total-filtrado">R$ 0,00</span></span>
-            </div>
+          <div class="card-header ap-lista-head">
+            <label class="ap-todos">
+              <input type="checkbox" id="cb-todos" onchange="selecionarTodosPagar(this.checked)">
+              <span id="pagar-qtd">Selecionar todos</span>
+            </label>
+            <div class="ap-total">Em aberto neste filtro <b id="total-filtrado">R$ 0,00</b></div>
           </div>
           <div id="lista-pagar" class="entry-list"></div>
           <div id="kanban-pagar" style="display:none;"></div>
           <div id="cal-pagar" style="display:none;"></div>
         </div>
+
+        <!-- Barra de ações da seleção -->
+        <div id="pagar-barra-sel" class="ap-selbar">
+          <span id="pagar-sel-count"></span>
+          <b id="pagar-sel-total"></b>
+          <button class="btn btn-sm" onclick="marcarSelecionadosPagos()">Dar baixa</button>
+          <button class="btn-del btn-sm" onclick="deletarSelecionadosPagar()">Excluir</button>
+          <button class="ap-selbar-x" onclick="selecionarTodosPagar(false)" title="Limpar seleção">✕</button>
+        </div>
       </div>
-      
+
       <!-- A RECEBER ML -->
       <div id="view-receber" class="view">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
