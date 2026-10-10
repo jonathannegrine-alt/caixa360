@@ -87,7 +87,7 @@
       host.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Ordens de compra</div><div class="pg-sub">As ordens vêm do Olist. Aqui você confere a chegada da mercadoria; o que ainda não chegou conta como estoque a caminho.</div></div>
-          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="ocAtualizar(this)">Atualizar do Olist</button></div>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="ocAtualizar(this)">Atualizar do Olist</button><button class="btn btn-sm" onclick="ocCriar()">+ Nova ordem</button></div>
         </div>
         ${oc.erro ? `<div class="alert alert-danger">${ocEsc(oc.erro)}</div>` : ''}
         <div class="kpi-grid k4i">
@@ -101,18 +101,19 @@
             .map(([k, t, n]) => `<button class="chip ${f === k ? 'active' : ''}" onclick="oc.filtro='${k}';ocDesenhar();">${t}<span class="n">${n}</span></button>`).join('')}
         </div></div></div>
         <div class="card"><div style="overflow-x:auto;"><table class="cp-tab">
-          <thead><tr><th>Situação</th><th>Ordem</th><th>Fornecedor</th><th>Produtos</th><th>Chegada</th><th class="num">Valor da ordem</th><th></th></tr></thead>
+          <thead><tr><th>Situação</th><th>Ordem</th><th>Fornecedor</th><th>Produtos</th><th>Previsão de chegada</th><th>Chegada</th><th class="num">Valor da ordem</th><th></th></tr></thead>
           <tbody>${mostrar.length ? mostrar.map(({ o, r }) => {
             const pct = r.comprado ? Math.round(r.recebido / r.comprado * 100) : 0;
             return `<tr>
               <td>${selo(r.sit)}</td>
-              <td class="cp-prod"><b>Nº ${ocEsc(o.numero || o.id)}</b><span>${dt(o.data)}${o.data_prevista ? ' · prevista ' + dt(o.data_prevista) : ''}</span></td>
+              <td class="cp-prod"><b>Nº ${ocEsc(o.numero || o.id)}</b><span>${dt(o.data)}${Number(o.id) < 0 ? ' · criada aqui' : ''}</span></td>
               <td class="cp-forn" style="max-width:240px;">${ocEsc(o.fornecedor || '—')}</td>
               <td class="cp-prod" style="max-width:300px;"><b>${r.itens.length} ${r.itens.length === 1 ? 'produto' : 'produtos'}</b><span title="${ocEsc(r.itens.map(i => i.sku).join(', '))}">${ocEsc(r.itens.map(i => i.sku).slice(0, 4).join(', '))}${r.itens.length > 4 ? '…' : ''}</span></td>
+              <td>${r.sit === 'A receber' || r.sit === 'Parcial' ? `<input type="date" value="${ocPrev(o) || ''}" onchange="ocSalvarPrevisao(${o.id}, this.value)" style="width:150px;${ocPrev(o) && ocPrev(o) < getToday() ? 'border-color:var(--danger);color:var(--danger);' : ''}" title="${ocPrev(o) && ocPrev(o) < getToday() ? 'A previsão já passou' : 'Quando a mercadoria deve chegar'}">` : dt(ocPrev(o))}</td>
               <td><div class="cp-cob"><div class="cp-cob-n"><b>${ocInt(r.recebido)}</b> de ${ocInt(r.comprado)} un.</div><div class="cp-cob-t"><span class="cp-cob-${pct >= 100 ? 'v' : pct > 0 ? 'a' : 'r'}" style="width:${Math.max(3, Math.min(100, pct))}%;"></span></div></div></td>
               <td class="num"><b>${fmt(Number(o.total) || 0)}</b></td>
               <td style="text-align:right;">${r.sit === 'A receber' || r.sit === 'Parcial' ? `<button class="btn btn-sm" onclick="ocConferir(${o.id})">Conferir chegada</button>` : `<button class="btn-out btn-sm" onclick="ocConferir(${o.id})">Ver</button>`}</td>
-            </tr>`; }).join('') : `<tr><td colspan="7"><div class="vazio"><b>Nenhuma ordem nesta lista</b>Troque o filtro acima ou clique em Atualizar do Olist.</div></td></tr>`}</tbody>
+            </tr>`; }).join('') : `<tr><td colspan="8"><div class="vazio"><b>Nenhuma ordem nesta lista</b>Troque o filtro acima ou clique em Atualizar do Olist.</div></td></tr>`}</tbody>
         </table></div></div>`;
     }
 
@@ -136,7 +137,7 @@
         ${hist.length ? `<div class="form-label" style="margin-top:18px;">Chegadas já lançadas</div><table><tbody>
           ${hist.map(h => `<tr><td>${dth(h.recebido_em)}</td><td><b>${ocEsc(h.sku)}</b></td><td style="text-align:right;">${ocInt(h.qtd)} un.</td><td class="text-muted" style="font-size:12px;">${h.somou === false ? 'sem somar ao galpão' : 'somado ao galpão'}${h.obs ? ' · ' + ocEsc(h.obs) : ''}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="ocDesfazer(${h.id})">Desfazer</button></td></tr>`).join('')}
         </tbody></table>` : ''}`,
-        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${aberta ? `<button class="btn" onclick="ocLancar(${o.id}, this)">Lançar chegada</button>` : ''}`);
+        `${Number(o.id) < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${o.id})">Excluir ordem</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${aberta ? `<button class="btn" onclick="ocLancar(${o.id}, this)">Lançar chegada</button>` : ''}`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
     }
     function ocReceberTudo(){ document.querySelectorAll('.oc-qtd').forEach(i => { if(!i.disabled) i.value = i.dataset.falta; }); }

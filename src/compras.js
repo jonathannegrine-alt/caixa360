@@ -100,6 +100,8 @@
       if(temFullAPI) estoqueFullML.forEach(f => addFull(f.sku, cpNum(f.total_geral) || (cpNum(f.aptos_venda) + cpNum(f.em_transito) + cpNum(f.pendente) + cpNum(f.em_separacao))));   // total_geral = "unidades que ocupam espaço" da planilha do ML (inclui o que está a caminho)   // em_separacao = entrada pendente (a caminho do Full) na planilha do ML
       else estoqueGalpao.forEach(e => addFull(e.sku, cpNum(e.qtd_full) + cpNum(e.qtd_full_pendente)));
 
+      // saiu do galpão para o Full e o Mercado Livre ainda não deu entrada: conta como Full
+      if(typeof esoACaminhoDoFull === 'function') esoACaminhoDoFull().forEach((q, k) => { const it = itens.get(k); if(it) it.full += q; });
       // vendas por SKU único e por dia
       const porSku = new Map(), porConta = new Map(), fora = new Map();
       const add = (k, idx, q) => { if(!porSku.has(k)) porSku.set(k, new Float64Array(120)); if(idx >= 0 && idx < 120) porSku.get(k)[idx] += q; };
@@ -189,6 +191,7 @@
       await comprasCarregarVendas(false);
       if(buscaFull) await buscaFull;
       if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
+      if(typeof estCarregar === 'function') try { await estCarregar(false); if(typeof esoSincronizar === 'function') await esoSincronizar(false); } catch(e){}
       comprasDesenhar();
     }
 

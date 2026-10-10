@@ -85,3 +85,14 @@ begin
   end loop;
 end $$;
 grant select on public.estoque_saldo to authenticated, service_role;
+
+-- envio ao Full: marca se ocupa o estoque enquanto está em preparação (escolha do usuário ao importar)
+alter table public.estoque_envios_full add column if not exists ocupar boolean not null default true;
+
+-- ordens de compra: previsão de chegada preenchida no Caixa 360 (quando o Olist não tem) e ordens criadas aqui (id negativo)
+alter table public.olist_ordens add column if not exists data_prevista_local date;
+alter table public.olist_ordens add column if not exists origem text not null default 'olist';
+drop policy if exists olist_ordens_local on public.olist_ordens;
+create policy olist_ordens_local on public.olist_ordens for all to authenticated
+  using (usuario_id = auth.uid()) with check (usuario_id = auth.uid());
+grant insert, update, delete on public.olist_ordens to authenticated;

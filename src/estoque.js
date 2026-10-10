@@ -94,7 +94,10 @@
       if(!est.carregadoEm) host.innerHTML = '<div class="vazio"><b>Carregando o estoque…</b></div>';
       await estCarregar(false);
       if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
+      if(typeof esoSincronizar === 'function') try { await esoSincronizar(false); } catch(e){}
       estDesenhar();
+      // em segundo plano: pergunta ao Mercado Livre o que já foi enviado, baixa do físico e redesenha
+      if(typeof esoSincronizar === 'function') esoSincronizar(true).then(() => { const v = document.getElementById('view-estoque'); if(v && v.classList.contains('active')) estDesenhar(); }).catch(() => {});
     }
 
     function estLinhas(dep){
@@ -119,9 +122,9 @@
       const host = document.getElementById('est-host'); if(!host) return;
       const dep = est.depositos.find(d => d.id === est.dep) || est.depositos[0];
       if(!dep){ host.innerHTML = `<div class="alert alert-danger">${esEsc(est.erro || 'Não consegui carregar os depósitos.')}</div>`; return; }
-      const abas = `<div class="chips" style="margin-bottom:14px;">${est.depositos.filter(d => d.ativo).map(d => `<button class="chip ${d.id === dep.id ? 'active' : ''}" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estNovoDeposito()" title="Criar outro depósito">+ Depósito</button></div>`;
+      const abas = `<div class="chips" style="margin-bottom:14px;">${est.depositos.filter(d => d.ativo).map(d => `<button class="chip ${d.id === dep.id ? 'active' : ''}" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estGerenciarDepositos()" title="Criar, renomear ou excluir depósitos">Gerenciar depósitos</button></div>`;
       const cab = `<div class="pg-head"><div><div class="pg-title">Estoque</div><div class="pg-sub">Quanto existe em cada depósito, o que está a caminho e o que já está vendido e ainda não saiu.</div></div>
-        <div class="d-flex gap-1" style="flex-wrap:wrap;">${dep.tipo === 'full' ? `<button class="btn-out btn-sm" onclick="estAtualizarFull(this)">Atualizar do Mercado Livre</button>` : `<button class="btn-out btn-sm" onclick="estAjuste()">Ajuste manual</button><button class="btn btn-sm" onclick="estCargaPlanilha()">Carregar planilha da UpSeller</button>`}</div></div>`;
+        <div class="d-flex gap-1" style="flex-wrap:wrap;">${dep.tipo === 'full' ? `<button class="btn-out btn-sm" onclick="estAtualizarFull(this)">Atualizar do Mercado Livre</button>` : `<button class="btn-out btn-sm" onclick="estAjuste()">Ajuste manual</button><button class="btn-out btn-sm" onclick="esoEnvios()">Envios ao Full</button><button class="btn btn-sm" onclick="esoContagens()">Contagem de estoque</button>`}</div></div>`;
       const erro = est.erro ? `<div class="alert alert-danger">${esEsc(est.erro)}</div>` : '';
 
       if(dep.tipo === 'full'){
@@ -149,7 +152,7 @@
       const cam = todas.reduce((s, l) => s + l.caminho, 0), ocp = todas.reduce((s, l) => s + l.ocupado, 0);
       const semMov = !est.saldo.some(s => Number(s.deposito_id) === dep.id);
       host.innerHTML = cab + erro + abas + `
-        ${semMov ? `<div class="alert alert-warning">Este depósito ainda não tem estoque lançado. Clique em <b>&nbsp;Carregar planilha da UpSeller&nbsp;</b> e escolha a Lista de Estoque (a de produtos, não a de kits).</div>` : ''}
+        ${semMov ? `<div class="alert alert-warning">Este depósito ainda não tem estoque lançado. Clique em <b>&nbsp;Contagem de estoque&nbsp;</b> e importe a Lista de Estoque (a de produtos, não a de kits).</div>` : ''}
         <div class="kpi-grid k4i">
           <div class="kpi k-venda"><div class="kpi-label">Estoque físico</div><div class="kpi-value">${esInt(un)} un.</div><div class="kpi-sub">${fmt(valor)} a custo médio</div></div>
           <div class="kpi k-frete"><div class="kpi-label">A caminho</div><div class="kpi-value">${esInt(cam)} un.</div><div class="kpi-sub">comprado e ainda não conferido</div></div>
@@ -181,14 +184,6 @@
       if(btn){ btn.disabled = true; btn.textContent = 'Buscando…'; }
       if(typeof comprasFullAPI === 'function') await comprasFullAPI();
       estDesenhar();
-    }
-
-    async function estNovoDeposito(){
-      const nome = (prompt('Nome do novo depósito (ex.: Galpão 2, Loja):') || '').trim();
-      if(!nome) return;
-      const r = await supa.from('estoque_depositos').insert({ usuario_id: usuarioAtual.id, nome, tipo: 'proprio' });
-      if(r.error){ alert('Não consegui criar o depósito: ' + r.error.message); return; }
-      await estCarregar(true); estDesenhar();
     }
 
     // histórico de um produto no depósito aberto
