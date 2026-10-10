@@ -258,19 +258,24 @@ Deno.serve(async (req) => {
       const soConta = body?.conta ? String(body.conta) : null, soRecentes = body?.recentes === true
       const pares: { u: string; c: string }[] = (Array.isArray(tokens) ? tokens.map((t: any) => ({ u: t.usuario_id, c: String(t.ml_user_id) })) : [])
         .filter(x => !soConta || x.c === soConta)
-      const resultados = await Promise.all(pares.map(async ({ u, c }) => {
+      // Uma conta por vez e poucos dias de histórico por execução: com várias contas em paralelo importando
+      // tudo o que coubesse em 110 s, a função estourava o limite de processamento (WORKER_RESOURCE_LIMIT) e
+      // nada era gravado. O histórico avança DIAS_HIST_POR_VEZ dias por conta a cada execução do cron.
+      const DIAS_HIST_POR_VEZ = 2
+      const resultados: any[] = []
+      for (const { u, c } of pares) {
         try {
           const conta = (await contasDe(ctx, u, c))[0]
-          if (!conta) return { usuario_id: u, ml_user_id: c, error: 'conta não encontrada' }
+          if (!conta) { resultados.push({ usuario_id: u, ml_user_id: c, error: 'conta não encontrada' }); continue }
           // hoje/ontem (se o cache venceu) + o próximo trecho do histórico ainda não importado
           const recentes = await diasPendentes(ctx, u, c, diaBRT(-1), diaBRT(), false, soRecentes ? 20 * 1000 : 10 * 60 * 1000)
           const antigos = soRecentes ? [] : await diasPendentes(ctx, u, c, diaBRT(-HISTORICO_DIAS), diaBRT(-2), false)
-          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos], prazoMs)
-          return { usuario_id: u, ml_user_id: c, ...r }
+          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos.slice(0, DIAS_HIST_POR_VEZ)], prazoMs)
+          resultados.push({ usuario_id: u, ml_user_id: c, ...r })
         } catch (e) {
-          return { usuario_id: u, ml_user_id: c, error: String(e) }
+          resultados.push({ usuario_id: u, ml_user_id: c, error: String(e) })
         }
-      }))
+      }
       await Promise.all([...new Set(pares.map(x => x.u))].map(u => carimbarCustos(ctx, u)))
       console.log('ml-vendas cron', JSON.stringify(resultados))
       return resp({ success: true, contas: pares.length, resultados })
