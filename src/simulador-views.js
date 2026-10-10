@@ -170,10 +170,10 @@
     function renderKanbanPagar(){
       const hoje = getToday();
       const cols = {
-        atrasado: {label:'⚠️ Atrasado', items:[], css:'atrasado'},
-        hoje:     {label:'📅 Hoje',     items:[], css:'hoje'},
-        aberto:   {label:'🕐 Em aberto',items:[], css:'em-aberto'},
-        pago:     {label:'✓ Pago',      items:[], css:'pago'},
+        atrasado: {label:'Atrasado', items:[], css:'atrasado'},
+        hoje:     {label:'Hoje',     items:[], css:'hoje'},
+        aberto:   {label:'Em aberto',items:[], css:'em-aberto'},
+        pago:     {label:'Pago',      items:[], css:'pago'},
       };
 
       // Usa os mesmos filtros da lista

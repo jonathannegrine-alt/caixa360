@@ -825,17 +825,39 @@
       return {minSaldo, dataCritica};
     }
     
+    let skuFiltroCusto = '';   // '' = todos · 'sem' = sem custo · 'com' = com custo
+    function skuFiltrarCusto(v){ skuFiltroCusto = v; renderSKUs(); }
+
     function renderSKUs(){
       const tbody = document.getElementById('tbody-skus');
       const busca = document.getElementById('filtro-sku').value.toLowerCase();
       const vazio = document.getElementById('skus-vazio');
+      const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
       const _kitSkus = new Set(composicaoKit.map(c => c.sku_comercial));
-      let filtrados = skus.filter(s => !_kitSkus.has(s.sku) && (!busca || s.sku.toLowerCase().includes(busca) || (s.titulo||'').toLowerCase().includes(busca)));
+      const produtos = skus.filter(s => !_kitSkus.has(s.sku));
+      const semCusto = s => !(Number(s.custo) > 0);
+
+      // Resumo e filtros
+      const nSem = produtos.filter(semCusto).length, nCom = produtos.length - nSem;
+      const comCusto = produtos.filter(s => !semCusto(s));
+      const medio = comCusto.length ? comCusto.reduce((t, s) => t + Number(s.custo), 0) / comCusto.length : 0;
+      const kp = document.getElementById('sku-kpis');
+      if(kp) kp.innerHTML = `
+        <div class="kpi k-venda" onclick="skuFiltrarCusto('')"><div class="kpi-label">Produtos</div><div class="kpi-value">${produtos.length}</div><div class="kpi-sub">${_kitSkus.size} ${_kitSkus.size === 1 ? 'kit cadastrado' : 'kits cadastrados'}</div></div>
+        <div class="kpi ${nSem ? 'k-atraso' : 'k-mc'}" onclick="skuFiltrarCusto('sem')"><div class="kpi-label">Sem custo</div><div class="kpi-value">${nSem}</div><div class="kpi-sub">${nSem ? 'A margem destes produtos fica superestimada' : 'Todos os produtos têm custo'}</div></div>
+        <div class="kpi k-mc" onclick="skuFiltrarCusto('com')"><div class="kpi-label">Com custo</div><div class="kpi-value">${nCom}</div><div class="kpi-sub">${produtos.length ? Math.round(nCom / produtos.length * 100) : 0}% do cadastro</div></div>
+        <div class="kpi k-neutro"><div class="kpi-label">Custo médio</div><div class="kpi-value">${fmt(medio)}</div><div class="kpi-sub">Entre os produtos com custo</div></div>`;
+      const ch = document.getElementById('sku-chips');
+      if(ch) ch.innerHTML = [['', 'Todos', produtos.length], ['sem', 'Sem custo', nSem], ['com', 'Com custo', nCom]]
+        .map(([v, n, q]) => `<button class="chip ${v === skuFiltroCusto ? 'active' : ''}" onclick="skuFiltrarCusto('${v}')">${n}<span class="n">${q}</span></button>`).join('');
+
+      let filtrados = produtos.filter(s => (!busca || s.sku.toLowerCase().includes(busca) || (s.titulo||'').toLowerCase().includes(busca))
+        && (skuFiltroCusto === '' || (skuFiltroCusto === 'sem') === semCusto(s)));
 
       if(filtrados.length === 0){
-        tbody.innerHTML = '';
-        vazio.style.display = 'block';
+        tbody.innerHTML = produtos.length ? '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted);">Nenhum produto neste filtro.</td></tr>' : '';
+        vazio.style.display = produtos.length ? 'none' : 'block';
         document.getElementById('sku-sel-count').textContent = '';
         return;
       }
@@ -853,11 +875,11 @@
           || '';
         html += `<tr onclick="editarSKU(${idx})" style="cursor:pointer;" title="Clique para editar">
           <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="sku-cb" data-idx="${idx}" onchange="atualizarContSKUSel()"></td>
-          <td style="font-family:monospace;font-weight:600;white-space:nowrap;">${s.sku}</td>
-          <td style="font-size:12px;color:#555;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${titulo}">${titulo||'—'}</td>
-          <td>${fmt(s.custo)}</td>
+          <td class="sku-cod">${esc(s.sku)}</td>
+          <td class="sku-tit" title="${esc(titulo)}">${esc(titulo) || '—'}</td>
+          <td style="text-align:right;white-space:nowrap;">${semCusto(s) ? '<span class="badge badge-danger">Sem custo</span>' : '<b>' + fmt(Number(s.custo)) + '</b>'}</td>
           <td style="text-align:center;">
-            <button class="btn-out btn-sm" onclick="editarSKU(${idx})">✏️</button>
+            <button class="btn-out btn-sm" onclick="event.stopPropagation();editarSKU(${idx})">Editar</button>
           </td>
         </tr>`;
       });

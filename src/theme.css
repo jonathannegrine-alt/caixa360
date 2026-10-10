@@ -814,3 +814,19 @@ input[type="checkbox"]{accent-color:var(--primary);}
 .cal-day-num{font-weight:650;}
 .opt-ico{flex:0 0 34px;width:34px;height:34px;border-radius:10px;background:var(--primary-soft);position:relative;display:inline-block;}
 .opt-ico::before{content:"";position:absolute;inset:11px;border:2px solid var(--primary);border-radius:4px;opacity:.75;}
+
+/* ===== PRODUTOS ===== */
+#sku-kpis .kpi[onclick]{cursor:pointer;}
+.sku-barra{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--border);}
+.sku-barra input[type="text"]{flex:1 1 260px;min-width:200px;max-width:420px;}
+.sku-acoes{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;}
+.sku-cod{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;font-weight:650;white-space:nowrap;}
+.sku-tit{font-size:12.5px;color:var(--text-2);max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* ===== CALENDÁRIOS E COLUNAS ===== */
+.cal-day{min-height:104px;}
+.cal-day-num{font-size:12.5px;}
+.cal-valor-entrada,.cal-valor-saida,.cal-valor-proj{font-size:11px;font-weight:600;}
+.cal-saldo{font-size:11.5px;}
+.cal-acum{font-size:11px;border-top-color:var(--border);}
+.kanban-col-header{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.kanban-card{border-radius:10px;}
