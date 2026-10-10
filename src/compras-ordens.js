@@ -149,6 +149,21 @@
       e.data_atualizacao = getToday();
     }
 
+    // registra no controle de estoque (depósito próprio); sem ele, mexe direto na lista antiga
+    async function ocNoEstoque(linhas, motivo, ref, obs){
+      if(typeof estCarregar === 'function'){
+        await estCarregar(false);
+        const dep = typeof estDepProprio === 'function' ? estDepProprio() : null;
+        if(dep){
+          linhas.forEach(l => { if(!estoqueGalpao.some(x => ocN(x.sku) === ocN(l.sku))) estoqueGalpao.push({ sku: l.sku, descricao: l.descricao || l.sku, qtd_galpao: 0, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: getToday() }); });
+          const r = await estMovimentar(dep.id, linhas.map(l => ({ sku: l.sku, qtd: l.qtd, motivo, ref, obs: obs || null, custo_unit: l.custo_unit })));
+          if(!r.ok) alert('A chegada foi lançada, mas não consegui registrar no estoque: ' + r.erro);
+          return;
+        }
+      }
+      linhas.forEach(l => ocMexerGalpao(l.sku, l.qtd, l.descricao)); salvar();
+    }
+
     async function ocLancar(id, btn){
       const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return;
       const ja = document.getElementById('oc-ja')?.checked || false, obs = (document.getElementById('oc-obs')?.value || '').trim();
@@ -160,7 +175,7 @@
       const { data, error } = await supa.from('compras_recebimentos').insert(linhas.map(l => ({ usuario_id: usuarioAtual.id, ordem_id: Number(id), sku: l.sku, qtd: l.qtd, obs: obs || null, somou: !ja }))).select();
       if(error){ alert('Não consegui lançar a chegada: ' + error.message); if(btn){ btn.disabled = false; btn.textContent = 'Lançar chegada'; } return; }
       oc.receb = (data || []).concat(oc.receb);
-      if(!ja){ linhas.forEach(l => { const it = (o.itens || []).find(i => ocN(i.sku) === ocN(l.sku)); ocMexerGalpao(l.sku, l.qtd, it && it.descricao); }); salvar(); }
+      if(!ja) await ocNoEstoque(linhas.map(l => { const it = (o.itens || []).find(i => ocN(i.sku) === ocN(l.sku)); return { sku: l.sku, qtd: l.qtd, descricao: it && it.descricao, custo_unit: it && Number(it.valor) > 0 ? Number(it.valor) : null }; }), 'compra', 'OC ' + (o.numero || o.id), obs);
       fecharModal('modal-vml');
       ocDesenhar();
     }
@@ -171,7 +186,7 @@
       const { error } = await supa.from('compras_recebimentos').delete().eq('id', recId);
       if(error){ alert('Não consegui desfazer: ' + error.message); return; }
       oc.receb = oc.receb.filter(x => Number(x.id) !== Number(recId));
-      if(h.somou !== false){ ocMexerGalpao(h.sku, -Number(h.qtd)); salvar(); }
+      if(h.somou !== false){ const o = oc.ordens.find(x => Number(x.id) === Number(h.ordem_id)); await ocNoEstoque([{ sku: h.sku, qtd: -Number(h.qtd) }], 'ajuste', 'OC ' + ((o && o.numero) || h.ordem_id), 'Chegada desfeita'); }
       ocDesenhar();
       ocConferir(h.ordem_id);
     }
