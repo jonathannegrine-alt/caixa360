@@ -920,3 +920,20 @@
       tip.style.left = x + 'px';
       tip.style.top = (r.bottom - host.top + 10) + 'px';
     }
+
+    // ----- atualização automática da página Vendas enquanto ela está aberta (período inclui hoje) -----
+    // A cada 30 s confere no banco se entrou venda nova (o ml-webhook grava em tempo real); a cada ~2 min
+    // também pergunta ao ML, para funcionar mesmo sem o aviso em tempo real configurado.
+    let vdTick = 0;
+    setInterval(async () => {
+      const el = document.getElementById('view-vendas');
+      if(!el || !el.classList.contains('active') || document.hidden || typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      if(!vdFiltro.ate || vdFiltro.ate < getToday() || document.querySelector('#modal-vml.open')) return;
+      try {
+        vdTick++;
+        if(vdTick % 4 === 0 && !vmlSync.rodando) await vmlSincronizar(getToday(), getToday(), false, null);
+        const { count } = await vdConsulta('order_id', { count:'exact', head:true });
+        const digitando = document.activeElement && document.activeElement.id === 'vd-termo';
+        if(typeof count === 'number' && count !== vdDados.total && vdFiltro.pagina === 1 && !digitando) vdCarregar();
+      } catch(e){}
+    }, 30000);

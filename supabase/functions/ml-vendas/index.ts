@@ -203,7 +203,8 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
 }
 
 // Dias do período que precisam ir ao ML (mais recentes primeiro)
-async function diasPendentes(ctx: Ctx, userId: string, conta: string, de: string, ate: string, forcar: boolean) {
+// validadeMs: por quanto tempo o cache de hoje/ontem vale antes de ir ao ML de novo
+async function diasPendentes(ctx: Ctx, userId: string, conta: string, de: string, ate: string, forcar: boolean, validadeMs = 10 * 60 * 1000) {
   const hoje = diaBRT(), ontem = diaBRT(-1)
   const cache = new Map<string, { completo: boolean; em: number }>()
   const rows = await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&dia=gte.${de}&dia=lte.${ate}&select=dia,completo,sincronizado_em&limit=2000`, { headers: ctx.dbH })
@@ -213,7 +214,7 @@ async function diasPendentes(ctx: Ctx, userId: string, conta: string, de: string
   for (let d = ate > hoje ? hoje : ate; d >= de; d = somaDia(d, -1)) {
     const c = cache.get(d)
     const recente = d === hoje || d === ontem
-    if (forcar || !c || !c.completo || (recente && Date.now() - c.em > 10 * 60 * 1000)) lista.push(d)
+    if (forcar || !c || !c.completo || (recente && Date.now() - c.em > validadeMs)) lista.push(d)
   }
   return lista
 }
@@ -253,14 +254,17 @@ Deno.serve(async (req) => {
       const cronSecret = Deno.env.get('CRON_SECRET')
       if (cronSecret && body?.secret !== cronSecret) return resp({ error: 'Unauthorized' })
       const tokens = await fetch(`${supaUrl}/rest/v1/ml_tokens?select=usuario_id,ml_user_id`, { headers: ctx.dbH }).then(r => r.json())
-      const pares: { u: string; c: string }[] = Array.isArray(tokens) ? tokens.map((t: any) => ({ u: t.usuario_id, c: String(t.ml_user_id) })) : []
+      // { conta, recentes: true } = chamada do ml-webhook: só hoje/ontem daquela conta, sem mexer no histórico
+      const soConta = body?.conta ? String(body.conta) : null, soRecentes = body?.recentes === true
+      const pares: { u: string; c: string }[] = (Array.isArray(tokens) ? tokens.map((t: any) => ({ u: t.usuario_id, c: String(t.ml_user_id) })) : [])
+        .filter(x => !soConta || x.c === soConta)
       const resultados = await Promise.all(pares.map(async ({ u, c }) => {
         try {
           const conta = (await contasDe(ctx, u, c))[0]
           if (!conta) return { usuario_id: u, ml_user_id: c, error: 'conta não encontrada' }
           // hoje/ontem (se o cache venceu) + o próximo trecho do histórico ainda não importado
-          const recentes = await diasPendentes(ctx, u, c, diaBRT(-1), diaBRT(), false)
-          const antigos = await diasPendentes(ctx, u, c, diaBRT(-HISTORICO_DIAS), diaBRT(-2), false)
+          const recentes = await diasPendentes(ctx, u, c, diaBRT(-1), diaBRT(), false, soRecentes ? 20 * 1000 : 10 * 60 * 1000)
+          const antigos = soRecentes ? [] : await diasPendentes(ctx, u, c, diaBRT(-HISTORICO_DIAS), diaBRT(-2), false)
           const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos], prazoMs)
           return { usuario_id: u, ml_user_id: c, ...r }
         } catch (e) {
@@ -301,7 +305,8 @@ Deno.serve(async (req) => {
     if (ate < de) ate = de
     const deMin = diaBRT(-HISTORICO_DIAS)
     const res: any[] = await Promise.all(contas.map(async (c) => {
-      const dias = await diasPendentes(ctx, userId, c.mlUserId, de < deMin ? deMin : de, ate, body?.forcar === true)
+      // com a tela aberta, hoje/ontem são conferidos de novo depois de 1 minuto
+      const dias = await diasPendentes(ctx, userId, c.mlUserId, de < deMin ? deMin : de, ate, body?.forcar === true, 60 * 1000)
       if (dias.length === 0) return { success: true, feitos: 0, vendas: 0, pendentes: 0, restantes: 0, em_cache: true }
       return sincronizarLista(ctx, userId, c, dias, prazoMs)
     }))
