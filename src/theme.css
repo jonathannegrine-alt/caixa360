@@ -734,3 +734,34 @@ input[type="text"],input[type="number"],input[type="date"],input[type="email"],i
 input[type="checkbox"]{accent-color:var(--primary);}
 .ap-selbar{border-color:var(--ctl-border);}
 @media (max-width:768px){ .btn-out{padding:7px 12px;font-size:12px;} .btn-sm{padding:5px 8px;font-size:11px;} }
+
+/* ===== FLUXO DE CAIXA ===== */
+.fx-barra{display:block;}
+.fx-controles{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.fx-controles .fx-modo{margin-left:auto;}
+.fx-table{width:100%;}
+.fx-table th.num,.fx-table td.num{text-align:right;}
+.fx-table th{white-space:nowrap;padding:11px 16px;}
+.fx-table td{padding:10px 16px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.fx-table td:first-child{font-weight:600;}
+.fx-dia{color:var(--text-muted);font-size:12px;}
+.fx-row.fx-fds td{background:var(--surface-2);}
+.fx-row.fx-fds td:first-child,.fx-row.fx-fds .fx-dia{color:var(--text-muted);}
+.fx-row.fx-risco td{background:var(--tint-red);}
+.fx-row.fx-hoje td{box-shadow:inset 0 2px 0 var(--primary),inset 0 -2px 0 var(--primary);}
+.fx-row.fx-hoje td:first-child{box-shadow:inset 3px 0 0 var(--primary),inset 0 2px 0 var(--primary),inset 0 -2px 0 var(--primary);}
+.fx-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#fff;background:var(--primary);border-radius:20px;padding:1px 7px;margin-left:6px;}
+.fx-ent{color:var(--success);}
+.fx-proj{color:var(--tint-blue-fg);}
+.fx-zero,.fx-cob{color:var(--text-muted);}
+.fx-cob{font-size:11.5px;}
+.fx-link{color:var(--danger);font-weight:600;cursor:pointer;border-bottom:1px dashed currentColor;}
+.fx-link:hover{border-bottom-style:solid;}
+.fx-acum{position:relative;font-weight:700;min-width:170px;}
+.fx-acum .fx-bar{position:absolute;right:0;top:7px;bottom:7px;background:var(--primary);opacity:.11;border-radius:5px 0 0 5px;pointer-events:none;}
+.fx-acum.text-danger .fx-bar{background:var(--danger);opacity:.16;}
+.fx-acum .fx-acum-v{position:relative;}
+.fx-table tfoot td{padding:12px 16px;font-weight:750;border-top:2px solid var(--ctl-border);border-bottom:none;background:var(--surface-2);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.fx-rodape{padding:10px 16px;font-size:11.5px;color:var(--text-muted);border-top:1px solid var(--border);}
+#plan-kpis .kpi-sub{display:block;}
+@media (max-width:768px){ .fx-controles .fx-modo{margin-left:0;} .fx-table th,.fx-table td{padding:9px 10px;} .fx-acum{min-width:120px;} }

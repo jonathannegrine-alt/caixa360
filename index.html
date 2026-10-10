@@ -367,75 +367,83 @@
       <div id="view-mensagens" class="view"></div>
 
       <div id="view-planilha" class="view">
-        <h1 style="margin-bottom:20px;">Fluxo de Caixa</h1>
+        <div class="pg-head">
+          <div>
+            <div class="pg-title">Fluxo de Caixa</div>
+            <div class="pg-sub" id="plan-sub">Quanto entra, quanto sai e quanto sobra em cada dia.</div>
+          </div>
+          <div class="seg">
+            <button class="btn-toggle active" id="plan-view-tabela" onclick="setPlanilhaView('tabela')">Dia a dia</button>
+            <button class="btn-toggle" id="plan-view-cal" onclick="setPlanilhaView('cal')">Calendário</button>
+          </div>
+        </div>
+
+        <!-- Resumo do período -->
+        <div class="kpi-grid k5" id="plan-kpis"></div>
 
         <div class="card">
-          <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-            <div>Fluxo de Caixa — dia a dia</div>
-            <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
-              <!-- Toggle lista / calendário -->
-              <div style="border:1px solid var(--gray-200);border-radius:6px;overflow:hidden;display:flex;">
-                <button class="btn-toggle active" id="plan-view-tabela" onclick="setPlanilhaView('tabela')" style="border-radius:0;border:none;">☰ Lista</button>
-                <button class="btn-toggle" id="plan-view-cal" onclick="setPlanilhaView('cal')" style="border-radius:0;border:none;">📅 Calendário</button>
+          <div class="card-header fx-barra">
+            <!-- Controles da tabela -->
+            <div id="plan-controles-tabela" class="fx-controles">
+              <div class="chips" id="plan-periodos">
+                <button class="chip" onclick="setPlanilhaDias(7,this)">7 dias</button>
+                <button class="chip" onclick="setPlanilhaDias(15,this)">15 dias</button>
+                <button class="chip active" id="plan-dias-30" onclick="setPlanilhaDias(30,this)">30 dias</button>
+                <button class="chip" onclick="setPlanilhaDias(60,this)">60 dias</button>
+                <button class="chip" onclick="setPlanilhaDias(90,this)">90 dias</button>
+                <button class="chip" id="plan-btn-custom" onclick="togglePlanilhaCustom()">Período</button>
               </div>
-              <div style="width:1px;height:20px;background:var(--gray-200);margin:0 2px;" id="plan-sep"></div>
-              <!-- Controles da tabela -->
-              <div id="plan-controles-tabela" class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
-                <div class="period-btns">
-                  <button class="period-btn" onclick="setPlanilhaDias(7,this)">7d</button>
-                  <button class="period-btn" onclick="setPlanilhaDias(15,this)">15d</button>
-                  <button class="period-btn active" id="plan-dias-30" onclick="setPlanilhaDias(30,this)">30d</button>
-                  <button class="period-btn" onclick="setPlanilhaDias(60,this)">60d</button>
-                  <button class="period-btn" onclick="setPlanilhaDias(90,this)">90d</button>
-                  <button class="period-btn" id="plan-btn-custom" onclick="togglePlanilhaCustom()">Personalizado</button>
-                </div>
-                <div id="plan-custom-range" style="display:none;" class="d-flex gap-1 align-items:center;">
-                  <input type="date" id="plan-de" style="font-size:11px;padding:3px 6px;" onchange="renderPlanilha()">
-                  <span style="align-self:center;font-size:11px;">até</span>
-                  <input type="date" id="plan-ate" style="font-size:11px;padding:3px 6px;" onchange="renderPlanilha()">
-                </div>
-                <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px;"></div>
-                <button class="btn-toggle active" id="plan-toggle-conf" onclick="togglePlanilha('confirmado')">Confirmado</button>
-                <button class="btn-toggle" id="plan-toggle-proj" onclick="togglePlanilha('projetado')">+ Projetado</button>
+              <div id="plan-custom-range" style="display:none;gap:8px;align-items:center;">
+                <input type="date" id="plan-de" onchange="renderPlanilha()">
+                <span class="text-muted" style="font-size:12px;">até</span>
+                <input type="date" id="plan-ate" onchange="renderPlanilha()">
               </div>
-              <!-- Controles do calendário -->
-              <div id="plan-controles-cal" class="d-flex gap-1" style="display:none!important;align-items:center;gap:8px;">
+              <div class="seg fx-modo">
+                <button class="btn-toggle active" id="plan-toggle-conf" onclick="togglePlanilha('confirmado')" title="Só o que o Mercado Livre já confirmou">Confirmado</button>
+                <button class="btn-toggle" id="plan-toggle-proj" onclick="togglePlanilha('projetado')" title="Confirmado mais a estimativa de vendas futuras">Com projeção</button>
+              </div>
+            </div>
+            <!-- Controles do calendário -->
+            <div id="plan-controles-cal" class="fx-controles" style="display:none;">
+              <div class="d-flex" style="gap:8px;align-items:center;">
                 <button class="btn-out btn-sm" onclick="navPlanilhaCal(-1)">← Anterior</button>
-                <span id="planilha-cal-label" style="font-weight:600;font-size:13px;min-width:130px;text-align:center;"></span>
+                <span id="planilha-cal-label" style="font-weight:650;font-size:14px;min-width:140px;text-align:center;"></span>
                 <button class="btn-out btn-sm" onclick="navPlanilhaCal(1)">Próximo →</button>
-                <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px;"></div>
+              </div>
+              <div class="seg fx-modo">
                 <button class="btn-toggle active" id="plan-cal-toggle-conf" onclick="togglePlanilha('confirmado')">Confirmado</button>
-                <button class="btn-toggle" id="plan-cal-toggle-proj" onclick="togglePlanilha('projetado')">+ Projetado</button>
+                <button class="btn-toggle" id="plan-cal-toggle-proj" onclick="togglePlanilha('projetado')">Com projeção</button>
               </div>
             </div>
           </div>
           <!-- Vista Tabela -->
-          <div id="planilha-tabela-wrap" class="card-body" style="overflow-x:auto;">
-            <table id="table-planilha">
+          <div id="planilha-tabela-wrap" style="overflow-x:auto;">
+            <table id="table-planilha" class="fx-table">
               <thead>
                 <tr>
                   <th>Data</th>
                   <th>Dia</th>
-                  <th id="th-conf">Entrada Conf. ML <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Valor confirmado pelo Mercado Livre para este dia. Vem diretamente da API do ML (coletado todo dia às 06h). Para os próximos 7 dias, este dado é real e preciso.</span></span></th>
-                  <th id="th-proj">Projeção Compl. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Estimativa adicional para dias sem confirmação do ML (D+8 em diante). Calculado: média histórica × fator prudencial − o que já está confirmado. Zero quando o ML já confirmou mais do que a estimativa.</span></span></th>
-                  <th id="th-total">Total Entrada <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">O maior entre o confirmado ML e a projeção. Garante que a projeção nunca diminua um valor real que o ML já confirmou.</span></span></th>
-                  <th>A Pagar <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Soma de todas as contas a pagar em aberto com vencimento nesta data.</span></span></th>
-                  <th>Saldo Dia <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Entrada do dia menos saída do dia. Positivo = caixa cresce, negativo = caixa encolhe.</span></span></th>
-                  <th>Saldo Acum. <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Saldo total acumulado até este dia (saldo anterior + saldo do dia). Vermelho se abaixo da reserva mínima.</span></span></th>
-                  <th>Cobertura <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Quantos dias o saldo acumulado cobriria se todo o dia seguinte fosse igual ao A Pagar desta linha.</span></span></th>
+                  <th id="th-conf" class="num">Recebimentos ML <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Valor confirmado pelo Mercado Livre para este dia. Vem diretamente da API do ML (coletado todo dia às 06h). Para os próximos 7 dias, este dado é real e preciso.</span></span></th>
+                  <th id="th-proj" class="num">Projeção <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Estimativa adicional para dias sem confirmação do ML (D+8 em diante). Calculado: média histórica × fator prudencial − o que já está confirmado. Zero quando o ML já confirmou mais do que a estimativa.</span></span></th>
+                  <th id="th-total" class="num">Total de entradas <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">O maior entre o confirmado ML e a projeção. Garante que a projeção nunca diminua um valor real que o ML já confirmou.</span></span></th>
+                  <th class="num">Contas a pagar <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Soma de todas as contas a pagar em aberto com vencimento nesta data.</span></span></th>
+                  <th class="num">Resultado do dia <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Entrada do dia menos saída do dia. Positivo = caixa cresce, negativo = caixa encolhe.</span></span></th>
+                  <th class="num">Saldo acumulado <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Saldo total acumulado até este dia (saldo anterior + saldo do dia). Vermelho se abaixo da reserva mínima.</span></span></th>
+                  <th class="num">Cobertura <span class="tip tip-down"><span class="tip-icon">?</span><span class="tip-box">Quantos dias o saldo acumulado cobriria se todo o dia seguinte fosse igual ao A Pagar desta linha.</span></span></th>
                 </tr>
               </thead>
               <tbody id="tbody-planilha"></tbody>
+              <tfoot id="tfoot-planilha"></tfoot>
             </table>
           </div>
           <!-- Vista Calendário -->
           <div id="planilha-cal-wrap" style="display:none;">
             <div id="planilha-cal-grid" style="padding:0;"></div>
           </div>
-          <div style="padding:8px 16px;font-size:11px;color:#999;border-top:1px solid var(--gray-100);" id="plan-label-periodo"></div>
+          <div class="fx-rodape" id="plan-label-periodo"></div>
         </div>
       </div>
-      
+
       <!-- CONTAS A PAGAR -->
       <div id="view-pagar" class="view">
         <div class="pg-head">

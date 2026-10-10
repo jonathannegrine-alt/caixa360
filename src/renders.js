@@ -45,6 +45,8 @@
       document.getElementById('plan-controles-tabela').style.display = mode === 'tabela' ? '' : 'none';
       document.getElementById('plan-controles-cal').style.display    = mode === 'cal'    ? 'flex' : 'none';
       document.getElementById('plan-label-periodo').style.display    = mode === 'tabela' ? '' : 'none';
+      const planKpis = document.getElementById('plan-kpis');
+      if(planKpis) planKpis.style.display = mode === 'tabela' ? '' : 'none';
       if(mode === 'tabela') renderPlanilha();
       else renderPlanilhaCal();
     }
@@ -140,7 +142,7 @@
       planilhaDias = dias;
       planilhaCustomMode = false;
       document.getElementById('plan-custom-range').style.display = 'none';
-      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#plan-periodos .chip, #plan-periodos .period-btn').forEach(b => b.classList.remove('active'));
       if(btn) btn.classList.add('active');
       renderPlanilha();
     }
@@ -148,16 +150,34 @@
     function togglePlanilhaCustom(){
       planilhaCustomMode = true;
       document.getElementById('plan-custom-range').style.display = 'flex';
-      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#plan-periodos .chip, #plan-periodos .period-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('plan-btn-custom').classList.add('active');
       renderPlanilha();
+    }
+
+    // Contas que vencem em um dia (aberto pelo valor da coluna "Contas a pagar")
+    function planDiaDetalhe(d){
+      if(typeof vmlModal !== 'function') return;
+      const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const itens = pagamentos.filter(p => p.data === d && !p.pago).sort((a,b) => b.val - a.val);
+      const total = itens.reduce((s,p) => s + p.val, 0);
+      vmlModal('Contas de ' + ptDate(d) + ' · ' + nomeDia(d), `<table><thead><tr><th>Descrição</th><th>Fornecedor</th><th>Categoria</th><th style="text-align:right;">Valor</th></tr></thead><tbody>
+          ${itens.map(p => `<tr><td>${esc(p.desc)}${p.parcela ? ' <span class="ap-parc">' + esc(p.parcela) + '</span>' : ''}</td><td>${esc(p.forn || '—')}</td><td>${esc(p.cat || '—')}</td><td style="text-align:right;font-weight:650;">${fmt(p.val)}</td></tr>`).join('')}
+          </tbody><tfoot><tr><td colspan="3" style="font-weight:700;">Total do dia</td><td style="text-align:right;font-weight:750;">${fmt(total)}</td></tr></tfoot></table>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn" onclick="fecharModal('modal-vml');planVerNoPagar('${d}')">Abrir em Contas a pagar</button>`);
+    }
+
+    function planVerNoPagar(d){
+      nav('pagar');
+      const set = (id, v) => { const el = document.getElementById(id); if(el) el.value = v; };
+      set('filtro-busca', ''); set('filtro-cat', ''); set('filtro-periodo', 'custom'); set('filtro-status', 'abertas');
+      set('filtro-de', d); set('filtro-ate', d);
+      onFiltroPeridoChange();
     }
 
     function renderPlanilha(){
       const tbody = document.getElementById('tbody-planilha');
       const hoje = getToday();
-      let saldoAcum = saldoAtual;
-      let html = '';
 
       document.getElementById('plan-toggle-conf').className = 'btn-toggle' + (planilhaMode === 'confirmado' ? ' active' : '');
       document.getElementById('plan-toggle-proj').className = 'btn-toggle' + (planilhaMode === 'projetado' ? ' active' : '');
@@ -178,41 +198,72 @@
       }
 
       const showProj = planilhaMode === 'projetado';
-      let d = dataIni;
 
-      while(d <= dataFim){
-        const dia = nomeDia(d);
+      // 1) calcula os dias
+      const dias = [];
+      let saldoAcum = saldoAtual;
+      let d = dataIni;
+      while(d <= dataFim && dias.length < 800){
         const e = getEntrada(d);
         const entrada = showProj ? e.total : e.conf;
         const pag = getPag(d);
-        const saldoDia = entrada - pag;
-        saldoAcum += saldoDia;
-        const emRisco = saldoAcum < 0 || (reservaMinima > 0 && saldoAcum < reservaMinima);
-        const corSaldo = emRisco ? 'text-danger' : '';
-        const bgRisco = emRisco ? 'background:#fff5f5;' : '';
-
-        html += `<tr style="${bgRisco}">
-          <td>${ptDate(d)}</td>
-          <td>${dia}</td>
-          <td style="color:var(--success);">${e.conf > 0 ? fmt(e.conf) : '—'}</td>
-          ${showProj ? `<td style="color:#0891b2;">${e.proj > 0 ? fmt(e.proj) : '—'}</td><td style="font-weight:600;">${fmt(entrada)}</td>` : ''}
-          <td style="color:var(--danger);">${pag > 0 ? fmt(pag) : '—'}</td>
-          <td class="${saldoDia < 0 ? 'text-danger' : 'text-success'}">${fmt(saldoDia)}</td>
-          <td class="${corSaldo}" style="font-weight:600;">${fmt(saldoAcum)}</td>
-          <td style="font-size:11px;color:#888;">${pag > 0 ? Math.round(saldoAcum / pag) + 'd' : '—'}</td>
-        </tr>`;
-
+        saldoAcum += entrada - pag;
+        dias.push({ d, e, entrada, pag, saldoDia: entrada - pag, saldoAcum });
         d = addDias(d, 1);
       }
 
-      tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px;color:#999;">Nenhum dado no período</td></tr>';
+      // 2) resumo do período
+      const tot = dias.reduce((t, x) => { t.conf += x.e.conf; t.proj += x.e.proj; t.ent += x.entrada; t.pag += x.pag; return t; }, { conf:0, proj:0, ent:0, pag:0 });
+      const menor = dias.reduce((m, x) => !m || x.saldoAcum < m.saldoAcum ? x : m, null);
+      const final = dias.length ? dias[dias.length - 1].saldoAcum : saldoAtual;
+      const risco = v => v < 0 || (reservaMinima > 0 && v < reservaMinima);
+      const diasRisco = dias.filter(x => risco(x.saldoAcum)).length;
+      const kp = document.getElementById('plan-kpis');
+      if(kp){
+        const k = (cls, rot, val, sub) => `<div class="kpi ${cls}"><div class="kpi-label">${rot}</div><div class="kpi-value">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+        kp.innerHTML =
+          k('k-neutro', 'Saldo hoje', fmt(saldoAtual), reservaMinima > 0 ? 'Reserva mínima <b>' + fmt(reservaMinima) + '</b>' : 'Saldo informado em caixa') +
+          k('k-mc', 'Entradas no período', fmt(tot.ent), showProj ? 'Confirmado <b>' + fmt(tot.conf) + '</b>' : 'Confirmado pelo Mercado Livre') +
+          k('k-atraso', 'Contas a pagar', fmt(tot.pag), dias.filter(x => x.pag > 0).length + ' dias com vencimento') +
+          k(risco(final) ? 'k-atraso' : 'k-venda', 'Saldo no fim do período', fmt(final), (final - saldoAtual >= 0 ? '+ ' : '− ') + fmt(Math.abs(final - saldoAtual)) + ' no período') +
+          k(menor && risco(menor.saldoAcum) ? 'k-atraso' : 'k-frete', 'Menor saldo', menor ? fmt(menor.saldoAcum) : '—',
+            menor ? 'em ' + ptDate(menor.d) + (diasRisco ? ' · <b>' + diasRisco + (diasRisco === 1 ? ' dia' : ' dias') + ' abaixo da reserva</b>' : '') : '');
+      }
+
+      // 3) tabela — a barra do saldo acumulado é proporcional ao maior saldo do período
+      const maxAbs = Math.max(1, ...dias.map(x => Math.abs(x.saldoAcum)));
+      const html = dias.map(x => {
+        const emRisco = risco(x.saldoAcum);
+        const dow = parseDate(x.d).getDay();
+        const cls = (x.d === hoje ? ' fx-hoje' : '') + (dow === 0 || dow === 6 ? ' fx-fds' : '') + (emRisco ? ' fx-risco' : '');
+        const larg = Math.round(Math.abs(x.saldoAcum) / maxAbs * 100);
+        return `<tr class="fx-row${cls}">
+          <td>${ptDate(x.d)}${x.d === hoje ? ' <span class="fx-tag">hoje</span>' : ''}</td>
+          <td class="fx-dia">${nomeDia(x.d)}</td>
+          <td class="num fx-ent">${x.e.conf > 0 ? fmt(x.e.conf) : '—'}</td>
+          ${showProj ? `<td class="num fx-proj">${x.e.proj > 0 ? fmt(x.e.proj) : '—'}</td><td class="num" style="font-weight:600;">${fmt(x.entrada)}</td>` : ''}
+          <td class="num">${x.pag > 0 ? `<a class="fx-link" onclick="planDiaDetalhe('${x.d}')" title="Ver as contas deste dia">${fmt(x.pag)}</a>` : '—'}</td>
+          <td class="num ${x.saldoDia < 0 ? 'text-danger' : x.saldoDia > 0 ? 'text-success' : 'fx-zero'}">${fmt(x.saldoDia)}</td>
+          <td class="num fx-acum${emRisco ? ' text-danger' : ''}"><span class="fx-bar" style="width:${larg}%;"></span><span class="fx-acum-v">${fmt(x.saldoAcum)}</span></td>
+          <td class="num fx-cob">${x.pag > 0 ? Math.round(x.saldoAcum / x.pag) + 'd' : '—'}</td>
+        </tr>`;
+      }).join('');
+
+      tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-muted);">Nenhum dado no período</td></tr>';
+      const tfoot = document.getElementById('tfoot-planilha');
+      if(tfoot) tfoot.innerHTML = dias.length ? `<tr><td colspan="2">Total do período</td>
+          <td class="num fx-ent">${fmt(tot.conf)}</td>
+          ${showProj ? `<td class="num fx-proj">${fmt(tot.proj)}</td><td class="num">${fmt(tot.ent)}</td>` : ''}
+          <td class="num text-danger">${fmt(tot.pag)}</td>
+          <td class="num ${tot.ent - tot.pag < 0 ? 'text-danger' : 'text-success'}">${fmt(tot.ent - tot.pag)}</td>
+          <td class="num">${fmt(final)}</td><td></td></tr>` : '';
       makeSortable('tbody-planilha', [8]);
       initResizableCols('tbody-planilha');
 
       const labelEl = document.getElementById('plan-label-periodo');
-      if(labelEl) labelEl.textContent = 'Período: ' + ptDate(dataIni) + ' até ' + ptDate(dataFim);
+      if(labelEl) labelEl.textContent = 'De ' + ptDate(dataIni) + ' até ' + ptDate(dataFim) + ' · ' + (showProj ? 'recebimentos confirmados mais a projeção de vendas' : 'somente recebimentos já confirmados pelo Mercado Livre');
     }
-    
+
     function onFiltroPeridoChange(){
       const periodo = document.getElementById('filtro-periodo')?.value || '';
       const customRange = document.getElementById('filtro-custom-range');
