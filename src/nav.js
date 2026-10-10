@@ -45,6 +45,7 @@
       else if(page === 'vendas') renderVendas();
       else if(page === 'resumo-fin') renderResumoFin();
       else if(page === 'perguntas') renderPerguntas();
+      else if(page === 'compras') renderCompras();
       else if(page === 'mensagens') renderMensagens();
     }
 

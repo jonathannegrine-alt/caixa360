@@ -630,3 +630,14 @@ a.v-id{text-decoration:none;}
 .entry:hover{background:var(--surface-2);}
 /* DRE simplificado ocupa a largura do card */
 #dre-body > div{max-width:none !important;}
+
+/* ===== SUGESTÃO DE COMPRAS ===== */
+.cp-sit{display:inline-block;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:750;white-space:nowrap;}
+.cp-urgente{background:var(--tint-red);color:var(--tint-red-fg);}
+.cp-comprar{background:var(--tint-blue);color:var(--tint-blue-fg);}
+.cp-ok{background:var(--tint-green);color:var(--tint-green-fg);}
+.cp-excesso{background:var(--tint-amber);color:var(--tint-amber-fg);}
+.cp-semvenda{background:var(--surface-3);color:var(--text-muted);}
+.cp-dias{width:72px !important;text-align:right;padding:5px 8px !important;background:var(--tint-amber) !important;border-color:transparent !important;font-weight:700;}
+.cp-dias.sim{outline:2px solid var(--warning);}
+.cp-tab td{vertical-align:middle;}

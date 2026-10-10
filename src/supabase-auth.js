@@ -355,6 +355,7 @@
         if(c.modoProjecao !== undefined) modoProjecao = c.modoProjecao;
         if(c.periodoHistoricoML !== undefined) periodoHistoricoML = c.periodoHistoricoML;
         if(c.patCfg) patCfg = {...patCfg, ...c.patCfg};
+        if(c.comprasCfg && typeof comprasCarregarCfg === 'function') comprasCarregarCfg(c.comprasCfg);
         saldoAtual = saldoMP + saldoOutros;
       }
 
@@ -431,6 +432,7 @@
     async function salvarCfgSupabase(){
       if(!usuarioAtual) return;
       const cfg = {saldoMP, saldoOutros, cfgPct, reservaMinima, periodoHistorico, modoProjecao, periodoHistoricoML, patCfg};
+      if(typeof comprasCfg !== 'undefined') cfg.comprasCfg = comprasCfg;   // parâmetros da Sugestão de compras
       await supa.from('configuracoes').upsert({usuario_id: usuarioAtual.id, cfg, updated_at: new Date().toISOString()});
     }
 
