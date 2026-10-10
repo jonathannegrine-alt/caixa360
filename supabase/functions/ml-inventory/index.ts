@@ -138,6 +138,19 @@ Deno.serve(async (req: Request) => {
     const tokens = await tokensML(supaUrl, supaKey, userId, clientId, secret)
     if (!tokens.length) return resp({ error: 'Conta ML não conectada — conecte em Configurações → Mercado Livre.' }, 404)
 
+    // diagnóstico: testa endereços candidatos da API para uma conta e devolve só o status e o começo da resposta
+    const corpo = await req.json().catch(() => ({}))
+    if (corpo?.diag) {
+      const tk: any = tokens.find((x: any) => String(x.ml_user_id) === String(corpo.conta)) || tokens[0]
+      const h = { Authorization: `Bearer ${tk.access_token}` }
+      const out: any[] = []
+      for (const caminho of (corpo.caminhos || []).slice(0, 30)) {
+        const r = await get('https://api.mercadolibre.com' + String(caminho).replace('{u}', String(tk.ml_user_id)), h)
+        out.push({ caminho, status: r.status, corpo: JSON.stringify(r.json).slice(0, Number(corpo.tam) || 300) })
+      }
+      return resp({ ok: true, conta: tk.ml_user_id, out })
+    }
+
     const contas = await Promise.all(tokens.map((t: any) => t.invalido
       ? Promise.resolve({ conta: String(t.ml_user_id), apelido: t.apelido || '', itens: [], anuncios: 0, avisos: ['conexão expirada: reconecte a conta'] })
       : estoqueDaConta(String(t.ml_user_id), t.apelido || '', { Authorization: `Bearer ${t.access_token}` })))

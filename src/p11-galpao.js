@@ -1934,11 +1934,13 @@
             var idx = estoqueGalpao.findIndex(function(e){ return e.sku === sku; });
             if(idx >= 0){
               estoqueGalpao[idx].qtd_galpao = qtd;
+              estoqueGalpao[idx].em_transito = parseFloat(row[5]) || 0;   // Em Trânsito (Compra)
+              if(parseFloat(row[10]) > 0) estoqueGalpao[idx].custo_medio = parseFloat(row[10]);   // Custo Médio
               estoqueGalpao[idx].data_atualizacao = hoje;
               if(titulo) estoqueGalpao[idx].descricao = titulo;
               atualizados++;
             } else {
-              estoqueGalpao.push({ sku: sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje });
+              estoqueGalpao.push({ sku: sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: parseFloat(row[5]) || 0, custo_medio: parseFloat(row[10]) || 0, data_atualizacao: hoje });
               naoEncontrados++;
             }
           }
@@ -1984,10 +1986,12 @@
             const idxEg = estoqueGalpao.findIndex(e => e.sku === sku);
             if(idxEg >= 0){
               estoqueGalpao[idxEg].qtd_galpao = qtd;
+              estoqueGalpao[idxEg].em_transito = parseFloat(row[5]) || 0;   // Em Trânsito (Compra)
+              if(parseFloat(row[10]) > 0) estoqueGalpao[idxEg].custo_medio = parseFloat(row[10]);   // Custo Médio (não mexe em skus.custo)
               estoqueGalpao[idxEg].data_atualizacao = hoje;
               if(titulo) estoqueGalpao[idxEg].descricao = titulo;
             } else {
-              estoqueGalpao.push({ sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: 0, custo_medio: 0, data_atualizacao: hoje });
+              estoqueGalpao.push({ sku, descricao: titulo, qtd_galpao: qtd, qtd_full: 0, qtd_full_pendente: 0, em_transito: parseFloat(row[5]) || 0, custo_medio: parseFloat(row[10]) || 0, data_atualizacao: hoje });
             }
           }
           salvar();
