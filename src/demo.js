@@ -58,6 +58,10 @@
               const c = (await dado('contas', h)) || [];
               return (h.get('Accept') || '').includes('vnd.pgrst.object') ? resp(c[0] || {}) : resp(c);
             }
+            if(alvo === 'olist_config' && (m === 'GET' || m === 'HEAD')){   // mostra as ordens de compra de exemplo como se o Olist estivesse ligado
+              const linha = { usuario_id: 'demo', atualizado_em: new Date().toISOString(), v3_em: new Date().toISOString(), v3_erro: '', client_id: '' };
+              return (h.get('Accept') || '').includes('vnd.pgrst.object') ? resp(linha) : resp([linha]);
+            }
             if(alvo.startsWith('rpc/')){
               const fn = alvo.slice(4);
               if(GRAVA.has(fn) || (fn === 'vendas_ml_ajustar' && !(corpo && corpo.p_simular))){ aviso(); return resp(0); }
