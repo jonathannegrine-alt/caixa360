@@ -1114,3 +1114,8 @@ a.pv-venda:hover{border-bottom-style:solid;}
   .oc-totais{grid-template-columns:1fr 1fr;}
   .an-barras{overflow-x:auto;}
 }
+@media (max-width:768px){
+  /* janela aberta fica por cima do botão do menu */
+  .modal{z-index:10001 !important;}
+  #modal-feedback{z-index:10002;}
+}
