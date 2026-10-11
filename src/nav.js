@@ -9,7 +9,8 @@
       document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
       document.querySelectorAll('.modal').forEach(m => { if(m.style.display && m.style.display !== 'none') m.style.display = 'none'; });
       localStorage.setItem('mk_last_page', page);
-      try { sessionStorage.setItem('mk_pagina', page); } catch(e){}
+      // só depois que o sistema terminou de abrir: os redesenhos do carregamento não podem trocar a página guardada
+      if(window._navPronto){ try { sessionStorage.setItem('mk_pagina', page); } catch(e){} }
       // Empurra estado no histórico do browser (exceto quando chamado pelo próprio popstate)
       if(!fromPopState && usuarioAtual){
         history.pushState({page}, '', location.pathname + location.search);

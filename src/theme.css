@@ -1119,3 +1119,12 @@ a.pv-venda:hover{border-bottom-style:solid;}
   .modal{z-index:10001 !important;}
   #modal-feedback{z-index:10002;}
 }
+
+/* Início: olho que esconde os valores */
+.ini-olho{background:rgba(255,255,255,.16);border:0;border-radius:8px;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;vertical-align:middle;margin-left:8px;color:inherit;padding:0;}
+.ini-olho:hover{background:rgba(255,255,255,.3);}
+.ini-olho svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+#view-inicio.ini-oculto .sens,#view-inicio.ini-oculto .kpi-value,#view-inicio.ini-oculto .kpi-sub,#view-inicio.ini-oculto .ini-num,#view-inicio.ini-oculto .ini-mini b,
+#view-inicio.ini-oculto .ini-venc .vl,#view-inicio.ini-oculto .ini-lib .v,#view-inicio.ini-oculto .ini-top .vl,#view-inicio.ini-oculto .ini-alerta b,
+#view-inicio.ini-oculto .pc-metricas b,#view-inicio.ini-oculto .pc-metricas strong,#view-inicio.ini-oculto .pc-eixo,#view-inicio.ini-oculto .pc-tip,#view-inicio.ini-oculto .ini-var{filter:blur(8px);user-select:none;pointer-events:none;}
+#view-inicio.ini-oculto .ini-bar{pointer-events:none;}

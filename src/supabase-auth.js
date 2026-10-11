@@ -63,6 +63,7 @@
         return;
       }
 
+      try { sessionStorage.removeItem('mk_pagina'); } catch(e){}   // quem acabou de entrar começa no Início
       await entrarNoApp(res.data.user);
     }
 
@@ -186,6 +187,7 @@
         // Verificar callback OAuth do ML (?code=...)
         const mlCode = new URLSearchParams(window.location.search).get('code');
         if(mlCode){
+          window._navPronto = true;
           nav('receber');
           await handleMLCallback(mlCode);
         } else {
@@ -222,6 +224,7 @@
     async function sair(){
       if(!confirm('Sair da conta?')) return;
       limparSessaoLocal();
+      try { sessionStorage.removeItem('mk_pagina'); } catch(e){}
       await supa.auth.signOut();
       usuarioAtual = null;
       document.getElementById('tela-login').classList.add('ativo');

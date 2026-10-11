@@ -587,82 +587,7 @@
             <button class="btn-out btn btn-sm" onclick="rfAtualizar()">↻ Atualizar</button>
             <button class="btn-out btn btn-sm" onclick="rfLegenda()">Legendas</button>
             <button class="btn-out btn btn-sm" onclick="rfRanking()">🏆 Ranking de produtos</button>
-            <div class="dd-wrap" style="position:relative;display:inline-block;">
-              <button class="btn btn-sm" title="${podeExportar ? 'Exportar todas as vendas filtradas' : 'Período grande: exporta apenas a página atual'}" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">⬇ Exportar ▾</button>
-              <div class="dd-menu" style="display:none;position:absolute;right:0;top:110%;z-index:20;min-width:150px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;">
-                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfExportar('xlsx')">Excel (.xlsx)</div>
-                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfExportar('csv')">CSV</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        ${vmlAvisoPermissao()}
-        ${d.erro ? `<div class="alert alert-danger">Erro ao consultar as vendas: ${vmlEsc(d.erro)}</div>` : ''}
-
-        <div class="kpi-grid k5">
-          <div class="kpi k-venda">
-            <div class="kpi-label" title="Valor dos produtos${vmlFreteComprador ? ' + frete pago pelo comprador' : ''} das vendas aprovadas">Vendas aprovadas</div>
-            <div class="kpi-value">R$ ${vmlNum(vendas)}</div>
-            <div class="kpi-sub"><span>Canceladas <b>R$ ${vmlNum(c.valor)}</b></span></div>
-            <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11.5px;color:var(--text-muted);cursor:pointer;">
-              <input type="checkbox" ${vmlFreteComprador ? 'checked' : ''} onchange="rfToggleFrete(this.checked)" style="width:auto;"> Considerar frete do comprador
-            </label>
-          </div>
-          <div class="kpi k-custo"><div class="kpi-label" title="Valores do cadastro de Produtos">Custo &amp; imposto</div><div class="kpi-value">R$ ${vmlNum(n('custo') + n('imposto'))}</div><div class="kpi-sub"><span>Custo <b>R$ ${vmlNum(n('custo'))}</b></span><span>Imposto <b>R$ ${vmlNum(n('imposto'))}</b></span></div></div>
-          <div class="kpi k-tarifa"><div class="kpi-label">Tarifa de venda</div><div class="kpi-value">R$ ${vmlNum(n('tarifa'))}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('tarifa') / n('bruto') * 100 : 0)}</b> das vendas</span></div></div>
-          <div class="kpi k-frete"><div class="kpi-label">Frete total</div><div class="kpi-value">R$ ${vmlNum(n('frete_comp') + n('frete_vend'))}</div><div class="kpi-sub"><span>Comprador <b>R$ ${vmlNum(n('frete_comp'))}</b></span><span>Vendedor <b>R$ ${vmlNum(n('frete_vend'))}</b></span></div></div>
-          <div class="kpi k-mc"><div class="kpi-label" title="Vendas aprovadas − custo − imposto − tarifa − frete do vendedor">Margem de contribuição</div><div class="kpi-value">R$ ${vmlNum(n('mc'))}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('mc') / n('bruto') * 100 : 0)}</b></span>${a.sem_custo ? `<span class="sem-custo">${a.sem_custo} sem custo/imposto</span>` : ''}</div></div>
-        </div>
-        <div class="kpi-grid k4">
-          <div class="kpi k-neutro"><div class="kpi-label">Por tipo de envio</div>
-            <div class="kpi-sub" style="margin-top:9px;display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;">
-              <span>Full <b>${log('Full')}</b></span><span>Flex <b>${log('Flex')}</b></span>
-              <span>Coleta <b>${log('Coleta')}</b></span><span>Agência/Places <b>R$ ${vmlNum((porEnvio['Agência'] || 0) + (porEnvio['Places'] || 0))}</b></span>
-              <span>Outros <b>R$ ${vmlNum(outros)}</b></span>
-            </div></div>
-          <div class="kpi k-neutro"><div class="kpi-label">Qtd. vendas aprovadas</div><div class="kpi-value">${n('qtd').toLocaleString('pt-BR')}</div><div class="kpi-sub"><span><b>${n('un').toLocaleString('pt-BR')}</b> unidades</span><span>Canceladas <b>${c.qtd || 0}</b> (${c.un || 0} un.)</span></div></div>
-          <div class="kpi k-neutro"><div class="kpi-label">Ticket médio por venda</div><div class="kpi-value">R$ ${vmlNum(n('qtd') ? vendas / n('qtd') : 0)}</div></div>
-          <div class="kpi k-neutro"><div class="kpi-label">Ticket médio da margem</div><div class="kpi-value">R$ ${vmlNum(n('qtd') ? n('mc') / n('qtd') : 0)}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('mc') / n('bruto') * 100 : 0)}</b></span></div></div>
-        </div>
-
-        <div style="display:grid;grid-template-columns:minmax(0,1.9fr) minmax(280px,1fr);gap:16px;" class="responsive-grid-2">
-          <div class="card"><div class="card-header"><div class="card-title">Filtrar busca</div><span class="text-muted">${nDias} dia${nDias > 1 ? 's' : ''}</span></div><div class="card-body">
-            <div class="filtros">
-              <div style="grid-column:span 2;"><label>Data início</label><div class="dt-nav">
-                <input type="date" value="${f.de}" onchange="rfSetData('de', this.value)">
-                <button class="ico-btn" title="Dia anterior" onclick="rfMoverDia(-1)">‹</button>
-                <button class="ico-btn" title="Próximo dia" onclick="rfMoverDia(1)">›</button></div></div>
-              <div><label>Data fim</label><input type="date" value="${f.ate}" onchange="rfSetData('ate', this.value)"></div>
-              <div><label>Nº pedido / carrinho</label><input type="text" value="${vmlEsc(f.pedido)}" onchange="rfSet('pedido', this.value)"></div>
-              <div><label>Título ou MLB</label><input type="text" value="${vmlEsc(f.titulo)}" onchange="rfSet('titulo', this.value)"></div>
-              <div><label>SKU</label><input type="text" value="${vmlEsc(f.sku)}" onchange="rfSet('sku', this.value)"></div>
-              <div><label>Status da venda</label>${sel('status', f.status, [['todas','Todos'],['aprovadas','Aprovados'],['canceladas','Cancelados']])}</div>
-              <div><label>Modalidade</label>${sel('modalidade', f.modalidade, [['todas','Todos'],['Premium','Premium'],['Clássico','Clássico'],['Grátis','Grátis']])}</div>
-              <div><label>Tipo do frete</label>${sel('frete', f.frete, [['todos','Todos'],['Full','Full'],['Flex','Flex'],['Coleta','Coleta'],['Agência','Agência'],['Places','Places'],['Outros','Outros']])}</div>
-              <div><label>Custo &amp; imposto</label>${sel('custo', f.custo, [['todos','Todos'],['sem-custo','Somente vendas sem custo'],['sem-imposto','Somente vendas sem imposto'],['sem-um','Sem custo ou sem imposto'],['sem-ambos','Sem custo e sem imposto']])}</div>
-            </div>
-            <div class="chips" style="margin-top:14px;">
-              ${[['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Mês atual'],['12m','12 meses']].map(([k,l]) => `<button class="chip" onclick="rfAtalho('${k}')">${l}</button>`).join('')}
-            </div>
-          </div></div>
-          <div class="card"><div class="card-header"><div class="card-title">Para onde vai cada real</div></div><div class="card-body">
-            ${rfDonut([
-              { nome:'Frete', v:n('frete_vend'), cor:'#3b82f6' }, { nome:'Tarifa', v:n('tarifa'), cor:'#eab308' },
-              { nome:'M. contribuição', v:n('mc'), cor:'#10b981' }, { nome:'Custo', v:n('custo'), cor:'#f97316' }, { nome:'Imposto', v:n('imposto'), cor:'#ef4444' }])}
-            <div class="text-muted" style="font-size:11px;margin-top:10px;">* O frete pago pelo comprador não entra no gráfico.</div>
-          </div></div>
-        </div>
-
-        <div class="card">
-          ${podeExportar ? '' : `<div class="alert alert-info" style="margin:14px 16px 0;"><b>Visualização otimizada para muitas vendas.</b>&nbsp;Os totais consideram o período inteiro; a exportação em Excel ou CSV considera apenas a página atual.</div>`}
-          <div class="rf-ferr">
-            <div class="dd-wrap" style="position:relative;display:inline-block;">
-              <button class="btn btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">⚖ Nivelar custo &amp; imposto ▾</button>
-              <div class="dd-menu" style="display:none;position:absolute;left:0;top:110%;z-index:20;min-width:230px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;">
-                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfNivelar()"><b>Nivelar</b><br><small class="text-muted">informar custo e imposto de um SKU no período</small></div>
-                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfReprocessar()"><b>Reprocessar</b><br><small class="text-muted">regravar com o cadastro atual de Produtos</small></div>
-              </div>
-            </div>
+            <button class="btn btn-sm" onclick="rfReprocessar()" title="Corrigir o custo e o imposto das vendas já feitas">⚖ Reprocessar custo &amp; imposto</button>
             <button class="btn-out btn btn-sm" onclick="rfNivelarSku()">Nivelar SKU</button>
             <button class="btn-out btn btn-sm" onclick="rfRanking()">🏆 Ranking de produtos</button>
           </div>
@@ -796,45 +721,60 @@
     function rfPeriodoTxt(){ return `${ptDate(rfFiltro.de)} a ${ptDate(rfFiltro.ate)}${contaAtiva ? ' · conta ' + vmlEsc(contaNome(contaAtiva)) : ''}`; }
     function rfFecharMenus(){ document.querySelectorAll('#view-resumo-fin .dd-menu').forEach(m => { m.style.display = 'none'; }); }
 
-    function rfNivelar(){
-      rfFecharMenus();
-      vmlModal('Nivelar custo & imposto', `
-        <div class="text-muted" style="margin-bottom:14px;line-height:1.5;">Grava nas vendas de um SKU, no período <b style="color:var(--text)">${rfPeriodoTxt()}</b>, o custo e o imposto que você informar. Não altera o cadastro de Produtos. Deixe um campo em branco para não mexer nele.</div>
-        <div class="form-group"><label class="form-label">SKU</label><input type="text" id="niv-sku" value="${vmlEsc(rfFiltro.sku)}" placeholder="Ex.: J-2010-Vermelho"></div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Custo unitário (R$)</label><input type="number" step="0.01" min="0" id="niv-custo"></div>
-          <div class="form-group"><label class="form-label">Imposto (% sobre a venda)</label><input type="number" step="0.01" min="0" id="niv-imp"></div>
-        </div>
-        <div id="niv-msg"></div>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="niv-ok" onclick="rfNivelarOk()">Nivelar vendas</button>`);
-    }
-    async function rfNivelarOk(){
-      const sku = document.getElementById('niv-sku').value.trim();
-      const c = document.getElementById('niv-custo').value, i = document.getElementById('niv-imp').value;
-      const msg = document.getElementById('niv-msg');
-      if(!sku || (c === '' && i === '')){ msg.innerHTML = '<div class="alert alert-warning">Informe o SKU e pelo menos um valor.</div>'; return; }
-      document.getElementById('niv-ok').disabled = true;
-      const { data, error } = await supa.rpc('vendas_ml_nivelar', { p_de: rfFiltro.de, p_ate: rfFiltro.ate, p_sku: sku, p_custo: c === '' ? null : Number(c), p_imposto: i === '' ? null : Number(i), p_conta: contaParam() });
-      if(error){ msg.innerHTML = `<div class="alert alert-danger">${vmlEsc(error.message)}</div>`; document.getElementById('niv-ok').disabled = false; return; }
-      vmlModal('Nivelar custo & imposto', `<div class="alert alert-info"><b>${data || 0}</b>&nbsp;venda(s) do SKU ${vmlEsc(sku)} atualizada(s) no período.</div>`);
-      rfRankDados = null; rfCarregar();
-    }
-
+    // Uma janela só para corrigir custo e imposto das vendas já feitas: período, SKU (ou todos) e, para cada um,
+    // não mexer / usar o cadastro de Produtos / gravar um valor informado. "Conferir" mostra quantas vendas mudam.
+    function rfNivelar(){ rfReprocessar(); }
     function rfReprocessar(){
       rfFecharMenus();
+      const modo = (id, rot) => `<select id="${id}" onchange="rfRepTroca()">
+          <option value="cadastro">Usar o cadastro de Produtos</option>
+          <option value="valor">Informar ${rot}</option>
+          <option value="nada">Não alterar</option></select>`;
       vmlModal('Reprocessar custo & imposto', `
-        <div style="line-height:1.6;">Regrava o custo e o imposto das vendas do período <b>${rfPeriodoTxt()}</b> com os valores <b>atuais</b> do cadastro de Produtos.</div>
-        <div class="alert alert-warning" style="margin-top:12px;">Isso altera o resultado passado dessas vendas. Use quando o custo da época estava errado.</div>
-        <div class="form-group"><label class="form-label">Somente este SKU (opcional)</label><input type="text" id="rep-sku" value="${vmlEsc(rfFiltro.sku)}" placeholder="Em branco = todos os SKUs do período"></div>
-        <div id="rep-msg"></div>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="rep-ok" onclick="rfReprocessarOk()">Reprocessar</button>`);
+        <div class="text-muted" style="margin-bottom:14px;line-height:1.5;">Regrava o custo e o imposto das vendas <b style="color:var(--text)">já feitas</b>. O cadastro de Produtos não muda aqui.${contaAtiva ? ' Loja: <b style="color:var(--text)">' + vmlEsc(contaNome(contaAtiva)) + '</b>.' : ' Vale para <b style="color:var(--text)">todas as lojas</b>.'}</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Vendas de</label><input type="date" id="rep-de" value="${rfFiltro.de}" onchange="rfRepLimpa()"></div>
+          <div class="form-group"><label class="form-label">até</label><input type="date" id="rep-ate" value="${rfFiltro.ate}" onchange="rfRepLimpa()"></div>
+        </div>
+        <div class="form-group"><label class="form-label">SKU (em branco = todos os SKUs do período)</label><input type="text" id="rep-sku" value="${vmlEsc(rfFiltro.sku)}" placeholder="Ex.: J-2010-Vermelho" oninput="rfRepLimpa()"></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Custo</label>${modo('rep-cmodo', 'o custo')}
+            <input type="number" step="0.01" min="0" id="rep-custo" placeholder="Custo unitário (R$)" style="display:none;margin-top:6px;" oninput="rfRepLimpa()"></div>
+          <div class="form-group"><label class="form-label">Imposto</label>${modo('rep-imodo', 'o imposto')}
+            <input type="number" step="0.01" min="0" id="rep-imp" placeholder="Imposto (% sobre a venda)" style="display:none;margin-top:6px;" oninput="rfRepLimpa()"></div>
+        </div>
+        <label class="vml-opcao"><input type="radio" name="rep-quais" value="todas" checked onchange="rfRepLimpa()"> <span><b>Todas as vendas do período</b><br><span class="text-muted">Substitui o custo e o imposto que estavam gravados. Muda o resultado passado dessas vendas.</span></span></label>
+        <label class="vml-opcao"><input type="radio" name="rep-quais" value="vazias" onchange="rfRepLimpa()"> <span><b>Só as que estão sem valor</b><br><span class="text-muted">Preenche apenas as vendas sem custo ou sem imposto; as demais ficam como estão.</span></span></label>
+        <div id="rep-msg" style="margin-top:10px;"></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn-out btn" id="rep-conf" onclick="rfReprocessarOk(true)">Conferir</button><button class="btn" id="rep-ok" onclick="rfReprocessarOk(false)">Reprocessar</button>`);
     }
-    async function rfReprocessarOk(){
-      const sku = document.getElementById('rep-sku').value.trim();
-      document.getElementById('rep-ok').disabled = true;
-      const { data, error } = await supa.rpc('vendas_ml_reprocessar', { p_de: rfFiltro.de, p_ate: rfFiltro.ate, p_sku: sku || null, p_conta: contaParam() });
-      if(error){ document.getElementById('rep-msg').innerHTML = `<div class="alert alert-danger">${vmlEsc(error.message)}</div>`; document.getElementById('rep-ok').disabled = false; return; }
-      vmlModal('Reprocessar custo & imposto', `<div class="alert alert-info"><b>${data || 0}</b>&nbsp;venda(s) regravada(s) com o cadastro atual.</div>`);
+    function rfRepTroca(){
+      document.getElementById('rep-custo').style.display = document.getElementById('rep-cmodo').value === 'valor' ? '' : 'none';
+      document.getElementById('rep-imp').style.display = document.getElementById('rep-imodo').value === 'valor' ? '' : 'none';
+      rfRepLimpa();
+    }
+    function rfRepLimpa(){ const m = document.getElementById('rep-msg'); if(m) m.innerHTML = ''; }
+    async function rfReprocessarOk(simular){
+      const g = id => document.getElementById(id), msg = g('rep-msg');
+      const aviso = tx => { msg.innerHTML = `<div class="alert alert-warning">${tx}</div>`; };
+      const de = g('rep-de').value, ate = g('rep-ate').value, sku = g('rep-sku').value.trim();
+      const cm = g('rep-cmodo').value, im = g('rep-imodo').value, c = g('rep-custo').value, i = g('rep-imp').value;
+      if(!de || !ate || de > ate) return aviso('Confira as datas do período.');
+      if(cm === 'nada' && im === 'nada') return aviso('Escolha o que alterar: custo, imposto ou os dois.');
+      if(cm === 'valor' && !sku) return aviso('Para informar um custo é preciso escolher o SKU (cada produto tem o seu). Sem SKU, use "Usar o cadastro de Produtos".');
+      if(cm === 'valor' && c === '') return aviso('Informe o custo unitário.');
+      if(im === 'valor' && i === '') return aviso('Informe o imposto.');
+      const bo = g('rep-ok'), bc = g('rep-conf'); bo.disabled = bc.disabled = true;
+      msg.innerHTML = '<div class="text-muted">' + (simular ? 'Conferindo…' : 'Reprocessando…') + '</div>';
+      const { data, error } = await supa.rpc('vendas_ml_ajustar', { p_de: de, p_ate: ate, p_sku: sku || null, p_conta: contaParam(),
+        p_custo_modo: cm, p_custo: cm === 'valor' ? Number(c) : null, p_imp_modo: im, p_imposto: im === 'valor' ? Number(i) : null,
+        p_so_vazias: (document.querySelector('input[name="rep-quais"]:checked') || {}).value === 'vazias', p_simular: !!simular });
+      if(!document.getElementById('rep-msg')) return;
+      bo.disabled = bc.disabled = false;
+      if(error){ msg.innerHTML = `<div class="alert alert-danger">${vmlEsc(error.message)}</div>`; return; }
+      const n = Number(data) || 0;
+      if(simular){ msg.innerHTML = `<div class="alert alert-info"><b>${n.toLocaleString('pt-BR')}</b>&nbsp;venda(s) seriam alteradas. Nada foi gravado ainda.</div>`; return; }
+      vmlModal('Reprocessar custo & imposto', `<div class="alert alert-info"><b>${n.toLocaleString('pt-BR')}</b>&nbsp;venda(s) regravada(s), de ${ptDate(de)} a ${ptDate(ate)}${sku ? ', SKU ' + vmlEsc(sku) : ''}.</div>`);
       rfRankDados = null; rfCarregar();
     }
 

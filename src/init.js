@@ -59,6 +59,7 @@
       let lastPage = 'inicio'; try { lastPage = sessionStorage.getItem('mk_pagina') || 'inicio'; } catch(e){}
       if(!document.getElementById('view-' + lastPage)) lastPage = 'inicio';
       localStorage.setItem('mk_viu_inicio', '1');
+      window._navPronto = true;
       nav(['calendario'].includes(lastPage) ? 'dashboard' : lastPage);
     }
     

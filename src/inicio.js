@@ -22,7 +22,7 @@
           supa.rpc('vendas_ml_ranking', { p_de: addDias(hoje, -29), p_ate: hoje, p_grupo: 'sku', p_conta: contaParam() })
         ]);
         const porDia = {};
-        (serie.data || []).forEach(r => { porDia[String(r.dia).substring(0,10)] = { val: Number(r.bruto) || 0, qtd: Number(r.vendas) || 0 }; });
+        (serie.data || []).forEach(r => { porDia[String(r.dia).substring(0,10)] = { val: Number(r.bruto) || 0, qtd: Number(r.vendas) || 0, mc: Number(r.mc) || 0 }; });
         const top = (rank.data || []).slice(0, 5).map(t => ({ sku: t.chave, titulo: t.titulo || '', un: Number(t.un) || 0, val: Number(t.bruto) || 0 }));
         inicioVendas = { porDia, top, em: Date.now(), tem: (serie.data || []).length > 0 };
       } catch(e){
@@ -39,8 +39,15 @@
       if(usaVendas) Object.keys(inicioVendas.porDia).forEach(d => { mapa[d] = inicioVendas.porDia[d]; });
       else extratoHistorico.forEach(e => { mapa[e.data] = { val: Number(e.val_liquido) || 0, qtd: Number(e.qtd_pedidos) || 0 }; });
       const dias = [];
-      for(let i = 59; i >= 0; i--){ const d = addDias(hoje, -i); dias.push({ data:d, val:(mapa[d] || {}).val || 0, qtd:(mapa[d] || {}).qtd || 0 }); }
+      for(let i = 59; i >= 0; i--){ const d = addDias(hoje, -i); dias.push({ data:d, val:(mapa[d] || {}).val || 0, qtd:(mapa[d] || {}).qtd || 0, mc:(mapa[d] || {}).mc || 0 }); }
       return { usaVendas, atual: dias.slice(30), anterior: dias.slice(0,30) };
+    }
+
+    // Olho: esconde os valores da tela Início (fica guardado neste navegador)
+    function iniOculto(){ try { return localStorage.getItem('mk_ini_oculto') === '1'; } catch(e){ return false; } }
+    function iniOlho(){
+      try { localStorage.setItem('mk_ini_oculto', iniOculto() ? '0' : '1'); } catch(e){}
+      renderInicio();
     }
 
     function renderInicio(){
@@ -112,6 +119,12 @@
       const icoDe = p => { const n = document.querySelector(`.nav-item[onclick="nav('${p}')"] svg`); return n ? n.outerHTML : ''; };
       const seta = v => v === null ? '' : `<span class="ini-var ${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1).replace('.', ',')}%</span>`;
 
+      const oculto = iniOculto();
+      el.classList.toggle('ini-oculto', oculto);
+      const olhoSvg = oculto
+        ? '<svg viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c5.5 0 9 6 9 6a15.6 15.6 0 0 1-3.2 3.8M6.5 7.6A15.4 15.4 0 0 0 3 12s3.5 6 9 6a9.3 9.3 0 0 0 3.6-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>'
+        : '<svg viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="3"/></svg>';
+      const margHoje = vHoje.val > 0 ? vHoje.mc / vHoje.val * 100 : 0;
       el.innerHTML = `
         <div class="ini-hero">
           <div class="ini-hero-txt">
@@ -125,10 +138,10 @@
             </div>
           </div>
           <div class="ini-hero-saldo">
-            <span>Saldo em caixa</span>
-            <b>${fmt(saldoAtual)}</b>
-            <small>Em 30 dias: <b>${fmt(fim30)}</b> ${seta(saldoAtual ? (fim30 - saldoAtual) / Math.abs(saldoAtual) * 100 : null)}</small>
-            <small class="link" onclick="nav('dashboard')">Atualizar saldos →</small>
+            <span>${sv.usaVendas ? 'Vendas hoje' : 'Liberado hoje'} <button class="ini-olho" onclick="iniOlho()" title="${oculto ? 'Mostrar os valores' : 'Esconder os valores'}" aria-label="${oculto ? 'Mostrar os valores' : 'Esconder os valores'}">${olhoSvg}</button></span>
+            <b class="sens">${fmt(vHoje.val)}</b>
+            <small>${sv.usaVendas ? `<b class="sens">${vHoje.qtd}</b> pedido${vHoje.qtd === 1 ? '' : 's'} · Margem <b class="sens">${fmt(vHoje.mc)}</b> <span class="sens">(${margHoje.toFixed(1).replace('.', ',')}%)</span>` : `<b class="sens">${vHoje.qtd}</b> pedido${vHoje.qtd === 1 ? '' : 's'}`}</small>
+            <small>Ontem: <b class="sens">${fmt(vOntem.val)}</b>${sv.usaVendas && vOntem.qtd ? ` · <span class="sens">${vOntem.qtd}</span> pedidos` : ''}</small>
           </div>
         </div>
 
@@ -142,9 +155,9 @@
           <div class="kpi k-venda" onclick="nav('${sv.usaVendas ? 'vendas' : 'receber'}')" style="cursor:pointer;">
             <div class="kpi-label">${rotVendas} · 30 dias</div><div class="kpi-value">${fmt(tot30)}</div>
             <div class="kpi-sub">${seta(varVendas)}<span>vs. 30 dias anteriores</span></div></div>
-          <div class="kpi k-frete">
-            <div class="kpi-label">${sv.usaVendas ? 'Vendas hoje' : 'Liberado hoje'}</div><div class="kpi-value">${fmt(vHoje.val)}</div>
-            <div class="kpi-sub"><span>Ontem <b>${fmt(vOntem.val)}</b></span><span>Média 7d <b>${fmt(media7)}</b></span></div></div>
+          <div class="kpi k-frete" onclick="nav('dashboard')" style="cursor:pointer;">
+            <div class="kpi-label">Saldo em caixa</div><div class="kpi-value">${fmt(saldoAtual)}</div>
+            <div class="kpi-sub"><span>Em 30 dias <b>${fmt(fim30)}</b></span>${seta(saldoAtual ? (fim30 - saldoAtual) / Math.abs(saldoAtual) * 100 : null)}</div></div>
         </div>
 
         <div class="ini-grid">
