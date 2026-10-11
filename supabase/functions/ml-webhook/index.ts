@@ -7,7 +7,8 @@
 // pedidos é o ml-vendas, com o token da própria conta. No máximo um disparo por conta a cada 20 s.
 //
 // Configuração (uma vez, no DevCenter do ML → aplicativo → "URL de retornos de chamada de notificação"):
-//   https://qasrccmtrllotukyeiax.supabase.co/functions/v1/ml-webhook      (tópico orders_v2 marcado)
+//   https://qasrccmtrllotukyeiax.supabase.co/functions/v1/ml-webhook      (tópicos orders_v2, questions e messages marcados)
+// Perguntas e mensagens: cada notificação grava uma linha em ml_avisos (src/avisos.js mostra o selo no menu).
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void }
 
@@ -30,6 +31,17 @@ async function sincronizar(conta: string) {
   }).catch(() => null)
 }
 
+// pergunta ou mensagem nova: grava um aviso para cada usuário dono daquela conta (a tela mostra o selo em até 1 minuto)
+async function avisar(conta: string, topico: string, recurso: string) {
+  const supaUrl = Deno.env.get('SUPABASE_URL')!, supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const dbH = { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json' }
+  const donos = await fetch(`${supaUrl}/rest/v1/ml_tokens?ml_user_id=eq.${conta}&select=usuario_id`, { headers: dbH }).then(r => r.json()).catch(() => [])
+  if (!Array.isArray(donos) || !donos.length) return
+  await fetch(`${supaUrl}/rest/v1/ml_avisos`, { method: 'POST', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify(donos.map((d: any) => ({ usuario_id: d.usuario_id, ml_user_id: conta, topico, recurso: recurso.slice(0, 200) }))) }).catch(() => null)
+  // limpeza: avisos com mais de 10 dias
+  await fetch(`${supaUrl}/rest/v1/ml_avisos?em=lt.${new Date(Date.now() - 10 * 86400000).toISOString()}`, { method: 'DELETE', headers: dbH }).catch(() => null)
+}
+
 Deno.serve(async (req) => {
   // o ML exige resposta 200 rápida; o trabalho segue em segundo plano
   if (req.method === 'POST') {
@@ -41,6 +53,9 @@ Deno.serve(async (req) => {
         ultimo.set(conta, agora)
         EdgeRuntime.waitUntil(sincronizar(conta))
       }
+    }
+    else if ((topico === 'questions' || topico === 'messages') && /^\d{4,20}$/.test(conta)) {
+      EdgeRuntime.waitUntil(avisar(conta, topico, String(b?.resource || '')))
     }
   }
   return new Response('ok', { status: 200 })

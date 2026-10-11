@@ -19,6 +19,8 @@
       let card = document.getElementById('cfg-regras-card');
       if(!card){ card = document.createElement('div'); card.id = 'cfg-regras-card'; card.className = 'card'; card.dataset.cfgAba = 'ml'; view.appendChild(card); }
       if(!vr.carregado) await vrCarregar();
+      const pc = await supa.from('custo_peps_cfg').select('desde,ativo').eq('usuario_id', usuarioAtual.id).maybeSingle();
+      vr.peps = pc.data || null;
       const contas = typeof contasML !== 'undefined' ? contasML : [];
       const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       const sn = (conta, campo, val, sim, nao) => `<select onchange="vrSalvar('${conta}','${campo}',this.value==='1')"><option value="1" ${val ? 'selected' : ''}>${sim}</option><option value="0" ${val ? '' : 'selected'}>${nao}</option></select>`;
@@ -34,6 +36,11 @@
               <div class="vr-linha"><div><b>Frete pago pelo comprador entra no cálculo do imposto?</b><span class="d">Em alguns lugares o comprador paga uma parte do frete. Marque "Sim" se a sua nota fiscal inclui esse valor; com "Não", o imposto é só sobre o valor do produto.</span></div>
                 ${sn(c.id, 'frete_no_imposto', !!g.frete_no_imposto, 'Sim, considerar o frete', 'Não considerar o frete')}</div>
             </div>`; }).join('') : '<div class="text-muted">Conecte uma conta do Mercado Livre para configurar.</div>'}
+          <div class="vr-loja"><h4>Custo do produto nas vendas</h4>
+            <div class="vr-linha"><div><b>De onde vem o custo de cada venda?</b><span class="d"><b>Pelas ordens de compra</b>: cada compra que chega vira um lote com o preço pago, e as vendas consomem os lotes na ordem de chegada. <b>Pelo valor do cadastro</b>: vale o custo que você digita em Produtos — útil para quem não lança ordem de compra ou quer embutir outros gastos no custo (por exemplo, R$ 10 do produto + R$ 1 de expedição = R$ 11). A troca vale para as próximas vendas; as já calculadas não mudam.</span></div>
+              ${vr.peps ? `<select onchange="vrCusto(this.value==='1')"><option value="1" ${vr.peps.ativo ? 'selected' : ''}>Pelas ordens de compra (lotes)</option><option value="0" ${vr.peps.ativo ? '' : 'selected'}>Pelo valor do cadastro</option></select>`
+                : `<div style="text-align:right;"><div class="text-muted" style="font-size:12.5px;margin-bottom:6px;">Hoje: pelo valor do cadastro</div><button class="btn-out btn btn-sm" onclick="nav('ordens-compra');if(typeof pepsAbrir==='function')setTimeout(pepsAbrir,400)">Passar a usar as ordens de compra</button></div>`}</div>
+          </div>
           <div id="vr-msg" class="text-muted" style="font-size:12.5px;"></div>
         </div>`;
     }
@@ -51,4 +58,11 @@
       if(typeof dreDados !== 'undefined') dreDados = { chave: '', ml: {}, cobertura: {}, carregado: false, erro: null };
       if(typeof an !== 'undefined'){ an.chave = ''; an.meses = null; }
       toast('Regra gravada. As margens das vendas já consideram a mudança.');
+    }
+
+    async function vrCusto(porLote){
+      const r = await supa.from('custo_peps_cfg').update({ ativo: !!porLote }).eq('usuario_id', usuarioAtual.id);
+      if(r.error){ toast('Não consegui gravar: ' + r.error.message); return; }
+      if(vr.peps) vr.peps.ativo = !!porLote;
+      toast(porLote ? 'As próximas vendas usam o custo das ordens de compra (lotes).' : 'As próximas vendas usam o custo digitado no cadastro do produto.');
     }

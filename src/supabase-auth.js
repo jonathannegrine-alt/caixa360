@@ -668,18 +668,24 @@
       }
       document.getElementById('feedback-texto').value = '';
       document.getElementById('modal-feedback').classList.remove('open');
-      alert('Feedback enviado! Obrigado.');
+      if(typeof toast === 'function') toast('Recebido, obrigado! Sua mensagem foi enviada para quem cuida do sistema.'); else alert('Feedback enviado! Obrigado.');
     }
 
     async function carregarFeedbacks(){
       if(!usuarioAtual) return;
       const el = document.getElementById('lista-feedbacks');
       el.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">Carregando...</div>';
-      const { data } = await supa.from('feedbacks')
-        .select('mensagem,pagina,created_at')
-        .eq('usuario_id', usuarioAtual.id)
-        .order('created_at', {ascending:false})
-        .limit(50);
+      // quem administra o sistema vê as sugestões de todos os usuários; os demais, só as próprias
+      let data = null, admin = false;
+      try { const a = await supa.rpc('eh_admin'); admin = !!a.data; } catch(e){}
+      if(admin){
+        const r = await supa.rpc('feedbacks_todos');
+        data = (r.data || []).map(f => ({ mensagem: f.mensagem, pagina: f.pagina, created_at: f.criado, email: f.email, novo: !f.lido }));
+        if(data.some(f => f.novo)){ supa.rpc('feedbacks_lidos').then(() => { if(typeof avisos !== 'undefined'){ avisos.sugestoes = 0; if(typeof avDesenhar === 'function') avDesenhar(); } }); }
+      } else {
+        const r = await supa.from('feedbacks').select('mensagem,pagina,created_at').eq('usuario_id', usuarioAtual.id).order('created_at', {ascending:false}).limit(50);
+        data = r.data;
+      }
       if(!data || data.length === 0){
         el.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">Nenhum feedback enviado ainda.</div>';
         return;
@@ -688,8 +694,8 @@
         const dt = new Date(f.created_at);
         const dtStr = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
         return `<div style="padding:12px 16px;border-bottom:1px solid var(--gray-100);">
-          <div style="font-size:11px;color:#999;margin-bottom:4px;">${dtStr}${f.pagina ? ' · ' + f.pagina.trim() : ''}</div>
-          <div style="font-size:13px;">${f.mensagem}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">${f.novo ? '<b style="color:var(--primary);">NOVA</b> · ' : ''}${dtStr}${f.email ? ' · ' + String(f.email).replace(/</g, '&lt;') : ''}${f.pagina ? ' · ' + f.pagina.trim().replace(/</g, '&lt;') : ''}</div>
+          <div style="font-size:13px;white-space:pre-wrap;">${String(f.mensagem || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
         </div>`;
       }).join('');
       initResizableCols('tbody-categorias');
