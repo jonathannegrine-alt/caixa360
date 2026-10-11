@@ -22,8 +22,8 @@
         const aviso = () => { if(Date.now() - ultimoAviso < 25000) return; ultimoAviso = Date.now(); setTimeout(() => { if(typeof toast === 'function') toast('Demonstração: a alteração vale só nesta tela e não é gravada.'); }, 50); };
         const dado = async (chave, h) => {
           if(chave in cache) return cache[chave];
-          try { const r = await orig('https://' + SUPA + '/rest/v1/rpc/demo_dado', { method: 'POST', headers: { apikey: h.get('apikey') || '', Authorization: h.get('Authorization') || '', 'Content-Type': 'application/json' }, body: JSON.stringify({ p_chave: chave }) });
-            cache[chave] = r.ok ? await r.json() : null; } catch(e){ cache[chave] = null; }
+          try { const r = await orig('https://' + SUPA + '/rest/v1/rpc/demo_dado', { method: 'POST', headers: { apikey: h.get('apikey') || (typeof SUPA_KEY !== 'undefined' ? SUPA_KEY : ''), Authorization: h.get('Authorization') || '', 'Content-Type': 'application/json' }, body: JSON.stringify({ p_chave: chave }) });
+            if(r.ok) cache[chave] = await r.json(); else return null; } catch(e){ return null; }
           return cache[chave];
         };
         window.fetch = async function(input, init){
