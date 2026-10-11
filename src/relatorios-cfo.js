@@ -1,15 +1,15 @@
 // ===== UTILS MONETÁRIOS =====
+    // Campo de dinheiro no padrão de banco: os dígitos entram pelos centavos (digitar 4409499 vira 44.094,99),
+    // sem precisar da vírgula. Colar um valor já formatado ("1.234,5" ou "1234.50") é respeitado.
     function onMoneyInput(el){
-      const old = el.value;
-      const pos = el.selectionStart;
-      let v = old.replace(/[^\d,]/g, '');
-      const parts = v.split(',');
-      let intPart = (parts[0] || '').replace(/^0+/, '') || '';
-      intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-      const result = parts.length > 1 ? intPart + ',' + parts[1].substring(0, 2) : intPart;
-      el.value = result;
-      const diff = result.length - old.length;
-      el.setSelectionRange(Math.max(0, pos + diff), Math.max(0, pos + diff));
+      const ev = window.event;
+      let centavos;
+      if(ev && ev.inputType === 'insertFromPaste' && /[.,]/.test(el.value)) centavos = Math.round(parseMoney(el.value) * 100);
+      else centavos = parseInt(el.value.replace(/\D/g, '') || '0', 10);
+      if(!centavos){ el.value = ''; return; }
+      if(centavos > 99999999999) centavos = Math.floor(centavos / 10);      // limite de segurança (R$ 999 milhões)
+      el.value = (centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      try { el.setSelectionRange(el.value.length, el.value.length); } catch(e){}
     }
 
     function parseMoney(str){
