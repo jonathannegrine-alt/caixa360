@@ -426,7 +426,7 @@ Deno.serve(async (req: Request) => {
           const M = await montarReclamacao(tk, cl, det)
           const { caso, fotos, ped, prazo, anexos } = M
           // "o problema" na tela: o relato do comprador na abertura, quando o ML não manda o resumo
-          const relato = String(M.conversa.find((m: any) => m.sender_role !== 'respondent')?.message || '').replace(/s+/g, ' ')
+          const relato = String(M.conversa.find((m: any) => m.sender_role !== 'respondent')?.message || '').replace(/\*\*/g, '').replace(/\s+/g, ' ')
           const iRel = relato.indexOf('O comprador')
           if (!caso.problema && iRel >= 0) caso.problema = relato.slice(iRel, iRel + 280).split(' Se você ')[0].trim()
           // a última palavra foi nossa: a vez é do Mercado Livre (ou do comprador)
