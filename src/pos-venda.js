@@ -246,8 +246,11 @@
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp'; inp.id = 'pv-img-input';
       inp.onchange = async () => { const f = inp.files[0]; if(!f) return;
         if(f.size > 4 * 1024 * 1024){ toast('A imagem tem mais de 4 MB. Envie uma menor.'); return; }
-        const r = await supa.storage.from('pos-venda').upload(usuarioAtual.id + '/' + f.name, f, { upsert: true, contentType: f.type });
+        // o armazenamento não aceita acento nem símbolo no nome do arquivo
+        const nome = f.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9._ ()-]/g, '_');
+        const r = await supa.storage.from('pos-venda').upload(usuarioAtual.id + '/' + nome, f, { upsert: true, contentType: f.type });
         if(r.error){ toast('Não consegui enviar: ' + r.error.message); return; }
+        if(nome !== f.name) toast('Imagem guardada como "' + nome + '" (sem acentos). A IA reconhece pelo nome mesmo assim.');
         await pvAtualizar(); };
       inp.click();
     }

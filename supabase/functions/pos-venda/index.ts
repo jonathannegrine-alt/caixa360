@@ -184,7 +184,9 @@ Deno.serve(async (req: Request) => {
       if ((acao === 'mensagem_comprador' || acao === 'mensagem_mediador') && !texto) { acao = 'manual'; manual = manual || 'A IA não escreveu a mensagem.' }
       const pct = acao === 'reembolso_parcial' ? Math.round(Number(d?.percentual) || 0) : null
       if (acao === 'reembolso_parcial' && !(pct! >= 10 && pct! <= 90)) motivos.push('percentual inválido')
-      const imagem = d?.imagem && apoio.includes(String(d.imagem)) ? String(d.imagem) : null
+      // o nome pode vir com acento (como está escrito nas regras): compara sem acento e sem maiúsculas
+      const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+      const imagem = d?.imagem ? (apoio.find(a => semAcento(a) === semAcento(String(d.imagem))) || null) : null
       const dinheiro = ['reembolso_total', 'reembolso_parcial', 'liberar_devolucao'].includes(acao)
       let caminho = d?.caminho === 'direto' ? 'direto' : 'fila'
       if (d?.escalar) { caminho = 'fila'; motivos.push('caso para escalar') }
