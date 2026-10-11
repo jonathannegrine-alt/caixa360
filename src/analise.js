@@ -15,14 +15,26 @@
     const AN_MES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const AN_UF = { AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul', MG: 'Minas Gerais', PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul', RO: 'Rondônia', RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins' };
 
-    function anPeriodo(){ const ate = getToday(); return { de: addDias(ate, -(an.dias - 1)), ate }; }
+    // período: atalho (30/60/90 dias) ou datas escolhidas no calendário (no máximo 90 dias, por causa do peso e do limite de ADS)
+    function anPeriodo(){
+      if(an.de && an.ate) return { de: an.de, ate: an.ate };
+      const ate = getToday(); return { de: addDias(ate, -(an.dias - 1)), ate };
+    }
+    function anDatas(){
+      let de = document.getElementById('an-de').value, ate = document.getElementById('an-ate').value;
+      if(!de || !ate) return;
+      if(ate > getToday()) ate = getToday();
+      if(de > ate){ const x = de; de = ate; ate = x; }
+      if(diasDif(de, ate) > 89){ de = addDias(ate, -89); toast('O período máximo é de 90 dias: ajustei a data inicial.'); }
+      an.de = de; an.ate = ate; an.dias = diasDif(de, ate) + 1; anRender();
+    }
 
     async function anRender(){
       const view = document.getElementById('view-analise'); if(!view) return;
       let host = document.getElementById('an-host');
       if(!host){ [...view.children].forEach(el => { el.style.display = 'none'; }); host = document.createElement('div'); host.id = 'an-host'; view.appendChild(host); }
       const conta = typeof contaParam === 'function' ? contaParam() : null;
-      const chave = (conta || '') + '|' + an.dias;
+      const chave = (conta || '') + '|' + an.dias + '|' + (an.de || '') + '|' + (an.ate || '');
       if(an.chave !== chave){ an.chave = chave; an.dados = null; an.rank = null; an.rankMlb = null; an.ads = null; an.adsErro = ''; if(an.contaMeses !== (conta || '')){ an.meses = null; an.contaMeses = conta || ''; } }
       anDesenhar();
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
@@ -73,7 +85,7 @@
     }
 
     function anAba(a){ an.aba = a; an.busca = ''; anRender(); }
-    function anDias(d){ an.dias = d; anRender(); }
+    function anDias(d){ an.dias = d; an.de = ''; an.ate = ''; anRender(); }
     function anOrdenar(col){ const o = an.ord[an.aba] || {}; an.ord[an.aba] = { col, desc: o.col === col ? !o.desc : true }; anDesenhar(); }
     // tabela ordenável: cols = [{ k, t, num, fmt(linha), val(linha) }]
     function anTabela(linhas, cols, padrao){
@@ -95,7 +107,8 @@
       host.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Análise de vendas</div><div class="pg-sub">Crescimento, produtos, compradores, estados, cancelamentos e anúncios pagos — direto das vendas do Mercado Livre.</div></div>
-          ${an.aba === 'geral' ? '' : `<div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${an.dias === d ? 'active' : ''}" onclick="anDias(${d})">${d} dias</button>`).join('')}</div>`}
+          ${an.aba === 'geral' ? '' : `<div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;"><div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${!an.de && an.dias === d ? 'active' : ''}" onclick="anDias(${d})">${d} dias</button>`).join('')}</div>
+            <input type="date" id="an-de" value="${anPeriodo().de}" max="${getToday()}" onchange="anDatas()" title="Data inicial" style="width:auto;"><span class="text-muted">até</span><input type="date" id="an-ate" value="${anPeriodo().ate}" max="${getToday()}" onchange="anDatas()" title="Data final" style="width:auto;"></div>`}
         </div>
         <div class="chips" style="margin-bottom:14px;">${abas.map(([k, t]) => `<button class="chip ${an.aba === k ? 'active' : ''}" onclick="anAba('${k}')">${t}</button>`).join('')}</div>
         ${an.erro ? `<div class="alert alert-danger">Não consegui carregar: ${anE(an.erro)}</div>` : ''}

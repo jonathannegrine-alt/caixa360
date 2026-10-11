@@ -90,6 +90,7 @@
       [...view.children].forEach((el, i) => { if(i > 0 && el.id !== 'bal-host') el.style.display = 'none'; });
       const snap = view.querySelector('button[onclick="salvarSnapshotPatrimonio()"]'); if(snap) snap.style.display = 'none';
       balClassificarCategorias();
+      if(!host.innerHTML.trim() && typeof carregandoMsg === 'function') carregandoMsg(host, 'Calculando o balanço… (estoque, Full e vendas por loja)');
       // dados que o balanço usa: estoque (movimentações), Full (API), envios e a venda por loja
       try {
         if(typeof estCarregar === 'function') await estCarregar(false);

@@ -108,7 +108,7 @@
       let host = document.getElementById('est-host');
       [...view.children].forEach(el => { if(el.id !== 'est-host') el.style.display = 'none'; });
       if(!host){ host = document.createElement('div'); host.id = 'est-host'; view.appendChild(host); }
-      if(!est.carregadoEm) host.innerHTML = '<div class="vazio"><b>Carregando o estoque…</b></div>';
+      if(!est.carregadoEm || !host.innerHTML.trim()){ if(typeof carregandoMsg === 'function') carregandoMsg(host, 'Carregando o estoque…'); else host.innerHTML = '<div class="vazio"><b>Carregando o estoque…</b></div>'; }
       await estCarregar(false);
       if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
       if(typeof esoSincronizar === 'function') try { await esoSincronizar(false); } catch(e){}
