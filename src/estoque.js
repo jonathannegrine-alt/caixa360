@@ -164,6 +164,17 @@
         const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
         await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
         await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+        // foto do anúncio de cada produto (vem da venda mais recente; produto só de kit usa a foto do kit)
+        const fotos = new Map();
+        try {
+          const rf = await supa.rpc('sku_fotos', { p_skus: linhas.map(l => l.sku) });
+          await Promise.all((rf.data || []).map(x => new Promise(ok => {
+            const im = new Image(); im.crossOrigin = 'anonymous';
+            im.onload = () => { try { const c = document.createElement('canvas'); c.width = c.height = 120; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 120, 120);
+              const r = Math.min(120 / im.width, 120 / im.height), w = im.width * r, h = im.height * r; g.drawImage(im, (120 - w) / 2, (120 - h) / 2, w, h); fotos.set(x.sku, c.toDataURL('image/jpeg', 0.8)); } catch(err){} ok(); };
+            im.onerror = () => ok(); im.src = String(x.foto).replace('http://', 'https://'); setTimeout(ok, 6000);
+          })));
+        } catch(err){}
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), agora = new Date();
         doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.text('Lista de Estoque', 40, 50);
         doc.setFontSize(10); doc.setFont(undefined, 'normal');
@@ -172,10 +183,11 @@
         doc.autoTable({
           startY: 74, theme: 'grid', styles: { fontSize: 10, cellPadding: 7, valign: 'middle', lineColor: 120, lineWidth: 0.5, textColor: 20 },
           headStyles: { fillColor: [235, 235, 235], textColor: 20, fontStyle: 'bold' },
-          columnStyles: { 0: { cellWidth: 28, halign: 'center' }, 2: { cellWidth: 62, halign: 'center' }, 3: { cellWidth: 80 }, 4: { cellWidth: 120 } },
-          head: [['#', 'SKU', 'Estoque atual', 'Contado', 'Observações']],
-          body: linhas.map((l, i) => [i + 1, l.sku + (l.nome ? '\n' + l.nome : ''), esInt(l.fisico), '', '']),
-          didParseCell: d => { if(d.section === 'body' && d.column.index === 1) d.cell.styles.fontStyle = 'normal'; if(d.section === 'body') d.cell.styles.minCellHeight = 38; }
+          columnStyles: { 0: { cellWidth: 26, halign: 'center' }, 1: { cellWidth: 50 }, 3: { cellWidth: 60, halign: 'center' }, 4: { cellWidth: 78 }, 5: { cellWidth: 110 } },
+          head: [['#', 'Foto', 'SKU', 'Estoque atual', 'Contado', 'Observações']],
+          body: linhas.map((l, i) => [i + 1, '', l.sku + (l.nome ? '\n' + l.nome : ''), esInt(l.fisico), '', '']),
+          didParseCell: d => { if(d.section === 'body') d.cell.styles.minCellHeight = 46; },
+          didDrawCell: d => { if(d.section === 'body' && d.column.index === 1){ const f = fotos.get(esN(linhas[d.row.index].sku)); if(f){ try { doc.addImage(f, 'JPEG', d.cell.x + 5, d.cell.y + 3, 40, 40); } catch(err){} } } }
         });
         const y = Math.min(doc.lastAutoTable.finalY + 30, 800);
         doc.text('Contado por: ______________________     Data: ____/____/______', 40, y);

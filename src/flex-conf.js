@@ -17,9 +17,11 @@
       ok:           { r: 'Entregue',                         q: false, cls: 'cp-ok',      d: 'Venda paga e entregue.' },
       andamento:    { r: 'Em andamento',                     q: false, cls: 'cp-comprar', d: 'Venda paga; o Mercado Livre ainda não marcou a entrega.' },
       devolvida:    { r: 'Entregue e devolvida depois',      q: false, cls: 'cp-comprar', d: 'Foi entregue; o comprador devolveu ou reclamou depois. A entrega aconteceu.' },
-      antes:        { r: 'Cancelada antes de sair',          q: true,  cls: 'cp-excesso', d: 'A venda foi cancelada antes de o envio sair, e o pacote foi coletado mesmo assim.' },
+      // frete:false = o frete não é contestado (a coleta aconteceu e o cancelamento não foi culpa do transportador)
+      antes:        { r: 'Cancelada; pacote com o transportador', q: true, frete: false, cls: 'cp-excesso', d: 'A venda foi cancelada e o pacote consta como coletado nesta fatura, sem entrega.' },
       nao_entregue: { r: 'Saiu e não foi entregue',          q: true,  cls: 'cp-excesso', d: 'O envio saiu com o transportador e a venda foi cancelada sem entrega.' },
-      pnr:          { r: 'Comprador diz que não recebeu',    q: true,  cls: 'cp-excesso', d: 'Consta como entregue, mas o comprador reclamou que não recebeu e a venda foi cancelada.' },
+      // validar:true = não entra marcado; o usuário confere com o transportador antes
+      pnr:          { r: 'Comprador diz que não recebeu',    q: true,  validar: true, cls: 'cp-excesso', d: 'Consta como entregue, mas o comprador reclamou que não recebeu e a venda foi cancelada.' },
       paga_nao_ent: { r: 'Não entregue (venda ainda paga)',  q: true,  cls: 'cp-excesso', d: 'O Mercado Livre marcou o envio como não entregue.' },
       sem_venda:    { r: 'Sem venda correspondente',         q: true,  cls: 'cp-excesso', d: 'Este número de envio não existe nas suas vendas.' },
       duplicada:    { r: 'Cobrada em duplicidade',           q: true,  cls: 'cp-excesso', d: 'Este envio já foi cobrado (nesta fatura ou em outra já conferida).' },
@@ -27,7 +29,7 @@
 
     // o que pedir ao transportador em cada situação
     const FX_PEDIDO = {
-      antes: 'Devolver o produto e estornar o frete: o envio já estava cancelado no Mercado Livre quando foi coletado. Se não for devolvido, abater também o valor do produto.',
+      antes: 'Devolver o produto. O frete desta coleta não está sendo contestado. Se o produto não for devolvido até o vencimento, abater o valor dele desta fatura.',
       nao_entregue: 'Devolver o produto e estornar o frete. Se não for devolvido, abater também o valor do produto.',
       pnr: 'Apresentar o comprovante de entrega. Sem comprovante, abater o frete e o valor do produto.',
       paga_nao_ent: 'Informar onde está o pacote e devolver o produto.',
@@ -117,7 +119,7 @@
         (r.envios || []).forEach(d => { const l = lote.find(x => String(x.envio) === String(d.envio)); if(l){ l.det = d; fxClassificar(l); } });
       }
       pend.filter(l => l.cat === '').forEach(l => { l.cat = l.cancelada ? 'antes' : 'andamento'; l.nota = 'o Mercado Livre não devolveu os detalhes deste envio'; });
-      fx.marc = new Set(L.filter(l => FX_CAT[l.cat].q).map(l => l.codigo + '|' + l.envio));
+      fx.marc = new Set(L.filter(l => FX_CAT[l.cat].q && !FX_CAT[l.cat].validar).map(l => l.codigo + '|' + l.envio));
       fx.lendo = ''; fx.ver = 'questionar'; fxDesenhar();
     }
 
@@ -134,18 +136,23 @@
         const txtCanc = 'Cancelada ' + quem + (l.cancEm ? ' em ' + fxDH(l.cancEm) : '') + (motivo ? ', motivo ' + motivo : '');
         if(entregue){ l.cat = /^PNR/.test(r.motivo || '') ? 'pnr' : 'devolvida'; l.nota = 'Entregue' + (l.entregue ? ' em ' + fxDH(l.entregue) : '') + '. ' + txtCanc + '.'; }
         else if(saiu){ const dias = l.cancEm ? Math.round((new Date(l.cancEm) - new Date(saiu)) / 3600000) : null; l.cat = 'nao_entregue'; l.nota = 'Saiu em ' + fxDH(saiu) + ' e não consta entrega' + (dias != null ? ' (' + (dias >= 48 ? Math.round(dias / 24) + ' dias' : dias + ' horas') + ' depois foi cancelada)' : '') + '. ' + txtCanc + '.'; }
-        else { l.cat = 'antes'; l.nota = txtCanc + ', sem registro de saída no Mercado Livre.'; }
+        else { l.cat = 'antes'; l.nota = txtCanc + '. O envio consta nesta fatura como coletado' + (l.coleta ? ' em ' + ptDate(l.coleta).slice(0, 5) : '') + ' e não teve saída nem entrega registradas no Mercado Livre: o produto ficou com o transportador.'; }
       } else if(entregue){ l.cat = 'ok'; }
       else if(naoEnt){ l.cat = 'paga_nao_ent'; l.nota = 'O Mercado Livre marcou como não entregue' + (saiu ? ' (saiu em ' + fxDH(saiu) + ')' : '') + '.'; }
       else { l.cat = 'andamento'; l.nota = saiu ? 'Saiu em ' + fxDH(saiu) + ', ainda sem entrega registrada.' : 'Ainda sem saída registrada no Mercado Livre.'; }
     }
 
     // ---------- tela ----------
+    // com uma loja escolhida no seletor, a conferência mostra só os envios dela (envio sem venda aparece em todas)
+    function fxLoja(){ return typeof lojaAtiva === 'function' ? (lojaAtiva() || '') : ''; }
+    function fxVisiveis(){ const lj = fxLoja(); return fx.linhas.filter(l => !lj || !l.conta || l.conta === lj); }
+    function fxFreteQ(l){ return FX_CAT[l.cat] && FX_CAT[l.cat].frete === false ? 0 : l.frete; }
+    function fxProdutoQ(l){ return FX_CAT[l.cat].q && l.valor && l.cat !== 'duplicada' ? l.valor * (1 - fxPct() / 100) : 0; }
     function fxResumo(){
-      const L = fx.linhas, q = L.filter(l => FX_CAT[l.cat] && FX_CAT[l.cat].q), pct = fxPct();
+      const L = fxVisiveis(), q = L.filter(l => FX_CAT[l.cat] && FX_CAT[l.cat].q), pct = fxPct();
       const marc = L.filter(l => fx.marc.has(l.codigo + '|' + l.envio));
       return { envios: L.length, frete: L.reduce((s, l) => s + l.frete, 0), ok: L.filter(l => l.cat === 'ok').length, questionar: q.length,
-        qFrete: marc.reduce((s, l) => s + l.frete, 0), qVenda: marc.reduce((s, l) => s + l.valor, 0), qRessarcir: marc.reduce((s, l) => s + l.valor * (1 - pct / 100), 0), qCusto: marc.reduce((s, l) => s + l.custo, 0), marcados: marc.length,
+        qFrete: marc.reduce((s, l) => s + fxFreteQ(l), 0), qVenda: marc.reduce((s, l) => s + l.valor, 0), qRessarcir: marc.reduce((s, l) => s + fxProdutoQ(l), 0), validar: L.filter(l => FX_CAT[l.cat].validar && !fx.marc.has(l.codigo + '|' + l.envio)).length, qCusto: marc.reduce((s, l) => s + l.custo, 0), marcados: marc.length,
         porCat: Object.keys(FX_CAT).map(k => [k, L.filter(l => l.cat === k).length]).filter(x => x[1]) };
     }
 
@@ -159,12 +166,15 @@
         const h = fx.hist || [];
         view.innerHTML = cab + erro + `<div class="card"><div class="card-header"><div class="card-title">Faturas já conferidas</div></div>
           ${h.length ? `<div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Fatura</th><th>Transportador</th><th>Período</th><th class="num">Envios</th><th class="num">Valor</th><th class="num">A questionar</th><th></th></tr></thead><tbody>
-            ${h.map(f => `<tr><td><b>${fxE(f.numero || '—')}</b><br><small class="text-muted">conferida em ${fxDH(f.criado_em)}</small></td><td>${fxE(f.transportador || '')}</td><td>${f.de ? ptDate(f.de) + ' a ' + ptDate(f.ate) : '—'}</td><td class="num">${(f.resumo && f.resumo.envios) || '—'}</td><td class="num">${fmt(Number(f.total) || 0)}</td><td class="num">${f.resumo ? f.resumo.marcados + ' · ' + fmt(f.resumo.qFrete + f.resumo.qRessarcir) : '—'}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="fxAbrir(${f.id})">Abrir</button></td></tr>`).join('')}
+            ${h.map(f => `<tr><td><b>${fxE(f.numero || '—')}</b><br><small class="text-muted">conferida em ${fxDH(f.criado_em)}</small></td><td>${fxE(f.transportador || '')}</td><td>${f.de ? ptDate(f.de) + ' a ' + ptDate(f.ate) : '—'}</td>${(() => { const lj = fxLoja(), pl = f.resumo && f.resumo.porLoja, nome = k => k === '-' ? 'sem venda' : (typeof contaNome === 'function' && contaNome(k)) || k;
+              if(lj && pl){ const o = pl[lj] || { envios: 0, frete: 0, marcados: 0, pedir: 0 }; return `<td class="num">${o.envios}</td><td class="num">${fmt(o.frete)}</td><td class="num" style="color:${o.pedir > 0 ? 'var(--danger)' : 'var(--primary)'};font-weight:700;">${o.marcados} · ${fmt(o.pedir)}</td>`; }
+              const det = pl ? '<br><small class="text-muted">' + Object.keys(pl).map(k => fxE(nome(k)) + ' ' + pl[k].envios).join(' · ') + '</small>' : '', ped = f.resumo ? f.resumo.qFrete + f.resumo.qRessarcir : 0;
+              return `<td class="num">${(f.resumo && f.resumo.envios) || '—'}${det}</td><td class="num">${fmt(Number(f.total) || 0)}</td><td class="num" style="color:${ped > 0 ? 'var(--danger)' : 'var(--primary)'};font-weight:700;">${f.resumo ? f.resumo.marcados + ' · ' + fmt(ped) : '—'}</td>`; })()}<td style="text-align:right;"><button class="btn-out btn-sm" onclick="fxAbrir(${f.id})">Abrir</button></td></tr>`).join('')}
           </tbody></table></div>` : '<div class="vazio"><div class="vazio-ico"></div><b>Nenhuma fatura conferida ainda</b>Clique em "Enviar fatura (PDF)" e escolha o arquivo que o transportador mandou.</div>'}</div>`;
         return;
       }
-      const R = fxResumo(), F = fx.fat, pct = fxPct(), difTotal = Math.abs(R.frete - F.total) > 0.05;
-      const lista = fx.linhas.filter(l => fx.ver === 'todas' ? true : fx.ver === 'questionar' ? FX_CAT[l.cat].q : l.cat === fx.ver);
+      const R = fxResumo(), F = fx.fat, pct = fxPct(), lj = fxLoja(), difTotal = !lj && Math.abs(R.frete - F.total) > 0.05, pedir = R.qFrete + R.qRessarcir;
+      const lista = fxVisiveis().filter(l => fx.ver === 'todas' ? true : fx.ver === 'questionar' ? FX_CAT[l.cat].q : l.cat === fx.ver);
       const loja = c => c && typeof contaNome === 'function' ? contaNome(c) : '';
       view.innerHTML = cab + erro + `
         <div class="card"><div class="card-body" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
@@ -177,10 +187,10 @@
           </div></div></div>
         ${difTotal ? `<div class="alert alert-warning">A soma dos envios que li (${fmt(R.frete)}) é diferente do valor a pagar da fatura (${fmt(F.total)}). Pode haver linha que não consegui ler: confira o total de envios.</div>` : ''}
         <div class="kpi-grid k4i">
-          <div class="kpi k-venda"><div class="kpi-label">Envios na fatura</div><div class="kpi-value">${R.envios}</div><div class="kpi-sub"><span>valor a pagar <b>${fmt(F.total || R.frete)}</b></span></div></div>
+          <div class="kpi k-venda"><div class="kpi-label">Envios na fatura${lj && typeof contaNome === 'function' ? ' · ' + fxE(contaNome(lj)) : ''}</div><div class="kpi-value">${R.envios}</div><div class="kpi-sub"><span>${lj ? 'desta loja' : 'valor a pagar'} <b>${fmt(lj ? R.frete : (F.total || R.frete))}</b></span>${lj ? '<span>fatura inteira ' + fmt(F.total) + '</span>' : ''}</div></div>
           <div class="kpi k-mc"><div class="kpi-label">Pagos e entregues</div><div class="kpi-value">${R.ok}</div><div class="kpi-sub"><span>${R.envios ? Math.round(R.ok / R.envios * 100) : 0}% da fatura</span></div></div>
-          <div class="kpi k-custo"><div class="kpi-label">Para questionar</div><div class="kpi-value">${R.questionar}</div><div class="kpi-sub"><span>${R.marcados} marcados para o relatório</span></div></div>
-          <div class="kpi k-frete"><div class="kpi-label">Valor a pedir de volta</div><div class="kpi-value">${fmt(R.qFrete + R.qRessarcir)}</div><div class="kpi-sub"><span>fretes <b>${fmt(R.qFrete)}</b></span><span>produtos <b>${fmt(R.qRessarcir)}</b></span></div></div>
+          <div class="kpi k-custo"><div class="kpi-label">Para questionar</div><div class="kpi-value">${R.questionar}</div><div class="kpi-sub"><span>${R.marcados} marcados para o relatório</span>${R.validar ? `<span style="color:var(--warning,#d97706)"><b style="color:inherit">${R.validar}</b> para você conferir antes</span>` : ''}</div></div>
+          <div class="kpi ${pedir > 0 ? 'k-atraso' : 'k-venda'}"><div class="kpi-label">Valor a pedir de volta</div><div class="kpi-value" style="color:${pedir > 0 ? 'var(--danger)' : 'var(--primary)'}">${fmt(pedir)}</div><div class="kpi-sub"><span>fretes <b>${fmt(R.qFrete)}</b></span><span>produtos <b>${fmt(R.qRessarcir)}</b></span></div></div>
         </div>
         <div class="card"><div class="card-body" style="padding-bottom:0;"><div class="chips">
           <button class="chip ${fx.ver === 'questionar' ? 'active' : ''}" onclick="fx.ver='questionar';fxDesenhar()">Para questionar ${R.questionar}</button>
@@ -189,12 +199,12 @@
           <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th title="Entra no relatório para o transportador"></th><th>Envio</th><th>Coleta</th><th>Situação</th><th>O que aconteceu</th><th>Produto</th><th class="num">Frete cobrado</th><th class="num">Valor da venda</th><th class="num" title="Custo gravado na venda">Custo real</th><th class="num" title="Valor da venda menos ${pct}%">A ressarcir</th></tr></thead><tbody>
             ${lista.length ? lista.map(l => { const c = FX_CAT[l.cat], k = l.codigo + '|' + l.envio, v = l.vendas[0];
               return `<tr><td><input type="checkbox" style="width:auto;" ${fx.marc.has(k) ? 'checked' : ''} onchange="this.checked?fx.marc.add('${k}'):fx.marc.delete('${k}');fxDesenhar()"></td>
-                <td><b>${fxE(l.envio)}</b><br><small class="text-muted">cód. ${fxE(l.codigo)}${loja(l.conta) ? ' · ' + fxE(loja(l.conta)) : ''}${l.dest ? '<br>' + fxE(l.dest) + (l.cep ? ' · CEP ' + fxE(l.cep) : '') : ''}</small></td>
+                <td>${v ? `<a class="fx-link" style="color:var(--primary);font-weight:700;" href="https://www.mercadolivre.com.br/vendas/${fxE(v.pedido)}/detalhe" target="_blank" rel="noopener" title="Abrir a venda no Mercado Livre">${fxE(l.envio)}</a>` : `<b>${fxE(l.envio)}</b>`}<br><small class="text-muted">cód. ${fxE(l.codigo)}${loja(l.conta) ? ' · ' + fxE(loja(l.conta)) : ''}${l.dest ? '<br>' + fxE(l.dest) + (l.cep ? ' · CEP ' + fxE(l.cep) : '') : ''}</small></td>
                 <td>${l.coleta ? ptDate(l.coleta).slice(0, 5) : '—'}</td>
                 <td><span class="cp-sit ${c.cls}">${c.r}</span></td>
-                <td style="max-width:360px;white-space:normal;font-size:12.5px;line-height:1.45;">${fxE(l.nota || c.d)}${FX_PEDIDO[l.cat] ? '<br><b>Pedir:</b> ' + fxE(FX_PEDIDO[l.cat]) : ''}${v ? `<br><a class="fx-link" style="color:var(--primary);" href="https://www.mercadolivre.com.br/vendas/${fxE(v.pedido)}/detalhe" target="_blank" rel="noopener">venda #${fxE(v.pedido)}</a>` : ''}</td>
+                <td style="max-width:360px;white-space:normal;font-size:12.5px;line-height:1.45;">${fxE(l.nota || c.d)}${c.validar && !fx.marc.has(k) ? '<br><b style="color:var(--warning,#d97706)">Confira antes:</b> peça ao transportador a prova de entrega; se ele não comprovar, marque a caixa ao lado para incluir no relatório.' : ''}${FX_PEDIDO[l.cat] ? '<br><b>Pedir:</b> ' + fxE(FX_PEDIDO[l.cat]) : ''}${v ? `<br><a class="fx-link" style="color:var(--primary);" href="https://www.mercadolivre.com.br/vendas/${fxE(v.pedido)}/detalhe" target="_blank" rel="noopener">venda #${fxE(v.pedido)}</a>` : ''}</td>
                 <td class="cp-prod"><b>${fxE(l.vendas.map(x => x.sku).filter(Boolean).join(', ') || '—')}</b><span>${fxE(v ? v.titulo : '')}</span></td>
-                <td class="num">${fmt(l.frete)}</td><td class="num">${l.valor ? fmt(l.valor) : '—'}</td><td class="num">${l.custo ? fmt(l.custo) : '—'}</td><td class="num"><b>${l.valor && c.q ? fmt(l.valor * (1 - pct / 100)) : '—'}</b></td></tr>`; }).join('')
+                <td class="num">${fmt(l.frete)}${c.q && c.frete === false ? '<br><small class="text-muted">não contestado</small>' : ''}</td><td class="num">${l.valor ? fmt(l.valor) : '—'}</td><td class="num">${l.custo ? fmt(l.custo) : '—'}</td><td class="num"><b>${fxProdutoQ(l) ? fmt(fxProdutoQ(l)) : '—'}</b></td></tr>`; }).join('')
               : '<tr><td colspan="10" class="text-muted" style="text-align:center;padding:22px;">Nada nesta lista.</td></tr>'}
           </tbody></table></div>
           <div class="text-muted" style="font-size:12px;padding:12px 18px;line-height:1.5;">Marque ou desmarque as linhas que entram no relatório. "A ressarcir" é o valor da venda menos ${pct}% e só é pedido quando o produto ficou com o transportador ou se perdeu; nas vendas entregues e devolvidas depois, a entrega aconteceu e não há o que cobrar dele.</div></div>`;
@@ -202,7 +212,9 @@
 
     async function fxSalvar(btn){
       if(!fx.fat) return; if(btn){ btn.disabled = true; btn.textContent = 'Guardando…'; }
-      const uid = usuarioAtual.id, F = fx.fat, R = fxResumo();
+      const uid = usuarioAtual.id, F = fx.fat, todas = fx.linhas, mk = l => fx.marc.has(l.codigo + '|' + l.envio);
+      const porLoja = {}; todas.forEach(l => { const k = l.conta || '-', o = porLoja[k] || (porLoja[k] = { envios: 0, frete: 0, marcados: 0, pedir: 0 }); o.envios++; o.frete += l.frete; if(mk(l)){ o.marcados++; o.pedir += fxFreteQ(l) + fxProdutoQ(l); } });
+      const R = { envios: todas.length, frete: todas.reduce((s, l) => s + l.frete, 0), marcados: todas.filter(mk).length, qFrete: todas.filter(mk).reduce((s, l) => s + fxFreteQ(l), 0), qRessarcir: todas.filter(mk).reduce((s, l) => s + fxProdutoQ(l), 0), porLoja };
       const linhas = fx.linhas.map(l => ({ envio: l.envio, codigo: l.codigo, coleta: l.coleta, cep: l.cep || '', dest: l.dest || '', frete: l.frete, cat: l.cat, nota: l.nota, conta: l.conta, valor: l.valor, custo: l.custo, vendas: l.vendas, marc: fx.marc.has(l.codigo + '|' + l.envio) }));
       if(F.numero) await supa.from('flex_faturas').delete().eq('usuario_id', uid).eq('numero', F.numero);
       const r = await supa.from('flex_faturas').insert({ usuario_id: uid, numero: F.numero || null, transportador: F.transportador || null, emitida: F.emitida || null, de: F.de || null, ate: F.ate || null, total: F.total || null, arquivo: F.arquivo || null, linhas, resumo: { ...R, venc: F.venc || null } });
@@ -221,30 +233,39 @@
 
     // ---------- relatório para o transportador ----------
     async function fxPdf(){
-      const marc = fx.linhas.filter(l => fx.marc.has(l.codigo + '|' + l.envio)); if(!marc.length) return;
+      const marc = fxVisiveis().filter(l => fx.marc.has(l.codigo + '|' + l.envio)); if(!marc.length) return;
       try {
         await fxScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
         await fxScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
-        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' }), F = fx.fat, pct = fxPct();
-        const produto = l => FX_CAT[l.cat].q && l.valor && l.cat !== 'duplicada' ? l.valor * (1 - pct / 100) : 0;
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' }), F = fx.fat, lj = fxLoja();
+        const nomeLoja = k => k ? ((typeof contaNome === 'function' && contaNome(k)) || k) : 'Sem venda correspondente';
+        const lojas = [...new Set(marc.map(l => l.conta || ''))].sort();
         doc.setFontSize(15); doc.setFont(undefined, 'bold'); doc.text('Contestação de fatura — entregas Flex', 40, 44);
         doc.setFontSize(10); doc.setFont(undefined, 'normal');
         doc.text('Fatura nº ' + (F.numero || '—') + (F.transportador ? ' · ' + F.transportador : '') + (F.de ? ' · período ' + ptDate(F.de) + ' a ' + ptDate(F.ate) : ''), 40, 62);
-        doc.text('Emitido em ' + ptDate(getToday()) + ' · ' + marc.length + ' envio(s) contestado(s) de ' + fx.linhas.length + ' cobrados', 40, 77);
-        const totF = marc.reduce((s, l) => s + l.frete, 0), totP = marc.reduce((s, l) => s + produto(l), 0);
-        doc.autoTable({
-          startY: 94, styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' }, headStyles: { fillColor: [79, 70, 229] },
-          columnStyles: { 0: { cellWidth: 62 }, 1: { cellWidth: 86 }, 2: { cellWidth: 44 }, 3: { cellWidth: 96 }, 4: { cellWidth: 190 }, 5: { cellWidth: 118 }, 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' }, 9: { halign: 'right' } },
-          head: [['Nº do envio', 'Nº da venda', 'Coleta', 'Destinatário / CEP', 'O que aconteceu', 'O que pedimos', 'Frete', 'Valor da venda', 'Custo do produto', 'Total']],
-          body: marc.map(l => [l.envio + '\ncód. ' + l.codigo, l.vendas.map(v => v.pedido).join('\n') || '—', l.coleta ? ptDate(l.coleta).slice(0, 5) : '', (l.dest || '—') + (l.cep ? '\nCEP ' + l.cep : ''), FX_CAT[l.cat].r + '. ' + (l.nota || FX_CAT[l.cat].d) + (l.vendas[0] && l.vendas[0].sku ? '\nProduto: ' + l.vendas.map(v => v.qtd + 'x ' + v.sku).join(', ') : ''), FX_PEDIDO[l.cat] || 'Rever a cobrança.', fmt(l.frete), l.valor ? fmt(l.valor) : '—', produto(l) ? fmt(produto(l)) : '—', fmt(l.frete + produto(l))]),
-          foot: [['', '', '', '', '', 'Total', fmt(totF), fmt(marc.reduce((s, l) => s + l.valor, 0)), fmt(totP), fmt(totF + totP)]], footStyles: { fillColor: [241, 245, 249], textColor: 20, fontStyle: 'bold', halign: 'right' }
+        doc.text('Emitido em ' + ptDate(getToday()) + ' · ' + marc.length + ' envio(s) contestado(s)' + (lj ? ' · loja ' + nomeLoja(lj) : ' de ' + fx.linhas.length + ' cobrados'), 40, 77);
+        let y = 96, totF = 0, totP = 0;
+        lojas.forEach(k => {
+          const ls = marc.filter(l => (l.conta || '') === k), f = ls.reduce((s, l) => s + fxFreteQ(l), 0), p = ls.reduce((s, l) => s + fxProdutoQ(l), 0); totF += f; totP += p;
+          if(y > 470){ doc.addPage(); y = 50; }
+          doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text('Loja: ' + nomeLoja(k) + ' — ' + ls.length + ' envio(s)', 40, y); doc.setFont(undefined, 'normal');
+          doc.autoTable({
+            startY: y + 8, styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' }, headStyles: { fillColor: [79, 70, 229] }, margin: { left: 40, right: 40 },
+            columnStyles: { 0: { cellWidth: 62 }, 1: { cellWidth: 86 }, 2: { cellWidth: 40 }, 3: { cellWidth: 96 }, 4: { cellWidth: 190 }, 5: { cellWidth: 122 }, 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' }, 9: { halign: 'right' } },
+            head: [['Nº do envio', 'Nº da venda', 'Coleta', 'Destinatário / CEP', 'O que aconteceu', 'O que pedimos', 'Frete contestado', 'Valor da venda', 'Custo do produto', 'Total']],
+            body: ls.map(l => [l.envio + '\ncód. ' + l.codigo, l.vendas.map(v => v.pedido).join('\n') || '—', l.coleta ? ptDate(l.coleta).slice(0, 5) : '', (l.dest || '—') + (l.cep ? '\nCEP ' + l.cep : ''),
+              FX_CAT[l.cat].r + '. ' + (l.nota || FX_CAT[l.cat].d) + (l.vendas[0] && l.vendas[0].sku ? '\nProduto: ' + l.vendas.map(v => v.qtd + 'x ' + v.sku).join(', ') : ''), FX_PEDIDO[l.cat] || 'Rever a cobrança.',
+              fxFreteQ(l) ? fmt(fxFreteQ(l)) : '—', l.valor ? fmt(l.valor) : '—', fxProdutoQ(l) ? fmt(fxProdutoQ(l)) : '—', fmt(fxFreteQ(l) + fxProdutoQ(l))]),
+            foot: [['', '', '', '', '', 'Total da loja', fmt(f), fmt(ls.reduce((s, l) => s + l.valor, 0)), fmt(p), fmt(f + p)]], footStyles: { fillColor: [241, 245, 249], textColor: 20, fontStyle: 'bold', halign: 'right' }
+          });
+          y = doc.lastAutoTable.finalY + 26;
         });
-        const y = doc.lastAutoTable.finalY + 22;
+        if(y > 520){ doc.addPage(); y = 50; }
         doc.setFontSize(10); doc.setFont(undefined, 'bold');
-        doc.text('Valor da fatura: ' + fmt(F.total || 0) + '     Contestado: ' + fmt(totF + totP) + '     Valor após a contestação: ' + fmt((F.total || 0) - totF - totP), 40, y);
+        doc.text((lj ? 'Contestado nesta loja: ' : 'Valor da fatura: ' + fmt(F.total || 0) + '     Contestado: ') + fmt(totF + totP) + (lj ? '' : '     Valor após a contestação: ' + fmt((F.total || 0) - totF - totP)), 40, y);
         doc.setFont(undefined, 'normal'); doc.setFontSize(8.5);
         doc.text('As ocorrências foram conferidas no histórico de cada envio no Mercado Livre. O custo do produto considera o valor de reposição e as despesas de operação.', 40, y + 16);
-        doc.text('Produtos devolvidos em bom estado até o vencimento da fatura não precisam ser abatidos: nesse caso, fica só o estorno do frete indicado.', 40, y + 29);
-        doc.save('contestacao_flex_fatura_' + (F.numero || getToday()) + '.pdf');
+        doc.text('Produtos devolvidos em bom estado até o vencimento da fatura não precisam ser abatidos: nesse caso, fica só o frete contestado, quando houver.', 40, y + 29);
+        doc.save('contestacao_flex_fatura_' + (F.numero || getToday()) + (lj ? '_' + String(nomeLoja(lj)).replace(/[^A-Za-z0-9]+/g, '_') : '') + '.pdf');
       } catch(e){ toast('Não consegui gerar o PDF: ' + ((e && e.message) || e)); }
     }

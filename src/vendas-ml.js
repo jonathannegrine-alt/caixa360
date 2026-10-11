@@ -218,9 +218,9 @@
         <div id="vd-graf">${vdGraficoHtml()}</div>
 
         <div class="kpi-grid">
-          <div class="kpi k-venda"><div class="kpi-label">Vendas aprovadas</div><div class="kpi-value">${(a.qtd || 0).toLocaleString('pt-BR')}</div><div class="kpi-sub"><span><b>${(a.un || 0).toLocaleString('pt-BR')}</b> unidades</span><span><b>${c.qtd || 0}</b> canceladas</span></div></div>
-          <div class="kpi k-frete"><div class="kpi-label">Faturamento (produtos)</div><div class="kpi-value">R$ ${vmlNum(a.bruto)}</div><div class="kpi-sub"><span>Ticket médio <b>R$ ${vmlNum(a.qtd ? a.bruto / a.qtd : 0)}</b></span></div></div>
-          <div class="kpi k-mc"><div class="kpi-label">Margem de contribuição</div><div class="kpi-value">R$ ${vmlNum(a.mc)}</div><div class="kpi-sub"><span><b>${vmlPct(a.bruto ? a.mc / a.bruto * 100 : 0)}</b> do faturamento</span>${a.sem_custo ? `<span class="sem-custo">${a.sem_custo} sem custo/imposto</span>` : ''}</div></div>
+          <div class="kpi k-venda"><div class="kpi-label">Vendas aprovadas${vdRotPeriodo()}</div><div class="kpi-value">${(a.qtd || 0).toLocaleString('pt-BR')}</div><div class="kpi-sub"><span><b>${(a.un || 0).toLocaleString('pt-BR')}</b> unidades</span><span><b>${c.qtd || 0}</b> canceladas</span></div></div>
+          <div class="kpi k-frete"><div class="kpi-label">Faturamento (produtos)${vdRotPeriodo()}</div><div class="kpi-value">R$ ${vmlNum(a.bruto)}</div><div class="kpi-sub"><span>Ticket médio <b>R$ ${vmlNum(a.qtd ? a.bruto / a.qtd : 0)}</b></span></div></div>
+          <div class="kpi k-mc"><div class="kpi-label">Margem de contribuição${vdRotPeriodo()}</div><div class="kpi-value">R$ ${vmlNum(a.mc)}</div><div class="kpi-sub"><span><b>${vmlPct(a.bruto ? a.mc / a.bruto * 100 : 0)}</b> do faturamento</span>${a.sem_custo ? `<span class="sem-custo">${a.sem_custo} sem custo/imposto</span>` : ''}</div></div>
         </div>
 
         <div class="card"><div class="card-body">
@@ -327,6 +327,11 @@
     function vdIr(p){ vdFiltro.pagina = p; vdCarregar(); window.scrollTo(0,0); }
     function vdSet(campo, val){ vdFiltro[campo] = val; vdFiltro.pagina = 1; vdCarregar(); }
     function vdBuscar(){ vdFiltro.termo = document.getElementById('vd-termo').value; vdFiltro.pagina = 1; vdCarregar(); }
+    // " · hoje", " · 7 dias"… ou as datas, para o indicador dizer de que período ele é
+    function vdRotPeriodo(){
+      const f = vdFiltro, n = { hoje: 'hoje', ontem: 'ontem', '7d': '7 dias', '30d': '30 dias', mes: 'mês atual' }[f.atalho];
+      return ' · ' + (n || (f.de && f.ate ? (f.de === f.ate ? ptDate(f.de).slice(0, 5) : ptDate(f.de).slice(0, 5) + ' a ' + ptDate(f.ate).slice(0, 5)) : 'período'));
+    }
     function vdSetAtalho(k){ const p = vmlAtalho(k); vdFiltro.atalho = k; vdFiltro.de = p.de; vdFiltro.ate = p.ate; vdFiltro.pagina = 1; renderVendas(); }
     function vdSetData(campo, val){
       if(!val) return;
