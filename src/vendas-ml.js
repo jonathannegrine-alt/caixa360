@@ -376,32 +376,49 @@
         </div>`);
     }
 
+    // Custo e imposto, como no Mercado Turbo: só nesta venda, ou no cadastro do SKU (vale dali para frente).
     function vdEditarCusto(orderId){
       const v = vdAchar(orderId); if(!v) return;
       if(!v.sku){ vmlModal('Custo & Imposto', '<div class="alert alert-warning">Este anúncio não tem SKU no Mercado Livre. Cadastre o SKU no anúncio para vincular custo e imposto.</div>'); return; }
       const info = vmlSkuInfo(v.sku) || {};
-      vmlModal('Custo & Imposto do SKU', `
+      const per = document.getElementById('view-resumo-fin').classList.contains('active') ? rfFiltro : vdFiltro;
+      const custoVenda = Number(v.custo_unit) > 0 ? Number(v.custo_unit) : (Number(info.custo) || ''), impVenda = Number(v.imposto_pct) > 0 ? Number(v.imposto_pct) : (Number(info.imposto) || '');
+      vmlModal('Custo & Imposto', `
         <div class="v-tit" style="margin-bottom:4px;">${vmlEsc(v.titulo)}</div>
-        <div class="text-muted" style="margin-bottom:16px;">SKU <b>${vmlEsc(v.sku)}</b> · Preço unitário R$ ${vmlNum(v.preco_unit)}</div>
+        <div class="text-muted" style="margin-bottom:16px;">SKU <b>${vmlEsc(v.sku)}</b> · Venda #${vmlEsc(orderId)} · Preço unitário R$ ${vmlNum(v.preco_unit)}${Number(info.custo) > 0 ? ' · no cadastro hoje: R$ ' + vmlNum(info.custo) + (Number(info.imposto) > 0 ? ' e ' + String(info.imposto).replace('.', ',') + '%' : '') : ' · sem custo no cadastro'}</div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Custo unitário (R$)</label><input type="number" step="0.01" min="0" id="vml-custo" value="${Number(info.custo) || ''}"></div>
-          <div class="form-group"><label class="form-label">Imposto (% sobre a venda)</label><input type="number" step="0.01" min="0" id="vml-imposto" value="${Number(info.imposto) || ''}"></div>
+          <div class="form-group"><label class="form-label">Custo unitário (R$)</label><input type="number" step="0.01" min="0" id="vml-custo" value="${custoVenda}"></div>
+          <div class="form-group"><label class="form-label">Imposto (% sobre a venda)</label><input type="number" step="0.01" min="0" id="vml-imposto" value="${impVenda}"></div>
         </div>
-        <div class="alert alert-info">O valor fica salvo no cadastro de <b>Produtos</b> e vale para as vendas <b>daqui para frente</b> e para as que ainda não tinham custo. Vendas antigas mantêm o custo da época.</div>
-        <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;line-height:1.45;"><input type="checkbox" id="vml-aplicar" style="width:auto;margin-top:3px;"> <span>Aplicar também às vendas deste SKU <b>no período exibido</b> (${ptDate((document.getElementById('view-resumo-fin').classList.contains('active') ? rfFiltro : vdFiltro).de)} a ${ptDate((document.getElementById('view-resumo-fin').classList.contains('active') ? rfFiltro : vdFiltro).ate)})</span></label>`,
+        <div class="form-label" style="margin-top:4px;">Onde aplicar</div>
+        <label class="vml-opcao"><input type="radio" name="vml-onde" value="venda" onchange="vdCustoOnde()"> <span><b>Só nesta venda</b><br><span class="text-muted">Corrige o custo e o imposto desta venda. O cadastro do produto e as outras vendas não mudam.</span></span></label>
+        <label class="vml-opcao"><input type="radio" name="vml-onde" value="sku" checked onchange="vdCustoOnde()"> <span><b>No cadastro do SKU</b><br><span class="text-muted">Vale para as vendas <b>daqui para frente</b> e para as que ainda estavam sem custo. As vendas antigas mantêm o custo da época.</span></span></label>
+        <label id="vml-aplicar-box" style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;line-height:1.45;margin:6px 0 0 28px;font-size:13px;"><input type="checkbox" id="vml-aplicar" style="width:auto;margin-top:3px;"> <span>Aplicar também às vendas deste SKU <b>no período exibido</b> (${ptDate(per.de)} a ${ptDate(per.ate)})</span></label>`,
         `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="vml-salvar-custo" onclick="vdSalvarCusto('${vmlEsc(v.sku)}','${orderId}')">Salvar</button>`);
+    }
+    function vdCustoOnde(){
+      const sku = (document.querySelector('input[name="vml-onde"]:checked') || {}).value !== 'venda';
+      const box = document.getElementById('vml-aplicar-box'); if(box) box.style.display = sku ? 'flex' : 'none';
     }
 
     async function vdSalvarCusto(sku, orderId){
       const custo = parseFloat(document.getElementById('vml-custo').value) || 0;
       const imposto = parseFloat(document.getElementById('vml-imposto').value) || 0;
+      const soVenda = (document.querySelector('input[name="vml-onde"]:checked') || {}).value === 'venda';
+      const b = document.getElementById('vml-salvar-custo'); if(b){ b.textContent = 'Salvando…'; b.disabled = true; }
+      if(soVenda){
+        const r = await supa.rpc('vendas_ml_custo_venda', { p_pedido: String(orderId), p_sku: sku, p_custo: custo || null, p_imposto: imposto || null });
+        if(r.error){ if(typeof toast === 'function') toast('Não consegui gravar: ' + r.error.message); if(b){ b.textContent = 'Salvar'; b.disabled = false; } return; }
+        fecharModal('modal-vml'); vmlRecarregar();
+        if(typeof toast === 'function') toast('Custo gravado só nesta venda.');
+        return;
+      }
       const info = vmlSkuInfo(sku);
       if(info){ info.custo = custo; info.imposto = imposto; }
       else {
         const v = vdAchar(orderId);
         skus.push({ sku: String(sku).trim().toUpperCase(), titulo: v ? v.titulo : '', custo, imposto, created_at: new Date().toISOString() });
       }
-      const b = document.getElementById('vml-salvar-custo'); if(b){ b.textContent = 'Salvando…'; b.disabled = true; }
       localStorage.setItem('mk_skus', JSON.stringify(skus));
       // a margem é calculada no banco: espera o cadastro subir antes de recarregar
       const aplicar = document.getElementById('vml-aplicar')?.checked;
