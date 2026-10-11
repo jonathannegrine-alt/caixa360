@@ -225,12 +225,12 @@
             <div class="saldo-row">
               <div class="saldo-field">
                 <span class="saldo-label">Mercado Pago</span>
-                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="if(this.value.trim()!==''){saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
+                <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="if(!this.readOnly && this.value.trim()!==''){saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
               </div>
               <span class="saldo-op">+</span>
               <div class="saldo-field">
                 <span class="saldo-label">Outros bancos</span>
-                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="if(this.value.trim()!==''){saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
+                <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="if(!this.readOnly && this.value.trim()!==''){saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
               </div>
               <span class="saldo-op">=</span>
               <div class="saldo-field">
@@ -238,6 +238,7 @@
                 <span class="saldo-total" id="saldo-total-label">R$ 0,00</span>
               </div>
             </div>
+            <div id="saldo-por-loja"></div>
             <div id="saldo-auto-nota" class="saldo-auto-nota"></div>
           </div>
         </div>

@@ -94,6 +94,11 @@
     // Em "Todas as contas" os campos de saldo mostram a soma e não aceitam digitação
     function lojasTravarSaldos(){
       const soma = !_lj.ativo && lojasVarias();
+      // os campos mostram SEMPRE o saldo da loja da vez (senão o valor antigo da tela era gravado na outra loja)
+      const mpEl = document.getElementById('saldo-mp'), ouEl = document.getElementById('saldo-inicial');
+      if(mpEl && document.activeElement !== mpEl) mpEl.value = saldoMP > 0 ? fmtMoney(saldoMP) : '';
+      if(ouEl && document.activeElement !== ouEl) ouEl.value = saldoOutros > 0 ? fmtMoney(saldoOutros) : '';
+      lojasSaldosPorLoja();
       ['saldo-mp', 'saldo-inicial'].forEach(id => {
         const el = document.getElementById(id); if(!el) return;
         el.readOnly = soma;
@@ -245,3 +250,23 @@
       el.innerHTML = `Saldo informado em <b>${dt(mais)}</b>${ms.length > 1 ? ' (a loja mais antiga)' : ''}: ${fmt((Number(saldoMP) || 0) + (Number(saldoOutros) || 0))}. Desde então: <b class="text-success">+ ${fmt(ent)}</b> liberado pelo Mercado Livre e <b class="text-danger">− ${fmt(sai)}</b> em ${n} conta${n === 1 ? '' : 's'} baixada${n === 1 ? '' : 's'}. Para acertar, digite o saldo real de novo. <a class="fx-link" style="color:var(--primary);cursor:pointer;" onclick="saldoAutoTrocar(false)">Desligar</a>`;
     }
     function saldoAutoTrocar(v){ saldoAutoLigado = !!v; saldoRecalcular(); if(typeof salvarCfg === 'function') salvarCfg(); if(typeof recalc === 'function') recalc(); }
+
+    // Em "Todas as contas": um bloco por loja, com Mercado Pago e Outros bancos editáveis
+    function lojasSaldosPorLoja(){
+      const host = document.getElementById('saldo-por-loja'); if(!host) return;
+      if(!lojasVarias() || _lj.ativo){ host.innerHTML = ''; return; }
+      const n = v => Number(v) || 0;
+      host.innerHTML = '<div class="saldo-lojas">' + contasML.map(c => { const s = saldosLoja[c.id] || {};
+        return `<div class="saldo-loja"><b>${contaEsc(c.apelido || 'Conta ' + c.id)}</b>
+          <label><span>Mercado Pago</span><input class="money-input" inputmode="decimal" placeholder="0,00" value="${n(s.mp) ? fmtMoney(n(s.mp)) : ''}" oninput="onMoneyInput(this)" onchange="lojasSaldoDaLoja('${c.id}', 'mp', this.value)"></label>
+          <label><span>Outros bancos</span><input class="money-input" inputmode="decimal" placeholder="0,00" value="${n(s.outros) ? fmtMoney(n(s.outros)) : ''}" oninput="onMoneyInput(this)" onchange="lojasSaldoDaLoja('${c.id}', 'outros', this.value)"></label>
+          <i>${fmt(n(s.mp) + n(s.outros))}</i></div>`; }).join('') + '</div>';
+    }
+    function lojasSaldoDaLoja(loja, campo, valor){
+      const s = saldosLoja[loja] || (saldosLoja[loja] = { mp: 0, outros: 0 });
+      s[campo] = parseMoney(valor);
+      const d = new Date(); saldoEm[loja] = dateStr(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      lojasSaldosRecortar(); saldoRecalcular(); lojasTravarSaldos();
+      if(typeof salvarCfg === 'function') salvarCfg();
+      if(typeof recalc === 'function') recalc();
+    }

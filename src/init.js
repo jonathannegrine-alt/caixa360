@@ -96,6 +96,7 @@
       const mpEl = document.getElementById('saldo-mp');
       const outrosEl = document.getElementById('saldo-inicial');
       let changed = false;
+      if(mpEl && mpEl.readOnly) return;   // em "Todas as contas" os campos mostram a soma e não são gravados
       if(mpEl && mpEl.value.trim() !== ''){
         const v = parseMoney(mpEl.value);
         if(v !== saldoMP){ saldoMP = v; changed = true; }
