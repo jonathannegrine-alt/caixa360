@@ -17,6 +17,8 @@
       inicioVendasCarregando = true;
       try {
         const hoje = getToday();
+        const sd = await supa.auth.getSession(), tk = sd && sd.data && sd.data.session ? sd.data.session.access_token : '';
+        const adsHoje = tk ? fetch(SUPA_URL + '/functions/v1/ml-ads', { method: 'POST', headers: { Authorization: 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify({ de: hoje, ate: hoje, conta: contaParam() || undefined }) }).then(x => x.json()).catch(() => null) : Promise.resolve(null);
         const [serie, rank] = await Promise.all([
           supa.rpc('vendas_ml_por_dia', { p_de: addDias(hoje, -59), p_ate: hoje, p_conta: contaParam() }),
           supa.rpc('vendas_ml_ranking', { p_de: addDias(hoje, -29), p_ate: hoje, p_grupo: 'sku', p_conta: contaParam() })
@@ -24,7 +26,9 @@
         const porDia = {};
         (serie.data || []).forEach(r => { porDia[String(r.dia).substring(0,10)] = { val: Number(r.bruto) || 0, qtd: Number(r.vendas) || 0, mc: Number(r.mc) || 0 }; });
         const top = (rank.data || []).slice(0, 5).map(t => ({ sku: t.chave, titulo: t.titulo || '', un: Number(t.un) || 0, val: Number(t.bruto) || 0 }));
-        inicioVendas = { porDia, top, em: Date.now(), tem: (serie.data || []).length > 0 };
+        inicioVendas = { porDia, top, em: Date.now(), tem: (serie.data || []).length > 0, ads: null };
+        // gasto com publicidade de hoje chega depois (não segura a tela)
+        adsHoje.then(r => { if(!r || r.error || !Array.isArray(r.anuncios) || !inicioVendas) return; inicioVendas.ads = r.anuncios.reduce((s, a) => s + (Number(a.investimento) || 0), 0); if(document.getElementById('view-inicio').classList.contains('active')) renderInicio(); });
       } catch(e){
         inicioVendas = { porDia:{}, top:[], em: Date.now(), tem:false };
       }
@@ -140,7 +144,8 @@
           <div class="ini-hero-saldo">
             <span>${sv.usaVendas ? 'Vendas hoje' : 'Liberado hoje'} <button class="ini-olho" onclick="iniOlho()" title="${oculto ? 'Mostrar os valores' : 'Esconder os valores'}" aria-label="${oculto ? 'Mostrar os valores' : 'Esconder os valores'}">${olhoSvg}</button></span>
             <b class="sens">${fmt(vHoje.val)}</b>
-            <small>${sv.usaVendas ? `<b class="sens">${vHoje.qtd}</b> pedido${vHoje.qtd === 1 ? '' : 's'} · Margem <b class="sens">${fmt(vHoje.mc)}</b> <span class="sens">(${margHoje.toFixed(1).replace('.', ',')}%)</span>` : `<b class="sens">${vHoje.qtd}</b> pedido${vHoje.qtd === 1 ? '' : 's'}`}</small>
+            <small>${sv.usaVendas ? `<b class="sens">${vHoje.qtd}</b> pedido${vHoje.qtd === 1 ? '' : 's'} · Margem <b class="sens ini-verde">${fmt(vHoje.mc)}</b> <span class="sens ini-verde">(${margHoje.toFixed(1).replace('.', ',')}%)</span>` : `<b class="sens">${vHoje.qtd}</b> pedido${vHoje.qtd === 1 ? '' : 's'}`}</small>
+            ${sv.usaVendas && inicioVendas && inicioVendas.ads != null ? `<small>ADS hoje: <b class="sens">${fmt(inicioVendas.ads)}</b> · TACOS <b class="sens">${vHoje.val > 0 ? (inicioVendas.ads / vHoje.val * 100).toFixed(1).replace('.', ',') + '%' : '–'}</b></small>` : ''}
             <small>Ontem: <b class="sens">${fmt(vOntem.val)}</b>${sv.usaVendas && vOntem.qtd ? ` · <span class="sens">${vOntem.qtd}</span> pedidos` : ''}</small>
           </div>
         </div>

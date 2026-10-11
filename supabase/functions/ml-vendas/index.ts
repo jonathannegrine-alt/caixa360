@@ -109,7 +109,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   const jaTem = new Map<number, any>()
   const thumbs = new Map<string, string>()
   const existentes = await fetch(
-    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,item_id,thumbnail,sku,sku_fixo&limit=10000`,
+    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,frete_flex,item_id,thumbnail,sku,sku_fixo&limit=10000`,
     { headers: ctx.dbH }
   ).then(r => r.json()).catch(() => [])
   if (Array.isArray(existentes)) for (const e of existentes) {
@@ -125,7 +125,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
     if (!porEnvio.has(sid)) porEnvio.set(sid, [])
     porEnvio.get(sid)!.push(o.id)
   }
-  const fretes = new Map<number, { logistic: string | null; vendedor: number; comprador: number }>()
+  const fretes = new Map<number, { logistic: string | null; vendedor: number; comprador: number; flex: number }>()
   const enviosBuscar = [...porEnvio.keys()].filter(sid =>
     !porEnvio.get(sid)!.every(oid => jaTem.get(oid)?.frete_vendedor != null && jaTem.get(oid)?.logistic_type))
   await emParalelo(enviosBuscar, 8, async (sid) => {
@@ -135,7 +135,10 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
     ])
     if (!s.ok || !c.ok) return
     const vendedor = (c.data.senders || []).reduce((t: number, x: any) => t + (Number(x.cost) || 0), 0)
-    fretes.set(sid, { logistic: s.data.logistic?.type || s.data.logistic_type || null, vendedor, comprador: Number(c.data.receiver?.cost) || 0 })
+    // Flex: o vendedor é o transportador e recebe o frete do envio (o que o comprador pagou + o que o ML bancou)
+    const rec = c.data.receiver || {}
+    const flex = (Number(rec.cost) || 0) + (rec.discounts || []).reduce((t: number, d: any) => t + (Number(d.promoted_amount) || 0), 0)
+    fretes.set(sid, { logistic: s.data.logistic?.type || s.data.logistic_type || null, vendedor, comprador: Number(rec.cost) || 0, flex })
   })
 
   // 4. fotos dos anúncios
@@ -160,6 +163,8 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
     const n = sid ? (porEnvio.get(sid)?.length || 1) : 1
     const freteVend = f ? Math.round(f.vendedor / n * 100) / 100 : (ant?.frete_vendedor ?? (sid ? null : 0))
     const freteComp = f ? Math.round(f.comprador / n * 100) / 100 : (ant?.frete_comprador ?? (sid ? null : 0))
+    const logistica = f?.logistic ?? ant?.logistic_type ?? null
+    const freteFlex = f ? (logistica === 'self_service' ? Math.round(f.flex / n * 100) / 100 : 0) : (ant?.frete_flex ?? null)
     if (freteVend == null) pendentes++
     return {
       usuario_id: userId,
@@ -180,9 +185,11 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       tarifa: Math.round((Number(oi.sale_fee) || 0) * qtd * 100) / 100,
       listing_type: oi.listing_type_id || null,
       shipping_id: sid,
-      logistic_type: f?.logistic ?? ant?.logistic_type ?? null,
+      logistic_type: logistica,
       frete_vendedor: freteVend,
       frete_comprador: freteComp,
+      frete_flex: freteFlex,
+      envio_n: n,
       total_pago: Number(o.paid_amount) || 0,
       thumbnail: (it.id && thumbs.get(it.id)) || ant?.thumbnail || null,
       atualizado_em: new Date().toISOString(),

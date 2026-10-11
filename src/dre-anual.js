@@ -49,7 +49,7 @@
       const [ml, dias] = await Promise.all([ supa.rpc('vendas_ml_por_mes', { p_ano: dreAno, p_conta: conta }), qDias ]);
       if(dreDados.chave !== chave) return;
       const porMes = {};
-      (ml.data || []).forEach(r => { porMes[r.mes] = { fat:Number(r.faturamento), canc:Number(r.canceladas), imp:Number(r.imposto), frete:Number(r.frete_vendedor), custo:Number(r.custo), tarifa:Number(r.tarifa), vendas:Number(r.vendas) }; });
+      (ml.data || []).forEach(r => { porMes[r.mes] = { fat:Number(r.faturamento), canc:Number(r.canceladas), imp:Number(r.imposto), frete:Number(r.frete_vendedor), custo:Number(r.custo), tarifa:Number(r.tarifa), vendas:Number(r.vendas), flex:(Number(r.flex_custo) || 0) - (Number(r.flex_repasse) || 0) }; });
       // dias do mês já importados do ML (para avisar mês incompleto); com várias contas, conta os dias distintos
       const cob = {}; const vistos = new Set();
       (dias.data || []).forEach(d => { const k = String(d.dia).substring(0,10); if(vistos.has(k)) return; vistos.add(k); const m = parseInt(k.substring(5,7)); cob[m] = (cob[m] || 0) + 1; });
@@ -80,6 +80,8 @@
         ['Vendas Canceladas ML', 'canc'], ['Imposto ML', 'imp'], ['Frete Vendedor ML', 'frete'],
         ['Custo dos Produtos ML', 'custo'], ['Tarifa de Venda ML', 'tarifa']
       ].map(([nome, k]) => ({ nome, v: Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, val(i + 1, k)])) }));
+      // Flex: pago ao transportador menos o repasse do ML (só aparece com o valor do frete Flex informado em Configurações)
+      if(DRE_MESES.some((_, i) => val(i + 1, 'flex'))) linhasML.push({ nome: 'Ajuste Flex ML', v: Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, val(i + 1, 'flex')])) });
       const linhasDe = g => Object.keys(desp[g]).map(nome => ({ nome, v: desp[g][nome], grupo: dreGrupoOlist(nome) })).sort((a,b) => a.grupo.localeCompare(b.grupo) || a.nome.localeCompare(b.nome));
       const variaveis = linhasDe('variavel'), fixas = linhasDe('fixo');
       const soma = (linhas, m) => linhas.reduce((s,l) => s + (l.v[m] || 0), 0);

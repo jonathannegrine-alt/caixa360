@@ -44,7 +44,8 @@
         qtd: Number(v.qtd) || 1, bruto, freteComp, freteVend, tarifa,
         custo: Number(v.custo) || 0, imposto: Number(v.imposto) || 0, mc: Number(v.mc) || 0, mcPct: Number(v.mc_pct) || 0,
         faturamento: bruto + freteComp, liquidoML: bruto - tarifa - freteVend,
-        temCusto: !!v.tem_custo, temImposto: !!v.tem_imposto, fretePendente: v.frete_vendedor == null
+        temCusto: !!v.tem_custo, temImposto: !!v.tem_imposto, fretePendente: v.frete_vendedor == null,
+        flexRep: Number(v.flex_repasse) || 0, flexCusto: Number(v.flex_custo) || 0, flex: v.logistic_type === 'self_service'
       };
     }
     function vmlDiasEntre(de, ate){ return diasDif(de, ate) + 1; }
@@ -307,6 +308,7 @@
             ${linha('Recebido', 'R$ ' + vmlNum(c.faturamento), 'pos', 'Valor dos produtos + frete pago pelo comprador')}
             ${linha('Frete', c.fretePendente ? '…' : '-R$ ' + vmlNum(c.freteVend + c.freteComp), 'neg', 'Frete do comprador + frete do vendedor')}
             ${linha('Tarifa de venda', '-R$ ' + vmlNum(c.tarifa), 'neg')}
+            ${c.flexCusto > 0 ? linha('Flex', (c.flexRep - c.flexCusto >= 0 ? 'R$ ' : '-R$ ') + vmlNum(Math.abs(c.flexRep - c.flexCusto)), c.flexRep - c.flexCusto >= 0 ? 'pos' : 'neg', 'Repasse do Mercado Livre pelo envio Flex (R$ ' + vmlNum(c.flexRep) + ') menos o que você paga ao transportador (R$ ' + vmlNum(c.flexCusto) + ')') : ''}
             ${linha('Líquido ML', 'R$ ' + vmlNum(c.liquidoML), 'sub')}
             ${linha('Custo', c.temCusto ? '-R$ ' + vmlNum(c.custo) : 'sem custo', c.temCusto ? 'neg' : 'neg sem-custo')}
             ${linha('Imposto', c.temImposto ? '-R$ ' + vmlNum(c.imposto) : 'sem imposto', c.temImposto ? 'neg' : 'neg sem-custo')}
@@ -369,8 +371,9 @@
             ${l('Frete pago pelo comprador', 'R$ ' + vmlNum(c.freteComp))}
             ${l('Frete pago pelo vendedor', c.fretePendente ? 'buscando…' : '-R$ ' + vmlNum(c.freteVend))}
             ${l('Tarifa de venda', '-R$ ' + vmlNum(c.tarifa))}
+            ${c.flexCusto > 0 ? l('Repasse do ML pelo envio Flex', 'R$ ' + vmlNum(c.flexRep)) + l('Pago ao transportador (Flex)', '-R$ ' + vmlNum(c.flexCusto)) : ''}
             ${l('Custo do produto', c.temCusto ? '-R$ ' + vmlNum(c.custo) : 'não cadastrado')}
-            ${l('Imposto', c.temImposto ? '-R$ ' + vmlNum(c.imposto) : 'não cadastrado')}
+            ${l('Imposto', c.temImposto ? '-R$ ' + vmlNum(c.imposto) : (c.flex ? 'Flex sem imposto (ou não cadastrado)' : 'não cadastrado'))}
             ${l('Margem de contribuição', `<span class="${c.mc >= 0 ? 'mc-pos' : 'mc-neg'}">R$ ${vmlNum(c.mc)} (${vmlPct(c.mcPct)})</span>`)}
           </div>
         </div>`);

@@ -89,6 +89,30 @@ async function estados(supaUrl: string, dbH: Record<string, string>, userId: str
   return feitos
 }
 
+// Repasse do Flex das vendas antigas (vendas_ml.frete_flex): GET /shipments/{id}/costs. Um lote por chamada.
+const MAX_FLEX = 400
+async function flex(supaUrl: string, dbH: Record<string, string>, userId: string, clientId: string, secret: string) {
+  let feitos = 0, faltam = 0
+  for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
+    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&logistic_type=eq.self_service&frete_flex=is.null&shipping_id=not.is.null&select=shipping_id&order=data_venda.desc&limit=${MAX_FLEX * 3}`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    const todos = [...new Set((Array.isArray(vendas) ? vendas : []).map((v: any) => String(v.shipping_id)))]
+    const ids = todos.slice(0, MAX_FLEX); faltam += todos.length - ids.length
+    await emLotes(ids, 8, async sid => {
+      const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}/costs`, { headers: { Authorization: `Bearer ${t.access_token}` } }).catch(() => null)
+      if (!r) return
+      const c = r.ok ? await r.json().catch(() => null) : null
+      if (!c && r.status !== 404 && r.status !== 403) return        // falha passageira: tenta na próxima
+      const rec = c?.receiver || {}
+      const total = c ? (Number(rec.cost) || 0) + (rec.discounts || []).reduce((s: number, d: any) => s + (Number(d.promoted_amount) || 0), 0) : 0
+      const irmas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}&select=order_id`, { headers: dbH }).then(x => x.json()).catch(() => [])
+      const n = Math.max(1, Array.isArray(irmas) ? irmas.length : 1)
+      await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ frete_flex: Math.round(total / n * 100) / 100, envio_n: n }) })
+      feitos++
+    })
+  }
+  return { feitos, faltam }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   try {
@@ -111,6 +135,7 @@ Deno.serve(async (req: Request) => {
     const jwtRes = await fetch(`${supaUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authHeader } })
     if (!jwtRes.ok) return resp({ error: 'Sessão inválida — faça login novamente.' }, 401)
     const { id: userId } = await jwtRes.json()
+    if (body?.acao === 'flex') return resp({ ok: true, ...(await flex(supaUrl, dbH, userId, clientId, secret)) })
     return resp({ ok: true, ...(await conferir(supaUrl, dbH, userId, clientId, secret)) })
   } catch (err) {
     console.error('ml-envios error:', err)

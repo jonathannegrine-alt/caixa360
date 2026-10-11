@@ -107,7 +107,7 @@
       host.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Análise de vendas</div><div class="pg-sub">Crescimento, produtos, compradores, estados, cancelamentos e anúncios pagos — direto das vendas do Mercado Livre.</div></div>
-          ${an.aba === 'geral' ? '' : `<div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;"><div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${!an.de && an.dias === d ? 'active' : ''}" onclick="anDias(${d})">${d} dias</button>`).join('')}</div>
+          ${`<div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;"><div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${!an.de && an.dias === d ? 'active' : ''}" onclick="anDias(${d})">${d} dias</button>`).join('')}</div>
             <input type="date" id="an-de" value="${anPeriodo().de}" max="${getToday()}" onchange="anDatas()" title="Data inicial" style="width:auto;"><span class="text-muted">até</span><input type="date" id="an-ate" value="${anPeriodo().ate}" max="${getToday()}" onchange="anDatas()" title="Data final" style="width:auto;"></div>`}
         </div>
         <div class="chips" style="margin-bottom:14px;">${abas.map(([k, t]) => `<button class="chip ${an.aba === k ? 'active' : ''}" onclick="anAba('${k}')">${t}</button>`).join('')}</div>
@@ -122,7 +122,7 @@
       for(let i = 11; i >= 0; i--){
         const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1), k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'), r = an.meses[k] || {};
         const fat = (Number(r.faturamento) || 0) - (Number(r.canceladas) || 0);
-        const mc = fat - (Number(r.imposto) || 0) - (Number(r.frete_vendedor) || 0) - (Number(r.custo) || 0) - (Number(r.tarifa) || 0);
+        const mc = fat - (Number(r.imposto) || 0) - (Number(r.frete_vendedor) || 0) - (Number(r.custo) || 0) - (Number(r.tarifa) || 0) - ((Number(r.flex_custo) || 0) - (Number(r.flex_repasse) || 0));
         const diasMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(), esperado = i === 0 ? hoje.getDate() : diasMes;
         lista.push({ k, rot: AN_MES[d.getMonth()] + '/' + String(d.getFullYear()).slice(2), fat, mc, vendas: Number(r.vendas) || 0, atual: i === 0, parcial: (an.cob[k] || 0) < esperado - 1, cob: an.cob[k] || 0, esperado });
       }
@@ -131,7 +131,18 @@
       const cresc = ult && pen && pen.fat ? (ult.fat / pen.fat - 1) * 100 : null;
       const atual = lista[lista.length - 1], proj = atual.fat && hoje.getDate() > 1 ? atual.fat / hoje.getDate() * new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate() : 0;
       const semDados = lista.filter(x => x.parcial && !x.atual).length;
+      // período escolhido no topo (30/60/90 dias ou datas)
+      const pr = an.rank ? { fat: an.rank.reduce((s, r) => s + Number(r.bruto), 0), mc: an.rank.reduce((s, r) => s + Number(r.mc), 0), vendas: an.rank.reduce((s, r) => s + Number(r.vendas), 0), un: an.rank.reduce((s, r) => s + Number(r.un), 0) } : null, pp = anPeriodo();
+      const curto = x => x >= 1000000 ? anN(x / 1000000, 2) + ' mi' : x >= 1000 ? anN(x / 1000, x >= 100000 ? 0 : 1) + 'k' : anN(x);
       return `
+        <div class="card"><div class="card-header"><div class="card-title">No período escolhido</div><span class="text-muted" style="font-size:12px;">${ptDate(pp.de)} a ${ptDate(pp.ate)} · vendas aprovadas</span></div>
+          <div class="card-body">${pr ? `<div class="kpi-grid k4i" style="margin:0;">
+            ${anKpi('k-venda', 'Faturamento', fmt(pr.fat), fmt(pr.fat / Math.max(1, an.dias)) + ' por dia')}
+            ${anKpi('k-mc', 'Margem de contribuição', fmt(pr.mc), anP(pr.mc, pr.fat) + ' do faturamento')}
+            ${anKpi('k-hoje', 'Vendas', anN(pr.vendas), anN(pr.un) + ' unidades')}
+            ${anKpi('k-frete', 'Ticket médio', pr.vendas ? fmt(pr.fat / pr.vendas) : '–', 'por venda aprovada')}
+          </div>` : '<div class="text-muted">Carregando…</div>'}</div></div>
+        <div class="text-muted" style="font-size:12px;margin:2px 0 8px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;">Últimos 12 meses</div>` + `
         <div class="kpi-grid k4i">
           ${anKpi('k-venda', 'Faturamento em 12 meses', fmt(tot), anN(totV) + ' vendas aprovadas')}
           ${anKpi(cresc == null ? 'k-neutro' : cresc >= 0 ? 'k-mc' : 'k-atraso', 'Último mês fechado', ult ? fmt(ult.fat) : '–', cresc == null ? '' : (cresc >= 0 ? '▲ ' : '▼ ') + anN(Math.abs(cresc), 1) + '% sobre ' + pen.rot)}
@@ -142,7 +153,7 @@
           <div class="card-body"><div class="an-barras">
             ${lista.map((x, i) => { const ant = lista[i - 1], v = ant && ant.fat && !x.atual ? (x.fat / ant.fat - 1) * 100 : null;
               return `<div class="an-barra${x.atual ? ' an-atual' : ''}" title="${x.rot}: ${fmt(x.fat)} · ${anN(x.vendas)} vendas · margem ${anP(x.mc, x.fat)}${x.parcial ? ' · vendas ainda sendo importadas (' + x.cob + ' de ' + x.esperado + ' dias)' : ''}">
-                <span class="an-val">${x.fat >= 1000 ? anN(x.fat / 1000, x.fat >= 100000 ? 0 : 1) + ' mil' : anN(x.fat)}</span>
+                <span class="an-val">${curto(x.fat)}</span>
                 <div class="an-col"><i style="height:${Math.max(2, x.fat / max * 100)}%"></i></div>
                 <b>${x.rot}${x.parcial && !x.atual ? '*' : ''}</b>
                 <em class="${v == null ? '' : v >= 0 ? 'an-sobe' : 'an-desce'}">${v == null ? (x.atual ? 'em curso' : '&nbsp;') : (v >= 0 ? '▲' : '▼') + anN(Math.abs(v), 0) + '%'}</em>
@@ -246,7 +257,7 @@
       if(!an.ads) return anVazio('Buscando os anúncios pagos no Mercado Livre…');
       const venda = new Map((an.rankMlb || []).map(r => [r.chave, Number(r.bruto) || 0]));
       const totVenda = (an.rank || []).reduce((s, r) => s + Number(r.bruto), 0);
-      const linhas = an.ads.anuncios.map(a => { const vt = venda.get(a.item_id) || 0; return { ...a, ctr: a.impressoes ? a.cliques / a.impressoes * 100 : 0, cpc: a.cliques ? a.investimento / a.cliques : 0, acos: a.vendas_ads ? a.investimento / a.vendas_ads * 100 : (a.investimento ? 999 : 0), venda_total: vt, tacos: vt ? a.investimento / vt * 100 : (a.investimento ? 999 : 0) }; })
+      const linhas = an.ads.anuncios.map(a => { const vt = Math.max(venda.get(a.item_id) || 0, (Number(a.diretas) || 0) + (Number(a.organicas) || 0)); return { ...a, ctr: a.impressoes ? a.cliques / a.impressoes * 100 : 0, cpc: a.cliques ? a.investimento / a.cliques : 0, acos: a.vendas_ads ? a.investimento / a.vendas_ads * 100 : (a.investimento ? 999 : 0), venda_total: vt, tacos: vt ? a.investimento / vt * 100 : (a.investimento ? 999 : 0) }; })
         .filter(a => a.investimento > 0 || a.impressoes > 0);
       const inv = linhas.reduce((s, a) => s + a.investimento, 0), vAds = linhas.reduce((s, a) => s + a.vendas_ads, 0);
       const avisos = (an.ads.contas || []).filter(c => c.erro).map(c => (c.apelido || c.conta) + ': ' + c.erro);
@@ -268,5 +279,5 @@
           { k: 'investimento', t: 'Investimento', num: 1, fmt: l => '<b>' + fmt(l.investimento) + '</b>' }, { k: 'vendas_ads', t: 'Vendas ADS', num: 1, fmt: l => fmt(l.vendas_ads) },
           { k: 'acos', t: 'ACOS', num: 1, fmt: l => pc(l.acos) }, { k: 'venda_total', t: 'Venda total', num: 1, fmt: l => fmt(l.venda_total) }, { k: 'tacos', t: 'TACOS', num: 1, fmt: l => pc(l.tacos) }
         ], 'investimento')}
-        <div class="text-muted" style="font-size:12px;padding:12px 18px;">ACOS = investimento ÷ vendas que vieram da publicidade. TACOS = investimento ÷ tudo que o anúncio vendeu no período (com e sem publicidade): mostra o peso real do ADS no produto.</div></div>`;
+        <div class="text-muted" style="font-size:12px;padding:12px 18px;">ACOS = investimento ÷ vendas que vieram da publicidade. TACOS = investimento ÷ tudo que o próprio anúncio vendeu no período (com e sem publicidade): mostra o peso real do ADS no produto. As vendas por publicidade incluem as indiretas, que são de outros anúncios seus comprados depois do clique; por isso a venda total do anúncio usa só as diretas mais as orgânicas.</div></div>`;
     }
