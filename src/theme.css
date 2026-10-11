@@ -1222,3 +1222,18 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .chip.chip-mes button{background:none;border:0;color:inherit;font-size:18px;line-height:1;width:26px;height:28px;border-radius:999px;cursor:pointer;}
 .chip.chip-mes button:hover{background:rgba(255,255,255,.22);}
 .ap-estorno{opacity:.75;font-size:12px;} .ap-estorno:hover{opacity:1;}
+
+/* Vendas: detalhes lidos no Mercado Livre (entrega, pagamento, comprador) */
+.vd-sec{margin-top:16px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);}
+.vd-sec h4{margin:0 0 6px;font-size:13.5px;}
+.vd-sec.vd-foco{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent);}
+.vd-cols{display:grid;grid-template-columns:1fr 1fr;gap:0 26px;}
+.vd-l{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.vd-l b{text-align:right;font-weight:600;min-width:0;overflow-wrap:anywhere;}
+.vd-l.vd-larga{grid-column:1/-1;}
+.vd-acoes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;}
+.v-envio{font-size:11.5px;text-align:center;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:3px 6px;cursor:pointer;}
+.ico-btn.v-i{width:18px;height:18px;border-radius:50%;font-size:11px;font-weight:700;font-style:italic;margin-right:6px;vertical-align:middle;}
+.dt-nav.dt-par{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.dt-nav.dt-par input[type=date]{flex:1 1 140px;min-width:130px;width:auto;}
+@media (max-width:700px){.vd-cols{grid-template-columns:1fr;}}

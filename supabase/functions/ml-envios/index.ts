@@ -17,6 +17,30 @@ const MAX_ENVIOS = 220   // por conta, por chamada
 const MAX_UF = 550        // vendas sem estado do comprador preenchidas por conta, por chamada (histórico vai aos poucos)
 const ufDe = (s: any): string | null => { const id = String(s?.destination?.shipping_address?.state?.id || s?.receiver_address?.state?.id || ''); const m = id.match(/([A-Z]{2})$/); return m ? m[1] : null }
 
+const endDe = (s: any) => s?.destination?.shipping_address || s?.receiver_address || {}
+const cidadeDe = (s: any): string | null => { const c = String(endDe(s)?.city?.name || '').trim(); return c || null }
+const cepDe = (s: any): string | null => { const c = String(endDe(s)?.zip_code || '').replace(/\D/g, ''); return c || null }
+
+// Guarda uma cópia da etiqueta (PDF) no depósito "etiquetas": o ML só a entrega enquanto o pacote não saiu.
+async function guardarEtiqueta(supaUrl: string, dbH: Record<string, string>, userId: string, sid: string, tk: string): Promise<boolean> {
+  const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${sid}&response_type=pdf`, { headers: { Authorization: `Bearer ${tk}` } }).catch(() => null)
+  if (!r || !r.ok || !(r.headers.get('content-type') || '').includes('pdf')) return false
+  const up = await fetch(`${supaUrl}/storage/v1/object/etiquetas/${userId}/${sid}.pdf`, { method: 'POST', headers: { ...dbH, 'Content-Type': 'application/pdf', 'x-upsert': 'true' }, body: await r.arrayBuffer() }).catch(() => null)
+  return !!(up && up.ok)
+}
+
+// Apaga as cópias com mais de 12 meses (um lote por chamada).
+async function limparEtiquetas(supaUrl: string, dbH: Record<string, string>) {
+  const corte = new Date(Date.now() - 366 * 86400000).toISOString()
+  const velhas = await fetch(`${supaUrl}/rest/v1/vendas_ml?etiqueta_em=lt.${corte}&select=usuario_id,shipping_id&limit=200`, { headers: dbH }).then(r => r.json()).catch(() => [])
+  const lista = Array.isArray(velhas) ? velhas : []
+  if (!lista.length) return 0
+  const prefixes = [...new Set(lista.map((v: any) => `${v.usuario_id}/${v.shipping_id}.pdf`))]
+  await fetch(`${supaUrl}/storage/v1/object/etiquetas`, { method: 'DELETE', headers: { ...dbH, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes }) }).catch(() => null)
+  for (const v of lista) await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${v.usuario_id}&shipping_id=eq.${v.shipping_id}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ etiqueta_em: null }) }).catch(() => null)
+  return prefixes.length
+}
+
 async function emLotes<T, R>(lista: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(lista.length); let i = 0
   await Promise.all(Array.from({ length: Math.min(n, lista.length) }, async () => { while (i < lista.length) { const k = i++; out[k] = await fn(lista[k]) } }))
@@ -44,11 +68,12 @@ async function tokens(supaUrl: string, dbH: Record<string, string>, userId: stri
 
 async function conferir(supaUrl: string, dbH: Record<string, string>, userId: string, clientId: string, secret: string) {
   const desde = new Date(Date.now() - DIAS * 86400000).toISOString()
-  let conferidos = 0, enviados = 0
+  let conferidos = 0, enviados = 0, etiquetas = 0
   for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
     // vendas do galpão ainda sem envio registrado (canceladas ficam de fora)
-    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&data_venda=gte.${desde}&enviado_em=is.null&shipping_id=not.is.null&status=neq.cancelled&or=(logistic_type.is.null,logistic_type.neq.fulfillment)&select=shipping_id&order=data_venda.desc&limit=3000`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&data_venda=gte.${desde}&enviado_em=is.null&shipping_id=not.is.null&status=neq.cancelled&or=(logistic_type.is.null,logistic_type.neq.fulfillment)&select=shipping_id,etiqueta_em&order=data_venda.desc&limit=3000`, { headers: dbH }).then(r => r.json()).catch(() => [])
     const ids = [...new Set((Array.isArray(vendas) ? vendas : []).map((v: any) => String(v.shipping_id)))].slice(0, MAX_ENVIOS)
+    const comEtiqueta = new Set((Array.isArray(vendas) ? vendas : []).filter((v: any) => v.etiqueta_em).map((v: any) => String(v.shipping_id)))
     await emLotes(ids, 6, async sid => {
       const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: { Authorization: `Bearer ${t.access_token}`, 'x-format-new': 'true' } }).catch(() => null)
       if (!r || !r.ok) return
@@ -63,17 +88,22 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       if (saiu && quando) { campos.enviado_em = quando; enviados++ }
       if (s.logistic?.type) campos.logistic_type = s.logistic.type
       const uf = ufDe(s); if (uf) campos.uf = uf
+      const cid = cidadeDe(s); if (cid) campos.cidade = cid
+      const cep = cepDe(s); if (cep) campos.cep = cep
+      if (s.tracking_number) campos.rastreio = String(s.tracking_number)
+      // etiqueta pronta e ainda sem cópia: guarda agora (depois que o pacote sai o ML não entrega mais)
+      if (status === 'ready_to_ship' && !comEtiqueta.has(sid) && await guardarEtiqueta(supaUrl, dbH, userId, sid, t.access_token)) { campos.etiqueta_em = new Date().toISOString(); etiquetas++ }
       await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(campos) })
     })
   }
-  return { conferidos, enviados, estados: await estados(supaUrl, dbH, userId, clientId, secret) }
+  return { conferidos, enviados, etiquetas, estados: await estados(supaUrl, dbH, userId, clientId, secret) }
 }
 
 // Estado (UF) de entrega de cada venda, para a análise por estado. Mais novas primeiro; o histórico é preenchido aos poucos.
 async function estados(supaUrl: string, dbH: Record<string, string>, userId: string, clientId: string, secret: string) {
   let feitos = 0
   for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
-    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&uf=is.null&shipping_id=not.is.null&select=shipping_id&order=data_venda.desc&limit=${MAX_UF * 2}`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&cidade=is.null&shipping_id=not.is.null&select=shipping_id&order=data_venda.desc&limit=${MAX_UF * 2}`, { headers: dbH }).then(r => r.json()).catch(() => [])
     const ids = [...new Set((Array.isArray(vendas) ? vendas : []).map((v: any) => String(v.shipping_id)))].slice(0, MAX_UF)
     await emLotes(ids, 8, async sid => {
       const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: { Authorization: `Bearer ${t.access_token}`, 'x-format-new': 'true' } }).catch(() => null)
@@ -83,7 +113,9 @@ async function estados(supaUrl: string, dbH: Record<string, string>, userId: str
       const uf = s ? (ufDe(s) || '--') : (r.status === 404 || r.status === 403 ? '--' : null)
       if (!uf) return
       feitos++
-      await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ uf }) })
+      const campos: Record<string, unknown> = { uf, cidade: (s && cidadeDe(s)) || '--' }
+      const cep = s && cepDe(s); if (cep) campos.cep = cep
+      await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(campos) })
     })
   }
   return feitos
@@ -168,7 +200,8 @@ Deno.serve(async (req: Request) => {
       const ids = [...new Set((Array.isArray(us) ? us : []).map((u: any) => u.usuario_id))]
       const res: any[] = []
       for (const u of ids) res.push({ usuario: u, ...(await conferir(supaUrl, dbH, String(u), clientId, secret)) })
-      return resp({ ok: true, usuarios: res.length, conferidos: res.reduce((s, r) => s + r.conferidos, 0), enviados: res.reduce((s, r) => s + r.enviados, 0), estados: res.reduce((s, r) => s + (r.estados || 0), 0) })
+      const limpas = await limparEtiquetas(supaUrl, dbH).catch(() => 0)
+      return resp({ ok: true, usuarios: res.length, conferidos: res.reduce((s, r) => s + r.conferidos, 0), enviados: res.reduce((s, r) => s + r.enviados, 0), etiquetas: res.reduce((s, r) => s + (r.etiquetas || 0), 0), etiquetas_apagadas: limpas, estados: res.reduce((s, r) => s + (r.estados || 0), 0) })
     }
 
     const authHeader = req.headers.get('Authorization') || ''

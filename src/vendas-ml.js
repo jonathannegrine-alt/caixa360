@@ -196,8 +196,15 @@
         (data || []).forEach(r => { carrinhos[r.pack_id] = (carrinhos[r.pack_id] || 0) + 1; });
         if(seq !== vmlSeq) return;
       }
-      vdDados = { linhas, total: pag.count || 0, tot: tot.data || null, carrinhos, carregado:true, erro: pag.error?.message || tot.error?.message, outraLoja };
+      const extra = {};
+      if(linhas.length){
+        const ex = await supa.from('vendas_ml').select('order_id,cidade,uf,cep,envio_status,rastreio,etiqueta_em,shipping_id,logistic_type').eq('usuario_id', usuarioAtual.id).in('order_id', linhas.map(v => v.order_id));
+        if(seq !== vmlSeq) return;
+        (ex.data || []).forEach(r => { extra[r.order_id] = r; });
+      }
+      vdDados = { linhas, total: pag.count || 0, tot: tot.data || null, carrinhos, extra, carregado:true, erro: pag.error?.message || tot.error?.message, outraLoja };
       vdDesenhar();
+      if(tot.data && tot.data.aprov && tot.data.aprov.sem_custo) vmlSemDetalhe(f.de, f.ate, 'vd-sem');
     }
 
     function renderVendas(){
@@ -244,7 +251,7 @@
         <div class="kpi-grid">
           <div class="kpi k-venda"><div class="kpi-label">Vendas aprovadas${vdRotPeriodo()}</div><div class="kpi-value">${(a.qtd || 0).toLocaleString('pt-BR')}</div><div class="kpi-sub"><span><b>${(a.un || 0).toLocaleString('pt-BR')}</b> unidades</span><span><b>${c.qtd || 0}</b> canceladas</span></div></div>
           <div class="kpi k-frete"><div class="kpi-label">Faturamento (produtos)${vdRotPeriodo()}</div><div class="kpi-value">R$ ${vmlNum(a.bruto)}</div><div class="kpi-sub"><span>Ticket médio <b>R$ ${vmlNum(a.qtd ? a.bruto / a.qtd : 0)}</b></span></div></div>
-          <div class="kpi k-mc"><div class="kpi-label">Margem de contribuição${vdRotPeriodo()}</div><div class="kpi-value">R$ ${vmlNum(a.mc)}</div><div class="kpi-sub"><span><b>${vmlPct(a.bruto ? a.mc / a.bruto * 100 : 0)}</b> do faturamento</span>${a.sem_custo ? `<span class="sem-custo">${a.sem_custo} sem custo/imposto</span>` : ''}</div></div>
+          <div class="kpi k-mc"><div class="kpi-label">Margem de contribuição${vdRotPeriodo()}</div><div class="kpi-value">R$ ${vmlNum(a.mc)}</div><div class="kpi-sub"><span><b>${vmlPct(a.bruto ? a.mc / a.bruto * 100 : 0)}</b> do faturamento</span>${a.sem_custo ? `<span class="sem-custo" id="vd-sem" style="cursor:pointer;" title="Mostrar essas vendas" onclick="vdSet('semCusto',true)">${a.sem_custo} sem custo ou imposto</span>` : ''}</div></div>
         </div>
 
         <div class="card"><div class="card-body">
@@ -292,8 +299,11 @@
       vmlAtualizarSync();
     }
 
+    const VD_ENVIO = { pending:'Aguardando', handling:'Em preparação', ready_to_ship:'Pronto para enviar', shipped:'A caminho', delivered:'Entregue', not_delivered:'Não entregue', cancelled:'Envio cancelado' };
+    const vdCep = c => { const d = String(c || '').replace(/\D/g, ''); return d.length === 8 ? d.slice(0, 5) + '-' + d.slice(5) : d; };
     function vdCard(v){
       const c = vmlCalc(v), st = v.situacao, dt = vmlDataBRT(v.data_venda), log = v.envio;
+      const ex = (vdDados.extra || {})[v.order_id] || {}, temCid = ex.cidade && ex.cidade !== '--';
       const nCart = v.pack_id ? (vdDados.carrinhos[v.pack_id] || 1) : 1;
       const nota = vmlNotas()[v.order_id] || '';
       const completo = c.temCusto && c.temImposto;
@@ -302,10 +312,11 @@
       return `
         <div class="venda ${st === 'cancelada' ? 'cancelada' : ''}">
           <div class="v-comp">
-            <div class="nome">${vmlEsc(v.comprador_nome || v.comprador_apelido || 'Comprador')} ${v.comprador_nome ? cp(v.comprador_nome) : ''}</div>
+            <div class="nome"><button class="ico-btn v-i" title="Dados do comprador" onclick="vdPagamento('${v.order_id}','comprador')">i</button>${vmlEsc(v.comprador_nome || v.comprador_apelido || 'Comprador')} ${v.comprador_nome ? cp(v.comprador_nome) : ''}</div>
             <div>${vmlEsc(v.comprador_apelido || '')} ${v.comprador_apelido ? cp(v.comprador_apelido) : ''}</div>
             <div><a class="v-id" href="https://www.mercadolivre.com.br/vendas/${v.order_id}/detalhe" target="_blank" rel="noopener" title="Ver os detalhes do pedido no ML">Venda: #${v.order_id}</a> ${cp(v.order_id)}</div>
             ${v.pack_id ? `<div><span class="v-id" onclick="vdCarrinho('${v.pack_id}')" title="Ver os itens do carrinho">Carrinho: #${v.pack_id}</span> ${cp(v.pack_id)}</div>` : ''}
+            ${ex.cep || temCid ? `<div>${ex.cep ? '<b>CEP:</b> ' + vdCep(ex.cep) + ' ' + cp(vdCep(ex.cep)) : ''}${temCid ? '<span class="text-muted"> ' + vmlEsc(ex.cidade) + (ex.uf && ex.uf !== '--' ? ' - ' + ex.uf : '') + '</span>' : ''}</div>` : ''}
             <div><b>Data:</b> ${ptDate(dt.dia)} - ${dt.hora}</div>
             <div style="margin-top:4px;"><button class="ico-btn" style="width:auto;padding:0 8px;gap:5px;" onclick="vdNota('${v.order_id}')" title="Anotação da venda">✎ ${nota ? vmlEsc(nota.length > 22 ? nota.slice(0,22) + '…' : nota) : 'Anotar'}</button></div>
           </div>
@@ -322,10 +333,11 @@
                 ${contasML.length > 1 && !contaAtiva ? `<span class="v-tag conta">${vmlEsc(contaNome(v.ml_user_id) || v.ml_user_id)}</span>` : ''}
                 <span class="v-tag">${vmlEsc(v.modalidade)}</span>
                 <span class="v-tag ${log === 'Full' ? 'full' : (log === 'Flex' ? 'flex' : '')}">${log === 'Full' ? '⚡ ' : ''}${vmlEsc(log)}</span>
+                <button class="ico-btn" title="Informações da entrega: rastreio, prazo, pacote e endereço" onclick="vdPagamento('${v.order_id}','entrega')">📦</button>
                 ${nCart > 1 ? `<span class="v-tag cart" onclick="vdCarrinho('${v.pack_id}')">🛒 +${nCart - 1} produto${nCart > 2 ? 's' : ''}</span>` : ''}
                 ${v.item_id ? `<a href="https://produto.mercadolivre.com.br/${String(v.item_id).replace(/^MLB/, 'MLB-')}" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:none;" title="Ver o anúncio no ML">${vmlEsc(v.item_id)}</a>${cp(v.item_id)}` : ''}
               </div>
-              <div class="v-meta"><span class="v-preco">R$ ${vmlNum(v.preco_unit)}</span>${v.variacao ? `<span>${vmlEsc(v.variacao)}</span>` : ''}</div>
+              <div class="v-meta"><span class="v-preco">R$ ${vmlNum(v.preco_unit)}</span><button class="ico-btn" title="Informações do pagamento" onclick="vdPagamento('${v.order_id}','pagamento')">$</button>${v.variacao ? `<span>${vmlEsc(v.variacao)}</span>` : ''}</div>
             </div>
           </div>
 
@@ -342,6 +354,7 @@
 
           <div class="v-acoes">
             <div class="v-status ${st === 'aprovada' ? 'ok' : (st === 'cancelada' ? 'canc' : 'pend')}">${st === 'aprovada' ? 'Aprovada' : (st === 'cancelada' ? 'Cancelada' : 'Pagamento pendente')}</div>
+            ${st !== 'cancelada' && ex.envio_status && VD_ENVIO[ex.envio_status] ? `<div class="v-envio" title="${ex.rastreio ? 'Rastreio: ' + vmlEsc(ex.rastreio) : 'Situação do envio'}" onclick="vdPagamento('${v.order_id}','entrega')">${VD_ENVIO[ex.envio_status]}</div>` : ''}
             <button class="btn-out btn btn-sm v-bt-msg" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}','${v.ml_user_id || ''}')">Mensagens</button>
             <button class="btn-out btn btn-sm" onclick="vdPagamento('${v.order_id}')">Detalhes</button>
             <a class="btn-out btn btn-sm v-bt-ml" style="text-align:center;text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${v.order_id}/detalhe" target="_blank" rel="noopener">Abrir no ML</a>
@@ -382,8 +395,9 @@
         </div>`).join('')}`);
     }
 
-    function vdPagamento(orderId){
+    function vdPagamento(orderId, foco){
       const v = vdAchar(orderId); if(!v) return;
+      setTimeout(() => vdDetalheML(orderId, foco), 0);
       const c = vmlCalc(v), dt = vmlDataBRT(v.data_venda);
       const l = (a,b) => `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);"><span class="text-muted">${a}</span><b>${b}</b></div>`;
       vmlModal('Detalhes da venda #' + v.order_id, `
@@ -407,7 +421,88 @@
             ${l('Imposto', c.temImposto ? '-R$ ' + vmlNum(c.imposto) : (c.flex ? 'Flex sem imposto (ou não cadastrado)' : 'não cadastrado'))}
             ${l('Margem de contribuição', `<span class="${c.mc >= 0 ? 'mc-pos' : 'mc-neg'}">R$ ${vmlNum(c.mc)} (${vmlPct(c.mcPct)})</span>`)}
           </div>
-        </div>`);
+        </div>
+        <div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>`);
+    }
+
+    async function vdFuncao(corpo){
+      const sd = await supa.auth.getSession(), tk = sd && sd.data && sd.data.session ? sd.data.session.access_token : '';
+      const r = await fetch(SUPA_URL + '/functions/v1/ml-venda', { method: 'POST', headers: { Authorization: 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+      return r.json().catch(() => ({ error: 'resposta inválida' }));
+    }
+    const VD_PAG = { account_money:'Saldo em conta', credit_card:'Cartão de crédito', debit_card:'Cartão de débito', ticket:'Boleto', bank_transfer:'Pix ou transferência', digital_currency:'Mercado Crédito', digital_wallet:'Carteira digital' };
+    const VD_PAG_ST = { approved:'Aprovado', pending:'Pendente', in_process:'Em análise', rejected:'Recusado', refunded:'Devolvido', cancelled:'Cancelado', charged_back:'Contestado', accredited:'Pagamento creditado' };
+    const VD_LOG = { fulfillment:'Full', self_service:'Flex', cross_docking:'Coleta', xd_drop_off:'Agência', drop_off:'Correios' };
+    async function vdDetalheML(orderId, foco){
+      const alvo = () => document.getElementById('vd-det-ml');
+      let d; try { d = await vdFuncao({ acao: 'detalhe', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
+      const el = alvo(); if(!el) return;
+      if(d && d.demo){ el.innerHTML = '<div class="alert alert-info" style="margin-top:14px;">Na demonstração, os dados de entrega, pagamento e comprador ficam desligados: eles são lidos na hora na conta do Mercado Livre.</div>'; return; }
+      if(!d || d.error || !d.ok){ el.innerHTML = '<div class="alert alert-warning" style="margin-top:14px;">Não consegui ler os detalhes no Mercado Livre agora' + (d && d.error ? ': ' + vmlEsc(d.error) : '') + '.</div>'; return; }
+      const l = (a, b) => b === '' || b == null ? '' : `<div class="vd-l"><span class="text-muted">${a}</span><b>${b}</b></div>`;
+      const dh = s => { if(!s) return ''; const x = vmlDataBRT(s); return ptDate(x.dia) + ' ' + x.hora; };
+      const dd = s => s ? ptDate(vmlDataBRT(s).dia) : '';
+      const cp = txt => `<button class="ico-btn" style="width:20px;height:20px;border:none;background:none;" title="Copiar" onclick="vmlCopiar('${vmlEsc(txt)}', this)">⧉</button>`;
+      const e = d.entrega, p = d.pagamento, c = d.comprador || {};
+      const end = e ? [e.endereco, e.complemento, e.bairro, [e.cidade, e.uf].filter(Boolean).join(' - ')].filter(Boolean).join(', ') : '';
+      const bloco = (id, tit, corpo) => `<div class="vd-sec" id="vd-sec-${id}"><h4>${tit}</h4><div class="vd-cols">${corpo}</div></div>`;
+      el.innerHTML =
+        (e ? bloco('entrega', 'Entrega',
+          l('Nº do envio', '#' + vmlEsc(e.envio) + ' ' + cp(e.envio)) + l('Tipo', VD_LOG[e.tipo] || vmlEsc(e.tipo)) + l('Situação', (VD_ENVIO[e.status] || vmlEsc(e.status)) + (e.substatus ? ' <small class="text-muted">(' + vmlEsc(e.substatus) + ')</small>' : '')) +
+          l('Código de rastreio', e.rastreio ? vmlEsc(e.rastreio) + ' ' + cp(e.rastreio) : '') + l('Transportadora', vmlEsc(e.transportadora)) + l('Entrega prevista', dd(e.prevista)) + l('Limite para despachar', dh(e.limite_envio)) +
+          l('Pacote', e.altura || e.largura || e.comprimento ? `${e.altura} × ${e.largura} × ${e.comprimento} cm` : '') + l('Peso', e.peso ? e.peso.toLocaleString('pt-BR') + ' g' : '') + l('Valor declarado', e.valor_declarado ? 'R$ ' + vmlNum(e.valor_declarado) : '') +
+          l('Destinatário', vmlEsc(e.destinatario)) + l('CEP', e.cep ? vdCep(e.cep) + ' ' + cp(vdCep(e.cep)) : '') +
+          (end ? `<div class="vd-l vd-larga"><span class="text-muted">Endereço</span><b>${vmlEsc(end)} <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(end + ' ' + (e.cep || ''))}" target="_blank" rel="noopener" style="font-weight:500;">ver no mapa</a></b></div>` : ''))
+          : '<div class="text-muted" style="padding:14px 0 0;">Esta venda não tem envio pelo Mercado Envios.</div>') +
+        (p ? bloco('pagamento', 'Pagamento',
+          l('Criado em', dh(p.criado)) + l('Aprovado em', dh(p.aprovado)) + l('Forma', (VD_PAG[p.tipo] || vmlEsc(p.tipo)) + (p.parcelas > 1 ? ' em ' + p.parcelas + 'x' : '')) + l('Meio', vmlEsc(p.meio)) +
+          l('Situação', (VD_PAG_ST[p.status] || vmlEsc(p.status)) + (p.detalhe && VD_PAG_ST[p.detalhe] && p.detalhe !== p.status ? ' · ' + VD_PAG_ST[p.detalhe] : '')) + l('Valor dos produtos', 'R$ ' + vmlNum(p.produtos)) + l('Total cobrado do comprador', 'R$ ' + vmlNum(p.total)) +
+          l('Devolvido', p.reembolsado ? 'R$ ' + vmlNum(p.reembolsado) : 'R$ 0,00') + l('Pago a mais', p.a_mais ? 'R$ ' + vmlNum(p.a_mais) : 'R$ 0,00') + (p.qtd > 1 ? l('Pagamentos', p.qtd) : '')) : '') +
+        bloco('comprador', 'Comprador',
+          l('Nome', vmlEsc(c.nome || '—')) + l('Apelido', vmlEsc(c.apelido)) + l(c.doc_tipo || 'Documento', c.doc ? vmlEsc(c.doc) + ' ' + cp(c.doc) : 'não informado') + l('Código no Mercado Livre', vmlEsc(c.id))) +
+        `<div class="vd-acoes">
+          ${e ? `<button class="btn-out btn btn-sm" onclick="vdEtiqueta('${orderId}', this)" title="Abre a etiqueta do envio em PDF. Vale também para etiqueta já impressa na UpSeller; depois que o pacote sai, usa a cópia guardada aqui.">🖨 ${d.tem_etiqueta ? 'Reimprimir etiqueta' : 'Imprimir etiqueta'}</button>` : ''}
+          <button class="btn-out btn btn-sm" onclick="vdNotaFiscal('${orderId}', this)" title="Mostra a nota fiscal que o Mercado Livre tem desta venda (Full e coleta). Nada é guardado.">🧾 Ver nota fiscal</button>
+          <span id="vd-det-msg" class="text-muted" style="font-size:12.5px;"></span>
+        </div><div id="vd-det-nf"></div>`;
+      if(foco){ const s = document.getElementById('vd-sec-' + foco); if(s){ s.classList.add('vd-foco'); s.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
+      // o que acabou de ser lido passa a aparecer no cartão
+      if(e && vdDados.extra){ const x = vdDados.extra[orderId] || (vdDados.extra[orderId] = {}); x.cidade = e.cidade || x.cidade; x.uf = e.uf || x.uf; x.cep = e.cep || x.cep; x.rastreio = e.rastreio || x.rastreio; x.envio_status = e.status || x.envio_status; }
+    }
+    async function vdEtiqueta(orderId, bt){
+      const msg = document.getElementById('vd-det-msg'), rot = bt.textContent; bt.disabled = true; bt.textContent = 'Buscando etiqueta…'; if(msg) msg.textContent = '';
+      let d; try { d = await vdFuncao({ acao: 'etiqueta', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
+      bt.disabled = false; bt.textContent = rot;
+      if(d && d.ok && d.pdf){
+        const bin = atob(d.pdf), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([u], { type: 'application/pdf' }));
+        const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.download = ''; a.removeAttribute('download'); document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        if(msg) msg.textContent = d.origem === 'guardada' ? 'Etiqueta aberta (cópia guardada no Caixa 360).' : 'Etiqueta aberta e cópia guardada por 12 meses.';
+      } else if(msg) msg.textContent = (d && (d.motivo || d.error)) || 'Não foi possível abrir a etiqueta.';
+    }
+    async function vdNotaFiscal(orderId, bt){
+      const el = document.getElementById('vd-det-nf'), rot = bt.textContent; bt.disabled = true; bt.textContent = 'Consultando…';
+      let d; try { d = await vdFuncao({ acao: 'nota', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
+      bt.disabled = false; bt.textContent = rot; if(!el) return;
+      if(!d || !d.ok){ el.innerHTML = '<div class="alert alert-info" style="margin-top:12px;">' + vmlEsc((d && (d.motivo || d.error)) || 'Sem nota para esta venda.') + '</div>'; return; }
+      const l = (a, b) => b ? `<div class="vd-l"><span class="text-muted">${a}</span><b>${b}</b></div>` : '';
+      const cp = txt => `<button class="ico-btn" style="width:20px;height:20px;border:none;background:none;" title="Copiar" onclick="vmlCopiar('${vmlEsc(txt)}', this)">⧉</button>`;
+      el.innerHTML = `<div class="vd-sec vd-foco"><h4>Nota fiscal <small class="text-muted" style="font-weight:500;">· ${vmlEsc(d.origem)}</small></h4><div class="vd-cols">
+        ${l('Número', vmlEsc(String(d.numero)) + (d.serie ? ' · série ' + vmlEsc(String(d.serie)) : ''))}${l('Emitida em', d.emitida ? ptDate(String(d.emitida).substring(0, 10)) : '')}${l('Valor', d.valor ? 'R$ ' + vmlNum(d.valor) : '')}${l('Situação', vmlEsc(String(d.situacao || '')))}
+        ${d.chave ? `<div class="vd-l vd-larga"><span class="text-muted">Chave de acesso</span><b style="word-break:break-all;">${vmlEsc(d.chave)} ${cp(d.chave)}</b></div>` : ''}
+        </div>${d.chave ? `<div style="margin-top:8px;font-size:12.5px;"><a href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=" target="_blank" rel="noopener">Consultar no portal da nota fiscal</a> <span class="text-muted">(cole a chave copiada)</span></div>` : ''}</div>`;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    // separa "N sem custo ou imposto" em custo e imposto (duas contagens rápidas)
+    async function vmlSemDetalhe(de, ate, elId){
+      try {
+        const base = () => { let q = supa.from('vendas_ml_calc').select('order_id', { count: 'exact', head: true }).eq('usuario_id', usuarioAtual.id).eq('situacao', 'aprovada').gte('dia', de).lte('dia', ate); if(contaAtiva) q = q.eq('ml_user_id', contaAtiva); return q; };
+        const [a, b] = await Promise.all([base().eq('tem_custo', false), base().eq('tem_imposto', false)]);
+        const el = document.getElementById(elId); if(!el) return;
+        const p = []; if(a.count) p.push(a.count + ' sem custo'); if(b.count) p.push(b.count + ' sem imposto');
+        if(p.length) el.textContent = p.join(' · ');
+      } catch(e){}
     }
 
     // Custo e imposto, como no Mercado Turbo: só nesta venda, ou no cadastro do SKU (vale dali para frente).
@@ -565,6 +660,7 @@
       if(seq !== vmlSeq) return;
       rfDados = { linhas: pag.data || [], total: pag.count || 0, tot: tot.data || null, carregado:true, erro: pag.error?.message || tot.error?.message };
       rfDesenhar();
+      if(document.getElementById('rf-sem')) vmlSemDetalhe(rfFiltro.de, rfFiltro.ate, 'rf-sem');
     }
 
     function renderResumoFin(){
@@ -645,7 +741,7 @@
           <div class="kpi k-custo"><div class="kpi-label" title="Valores do cadastro de Produtos">Custo &amp; imposto</div><div class="kpi-value">R$ ${vmlNum(n('custo') + n('imposto'))}</div><div class="kpi-sub"><span>Custo <b>R$ ${vmlNum(n('custo'))}</b></span><span>Imposto <b>R$ ${vmlNum(n('imposto'))}</b></span></div></div>
           <div class="kpi k-tarifa"><div class="kpi-label">Tarifa de venda</div><div class="kpi-value">R$ ${vmlNum(n('tarifa'))}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('tarifa') / n('bruto') * 100 : 0)}</b> das vendas</span></div></div>
           <div class="kpi k-frete"><div class="kpi-label">Frete total</div><div class="kpi-value">R$ ${vmlNum(n('frete_comp') + n('frete_vend'))}</div><div class="kpi-sub"><span>Comprador <b>R$ ${vmlNum(n('frete_comp'))}</b></span><span>Vendedor <b>R$ ${vmlNum(n('frete_vend'))}</b></span></div></div>
-          <div class="kpi k-mc"><div class="kpi-label" title="Vendas aprovadas − custo − imposto − tarifa − frete do vendedor">Margem de contribuição</div><div class="kpi-value">R$ ${vmlNum(n('mc'))}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('mc') / n('bruto') * 100 : 0)}</b></span>${a.sem_custo ? `<span class="sem-custo">${a.sem_custo} sem custo/imposto</span>` : ''}</div></div>
+          <div class="kpi k-mc"><div class="kpi-label" title="Vendas aprovadas − custo − imposto − tarifa − frete do vendedor">Margem de contribuição</div><div class="kpi-value">R$ ${vmlNum(n('mc'))}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('mc') / n('bruto') * 100 : 0)}</b></span>${a.sem_custo ? `<span class="sem-custo" id="rf-sem">${a.sem_custo} sem custo ou imposto</span>` : ''}</div></div>
         </div>
         <div class="kpi-grid k4">
           <div class="kpi k-neutro"><div class="kpi-label">Por tipo de envio</div>
@@ -662,11 +758,12 @@
         <div style="display:grid;grid-template-columns:minmax(0,1.9fr) minmax(280px,1fr);gap:16px;" class="responsive-grid-2">
           <div class="card"><div class="card-header"><div class="card-title">Filtrar busca</div><span class="text-muted">${nDias} dia${nDias > 1 ? 's' : ''}</span></div><div class="card-body">
             <div class="filtros">
-              <div style="grid-column:span 2;"><label>Data início</label><div class="dt-nav">
-                <input type="date" value="${f.de}" onchange="rfSetData('de', this.value)">
-                <button class="ico-btn" title="Dia anterior" onclick="rfMoverDia(-1)">‹</button>
-                <button class="ico-btn" title="Próximo dia" onclick="rfMoverDia(1)">›</button></div></div>
-              <div><label>Data fim</label><input type="date" value="${f.ate}" onchange="rfSetData('ate', this.value)"></div>
+              <div style="grid-column:span 3;"><label>Período</label><div class="dt-nav dt-par">
+                <input type="date" value="${f.de}" onchange="rfSetData('de', this.value)" aria-label="Data de início">
+                <span class="text-muted">até</span>
+                <input type="date" value="${f.ate}" onchange="rfSetData('ate', this.value)" aria-label="Data de fim">
+                <button class="ico-btn" title="Voltar um dia" onclick="rfMoverDia(-1)">‹</button>
+                <button class="ico-btn" title="Avançar um dia" onclick="rfMoverDia(1)">›</button></div></div>
               <div><label>Nº pedido / carrinho</label><input type="text" value="${vmlEsc(f.pedido)}" onchange="rfSet('pedido', this.value)"></div>
               <div><label>Título ou MLB</label><input type="text" value="${vmlEsc(f.titulo)}" onchange="rfSet('titulo', this.value)"></div>
               <div><label>SKU</label><input type="text" value="${vmlEsc(f.sku)}" onchange="rfSet('sku', this.value)"></div>
