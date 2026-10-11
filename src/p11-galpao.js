@@ -2101,5 +2101,6 @@
       if(data.session && data.session.user){
         entrarNoApp(data.session.user);
       }
+      else if(typeof MODO_DEMO !== "undefined" && MODO_DEMO) demoEntrar();   // link de demonstração: entra na conta de exemplo
       // Se não tem sessão, a tela de login já está visível (class "ativo")
     });
