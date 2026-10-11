@@ -27,7 +27,7 @@
 
     // o que pedir ao transportador em cada situação
     const FX_PEDIDO = {
-      antes: 'Devolver o produto. Se não for devolvido, abater o valor do produto desta fatura.',
+      antes: 'Devolver o produto e estornar o frete: o envio já estava cancelado no Mercado Livre quando foi coletado. Se não for devolvido, abater também o valor do produto.',
       nao_entregue: 'Devolver o produto e estornar o frete. Se não for devolvido, abater também o valor do produto.',
       pnr: 'Apresentar o comprovante de entrega. Sem comprovante, abater o frete e o valor do produto.',
       paga_nao_ent: 'Informar onde está o pacote e devolver o produto.',
