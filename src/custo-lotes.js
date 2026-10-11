@@ -93,7 +93,10 @@
         const kit = (typeof composicaoKit !== 'undefined' ? composicaoKit : []).filter(c => ppN(c.sku_comercial) === ppN(i.sku));
         if(kit.length) kit.forEach(c => { pega(c.sku_componente).full += un * (Number(c.qty) || 1); }); else pega(i.sku).full += un;
       });
-      const lista = [...m.values()].map(x => { const k = skus.find(s => ppN(s.sku) === ppN(x.sku)); return { ...x, total: x.galpao + x.full, custo: k ? Number(k.custo) || 0 : 0 }; })
+      const lista = [...m.values()].map(x => { const k = skus.find(s => ppN(s.sku) === ppN(x.sku)), cad = k ? Number(k.custo) || 0 : 0;
+        // sem custo no cadastro: usa o custo médio que veio na lista de estoque da UpSeller
+        const g = (typeof estoqueGalpao !== 'undefined' ? estoqueGalpao : []).find(e => ppN(e.sku) === ppN(x.sku)), ups = cad > 0 ? 0 : (g ? Number(g.custo_medio) || 0 : 0);
+        return { ...x, total: x.galpao + x.full, custo: cad > 0 ? cad : ups, daUps: !(cad > 0) && ups > 0 }; })
         .filter(x => x.total > 0).sort((a, b) => a.sku.localeCompare(b.sku));
       peps.previa = { lista, fullOk, em: new Date().toISOString() };
       const sem = lista.filter(x => !(x.custo > 0));
@@ -103,7 +106,7 @@
         ${sem.length ? `<div class="alert alert-warning"><b>${sem.length} produto(s) sem custo no cadastro</b>&nbsp;ficam fora dos lotes até você cadastrar o custo: ${sem.map(x => ppE(x.sku)).join(', ')}.</div>` : ''}
         ${peps.cfg ? '<div class="alert alert-warning">Já existe um lote inicial. Gravar de novo <b>substitui</b> o lote inicial e os lotes manuais, e a contagem das vendas recomeça de agora.</div>' : ''}
         <div style="max-height:48vh;overflow:auto;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">Galpão</th><th class="num">Full</th><th class="num">Total</th><th class="num">Custo</th><th class="num">Valor</th></tr></thead><tbody>
-          ${lista.map(x => `<tr><td><b>${ppE(x.sku)}</b></td><td class="num">${ppI(x.galpao)}</td><td class="num">${ppI(x.full)}</td><td class="num"><b>${ppI(x.total)}</b></td><td class="num">${x.custo > 0 ? fmt(x.custo) : '<span style="color:var(--danger)">sem custo</span>'}</td><td class="num">${fmt(x.total * x.custo)}</td></tr>`).join('') || '<tr><td colspan="6" class="text-muted" style="padding:18px;text-align:center;">Nenhum produto com estoque. Importe a lista de estoque na página Estoque.</td></tr>'}
+          ${lista.map(x => `<tr><td><b>${ppE(x.sku)}</b></td><td class="num">${ppI(x.galpao)}</td><td class="num">${ppI(x.full)}</td><td class="num"><b>${ppI(x.total)}</b></td><td class="num">${x.custo > 0 ? fmt(x.custo) + (x.daUps ? ' <small class="text-muted">UpSeller</small>' : '') : '<span style="color:var(--danger)">sem custo</span>'}</td><td class="num">${fmt(x.total * x.custo)}</td></tr>`).join('') || '<tr><td colspan="6" class="text-muted" style="padding:18px;text-align:center;">Nenhum produto com estoque. Importe a lista de estoque na página Estoque.</td></tr>'}
         </tbody><tfoot><tr><td><b>Total</b></td><td class="num">${ppI(lista.reduce((s, x) => s + x.galpao, 0))}</td><td class="num">${ppI(lista.reduce((s, x) => s + x.full, 0))}</td><td class="num"><b>${ppI(lista.reduce((s, x) => s + x.total, 0))}</b></td><td></td><td class="num"><b>${fmt(lista.reduce((s, x) => s + x.total * x.custo, 0))}</b></td></tr></tfoot></table></div>`,
         `<button class="btn-out btn" onclick="${peps.cfg ? 'pepsDesenhar()' : "fecharModal('modal-vml')"}">Cancelar</button><button class="btn" ${lista.some(x => x.custo > 0) ? '' : 'disabled'} onclick="pepsGravar(this)">Gravar lote inicial e ligar</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
@@ -116,7 +119,7 @@
       const uid = usuarioAtual.id, agora = new Date().toISOString();
       const erro = e => { toast('Não consegui gravar: ' + e.message); if(btn){ btn.disabled = false; btn.textContent = 'Gravar lote inicial e ligar'; } };
       let r = await supa.from('custo_lotes').delete().eq('usuario_id', uid); if(r.error) return erro(r.error);
-      const linhas = p.lista.filter(x => x.custo > 0).map(x => ({ usuario_id: uid, sku: x.sku, data: agora, qtd: x.total, custo_unit: x.custo, origem: 'inicial', obs: 'Galpão ' + x.galpao + ' + Full ' + x.full }));
+      const linhas = p.lista.filter(x => x.custo > 0).map(x => ({ usuario_id: uid, sku: x.sku, data: agora, qtd: x.total, custo_unit: x.custo, origem: 'inicial', obs: 'Galpão ' + x.galpao + ' + Full ' + x.full + (x.daUps ? ' · custo médio da UpSeller' : '') }));
       r = await supa.from('custo_lotes').insert(linhas); if(r.error) return erro(r.error);
       r = await supa.from('custo_peps_cfg').upsert({ usuario_id: uid, desde: agora, ativo: true }); if(r.error) return erro(r.error);
       await pepsRecalcular(false); await pepsCarregar(); pepsDesenhar();

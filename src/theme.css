@@ -1128,3 +1128,8 @@ a.pv-venda:hover{border-bottom-style:solid;}
 #view-inicio.ini-oculto .ini-venc .vl,#view-inicio.ini-oculto .ini-lib .v,#view-inicio.ini-oculto .ini-top .vl,#view-inicio.ini-oculto .ini-alerta>div>div,#view-inicio.ini-oculto .pc-metricas small,#view-inicio.ini-oculto .pc-host .alert b,
 #view-inicio.ini-oculto .pc-metricas b,#view-inicio.ini-oculto .pc-metricas strong,#view-inicio.ini-oculto .pc-eixo,#view-inicio.ini-oculto .pc-tip,#view-inicio.ini-oculto .ini-var{filter:blur(8px);user-select:none;pointer-events:none;}
 #view-inicio.ini-oculto .ini-bar{pointer-events:none;}
+
+/* Sugestão de compras: SKU e, na frente, o nome */
+.cp-prod-l{max-width:420px !important;white-space:normal;}
+.cp-prod-l b{display:inline;margin-right:8px;white-space:nowrap;}
+.cp-prod-l span{display:inline;font-size:12.5px;}

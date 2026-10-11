@@ -89,10 +89,12 @@
       // com as ordens de compra do Olist carregadas, o "a caminho" vem delas (comprado menos conferido); senão, da Lista de Estoque
       const ocUsa = typeof ocTemDados === 'function' && ocTemDados();
       const itens = new Map();
+      // nome igual ao próprio SKU não é nome: deixa o próximo cadastro preencher
+      const nomeBom = (n, sku) => { n = String(n || '').trim(); return n && cpNorm(n) !== cpNorm(sku) ? n : ''; };
       const item = (sku) => { const k = cpNorm(sku); if(!k) return null; if(!itens.has(k)) itens.set(k, { sku: String(sku).trim(), nome: '', galpao: 0, transito: 0, full: 0, custo: 0, forn: '' }); return itens.get(k); };
-      componentes.forEach(c => { const it = item(c.codigo); if(!it) return; it.nome = it.nome || c.descricao || ''; it.custo = cpNum(c.custo_unitario) || it.custo; it.forn = c.fornecedor || it.forn; });
-      estoqueGalpao.forEach(e => { if(kits.has(cpNorm(e.sku))) return; const it = item(e.sku); if(!it) return; it.nome = it.nome || e.descricao || ''; it.galpao += cpNum(e.qtd_galpao); if(!ocUsa) it.transito += cpNum(e.em_transito); if(cpNum(e.custo_medio) > 0) it.custo = cpNum(e.custo_medio); });   // custo médio do galpão vale mais que o do cadastro
-      skus.forEach(s => { if(kits.has(cpNorm(s.sku))) return; const it = item(s.sku); if(!it) return; it.nome = it.nome || s.titulo || ''; if(!it.custo) it.custo = cpNum(s.custo); });
+      componentes.forEach(c => { const it = item(c.codigo); if(!it) return; it.nome = it.nome || nomeBom(c.descricao, c.codigo); it.custo = cpNum(c.custo_unitario) || it.custo; it.forn = c.fornecedor || it.forn; });
+      estoqueGalpao.forEach(e => { if(kits.has(cpNorm(e.sku))) return; const it = item(e.sku); if(!it) return; it.nome = it.nome || nomeBom(e.descricao, e.sku); it.galpao += cpNum(e.qtd_galpao); if(!ocUsa) it.transito += cpNum(e.em_transito); if(cpNum(e.custo_medio) > 0) it.custo = cpNum(e.custo_medio); });   // custo médio do galpão vale mais que o do cadastro
+      skus.forEach(s => { if(kits.has(cpNorm(s.sku))) return; const it = item(s.sku); if(!it) return; it.nome = it.nome || nomeBom(s.titulo, s.sku); if(!it.custo) it.custo = cpNum(s.custo); });
       if(ocUsa) ocTransitoPorSku().forEach((q, k) => { const it = itens.get(k) || item(k.toUpperCase()); if(it) it.transito += q; });
       // Full: estoque por SKU do anúncio; kits abrem nos componentes
       const addFull = (sku, q) => { const k = cpNorm(sku); if(!q) return; if(kits.has(k)) kits.get(k).forEach(c => { const it = item(c.sku); if(it) it.full += q * c.qtd; }); else { const it = item(sku); if(it) it.full += q; } };
@@ -201,7 +203,7 @@
     // colunas: [chave, título, valor para ordenar, numérica?, dica]
     const CP_COLS = [
       ['sit', 'Situação', l => CP_ORDEM_SIT[l.sit], false, 'Urgente: o estoque acaba antes de chegar uma compra nova'],
-      ['sku', 'Produto', l => cpNorm(l.it.sku), false, ''],
+      ['sku', 'SKU e nome', l => cpNorm(l.it.sku), false, ''],
       ['forn', 'Fornecedor', l => cpNorm(l.it.forn), false, ''],
       ['cons', 'Venda por dia', l => l.cons, true, 'Venda por dia usada na conta (passe o mouse no número para ver o critério)'],
       ['est', 'Estoque', l => cpEstoque(l), true, 'Galpão + Full + o que está a caminho'],
@@ -344,7 +346,7 @@
                 ${lista.length ? lista.map(l => `<tr class="cp-l-${cpNorm(l.sit).replace(/\s/g,'')}">
                   <td><input type="checkbox" class="cp-check" data-k="${cpEsc(l.k)}" ${typeof comprasSel !== 'undefined' && comprasSel[l.k] ? 'checked' : ''} onchange="comprasMarcar(this.dataset.k, this.checked)"></td>
                   <td>${selo(l.sit)}</td>
-                  <td class="cp-prod"><b>${cpEsc(l.it.sku)}</b><span title="${cpEsc(l.it.nome)}">${cpEsc(l.it.nome || '—')}</span>${l.vende ? `<i>${cpEsc(l.vende)}</i>` : ''}</td>
+                  <td class="cp-prod cp-prod-l" title="${cpEsc(l.it.nome)}"><b>${cpEsc(l.it.sku)}</b><span>${cpEsc(l.it.nome || 'sem nome')}</span>${l.vende ? `<i>${cpEsc(l.vende)}</i>` : ''}</td>
                   <td class="cp-forn">${cpEsc(l.it.forn || '—')}</td>
                   <td class="num" title="${cpEsc(l.criterio)}"><b>${d1(l.cons)}</b>${l.zeros ? ` <span class="sem-custo" title="${l.zeros} dias de ruptura ou parada ficaram fora da média">●</span>` : ''}<div class="cp-sub">${tend(l) || '&nbsp;'}</div></td>
                   <td class="num"><b>${cpInt(cpEstoque(l))}</b><div class="cp-sub">galpão ${cpInt(l.it.galpao)} · Full ${cpInt(l.it.full)}${l.it.transito ? ' · a caminho ' + cpInt(l.it.transito) : ''}</div></td>
