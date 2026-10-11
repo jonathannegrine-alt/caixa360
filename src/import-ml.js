@@ -426,6 +426,8 @@
         el.innerHTML += '<br><span style="font-size:11px;color:var(--text-muted);">Extrato: ' + extDisp.length + ' dias disponíveis (período ' + periodoHistoricoML + 'd)' + aviso + '</span>';
       }
 
+      if(typeof curvaStatusHtml === 'function') el.innerHTML += curvaStatusHtml();
+
       // Atualizar badge compacto na tela "A receber"
       const badgeEl = document.getElementById('ml-pipeline-badge');
       if(badgeEl) badgeEl.textContent = badge_texto(diasPipeline, extratoHistorico.length, periodoHistoricoML);

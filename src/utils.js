@@ -234,7 +234,10 @@
         } else {
           media = totalBase / diasBase;
         }
-        const projPrudencial = media * cfgPct;
+        let projPrudencial = media * cfgPct;
+        // curva de maturação: quando já há histórico para esta distância, parte do que o ML confirmou
+        const fCurva = typeof curvaFator === 'function' ? curvaFator(diasAteData) : null;
+        if(fCurva && conf > 0 && media > 0) projPrudencial = Math.min(conf / fCurva, media * 2.5) * cfgPct;
         // Complemento = MAX(0, projPrudencial - conf) → nunca diminui o confirmado
         proj = Math.max(0, projPrudencial - conf);
       }

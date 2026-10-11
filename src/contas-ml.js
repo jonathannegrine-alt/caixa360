@@ -23,6 +23,7 @@
       if(contaAtiva && !contasML.some(c => c.id === contaAtiva)){ contaAtiva = ''; localStorage.removeItem('mk_conta_ativa'); aplicarContaAtiva(false); }
       renderSeletorContas();
       if(typeof lojasAposContas === 'function') lojasAposContas();
+      if(typeof curvaCarregar === 'function' && !curva.carregada) curvaCarregar();
     }
 
     // Recebe as linhas do banco (com ml_user_id) e atualiza os recortes da conta ativa
@@ -60,6 +61,7 @@
       if(typeof vdDados !== 'undefined'){ vdDados.carregado = false; rfDados.carregado = false; rfRankDados = null; }
       if(typeof inicioVendas !== 'undefined') inicioVendas = null;
       if(typeof atualizarRegressao === 'function') atualizarRegressao();
+      if(typeof curvaCalcular === 'function') curvaCalcular();
       const pag = document.querySelector('.view.active');
       if(pag) nav(pag.id.replace('view-', ''), true);
     }
