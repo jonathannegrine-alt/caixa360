@@ -19,10 +19,13 @@
       if(!original) return;
       window.fetch = function(url){
         const u = String(url && url.url ? url.url : url || '');
-        const conta = /supabase\.co\/(rest|functions|storage)\//.test(u);
+        // sincronizações de fundo (Mercado Livre, Olist) não contam: demoram e o usuário não está esperando por elas
+        const conta = /supabase\.co\/(rest|functions|storage)\//.test(u) && !/functions\/v1\/(ml-sync|ml-vendas|ml-envios|ml-snapshot|olist-contas|olist-compras|ml-inventory)/.test(u);
         if(!conta) return original.apply(this, arguments);
         emCurso++; atualizar();
-        const fim = () => { emCurso = Math.max(0, emCurso - 1); atualizar(); };
+        let feito = false;
+        const fim = () => { if(feito) return; feito = true; emCurso = Math.max(0, emCurso - 1); atualizar(); };
+        setTimeout(fim, 30000);   // pedido que não volta não deixa a barra presa
         return original.apply(this, arguments).then(r => { fim(); return r; }, e => { fim(); throw e; });
       };
     })();

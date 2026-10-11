@@ -1002,8 +1002,9 @@ input[type="checkbox"]{accent-color:var(--primary);}
 .pv-img span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
 .pv-chave{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;}
 .pv-chave input[type=checkbox]{width:20px;height:20px;margin-top:2px;flex:none;}
-.pv-chave div{display:flex;flex-direction:column;gap:2px;font-size:13.5px;}
-.pv-chave div span{font-size:12.5px;color:var(--text-muted);}
+.pv-chave>div{display:flex;flex-direction:column;gap:2px;font-size:13.5px;}
+.pv-chave>div>span{font-size:12.5px;color:var(--text-muted);}
+.pv-chave .chips{display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;}
 @media(max-width:860px){.pv-corpo{grid-template-columns:1fr;}.pv-prod{flex-basis:100%;white-space:normal;}}
 .cp-sel-barra{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;background:color-mix(in srgb,var(--primary) 10%,var(--surface));border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:13px;position:sticky;top:0;z-index:5;}
 
