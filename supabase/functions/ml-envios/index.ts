@@ -14,6 +14,8 @@ const CORS = {
 const resp = (body: object, status = 200) => new Response(JSON.stringify(body), { headers: CORS, status })
 const DIAS = 25          // olha as vendas dos últimos N dias
 const MAX_ENVIOS = 220   // por conta, por chamada
+const MAX_UF = 450        // vendas sem estado do comprador preenchidas por conta, por chamada (histórico vai aos poucos)
+const ufDe = (s: any): string | null => { const id = String(s?.destination?.shipping_address?.state?.id || s?.receiver_address?.state?.id || ''); const m = id.match(/([A-Z]{2})$/); return m ? m[1] : null }
 
 async function emLotes<T, R>(lista: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(lista.length); let i = 0
@@ -60,10 +62,31 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       const campos: Record<string, unknown> = { envio_status: status || null }
       if (saiu && quando) { campos.enviado_em = quando; enviados++ }
       if (s.logistic?.type) campos.logistic_type = s.logistic.type
+      const uf = ufDe(s); if (uf) campos.uf = uf
       await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(campos) })
     })
   }
-  return { conferidos, enviados }
+  return { conferidos, enviados, estados: await estados(supaUrl, dbH, userId, clientId, secret) }
+}
+
+// Estado (UF) de entrega de cada venda, para a análise por estado. Mais novas primeiro; o histórico é preenchido aos poucos.
+async function estados(supaUrl: string, dbH: Record<string, string>, userId: string, clientId: string, secret: string) {
+  let feitos = 0
+  for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
+    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&uf=is.null&shipping_id=not.is.null&select=shipping_id&order=data_venda.desc&limit=${MAX_UF * 2}`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    const ids = [...new Set((Array.isArray(vendas) ? vendas : []).map((v: any) => String(v.shipping_id)))].slice(0, MAX_UF)
+    await emLotes(ids, 8, async sid => {
+      const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: { Authorization: `Bearer ${t.access_token}`, 'x-format-new': 'true' } }).catch(() => null)
+      if (!r) return
+      // envio que o ML não entrega mais (404/403) fica marcado para não ser tentado de novo
+      const s = r.ok ? await r.json().catch(() => null) : null
+      const uf = s ? (ufDe(s) || '--') : (r.status === 404 || r.status === 403 ? '--' : null)
+      if (!uf) return
+      feitos++
+      await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ uf }) })
+    })
+  }
+  return feitos
 }
 
 Deno.serve(async (req: Request) => {
@@ -80,7 +103,7 @@ Deno.serve(async (req: Request) => {
       const ids = [...new Set((Array.isArray(us) ? us : []).map((u: any) => u.usuario_id))]
       const res: any[] = []
       for (const u of ids) res.push({ usuario: u, ...(await conferir(supaUrl, dbH, String(u), clientId, secret)) })
-      return resp({ ok: true, usuarios: res.length, conferidos: res.reduce((s, r) => s + r.conferidos, 0), enviados: res.reduce((s, r) => s + r.enviados, 0) })
+      return resp({ ok: true, usuarios: res.length, conferidos: res.reduce((s, r) => s + r.conferidos, 0), enviados: res.reduce((s, r) => s + r.enviados, 0), estados: res.reduce((s, r) => s + (r.estados || 0), 0) })
     }
 
     const authHeader = req.headers.get('Authorization') || ''

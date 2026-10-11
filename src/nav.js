@@ -36,7 +36,7 @@
       else if(page === 'simulador') renderFormSimulador();
       else if(page === 'skus') setSkuTab(skuCurrentTab || 'lista');
       else if(page === 'estoque'){ if(typeof estRender === 'function') estRender(); else renderEstoque(); }
-      else if(page === 'analise') renderAnalise();
+      else if(page === 'analise'){ if(typeof anRender === 'function') anRender(); else renderAnalise(); }
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); if(typeof olistRenderCard === 'function') olistRenderCard(); if(typeof iaRenderCard === 'function') iaRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }
       else if(page === 'resultado'){ setResultadoTab('anual'); }

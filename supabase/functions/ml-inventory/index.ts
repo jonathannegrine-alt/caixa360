@@ -142,7 +142,9 @@ Deno.serve(async (req: Request) => {
     const corpo = await req.json().catch(() => ({}))
     if (corpo?.diag) {
       const tk: any = tokens.find((x: any) => String(x.ml_user_id) === String(corpo.conta)) || tokens[0]
-      const h = { Authorization: `Bearer ${tk.access_token}` }
+      const h: Record<string, string> = { Authorization: `Bearer ${tk.access_token}` }
+      // cabeçalhos extras permitidos no diagnóstico (versão da API)
+      for (const k of ['api-version', 'x-format-new']) if (corpo?.cabecalhos?.[k]) h[k] = String(corpo.cabecalhos[k])
       const out: any[] = []
       for (const caminho of (corpo.caminhos || []).slice(0, 30)) {
         const r = await get('https://api.mercadolibre.com' + String(caminho).replace('{u}', String(tk.ml_user_id)), h)
