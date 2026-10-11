@@ -73,7 +73,10 @@
     function ocDesenhar(){
       const host = document.getElementById('oc-olist');
       if(!host) return;
-      const lista = oc.ordens.map(o => ({ o, r: ocResumo(o) })).filter(x => x.r.sit !== 'Cancelada');
+      // com uma loja escolhida no seletor, só as ordens dela (ordem do Olist ou sem loja = loja padrão)
+      const lojaSel = typeof lojaAtiva === 'function' ? lojaAtiva() : '';
+      const daLoja = o => !lojaSel || ((o.extra && o.extra.loja) || (typeof lojaPadraoId === 'function' ? lojaPadraoId() : '')) === lojaSel;
+      const lista = oc.ordens.filter(daLoja).map(o => ({ o, r: ocResumo(o) })).filter(x => x.r.sit !== 'Cancelada');
       const pend = lista.filter(x => x.r.sit === 'A receber' || x.r.sit === 'Parcial');
       const unCaminho = pend.reduce((s, x) => s + x.r.falta, 0), valCaminho = pend.reduce((s, x) => s + x.r.valorFalta, 0);
       const d30 = new Date(Date.now() - 30 * 86400000).toISOString();

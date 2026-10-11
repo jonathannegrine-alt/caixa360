@@ -62,7 +62,7 @@
         <div id="pf-ajuda" class="text-muted" style="font-size:12px;margin-top:6px;"></div>
         <div id="pf-parc"></div>`,
         `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="pfSalvarNova()">Salvar</button>`);
-      const m = document.querySelector('#modal-vml .modal-content'); if(m) m.style.maxWidth = '760px';
+      const m = document.querySelector('#modal-vml .modal-content'); if(m) m.style.maxWidth = '880px';
     }
 
     // gerar = true: clique em "Gerar parcelas" (avisa o que falta). Sem isso só atualiza rótulos e mantém a tabela já editada.
@@ -205,7 +205,7 @@
         `<button class="btn" onclick="pfSalvarEdicao()">Salvar</button>`
       ].join('');
       vmlModal('Editar conta a pagar' + (p.parcela ? ' · parcela ' + pfE(p.parcela) : ''), pagoInfo + pfCampos(p, travado) + blocoSerie, botoes);
-      const m = document.querySelector('#modal-vml .modal-content'); if(m) m.style.maxWidth = '760px';
+      const m = document.querySelector('#modal-vml .modal-content'); if(m) m.style.maxWidth = '880px';
     }
     function abrirModalSerie(grupoId){
       const i = pagamentos.findIndex(x => pfGrupo(x) === grupoId);
