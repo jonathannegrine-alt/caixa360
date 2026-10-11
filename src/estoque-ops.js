@@ -414,9 +414,11 @@
     }
     function esoContagemDigitar(){
       const dep = est.depositos.find(d => d.id === esoCtDep);
-      const linhas = estLinhas(dep).sort((a, b) => a.k.localeCompare(b.k));
+      const todas = estLinhas(dep).sort((a, b) => a.k.localeCompare(b.k));
+      // com produtos marcados na tela de estoque, a digitação mostra só eles (os da folha de contagem)
+      const marc = typeof estSel !== 'undefined' && estSel.size ? todas.filter(l => estSel.has(l.k)) : [], linhas = marc.length ? marc : todas;
       vmlModal('Digitar contagem — ' + esEsc(dep.nome), `
-        <div class="text-muted" style="margin-bottom:10px;">Preencha só os produtos que foram contados; os que ficarem em branco não entram.</div>
+        <div class="text-muted" style="margin-bottom:10px;">${marc.length ? 'Mostrando só os <b>' + marc.length + ' produtos marcados</b> na tela de estoque. ' : ''}Preencha só os produtos que foram contados; os que ficarem em branco não entram.</div>
         <div style="overflow-x:auto;max-height:56vh;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">No sistema</th><th class="num">Contado</th></tr></thead><tbody>
           ${linhas.map(l => `<tr><td class="cp-prod"><b>${esEsc(l.sku)}</b><span>${esEsc(l.nome)}</span></td><td class="num">${esInt(l.fisico)}</td><td class="num"><input type="number" class="cp-dias eso-ct" data-sku="${esEsc(l.sku)}" style="width:110px !important;" placeholder="—"></td></tr>`).join('')}
         </tbody></table></div>`,

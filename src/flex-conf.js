@@ -25,6 +25,16 @@
       duplicada:    { r: 'Cobrada em duplicidade',           q: true,  cls: 'cp-excesso', d: 'Este envio já foi cobrado (nesta fatura ou em outra já conferida).' },
     };
 
+    // o que pedir ao transportador em cada situação
+    const FX_PEDIDO = {
+      antes: 'Devolver o produto. Se não for devolvido, abater o valor do produto desta fatura.',
+      nao_entregue: 'Devolver o produto e estornar o frete. Se não for devolvido, abater também o valor do produto.',
+      pnr: 'Apresentar o comprovante de entrega. Sem comprovante, abater o frete e o valor do produto.',
+      paga_nao_ent: 'Informar onde está o pacote e devolver o produto.',
+      sem_venda: 'Estornar o frete: este envio não consta nas nossas vendas.',
+      duplicada: 'Estornar o frete cobrado em duplicidade.',
+    };
+
     function fxScript(src){ return new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('não consegui carregar ' + src)); document.head.appendChild(s); }); }
 
     async function fxRender(){
@@ -55,7 +65,10 @@
             const m = txt.match(/(\d{2}\/\d{2}\/\d{4})\s+(\d{5,10})\s+(\d{10,12})(?!\d)/); if(!m) return;
             const dinheiro = txt.slice(txt.indexOf(m[3])).match(/\d{1,3}(?:\.\d{3})*,\d{2}(?!\d)/g) || [];
             const chave = m[2] + '|' + m[3];
-            if(!linhas.has(chave)) linhas.set(chave, { coleta: fxIso(m[1]), codigo: m[2], envio: m[3], frete: dinheiro.length ? fxNum(dinheiro[dinheiro.length - 1]) : 0 });
+            const largo = its.filter(i => Math.abs(i.y - a.y) <= 13).sort((x, y) => x.x - y.x || y.y - x.y).map(i => i.s).join(' ');
+            const cep = (largo.match(/\d{5}-\d{3}/) || [])[0] || '';
+            const nm = cep ? largo.slice(0, largo.indexOf(cep)).match(/FLEX\s+(.+)$/i) : null;
+            if(!linhas.has(chave)) linhas.set(chave, { coleta: fxIso(m[1]), codigo: m[2], envio: m[3], frete: dinheiro.length ? fxNum(dinheiro[dinheiro.length - 1]) : 0, cep, dest: nm ? nm[1].replace(/\s+/g, ' ').trim() : '' });
           });
         }
         const num = (cab.match(/Fatura N.?:?\s*(\d+)/i) || [])[1] || '', per = cab.match(/(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})/);
@@ -176,10 +189,10 @@
           <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th title="Entra no relatório para o transportador"></th><th>Envio</th><th>Coleta</th><th>Situação</th><th>O que aconteceu</th><th>Produto</th><th class="num">Frete cobrado</th><th class="num">Valor da venda</th><th class="num" title="Custo gravado na venda">Custo real</th><th class="num" title="Valor da venda menos ${pct}%">A ressarcir</th></tr></thead><tbody>
             ${lista.length ? lista.map(l => { const c = FX_CAT[l.cat], k = l.codigo + '|' + l.envio, v = l.vendas[0];
               return `<tr><td><input type="checkbox" style="width:auto;" ${fx.marc.has(k) ? 'checked' : ''} onchange="this.checked?fx.marc.add('${k}'):fx.marc.delete('${k}');fxDesenhar()"></td>
-                <td><b>${fxE(l.envio)}</b><br><small class="text-muted">cód. ${fxE(l.codigo)}${loja(l.conta) ? ' · ' + fxE(loja(l.conta)) : ''}</small></td>
+                <td><b>${fxE(l.envio)}</b><br><small class="text-muted">cód. ${fxE(l.codigo)}${loja(l.conta) ? ' · ' + fxE(loja(l.conta)) : ''}${l.dest ? '<br>' + fxE(l.dest) + (l.cep ? ' · CEP ' + fxE(l.cep) : '') : ''}</small></td>
                 <td>${l.coleta ? ptDate(l.coleta).slice(0, 5) : '—'}</td>
                 <td><span class="cp-sit ${c.cls}">${c.r}</span></td>
-                <td style="max-width:360px;white-space:normal;font-size:12.5px;line-height:1.45;">${fxE(l.nota || c.d)}${v ? `<br><a class="fx-link" style="color:var(--primary);" href="https://www.mercadolivre.com.br/vendas/${fxE(v.pedido)}/detalhe" target="_blank" rel="noopener">venda #${fxE(v.pedido)}</a>` : ''}</td>
+                <td style="max-width:360px;white-space:normal;font-size:12.5px;line-height:1.45;">${fxE(l.nota || c.d)}${FX_PEDIDO[l.cat] ? '<br><b>Pedir:</b> ' + fxE(FX_PEDIDO[l.cat]) : ''}${v ? `<br><a class="fx-link" style="color:var(--primary);" href="https://www.mercadolivre.com.br/vendas/${fxE(v.pedido)}/detalhe" target="_blank" rel="noopener">venda #${fxE(v.pedido)}</a>` : ''}</td>
                 <td class="cp-prod"><b>${fxE(l.vendas.map(x => x.sku).filter(Boolean).join(', ') || '—')}</b><span>${fxE(v ? v.titulo : '')}</span></td>
                 <td class="num">${fmt(l.frete)}</td><td class="num">${l.valor ? fmt(l.valor) : '—'}</td><td class="num">${l.custo ? fmt(l.custo) : '—'}</td><td class="num"><b>${l.valor && c.q ? fmt(l.valor * (1 - pct / 100)) : '—'}</b></td></tr>`; }).join('')
               : '<tr><td colspan="10" class="text-muted" style="text-align:center;padding:22px;">Nada nesta lista.</td></tr>'}
@@ -190,7 +203,7 @@
     async function fxSalvar(btn){
       if(!fx.fat) return; if(btn){ btn.disabled = true; btn.textContent = 'Guardando…'; }
       const uid = usuarioAtual.id, F = fx.fat, R = fxResumo();
-      const linhas = fx.linhas.map(l => ({ envio: l.envio, codigo: l.codigo, coleta: l.coleta, frete: l.frete, cat: l.cat, nota: l.nota, conta: l.conta, valor: l.valor, custo: l.custo, vendas: l.vendas, marc: fx.marc.has(l.codigo + '|' + l.envio) }));
+      const linhas = fx.linhas.map(l => ({ envio: l.envio, codigo: l.codigo, coleta: l.coleta, cep: l.cep || '', dest: l.dest || '', frete: l.frete, cat: l.cat, nota: l.nota, conta: l.conta, valor: l.valor, custo: l.custo, vendas: l.vendas, marc: fx.marc.has(l.codigo + '|' + l.envio) }));
       if(F.numero) await supa.from('flex_faturas').delete().eq('usuario_id', uid).eq('numero', F.numero);
       const r = await supa.from('flex_faturas').insert({ usuario_id: uid, numero: F.numero || null, transportador: F.transportador || null, emitida: F.emitida || null, de: F.de || null, ate: F.ate || null, total: F.total || null, arquivo: F.arquivo || null, linhas, resumo: { ...R, venc: F.venc || null } });
       if(btn){ btn.disabled = false; btn.textContent = 'Guardar conferência'; }
@@ -220,17 +233,18 @@
         doc.text('Emitido em ' + ptDate(getToday()) + ' · ' + marc.length + ' envio(s) contestado(s) de ' + fx.linhas.length + ' cobrados', 40, 77);
         const totF = marc.reduce((s, l) => s + l.frete, 0), totP = marc.reduce((s, l) => s + produto(l), 0);
         doc.autoTable({
-          startY: 94, styles: { fontSize: 8.5, cellPadding: 4, overflow: 'linebreak' }, headStyles: { fillColor: [79, 70, 229] },
-          columnStyles: { 3: { cellWidth: 250 }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' } },
-          head: [['Nº do envio', 'Código', 'Coleta', 'Ocorrência', 'Frete cobrado', 'Valor da venda', 'Custo do produto', 'Total a ressarcir']],
-          body: marc.map(l => [l.envio, l.codigo, l.coleta ? ptDate(l.coleta) : '', FX_CAT[l.cat].r + '. ' + (l.nota || FX_CAT[l.cat].d), fmt(l.frete), l.valor ? fmt(l.valor) : '—', produto(l) ? fmt(produto(l)) : '—', fmt(l.frete + produto(l))]),
-          foot: [['', '', '', 'Total', fmt(totF), fmt(marc.reduce((s, l) => s + l.valor, 0)), fmt(totP), fmt(totF + totP)]], footStyles: { fillColor: [241, 245, 249], textColor: 20, fontStyle: 'bold', halign: 'right' }
+          startY: 94, styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' }, headStyles: { fillColor: [79, 70, 229] },
+          columnStyles: { 0: { cellWidth: 62 }, 1: { cellWidth: 86 }, 2: { cellWidth: 44 }, 3: { cellWidth: 96 }, 4: { cellWidth: 190 }, 5: { cellWidth: 118 }, 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' }, 9: { halign: 'right' } },
+          head: [['Nº do envio', 'Nº da venda', 'Coleta', 'Destinatário / CEP', 'O que aconteceu', 'O que pedimos', 'Frete', 'Valor da venda', 'Custo do produto', 'Total']],
+          body: marc.map(l => [l.envio + '\ncód. ' + l.codigo, l.vendas.map(v => v.pedido).join('\n') || '—', l.coleta ? ptDate(l.coleta).slice(0, 5) : '', (l.dest || '—') + (l.cep ? '\nCEP ' + l.cep : ''), FX_CAT[l.cat].r + '. ' + (l.nota || FX_CAT[l.cat].d) + (l.vendas[0] && l.vendas[0].sku ? '\nProduto: ' + l.vendas.map(v => v.qtd + 'x ' + v.sku).join(', ') : ''), FX_PEDIDO[l.cat] || 'Rever a cobrança.', fmt(l.frete), l.valor ? fmt(l.valor) : '—', produto(l) ? fmt(produto(l)) : '—', fmt(l.frete + produto(l))]),
+          foot: [['', '', '', '', '', 'Total', fmt(totF), fmt(marc.reduce((s, l) => s + l.valor, 0)), fmt(totP), fmt(totF + totP)]], footStyles: { fillColor: [241, 245, 249], textColor: 20, fontStyle: 'bold', halign: 'right' }
         });
         const y = doc.lastAutoTable.finalY + 22;
         doc.setFontSize(10); doc.setFont(undefined, 'bold');
         doc.text('Valor da fatura: ' + fmt(F.total || 0) + '     Contestado: ' + fmt(totF + totP) + '     Valor após a contestação: ' + fmt((F.total || 0) - totF - totP), 40, y);
         doc.setFont(undefined, 'normal'); doc.setFontSize(8.5);
         doc.text('As ocorrências foram conferidas no histórico de cada envio no Mercado Livre. O custo do produto considera o valor de reposição e as despesas de operação.', 40, y + 16);
+        doc.text('Produtos devolvidos em bom estado até o vencimento da fatura não precisam ser abatidos: nesse caso, fica só o estorno do frete indicado.', 40, y + 29);
         doc.save('contestacao_flex_fatura_' + (F.numero || getToday()) + '.pdf');
       } catch(e){ toast('Não consegui gerar o PDF: ' + ((e && e.message) || e)); }
     }

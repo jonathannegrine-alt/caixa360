@@ -135,6 +135,55 @@
       return [...mapa.values()];
     }
 
+    // ordenar pelas colunas (clique no título) e marcar produtos para a folha de contagem
+    let estOrd = { col: '', dir: -1 }, estSel = new Set();
+    function estOrdenar(col){ estOrd = { col, dir: estOrd.col === col ? -estOrd.dir : (col === 'sku' ? 1 : -1) }; estDesenhar(); }
+    function estTh(col, rot, num, dica){ return `<th class="${num ? 'num ' : ''}an-th" ${dica ? 'title="' + dica + '"' : ''} onclick="estOrdenar('${col}')">${rot}${estOrd.col === col ? (estOrd.dir < 0 ? ' ▾' : ' ▴') : ''}</th>`; }
+    function estComparar(vals, padrao){
+      const f = vals[estOrd.col]; if(!f) return padrao;
+      return (a, b) => { const x = f(a), y = f(b); const r = typeof x === 'string' ? String(x).localeCompare(String(y)) : (Number(x) || 0) - (Number(y) || 0); return r * estOrd.dir || a.k.localeCompare(b.k); };
+    }
+    function estMarcar(k, v){ if(v) estSel.add(k); else estSel.delete(k); estBarraSel(); }
+    function estMarcarTodos(v){ document.querySelectorAll('.est-flag').forEach(c => { c.checked = v; if(v) estSel.add(c.dataset.k); else estSel.delete(c.dataset.k); }); estBarraSel(); }
+    function estBarraSel(){ const b = document.getElementById('est-sel-barra'); if(b) b.innerHTML = estSelHtml(); }
+    function estSelHtml(){
+      return estSel.size ? `<b>${estSel.size}</b> produto${estSel.size === 1 ? '' : 's'} marcado${estSel.size === 1 ? '' : 's'} <button class="btn btn-sm" onclick="estFolhaContagem()">Folha de contagem (PDF)</button><button class="btn-out btn-sm" onclick="estSel.clear();estDesenhar()">Desmarcar</button>`
+        : '<span class="text-muted">Marque os produtos na primeira coluna para imprimir a folha de contagem.</span>';
+    }
+
+    // Folha para a equipe contar: produtos marcados, na ordem da tela, com o estoque do sistema e o espaço para anotar.
+    async function estFolhaContagem(){
+      const dep = (est.dep !== 'total' && est.depositos.find(d => d.id === est.dep && d.tipo !== 'full')) || estDepProprio();
+      if(!dep){ if(typeof toast === 'function') toast('Não achei o depósito do galpão.'); return; }
+      const ordem = [...document.querySelectorAll('.est-flag')].map(c => c.dataset.k);
+      const linhas = estLinhas(dep).filter(l => estSel.has(l.k)).sort((a, b) => { const x = ordem.indexOf(a.k), y = ordem.indexOf(b.k); return (x < 0 ? 1e9 : x) - (y < 0 ? 1e9 : y); });
+      // marcado na aba Total e ainda sem saldo no galpão entra com zero
+      [...estSel].filter(k => !linhas.some(l => l.k === k)).forEach(k => { const g = estoqueGalpao.find(x => esN(x.sku) === k), s = skus.find(x => esN(x.sku) === k); linhas.push({ k, sku: (g && g.sku) || (s && s.sku) || k, nome: (s && s.titulo) || '', fisico: 0 }); });
+      if(!linhas.length) return;
+      try {
+        const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), agora = new Date();
+        doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.text('Lista de Estoque', 40, 50);
+        doc.setFontSize(10); doc.setFont(undefined, 'normal');
+        doc.text('Qtd. de SKU: ' + linhas.length, 300, 40); doc.text('Total de itens: ' + esInt(linhas.reduce((s, l) => s + Math.max(0, l.fisico), 0)), 430, 40);
+        doc.text('Depósito: ' + dep.nome + '   ' + agora.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }), 300, 56);
+        doc.autoTable({
+          startY: 74, theme: 'grid', styles: { fontSize: 10, cellPadding: 7, valign: 'middle', lineColor: 120, lineWidth: 0.5, textColor: 20 },
+          headStyles: { fillColor: [235, 235, 235], textColor: 20, fontStyle: 'bold' },
+          columnStyles: { 0: { cellWidth: 28, halign: 'center' }, 2: { cellWidth: 62, halign: 'center' }, 3: { cellWidth: 80 }, 4: { cellWidth: 120 } },
+          head: [['#', 'SKU', 'Estoque atual', 'Contado', 'Observações']],
+          body: linhas.map((l, i) => [i + 1, l.sku + (l.nome ? '\n' + l.nome : ''), esInt(l.fisico), '', '']),
+          didParseCell: d => { if(d.section === 'body' && d.column.index === 1) d.cell.styles.fontStyle = 'normal'; if(d.section === 'body') d.cell.styles.minCellHeight = 38; }
+        });
+        const y = Math.min(doc.lastAutoTable.finalY + 30, 800);
+        doc.text('Contado por: ______________________     Data: ____/____/______', 40, y);
+        doc.text('Obs.:', 40, y + 24);
+        doc.save('contagem_de_estoque_' + getToday() + '.pdf');
+      } catch(err){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + err.message); }
+    }
+
     function estDesenhar(){
       const host = document.getElementById('est-host'); if(!host) return;
       if(est.dep !== 'total' && est.depositos.length && !estVisiveis().some(d => d.id === est.dep)) est.dep = 'total';
@@ -168,7 +217,8 @@
 
       const todas = estLinhas(dep), b = esN(est.busca);
       const lista = todas.filter(l => (!b || l.k.includes(b) || esN(l.nome).includes(b)) && (est.so === '' || (est.so === 'zerado' ? l.fisico <= 0 : est.so === 'caminho' ? l.caminho > 0 : est.so === 'ocupado' ? l.ocupado > 0 : est.so === 'semcusto' ? !(l.custo > 0) && l.fisico > 0 : true)))
-        .sort((a, c) => c.fisico * c.custo - a.fisico * a.custo || c.fisico - a.fisico || a.k.localeCompare(c.k));
+        .sort(estComparar({ sku: l => l.k, caminho: l => l.caminho, ocupado: l => l.ocupado, disp: l => l.disp, fisico: l => l.fisico, custo: l => l.custo, valor: l => Math.max(0, l.fisico) * l.custo },
+          (a, c) => c.fisico * c.custo - a.fisico * a.custo || c.fisico - a.fisico || a.k.localeCompare(c.k)));
       const un = todas.reduce((s, l) => s + Math.max(0, l.fisico), 0), valor = todas.reduce((s, l) => s + Math.max(0, l.fisico) * l.custo, 0);
       const cam = todas.reduce((s, l) => s + l.caminho, 0), ocp = todas.reduce((s, l) => s + l.ocupado, 0);
       const semMov = !est.saldo.some(s => Number(s.deposito_id) === dep.id);
@@ -184,8 +234,10 @@
           <input type="text" id="est-busca" placeholder="Buscar por SKU ou nome" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)">
           <div class="chips">${[['', 'Todos'], ['caminho', 'Com compra a caminho'], ['ocupado', 'Com ocupado'], ['zerado', 'Zerados'], ['semcusto', 'Sem custo']].map(([k, t]) => `<button class="chip ${est.so === k ? 'active' : ''}" onclick="est.so='${k}';estDesenhar();">${t}</button>`).join('')}</div>
         </div>
-        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num" title="Comprado e ainda não conferido">A caminho</th><th class="num" title="Vendido ou separado, ainda não saiu">Ocupado</th><th class="num" title="Físico menos ocupado">Disponível</th><th class="num" title="O que está no depósito">Estoque físico</th><th class="num">Custo médio</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+        <div id="est-sel-barra" class="est-sel-barra">${estSelHtml()}</div>
+        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th>${estTh('sku', 'Produto')}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('ocupado', 'Ocupado', 1, 'Vendido ou separado, ainda não saiu')}${estTh('disp', 'Disponível', 1, 'Físico menos ocupado')}${estTh('fisico', 'Estoque físico', 1, 'O que está no depósito')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}<th></th></tr></thead><tbody>
           ${lista.length ? lista.map(l => `<tr>
+            <td><input type="checkbox" class="est-flag" data-k="${esEsc(l.k)}" style="width:auto;" ${estSel.has(l.k) ? 'checked' : ''} onchange="estMarcar(this.dataset.k, this.checked)"></td>
             <td class="cp-prod" style="max-width:440px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
             <td class="num">${l.caminho ? esInt(l.caminho) : '<span class="text-muted">—</span>'}</td>
             <td class="num">${l.ocupado ? esInt(l.ocupado) : '<span class="text-muted">—</span>'}</td>
@@ -194,7 +246,7 @@
             <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td>
             <td class="num">${l.custo ? fmt(Math.max(0, l.fisico) * l.custo) : '—'}</td>
             <td style="text-align:right;"><button class="btn-out btn-sm" onclick="estMovimentos('${esEsc(l.k)}')">Movimentações</button></td>
-          </tr>`).join('') : '<tr><td colspan="8"><div class="vazio"><b>Nada nesta lista</b>Troque a busca ou o filtro.</div></td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="9"><div class="vazio"><b>Nada nesta lista</b>Troque a busca ou o filtro.</div></td></tr>'}
         </tbody></table></div></div>`;
     }
 
@@ -214,7 +266,8 @@
         l.custo = (g && Number(g.custo_medio) > 0 ? Number(g.custo_medio) : 0) || (s && Number(s.custo)) || 0;
         l.total = Object.values(l.por).reduce((a, v) => a + v, 0); });
       const b = esN(est.busca), todas = [...mapa.values()];
-      const lista = todas.filter(l => !b || l.k.includes(b) || esN(l.nome).includes(b)).sort((a, c) => c.total * c.custo - a.total * a.custo || c.total - a.total);
+      const lista = todas.filter(l => !b || l.k.includes(b) || esN(l.nome).includes(b)).sort(estComparar(Object.assign({ sku: l => l.k, total: l => l.total, caminho: l => l.caminho, custo: l => l.custo, valor: l => Math.max(0, l.total) * l.custo }, Object.fromEntries(deps.map(d => ['d' + d.id, l => l.por[d.id] || 0]))),
+        (a, c) => c.total * c.custo - a.total * a.custo || c.total - a.total));
       const un = todas.reduce((s, l) => s + Math.max(0, l.total), 0), valor = todas.reduce((s, l) => s + Math.max(0, l.total) * l.custo, 0), cam = todas.reduce((s, l) => s + l.caminho, 0);
       const somaDep = d => todas.reduce((s, l) => s + Math.max(0, l.por[d.id] || 0), 0);
       host.innerHTML = `<div class="pg-head"><div><div class="pg-title">Estoque</div><div class="pg-sub">Soma de todos os depósitos, produto a produto. O Full entra com os kits abertos nos componentes.</div></div>
@@ -227,11 +280,12 @@
           <div class="kpi k-hoje"><div class="kpi-label">A caminho</div><div class="kpi-value">${esInt(cam)} un.</div><div class="kpi-sub">comprado e ainda não conferido</div></div>
         </div>
         <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou nome" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)"></div>
-        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Produto</th>${deps.map(d => `<th class="num">${esEsc(d.nome)}</th>`).join('')}<th class="num">Total</th><th class="num" title="Comprado e ainda não conferido">A caminho</th><th class="num">Custo médio</th><th class="num">Valor</th></tr></thead><tbody>
-          ${lista.length ? lista.map(l => `<tr><td class="cp-prod" style="max-width:420px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
+        <div id="est-sel-barra" class="est-sel-barra">${estSelHtml()}</div>
+        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th>${estTh('sku', 'Produto')}${deps.map(d => estTh('d' + d.id, esEsc(d.nome), 1)).join('')}${estTh('total', 'Total', 1)}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}</tr></thead><tbody>
+          ${lista.length ? lista.map(l => `<tr><td><input type="checkbox" class="est-flag" data-k="${esEsc(l.k)}" style="width:auto;" ${estSel.has(l.k) ? 'checked' : ''} onchange="estMarcar(this.dataset.k, this.checked)"></td><td class="cp-prod" style="max-width:420px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
             ${deps.map(d => `<td class="num">${l.por[d.id] ? esInt(l.por[d.id]) : '<span class="text-muted">—</span>'}</td>`).join('')}
             <td class="num"><b>${esInt(l.total)}</b></td><td class="num">${l.caminho ? esInt(l.caminho) : '<span class="text-muted">—</span>'}</td>
-            <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td><td class="num">${l.custo ? fmt(Math.max(0, l.total) * l.custo) : '—'}</td></tr>`).join('') : '<tr><td colspan="9"><div class="vazio"><b>Nada nesta lista</b>Troque a busca.</div></td></tr>'}
+            <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td><td class="num">${l.custo ? fmt(Math.max(0, l.total) * l.custo) : '—'}</td></tr>`).join('') : '<tr><td colspan="12"><div class="vazio"><b>Nada nesta lista</b>Troque a busca.</div></td></tr>'}
         </tbody></table></div></div>`;
     }
 
