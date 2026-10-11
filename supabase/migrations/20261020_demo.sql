@@ -51,6 +51,15 @@ create or replace function demo.fc(x text) returns numeric language sql immutabl
   select 0.75 * (0.90 + (abs(hashtext(lower(btrim(coalesce(x, ''))))) % 21) / 100.0) $$;
 create or replace function demo.num(x bigint) returns bigint language sql immutable as $$ select case when x is null then null else (x % 1000000000000) + 3000004242424242 end $$;
 create or replace function demo.item(x text) returns text language sql immutable as $$ select case when x is null then null else 'MLB' || ((abs(hashtextextended(x, 3)) % 9000000000) + 1000000000)::text end $$;
+-- imagem fictícia do produto: quadrado colorido com o código (SVG embutido no próprio endereço)
+create or replace function demo.foto_novo(novo text) returns text language sql immutable as $$
+  select case when novo is null or novo = '' then null else
+    'data:image/svg+xml;charset=utf8,%3Csvg xmlns=''http://www.w3.org/2000/svg'' width=''240'' height=''240''%3E%3Crect width=''240'' height=''240'' rx=''28'' fill=''%23'
+    || (array['6366f1','0ea5e9','10b981','f59e0b','ef4444','8b5cf6','14b8a6','ec4899','84cc16','f97316'])[1 + abs(hashtext(novo)) % 10]
+    || '''/%3E%3Crect x=''60'' y=''52'' width=''120'' height=''96'' rx=''14'' fill=''white'' fill-opacity=''.22''/%3E%3Ctext x=''120'' y=''205'' font-size=''34'' font-family=''Arial,sans-serif'' font-weight=''700'' text-anchor=''middle'' fill=''white''%3E'
+    || novo || '%3C/text%3E%3C/svg%3E' end $$;
+create or replace function demo.foto(x text) returns text language sql stable as $$ select demo.foto_novo(demo.sku(x)) $$;
+
 -- multiplica todos os números de um JSON
 create or replace function demo.esc(j jsonb, f numeric) returns jsonb language sql immutable as $$
   select case jsonb_typeof(j)
@@ -118,7 +127,7 @@ begin
       'val', round(x.val * 0.45, 2), 'valor_pago', round(x.valor_pago * 0.45, 2), 'desconto', round(x.desconto * 0.45, 2), 'juros', round(x.juros * 0.45, 2),
       'tiny_key', null, 'fonte', null, 'loja', demo.loja(x.loja), 'doc', null, 'travas', null, 'oculta', false)$q$, 'not coalesce(x.oculta, false)');
   res := res || jsonb_build_object('pagamentos', n);
-  perform demo.copiar('skus', $q$jsonb_build_object('sku', demo.sku(x.sku), 'titulo', demo.tit(x.sku), 'custo', round(x.custo * demo.fc(x.sku), 2))$q$);
+  perform demo.copiar('skus', $q$jsonb_build_object('sku', demo.sku(x.sku), 'titulo', demo.tit(x.sku), 'custo', round(x.custo * demo.fc(x.sku), 2), 'imposto', 7)$q$);
   perform demo.copiar('sku_composicao', $q$jsonb_build_object('sku_comercial', demo.sku(x.sku_comercial), 'titulo_comercial', demo.tit(x.sku_comercial), 'sku_componente', demo.sku(x.sku_componente))$q$);
   perform demo.copiar('liberacoes', $q$jsonb_build_object('val', round(x.val * 0.45, 2), 'ml_user_id', demo.loja(x.ml_user_id))$q$);
   perform demo.copiar('extrato_historico', $q$jsonb_build_object('val_liquido', round(x.val_liquido * 0.45, 2), 'qtd_pedidos', round(x.qtd_pedidos * 0.6), 'ml_user_id', demo.loja(x.ml_user_id))$q$);
@@ -163,10 +172,13 @@ begin
     select a, demo.num(v.order_id), demo.num(v.pack_id), v.data_venda, v.status, (abs(hashtextextended(v.comprador_id::text, 5)) % 900000000) + 100000000,
       'COMPRADOR' || ((abs(hashtextextended(v.comprador_id::text, 5)) % 90000) + 10000), 'Cliente ' || ((abs(hashtextextended(v.comprador_id::text, 5)) % 90000) + 10000),
       demo.item(v.item_id), demo.tit(v.sku), demo.sku(v.sku), null, v.qtd, round(v.preco_unit * 0.75, 2), round(v.tarifa * 0.75, 2),
-      v.listing_type, demo.num(v.shipping_id), v.logistic_type, round(v.frete_vendedor * 0.75, 2), round(v.frete_comprador * 0.75, 2), round(v.total_pago * 0.75, 2), null, v.atualizado_em, demo.loja(v.ml_user_id),
-      round(v.custo_unit * demo.fc(v.sku), 4), v.imposto_pct, false, v.envio_status, v.enviado_em, v.uf, round(v.frete_flex * 0.75, 2), v.envio_n, false
+      v.listing_type, demo.num(v.shipping_id), v.logistic_type, round(v.frete_vendedor * 0.75, 2), round(v.frete_comprador * 0.75, 2), round(v.total_pago * 0.75, 2), demo.foto(v.sku), v.atualizado_em, demo.loja(v.ml_user_id),
+      round(v.custo_unit * demo.fc(v.sku), 4), 7, false, v.envio_status, v.enviado_em, v.uf, round(v.frete_flex * 0.75, 2), v.envio_n, false
     from vendas_ml v where v.usuario_id = o and (v.order_id % 100) < 60;
   get diagnostics n = row_count; res := res || jsonb_build_object('vendas', n);
+
+  -- foto de exemplo de cada produto (estoque e folha de contagem)
+  insert into sku_fotos_manual (usuario_id, sku_norm, url) select a, lower(m.novo), demo.foto_novo(m.novo) from demo.mapa_sku m on conflict do nothing;
 
   -- conferência do Flex: as faturas guardadas, sem nome nem CEP de comprador
   insert into flex_faturas (usuario_id, numero, transportador, emitida, de, ate, total, arquivo, linhas, resumo, criado_em)
@@ -190,7 +202,7 @@ begin
     from demo_fonte s where s.usuario_id = o and s.chave = 'inventory';
   insert into demo.dados select 'ads', jsonb_build_object('ok', true, 'contas', '[]'::jsonb,
       'anuncios', (select coalesce(jsonb_agg(jsonb_build_object('conta', demo.loja(i->>'conta'), 'item_id', demo.item(i->>'item_id'),
-          'titulo', coalesce((select demo.tit(v.sku) from vendas_ml v where v.usuario_id = o and v.item_id = i->>'item_id' and v.sku is not null limit 1), 'Anúncio de exemplo'), 'status', i->'status', 'campanha', 1, 'foto', null,
+          'titulo', coalesce((select demo.tit(v.sku) from vendas_ml v where v.usuario_id = o and v.item_id = i->>'item_id' and v.sku is not null limit 1), 'Anúncio de exemplo'), 'status', i->'status', 'campanha', 1, 'foto', coalesce((select demo.foto(v.sku) from vendas_ml v where v.usuario_id = o and v.item_id = i->>'item_id' and v.sku is not null limit 1), demo.foto_novo('ANUNCIO')),
           'cliques', round(coalesce((i->>'cliques')::numeric, 0) * 0.6), 'impressoes', round(coalesce((i->>'impressoes')::numeric, 0) * 0.6), 'investimento', round(coalesce((i->>'investimento')::numeric, 0) * 0.45, 2),
           'vendas_ads', round(coalesce((i->>'vendas_ads')::numeric, 0) * 0.45, 2), 'diretas', round(coalesce((i->>'diretas')::numeric, 0) * 0.45, 2), 'indiretas', round(coalesce((i->>'indiretas')::numeric, 0) * 0.45, 2),
           'un_ads', round(coalesce((i->>'un_ads')::numeric, 0) * 0.6), 'un_organicas', round(coalesce((i->>'un_organicas')::numeric, 0) * 0.6), 'organicas', round(coalesce((i->>'organicas')::numeric, 0) * 0.45, 2))), '[]'::jsonb)
