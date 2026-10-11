@@ -3,11 +3,13 @@
 // Campos: loja, forma de pagamento, fornecedor, vencimento, valor, emissão, nº do documento, histórico,
 // categoria, competência e ocorrência (única, parcelada "3" ou "15 30 45", ou recorrente).
 // Ao abrir uma parcela, mostra o parcelamento inteiro para conferir e alterar.
-// Conta que vem do Olist é só leitura aqui (o Olist manda nela); dá para escolher a loja.
+// Conta que vem do Olist pode ser alterada aqui: o campo alterado fica travado (p.travas) e deixa de seguir o Olist;
+// "Voltar a seguir o Olist" destrava. Excluir uma conta do Olist só a esconde (p.oculta), para não voltar na sincronização.
 
     const PF_FORMAS = ['Boleto', 'Pix', 'Cartão de crédito', 'Cartão de débito', 'Transferência bancária', 'Débito automático', 'Dinheiro', 'Depósito', 'Cheque', 'Outros'];
     const PF_OCORR = [['unica', 'Única'], ['parcelada', 'Parcelada'], ['semanal', 'Semanal'], ['quinzenal', 'Quinzenal'], ['mensal', 'Mensal'], ['trimestral', 'Trimestral'], ['semestral', 'Semestral'], ['anual', 'Anual']];
     let pf = { idx: null, parcelas: [], serie: [] };
+    const PF_ROT = { desc: 'histórico', forn: 'fornecedor', val: 'valor', data: 'vencimento', cat: 'categoria', competencia: 'competência', pago: 'situação (pago/em aberto)' };
 
     const pfE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const pfGrupo = p => (p && (p.grupo_id || p.grupoId)) || null;
@@ -26,7 +28,7 @@
       if(p.cat && !cats.includes(p.cat)) cats.push(p.cat);
       const loja = typeof lojaSelect === 'function' ? lojaSelect('pf-loja', p.loja || (typeof lojaDe === 'function' && pf.idx !== null ? lojaDe(p) : '')) : '';
       return `
-        ${travado ? `<div class="pf-aviso">Esta conta vem do <b>Olist</b>: descrição, valor, vencimento e categoria são alterados lá e chegam aqui sozinhos.${loja ? ' Aqui você escolhe a loja.' : ''}</div>` : ''}
+        ${p.fonte === 'olist' ? `<div class="pf-aviso">Esta conta vem do <b>Olist</b>. Você pode alterar o que quiser aqui: <b>o campo que você mudar passa a valer daqui</b> e não é mais sobrescrito pelo Olist; o resto continua chegando de lá.${Array.isArray(p.travas) && p.travas.length ? `<br>Alterado aqui: <b>${p.travas.map(k => PF_ROT[k] || k).join(', ')}</b>. <a class="fx-link" style="color:var(--primary);cursor:pointer;" onclick="pfVoltarOlist()">Voltar a seguir o Olist</a>` : ''}</div>` : ''}
         <div class="pf-grid">
           ${loja ? `<label class="pf-c"><span>Loja</span>${loja}</label>` : ''}
           <label class="pf-c"><span>Forma de pagamento</span>
@@ -55,7 +57,7 @@
           <label class="pf-c"><span>Ocorrência</span>
             <select id="pf-ocorr" onchange="pfMontarParcelas()">${PF_OCORR.map(o => `<option value="${o[0]}">${o[1]}</option>`).join('')}</select></label>
           <label class="pf-c" id="pf-qtd-box" style="display:none;"><span id="pf-qtd-rot">Parcelas</span>
-            <input id="pf-qtd" placeholder="3  ou  15 30 45" oninput="pfMontarParcelas()"></label>
+            <div style="display:flex;gap:8px;"><input id="pf-qtd" placeholder="3  ou  15 30 45" onkeydown="if(event.key==='Enter'){event.preventDefault();pfMontarParcelas(true);}"><button type="button" class="btn btn-sm" style="white-space:nowrap;" onclick="pfMontarParcelas(true)">Gerar parcelas</button></div></label>
         </div>
         <div id="pf-ajuda" class="text-muted" style="font-size:12px;margin-top:6px;"></div>
         <div id="pf-parc"></div>`,
@@ -63,47 +65,62 @@
       const m = document.querySelector('#modal-vml .modal-content'); if(m) m.style.maxWidth = '760px';
     }
 
-    function pfMontarParcelas(){
+    // gerar = true: clique em "Gerar parcelas" (avisa o que falta). Sem isso só atualiza rótulos e mantém a tabela já editada.
+    function pfMontarParcelas(gerar){
       const oc = pfV('pf-ocorr'), box = document.getElementById('pf-qtd-box'), host = document.getElementById('pf-parc'), ajuda = document.getElementById('pf-ajuda');
       if(!host) return;
       const total = parseMoney(pfV('pf-val')), venc = pfV('pf-venc'), emis = pfV('pf-emis') || getToday();
       document.getElementById('pf-val-rot').textContent = oc === 'parcelada' ? 'Valor total' : oc === 'unica' ? 'Valor' : 'Valor de cada conta';
       if(oc === 'unica'){ box.style.display = 'none'; host.innerHTML = ''; ajuda.textContent = ''; pf.parcelas = []; return; }
       box.style.display = '';
+      if(!gerar){ if(oc !== pf.ocGerada){ pf.parcelas = []; host.innerHTML = ''; }
+        document.getElementById('pf-qtd-rot').textContent = oc === 'parcelada' ? 'Parcelas' : 'Quantas vezes';
+        document.getElementById('pf-qtd').placeholder = oc === 'parcelada' ? '3  ou  15 30 45' : '12';
+        ajuda.textContent = oc === 'parcelada' ? 'Digite a quantidade de parcelas (ex.: 3, uma por mês a partir do vencimento) ou os prazos em dias a contar da emissão (ex.: 15 30 45) e clique em Gerar parcelas. Depois altere o que quiser em cada uma.' : 'Informe quantas vezes a conta se repete e clique em Gerar parcelas.';
+        return; }
+      if(!total || !venc){ toast('Preencha o valor e o vencimento antes de gerar as parcelas.'); return; }
+      pf.ocGerada = oc;
       const qEl = document.getElementById('pf-qtd');
       let datas = [];
       if(oc === 'parcelada'){
         document.getElementById('pf-qtd-rot').textContent = 'Parcelas';
         qEl.placeholder = '3  ou  15 30 45';
-        ajuda.textContent = 'Digite a quantidade de parcelas (ex.: 3, uma por mês a partir do vencimento) ou os prazos em dias a contar da emissão (ex.: 15 30 45).';
         const nums = String(qEl.value || '').split(/[^\d]+/).filter(Boolean).map(Number);
         if(nums.length === 1 && nums[0] >= 1 && nums[0] <= 120){ if(venc) for(let i = 0; i < nums[0]; i++) datas.push(pfSomaMeses(venc, i)); }
         else if(nums.length > 1) datas = nums.slice(0, 120).map(d => addDias(emis, d));
       } else {
         document.getElementById('pf-qtd-rot').textContent = 'Quantas vezes';
         qEl.placeholder = '12';
-        ajuda.textContent = 'Cria uma conta para cada período, com o mesmo valor.';
         const n = Math.min(120, Math.max(1, parseInt(qEl.value) || 12));
         if(venc) for(let i = 0; i < n; i++){
           datas.push(oc === 'semanal' ? addDias(venc, 7 * i) : oc === 'quinzenal' ? addDias(venc, 15 * i) : pfSomaMeses(venc, i * ({ mensal: 1, trimestral: 3, semestral: 6, anual: 12 })[oc]));
         }
       }
-      if(!datas.length || !total){ host.innerHTML = ''; pf.parcelas = []; return; }
+      if(!datas.length || !total){ host.innerHTML = ''; pf.parcelas = []; toast(oc === 'parcelada' ? 'Informe a quantidade (ex.: 3) ou os prazos (ex.: 15 30 45).' : 'Informe quantas vezes.'); return; }
       const n = datas.length;
       let vals;
       if(oc === 'parcelada'){ const base = Math.floor(total / n * 100) / 100; vals = datas.map(() => base); vals[n - 1] = pfR2(total - base * (n - 1)); }
       else vals = datas.map(() => total);
-      pf.parcelas = datas.map((d, i) => ({ data: d, val: vals[i] }));
+      pf.parcelas = datas.map((d, i) => ({ data: d, val: vals[i], doc: '', desc: '' }));
       pfDesenharParcelas();
     }
     function pfDesenharParcelas(){
       const host = document.getElementById('pf-parc'); if(!host) return;
-      const soma = pf.parcelas.reduce((s, x) => s + (Number(x.val) || 0), 0);
-      host.innerHTML = `<div class="pf-tab"><table><thead><tr><th>#</th><th>Vencimento</th><th style="text-align:right;">Valor</th></tr></thead><tbody>
+      const soma = pf.parcelas.reduce((s, x) => s + (Number(x.val) || 0), 0), total = parseMoney(pfV('pf-val')), parc = pfV('pf-ocorr') === 'parcelada';
+      const dif = parc ? pfR2(soma - total) : 0;
+      host.innerHTML = `<div class="pf-tab"><table><thead><tr><th>#</th><th>Vencimento</th><th style="text-align:right;">Valor</th><th>Nº do documento</th><th>Observação</th><th></th></tr></thead><tbody>
         ${pf.parcelas.map((x, i) => `<tr><td>${i + 1}/${pf.parcelas.length}</td>
           <td><input type="date" value="${x.data}" onchange="pf.parcelas[${i}].data = this.value"></td>
-          <td style="text-align:right;"><input class="money-input" style="text-align:right;max-width:130px;" value="${fmtMoney(x.val)}" oninput="onMoneyInput(this)" onchange="pf.parcelas[${i}].val = parseMoney(this.value); pfDesenharParcelas()"></td></tr>`).join('')}
-        </tbody><tfoot><tr><td colspan="2">${pf.parcelas.length} contas</td><td style="text-align:right;"><b>${fmt(soma)}</b></td></tr></tfoot></table></div>`;
+          <td style="text-align:right;"><input class="money-input" style="text-align:right;max-width:120px;" value="${fmtMoney(Number(x.val) || 0)}" oninput="onMoneyInput(this)" onchange="pf.parcelas[${i}].val = parseMoney(this.value); pfDesenharParcelas()"></td>
+          <td><input style="max-width:130px;" value="${pfE(x.doc || '')}" onchange="pf.parcelas[${i}].doc = this.value"></td>
+          <td><input style="min-width:120px;" value="${pfE(x.desc || '')}" placeholder="opcional" onchange="pf.parcelas[${i}].desc = this.value"></td>
+          <td><button type="button" class="ico-btn" title="Tirar esta parcela" onclick="pf.parcelas.splice(${i}, 1); pfDesenharParcelas()">✕</button></td></tr>`).join('')}
+        </tbody><tfoot><tr><td colspan="2">${pf.parcelas.length} ${parc ? 'parcelas' : 'contas'} · <a class="fx-link" style="color:var(--primary);cursor:pointer;" onclick="pfParcelaNova()">+ incluir uma</a></td><td style="text-align:right;"><b>${fmt(soma)}</b></td><td colspan="3">${dif ? `<span class="text-danger">${dif > 0 ? 'sobra' : 'falta'} ${fmt(Math.abs(dif))} em relação ao valor total</span>` : ''}</td></tr></tfoot></table></div>`;
+    }
+    function pfParcelaNova(){
+      const u = pf.parcelas[pf.parcelas.length - 1];
+      pf.parcelas.push({ data: u ? pfSomaMeses(u.data, 1) : (pfV('pf-venc') || getToday()), val: u ? u.val : 0, doc: '', desc: '' });
+      pfDesenharParcelas();
     }
 
     function pfLer(){
@@ -135,10 +152,11 @@
       if(b.loja) base.loja = b.loja;
       if(oc === 'unica') pagamentos.push({ ...base, val: b.val, data: b.data, tipo: 'unico' });
       else {
-        if(!pf.parcelas.length){ toast(oc === 'parcelada' ? 'Informe as parcelas (ex.: 3 ou 15 30 45).' : 'Informe quantas vezes a conta se repete.'); return; }
+        if(!pf.parcelas.length){ toast('Clique em "Gerar parcelas" antes de salvar.'); return; }
         const parc = oc === 'parcelada', grupo = (parc ? 'g_' : 'r_') + Date.now();
         pf.parcelas.forEach((x, i) => {
           const l = { ...base, val: Number(x.val) || 0, data: x.data, tipo: parc ? 'parcelado' : 'recorrente', grupo_id: grupo };
+          if(x.doc) l.doc = x.doc; if(x.desc) l.desc = base.desc + ' — ' + x.desc;
           if(parc) l.parcela = (i + 1) + '/' + pf.parcelas.length;
           else if(b.competencia) l.competencia = pfSomaMesesComp(b.competencia, b.data, x.data);
           pagamentos.push(l);
@@ -157,7 +175,7 @@
     function editarLanc(idx){
       const p = pagamentos[idx]; if(!p) return;
       editandoIdx = idx;
-      const travado = p.fonte === 'olist';
+      const travado = false, doOlist = p.fonte === 'olist';
       const g = pfGrupo(p);
       const serie = g ? pagamentos.filter(x => pfGrupo(x) === g).sort((a, b) => String(a.data).localeCompare(String(b.data))) : [];
       pf = { idx, parcelas: [], serie };
@@ -176,17 +194,17 @@
               <td>${sit(x)}</td></tr>`;
           }).join('')}
         </tbody></table></div>
-        ${travado ? '' : `<label class="pf-check"><input type="checkbox" id="pf-todas" checked> Aplicar histórico, fornecedor, categoria e forma de pagamento a todas as parcelas em aberto</label>`}` : '';
+        ${travado ? '' : `<label class="pf-check"><input type="checkbox" id="pf-todas" ${doOlist ? '' : 'checked'}> Aplicar histórico, fornecedor, categoria e forma de pagamento a todas as parcelas em aberto</label>`}` : '';
       const pagoInfo = p.pago ? `<div class="pf-aviso pf-ok">Paga${p.dataPaga ? ' em ' + ptDate(p.dataPaga) : ''}${p.valorPago ? ' · ' + fmt(Number(p.valorPago)) : ''}${p.desconto > 0 ? ' · desconto ' + fmt(p.desconto) : ''}${p.juros > 0 ? ' · juros ' + fmt(p.juros) : ''}</div>` : '';
       const botoes = [
-        travado ? '' : `<button class="btn-out btn" style="color:var(--danger);margin-right:auto;" onclick="pfExcluir()">Excluir</button>`,
+        `<button class="btn-out btn" style="color:var(--danger);margin-right:auto;" title="${doOlist ? 'A conta some daqui (e não volta na sincronização). No Olist ela continua existindo.' : ''}" onclick="pfExcluir()">${doOlist ? 'Excluir daqui' : 'Excluir'}</button>`,
         !travado && serie.filter(x => !x.pago).length > 1 ? `<button class="btn-out btn" style="color:var(--danger);" onclick="pfExcluir(true)">Excluir as em aberto</button>` : '',
         !p.pago && !travado ? `<button class="btn-out btn" onclick="fecharModal('modal-vml');abrirModalBaixa([${idx}])">Dar baixa</button>` : '',
         p.pago && !travado ? `<button class="btn-out btn" onclick="pfReabrir()">Reabrir</button>` : '',
         `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button>`,
         `<button class="btn" onclick="pfSalvarEdicao()">Salvar</button>`
       ].join('');
-      vmlModal((travado ? 'Conta a pagar' : 'Editar conta a pagar') + (p.parcela ? ' · parcela ' + pfE(p.parcela) : ''), pagoInfo + pfCampos(p, travado) + blocoSerie, botoes);
+      vmlModal('Editar conta a pagar' + (p.parcela ? ' · parcela ' + pfE(p.parcela) : ''), pagoInfo + pfCampos(p, travado) + blocoSerie, botoes);
       const m = document.querySelector('#modal-vml .modal-content'); if(m) m.style.maxWidth = '760px';
     }
     function abrirModalSerie(grupoId){
@@ -197,12 +215,8 @@
     function pfSalvarEdicao(){
       const p = pagamentos[pf.idx]; if(!p) return;
       const loja = pfV('pf-loja');
-      if(p.fonte === 'olist'){
-        // do Olist: só a loja é daqui (vale para o parcelamento inteiro)
-        if(loja) (pf.serie.length ? pf.serie : [p]).forEach(x => { x.loja = loja; });
-        return pfDepois();
-      }
       const b = pfLer();
+      const antes = new Map((pf.serie.length ? pf.serie : [p]).map(x => [x, { desc: x.desc, forn: x.forn || '', val: Number(x.val), data: x.data, cat: x.cat || '', competencia: (x.competencia || '').slice(0, 7) }]));
       if(!b.desc || !b.val || !b.data){ toast('Preencha o histórico, o valor e o vencimento.'); return; }
       // parcelas da série (lidas antes de mexer na conta aberta)
       pf.serie.forEach((x, k) => {
@@ -226,19 +240,48 @@
         if(x === p || x.pago || !todas || !todas.checked) return;
         Object.assign(x, { desc: b.desc, forn: b.forn, cat: b.cat, formaPgto: b.formaPgto });
       });
+      // conta do Olist: o que mudou aqui fica travado (o Olist não sobrescreve mais)
+      antes.forEach((a, x) => {
+        if(x.fonte !== 'olist') return;
+        const agora = { desc: x.desc, forn: x.forn || '', val: Number(x.val), data: x.data, cat: x.cat || '', competencia: (x.competencia || '').slice(0, 7) };
+        const mud = Object.keys(a).filter(k => a[k] !== agora[k]);
+        if(mud.length) x.travas = [...new Set([...(Array.isArray(x.travas) ? x.travas : []), ...mud])];
+      });
       pfDepois();
     }
     function pfExcluir(abertas){
-      const p = pagamentos[pf.idx]; if(!p || p.fonte === 'olist') return;
+      const p = pagamentos[pf.idx]; if(!p) return;
       const alvo = abertas ? pf.serie.filter(x => !x.pago) : [p];
       const bt = event && event.target;
       // confirmação em dois cliques, sem janela do navegador
       if(bt && bt.dataset.conf !== '1'){ bt.dataset.conf = '1'; bt.textContent = abertas ? 'Confirmar: excluir ' + alvo.length + ' contas' : 'Confirmar exclusão'; return; }
-      alvo.forEach(x => { const i = pagamentos.indexOf(x); if(i >= 0) pagamentos.splice(i, 1); });
+      // conta do Olist: só esconde (se fosse apagada, voltaria na próxima sincronização)
+      alvo.forEach(x => { if(x.fonte === 'olist'){ x.oculta = true; return; } const i = pagamentos.indexOf(x); if(i >= 0) pagamentos.splice(i, 1); });
       pfDepois();
     }
     function pfReabrir(){
       const p = pagamentos[pf.idx]; if(!p) return;
       p.pago = false; p.valorPago = null; p.dataPaga = null; p.desconto = 0; p.juros = 0;
+      if(p.fonte === 'olist'){ p.travas = Array.isArray(p.travas) ? p.travas : []; if(!p.travas.includes('pago')) p.travas.push('pago'); }
       pfDepois();
+    }
+    // destrava: a conta volta a seguir o Olist (os valores de lá chegam na próxima sincronização)
+    function pfVoltarOlist(){
+      const p = pagamentos[pf.idx]; if(!p) return;
+      p.travas = null;
+      pfDepois();
+      if(typeof olistSincronizar === 'function') olistSincronizar(false);
+      toast('A conta voltou a seguir o Olist.');
+    }
+    // contas do Olist excluídas aqui: lista para restaurar
+    function pfOcultas(){
+      const l = (typeof pagTodos === 'function' ? pagTodos() : pagamentos).filter(x => x.oculta);
+      vmlModal('Contas do Olist excluídas aqui', l.length ? `<div class="text-muted" style="margin-bottom:10px;">Continuam existindo no Olist. Restaurar faz a conta voltar a aparecer aqui.</div><div class="pf-tab" style="max-height:55vh;"><table><thead><tr><th>Vencimento</th><th>Histórico</th><th>Fornecedor</th><th style="text-align:right;">Valor</th><th></th></tr></thead><tbody>${l.map(x => `<tr><td>${ptDate(x.data)}</td><td>${pfE(x.desc)}${x.parcela ? ' (' + pfE(x.parcela) + ')' : ''}</td><td>${pfE(x.forn || '—')}</td><td style="text-align:right;">${fmt(Number(x.val) || 0)}</td><td><button class="btn-out btn-sm" onclick="pfRestaurar('${pfE(x.tiny_key || '')}')">Restaurar</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="text-muted">Nenhuma conta escondida.</div>');
+    }
+    function pfRestaurar(chave){
+      const x = (typeof pagTodos === 'function' ? pagTodos() : pagamentos).find(y => y.oculta && (y.tiny_key || '') === chave); if(!x) return;
+      x.oculta = false; salvar();
+      if(typeof lojasAbsorver === 'function'){ lojasAbsorver(); lojasRecortar(); }
+      if(typeof renderPagar === 'function') renderPagar();
+      pfOcultas();
     }

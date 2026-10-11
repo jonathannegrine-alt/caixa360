@@ -29,8 +29,8 @@
     // ----- contas a pagar -----
     function lojasAbsorver(){
       if(_lj.aberto) return;
-      if(!_lj.ativo){ pagamentosTodos = pagamentos; return; }
-      pagamentos.forEach(p => { if(!_lj.set.has(p) && !p.loja) p.loja = _lj.loja; });
+      if(!_lj.filtra){ pagamentosTodos = pagamentos; return; }
+      if(_lj.ativo) pagamentos.forEach(p => { if(!_lj.set.has(p) && !p.loja) p.loja = _lj.loja; });
       const antes = _lj.set;
       pagamentosTodos = pagamentosTodos.filter(p => !antes.has(p)).concat(pagamentos);
       _lj.set = new Set(pagamentos);
@@ -39,13 +39,15 @@
       if(_lj.aberto) return;
       const ca = typeof contaAtiva !== 'undefined' ? contaAtiva : '';
       _lj.loja = ca; _lj.ativo = !!ca && (typeof contasML === 'undefined' || contasML.length !== 1);
-      pagamentos = _lj.ativo ? pagamentosTodos.filter(p => lojaDe(p) === ca) : pagamentosTodos;
+      // contas escondidas (excluídas aqui, mas que continuam existindo no Olist) nunca aparecem
+      _lj.filtra = _lj.ativo || pagamentosTodos.some(p => p.oculta);
+      pagamentos = _lj.filtra ? pagamentosTodos.filter(p => !p.oculta && (!_lj.ativo || lojaDe(p) === ca)) : pagamentosTodos;
       _lj.set = new Set(pagamentos);
       lojasSaldosRecortar();
     }
     // conjunto completo, já com o que mudou no recorte
     function pagTodos(){ if(_lj.aberto) return pagamentos; lojasAbsorver(); return pagamentosTodos; }
-    function lojasDefinirTodos(lista){ _lj.aberto = 0; _lj.ativo = false; pagamentosTodos = lista; pagamentos = lista; lojasRecortar(); }
+    function lojasDefinirTodos(lista){ _lj.aberto = 0; _lj.ativo = false; _lj.filtra = false; pagamentosTodos = lista; pagamentos = lista; lojasRecortar(); }
     // para código que mexe no conjunto completo usando a variável pagamentos
     function lojasAbrir(){ if(_lj.aberto === 0){ lojasAbsorver(); pagamentos = pagamentosTodos; } _lj.aberto++; }
     function lojasFechar(){ if(_lj.aberto > 0 && --_lj.aberto === 0){ pagamentosTodos = pagamentos; lojasRecortar(); } }

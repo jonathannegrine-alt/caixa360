@@ -1,0 +1,1 @@
+alter table public.pagamentos add column if not exists travas jsonb, add column if not exists oculta boolean not null default false;  -- campos alterados aqui (não seguem mais o Olist) e conta do Olist escondida aqui

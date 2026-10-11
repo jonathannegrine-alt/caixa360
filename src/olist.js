@@ -80,14 +80,21 @@
           if(pago){ p.valorPago = c.valor; p.dataPaga = c.venc; }     // o Olist não informa o dia do pagamento: usa o vencimento
           pagamentos.push(p); r.novas++;
         } else {
-          if(p.desc !== d.desc || (p.forn || '') !== (c.forn || '') || p.val !== val || p.data !== c.venc || (p.parcela || '') !== d.parcela) r.alteradas++;
-          p.desc = d.desc; p.forn = c.forn || ''; p.val = val; p.data = c.venc; p.parcela = d.parcela; p.tipo = d.tipo;
-          if(pago && !p.pago){ p.pago = true; if(p.valorPago == null) p.valorPago = c.valor; if(!p.dataPaga) p.dataPaga = hoje; r.baixadas++; }   // percebido hoje
-          else if(!pago && p.pago){ p.pago = false; p.valorPago = null; p.dataPaga = null; r.reabertas++; }
+          // campo alterado aqui pelo usuário fica travado (p.travas): o Olist não sobrescreve
+          const tv = Array.isArray(p.travas) ? p.travas : [], livre = k => !tv.includes(k);
+          const nv = { desc: d.desc, forn: c.forn || '', val, data: c.venc };
+          if(['desc', 'forn', 'val', 'data'].some(k => livre(k) && (p[k] || '') !== (nv[k] || '')) || (p.parcela || '') !== d.parcela) r.alteradas++;
+          ['desc', 'forn', 'val', 'data'].forEach(k => { if(livre(k)) p[k] = nv[k]; });
+          p.parcela = d.parcela; p.tipo = d.tipo;
+          if(livre('pago')){
+            if(pago && !p.pago){ p.pago = true; if(p.valorPago == null) p.valorPago = c.valor; if(!p.dataPaga) p.dataPaga = hoje; r.baixadas++; }   // percebido hoje
+            else if(!pago && p.pago){ p.pago = false; p.valorPago = null; p.dataPaga = null; r.reabertas++; }
+          }
         }
         if(d.tipo === 'parcelado') p.grupo_id = 'g_olist_' + (d.desc + '||' + (c.forn || '')).toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 80);
-        if(c.categoria) p.cat = olistCategoria(c.categoria);
-        if(c.competencia) p.competencia = c.competencia;
+        const tv2 = Array.isArray(p.travas) ? p.travas : [];
+        if(c.categoria && !tv2.includes('cat')) p.cat = olistCategoria(c.categoria);
+        if(c.competencia && !tv2.includes('competencia')) p.competencia = c.competencia;
         usados.add(p);
       });
 
@@ -164,7 +171,7 @@
           (j.detalhes || []).forEach(d => {
             feitos.add(d.id);
             const p = olTodos().find(x => x.tiny_key === 'olist:' + d.id);
-            if(p){ if(d.categoria) p.cat = olistCategoria(d.categoria); if(d.competencia) p.competencia = d.competencia; }
+            if(p){ const tv = Array.isArray(p.travas) ? p.travas : []; if(d.categoria && !tv.includes('cat')) p.cat = olistCategoria(d.categoria); if(d.competencia && !tv.includes('competencia')) p.competencia = d.competencia; }
           });
           lote.filter(id => !feitos.has(id)).forEach(id => ids.unshift(id));   // os que não deu tempo voltam para a fila
           olist.detFaltam = ids.length; lotes++;
@@ -193,6 +200,7 @@
           (j.pagamentos || []).forEach(d => {
             vistos.add(d.id); feitos.add(d.id);
             const p = olTodos().find(x => x.tiny_key === 'olist:' + d.id); if(!p) return;
+            if(Array.isArray(p.travas) && p.travas.includes('pago')) return;
             if(d.pago_em) p.dataPaga = d.pago_em;
             if(d.valor_pago > 0) p.valorPago = d.valor_pago;
             if(d.competencia && !p.competencia) p.competencia = d.competencia;

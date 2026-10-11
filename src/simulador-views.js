@@ -417,6 +417,8 @@
     function confirmarBaixa(){
       const dataPaga = document.getElementById('baixa-data').value;
       if(!dataPaga){ alert('Informe a data do pagamento.'); return; }
+      // baixa dada aqui em conta que vem do Olist: a situação passa a ser a daqui
+      _baixaIdxs.forEach(i => { const p = pagamentos[i]; if(p && p.fonte === 'olist'){ p.travas = Array.isArray(p.travas) ? p.travas : []; if(!p.travas.includes('pago')) p.travas.push('pago'); } });
 
       const total      = _baixaIdxs.reduce((s, i) => s + pagamentos[i].val, 0);
       const totalPago  = _parseBaixaMoneyInput(document.getElementById('baixa-valor-pago'));

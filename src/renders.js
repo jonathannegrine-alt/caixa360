@@ -366,7 +366,11 @@
         card('k-frete', 'Próximos 7 dias', 'd7', 'semana', 'abertas') + card('k-venda', 'Próximos 30 dias', 'd30', 'mes', 'abertas') +
         card('k-mc', 'Pago neste mês', 'pago', 'mes', 'pagas');
       const sub = document.getElementById('pagar-sub');
-      if(sub) sub.textContent = g.aberto[1] ? qtd(g.aberto[1]) + ' em aberto, somando ' + fmt(g.aberto[0]) : 'Nenhuma conta em aberto';
+      if(sub){
+        sub.textContent = g.aberto[1] ? qtd(g.aberto[1]) + ' em aberto, somando ' + fmt(g.aberto[0]) : 'Nenhuma conta em aberto';
+        const nOc = (typeof pagTodos === 'function' ? pagTodos() : []).filter(x => x.oculta).length;
+        if(nOc) sub.innerHTML += ` · <a class="fx-link" style="color:var(--primary);cursor:pointer;" onclick="pfOcultas()">${nOc} do Olist excluída${nOc > 1 ? 's' : ''} aqui</a>`;
+      }
 
       const per = document.getElementById('filtro-periodo')?.value || 'mes', st = document.getElementById('filtro-status')?.value || 'abertas';
       const chips = (id, atual, ops, arg) => {
@@ -436,7 +440,7 @@
           <input type="checkbox" class="cb-pagar" data-idx="${idx}" data-val="${p.val}" onclick="event.stopPropagation();atualizarContPagar()">
           <div class="ap-data"><b>${dm(p.data)}</b><span>${quando(p)}</span></div>
           <div class="entry-main ap-main">
-            <div class="entry-title">${apEsc(p.desc)}${p.parcela ? ' <span class="ap-parc">' + apEsc(p.parcela) + '</span>' : ''}${typeof lojaEtiqueta === 'function' ? lojaEtiqueta(p) : ''}</div>
+            <div class="entry-title">${apEsc(p.desc)}${p.parcela ? ' <span class="ap-parc">' + apEsc(p.parcela) + '</span>' : ''}${typeof lojaEtiqueta === 'function' ? lojaEtiqueta(p) : ''}${Array.isArray(p.travas) && p.travas.length ? ' <span class="loja-tag" title="Você alterou esta conta aqui; esses campos não seguem mais o Olist">alterada aqui</span>' : ''}</div>
             <div class="entry-meta">${apEsc(p.forn || 'Sem fornecedor')}</div>
           </div>
           <span class="ap-cat">${apEsc(p.cat || 'Sem categoria')}</span>
@@ -856,7 +860,7 @@
         && (skuFiltroCusto === '' || (skuFiltroCusto === 'sem') === semCusto(s)));
 
       if(filtrados.length === 0){
-        tbody.innerHTML = produtos.length ? '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted);">Nenhum produto neste filtro.</td></tr>' : '';
+        tbody.innerHTML = produtos.length ? '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted);">Nenhum produto neste filtro.</td></tr>' : '';
         vazio.style.display = produtos.length ? 'none' : 'block';
         document.getElementById('sku-sel-count').textContent = '';
         return;
@@ -878,6 +882,7 @@
           <td class="sku-cod">${esc(s.sku)}</td>
           <td class="sku-tit" title="${esc(titulo)}">${esc(titulo) || '—'}</td>
           <td style="text-align:right;white-space:nowrap;">${semCusto(s) ? '<span class="badge badge-danger">Sem custo</span>' : '<b>' + fmt(Number(s.custo)) + '</b>'}</td>
+          <td style="text-align:right;white-space:nowrap;">${Number(s.imposto) > 0 ? Number(s.imposto).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%' : '<span class="text-muted">—</span>'}</td>
           <td style="text-align:center;">
             <button class="btn-out btn-sm" onclick="event.stopPropagation();editarSKU(${idx})">Editar</button>
           </td>
@@ -885,7 +890,7 @@
       });
 
       tbody.innerHTML = html;
-      makeSortable('tbody-skus', [3]);
+      makeSortable('tbody-skus', [3, 4]);
       initResizableCols('tbody-skus');
       const selAll = document.getElementById('sku-sel-all');
       if(selAll) selAll.checked = false;
@@ -917,6 +922,7 @@
       document.getElementById('sku-codigo').value = '';
       document.getElementById('sku-titulo').value = '';
       document.getElementById('sku-custo').value = '';
+      { const im = document.getElementById('sku-imposto'); if(im){ const moda = {}; skus.forEach(x => { if(Number(x.imposto) > 0) moda[x.imposto] = (moda[x.imposto] || 0) + 1; }); const m = Object.keys(moda).sort((a, b) => moda[b] - moda[a])[0]; im.value = m || ''; } }   // sugere o imposto mais usado
       document.getElementById('modal-sku').classList.add('open');
     }
 
@@ -931,6 +937,7 @@
       document.getElementById('sku-codigo').value = s.sku;
       document.getElementById('sku-titulo').value = s.titulo || '';
       document.getElementById('sku-custo').value = s.custo;
+      { const im = document.getElementById('sku-imposto'); if(im) im.value = Number(s.imposto) > 0 ? s.imposto : ''; }
       const infoEl = document.getElementById('sku-created-at-info');
       if(infoEl) infoEl.textContent = s.created_at ? ('Cadastrado em: ' + new Date(s.created_at).toLocaleString('pt-BR')) : '';
       document.getElementById('modal-sku').classList.add('open');
@@ -942,7 +949,8 @@
         sku: document.getElementById('sku-codigo').value.trim(),
         titulo: document.getElementById('sku-titulo').value.trim(),
         custo: parseFloat(document.getElementById('sku-custo').value) || 0,
-        imposto: skuAnterior ? (skuAnterior.imposto || 0) : 0,
+        imposto: (() => { const im = document.getElementById('sku-imposto'); return im ? (parseFloat(String(im.value).replace(',', '.')) || 0) : (skuAnterior ? (skuAnterior.imposto || 0) : 0); })(),
+        id: skuAnterior ? skuAnterior.id : undefined,
         created_at: skuAnterior ? (skuAnterior.created_at || new Date().toISOString()) : new Date().toISOString()
       };
 
@@ -962,6 +970,24 @@
       renderSKUs();
     }
     
+    // mesmo percentual de imposto para os produtos marcados (ou todos)
+    function skuImpostoEmMassa(){
+      const marcados = [...document.querySelectorAll('.sku-cb:checked')].map(c => skus[Number(c.dataset.idx)]).filter(Boolean);
+      const alvo = marcados.length ? marcados : skus;
+      vmlModal('Imposto em massa', `<div style="line-height:1.6;">Aplicar o mesmo percentual de imposto sobre a venda a <b>${marcados.length ? marcados.length + ' produtos marcados' : 'todos os ' + skus.length + ' produtos e kits'}</b>.</div>
+        <div class="form-group" style="margin-top:12px;max-width:220px;"><label class="form-label">Imposto (%)</label><input type="number" id="sku-imp-massa" step="0.01" min="0" max="100" placeholder="Ex.: 10,62"></div>
+        <div class="text-muted" style="font-size:12.5px;">Vale para as vendas daqui para frente. Para aplicar também em vendas já feitas, use "Reprocessar" no Resumo Financeiro.</div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="skuImpostoAplicar(${marcados.length ? 'true' : 'false'})">Aplicar</button>`);
+      window._skuImpAlvo = alvo;
+    }
+    function skuImpostoAplicar(){
+      const v = parseFloat(String(document.getElementById('sku-imp-massa').value).replace(',', '.'));
+      if(!(v >= 0 && v <= 100)){ toast('Informe um percentual entre 0 e 100.'); return; }
+      (window._skuImpAlvo || []).forEach(s => { s.imposto = v; });
+      salvar(); fecharModal('modal-vml'); renderSKUs();
+      toast('Imposto de ' + String(v).replace('.', ',') + '% aplicado a ' + (window._skuImpAlvo || []).length + ' produtos.');
+    }
+
     function deletarSKU(){
       try {
         if(!confirm('Deletar este SKU?')) return;

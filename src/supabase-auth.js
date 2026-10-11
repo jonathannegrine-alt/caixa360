@@ -342,7 +342,8 @@
         parcela:p.parcela, valorPago:p.valor_pago,
         dataPaga:p.data_paga||null, desconto:p.desconto||0, juros:p.juros||0,
         tiny_key:p.tiny_key||null, fonte:p.fonte||null, competencia:p.competencia||null,
-        loja:p.loja||null, formaPgto:p.forma_pgto||null, doc:p.doc||null, emissao:p.emissao||null
+        loja:p.loja||null, formaPgto:p.forma_pgto||null, doc:p.doc||null, emissao:p.emissao||null,
+        travas:Array.isArray(p.travas) && p.travas.length ? p.travas : null, oculta:!!p.oculta
       }));
       if(rPag.data && typeof lojasDefinirTodos === 'function') lojasDefinirTodos(pagamentos);
 
@@ -405,7 +406,8 @@
       grupo_id: p.grupo_id||p.grupoId||null, parcela: p.parcela||null, valor_pago: p.valorPago||null,
       data_paga: p.dataPaga||null, desconto: p.desconto||0, juros: p.juros||0,
       tiny_key: p.tiny_key||null, fonte: p.fonte||null, competencia: p.competencia||null,
-      loja: p.loja||null, forma_pgto: p.formaPgto||null, doc: p.doc||null, emissao: p.emissao||null
+      loja: p.loja||null, forma_pgto: p.formaPgto||null, doc: p.doc||null, emissao: p.emissao||null,
+      travas: Array.isArray(p.travas) && p.travas.length ? p.travas : null, oculta: !!p.oculta
     });
     const sincLinhaCat = c => ({ nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida', dre_grupo: c.dreGrupo||null, grupo: c.grupo||null });
     const sincLinhaSku = s => ({ sku: s.sku, custo: s.custo, imposto: s.imposto, titulo: s.titulo||null });
