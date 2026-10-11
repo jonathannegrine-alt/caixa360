@@ -1162,3 +1162,17 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .demo-faixa span{opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .demo-faixa a{background:#fff;color:#111827;border-radius:999px;padding:6px 14px;font-weight:700;text-decoration:none;white-space:nowrap;}
 @media (max-width:700px){.demo-faixa span{display:none;}}
+
+/* Análise: gráfico mês a mês no celular (mês em cima, ano embaixo, variação sem seta para caber) */
+.an-barra .an-ano::before{content:"/";}
+.an-barra .an-c{display:none;}
+@media (max-width:760px){
+  .an-barras{gap:2px;overflow-x:visible;}
+  .an-barra b{font-size:10px;line-height:1.15;text-align:center;font-weight:600;}
+  .an-barra .an-ano{display:block;font-size:8.5px;font-weight:500;color:var(--text-muted);}
+  .an-barra .an-ano::before{content:"'";}
+  .an-barra .an-val{font-size:9px;letter-spacing:-.03em;}
+  .an-barra em{font-size:9px;letter-spacing:-.03em;}
+  .an-barra .an-l{display:none;}
+  .an-barra .an-c{display:inline;}
+}

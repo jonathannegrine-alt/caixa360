@@ -155,8 +155,8 @@
               return `<div class="an-barra${x.atual ? ' an-atual' : ''}" title="${x.rot}: ${fmt(x.fat)} · ${anN(x.vendas)} vendas · margem ${anP(x.mc, x.fat)}${x.parcial ? ' · vendas ainda sendo importadas (' + x.cob + ' de ' + x.esperado + ' dias)' : ''}">
                 <span class="an-val">${curto(x.fat)}</span>
                 <div class="an-col"><i style="height:${Math.max(2, x.fat / max * 100)}%"></i></div>
-                <b>${x.rot}${x.parcial && !x.atual ? '*' : ''}</b>
-                <em class="${v == null ? '' : v >= 0 ? 'an-sobe' : 'an-desce'}">${v == null ? (x.atual ? 'em curso' : '&nbsp;') : (v >= 0 ? '▲' : '▼') + anN(Math.abs(v), 0) + '%'}</em>
+                <b>${x.rot.split('/')[0]}<span class="an-ano">${x.rot.split('/')[1]}</span>${x.parcial && !x.atual ? '*' : ''}</b>
+                <em class="${v == null ? '' : v >= 0 ? 'an-sobe' : 'an-desce'}">${v == null ? (x.atual ? '<span class="an-l">em curso</span><span class="an-c">atual</span>' : '&nbsp;') : `<span class="an-l">${v >= 0 ? '▲' : '▼'}</span><span class="an-c">${v >= 0 ? '+' : '−'}</span>` + (Math.abs(v) >= 1000 ? anN(x.fat / ant.fat, 0) + 'x' : anN(Math.abs(v), 0) + '%')}</em>
               </div>`; }).join('')}
           </div>
           ${semDados ? `<div class="text-muted" style="font-size:12px;margin-top:10px;">* ${semDados} ${semDados === 1 ? 'mês ainda está' : 'meses ainda estão'} com as vendas sendo importadas do Mercado Livre (o histórico entra aos poucos, sozinho). Esses valores vão subir.</div>` : ''}
