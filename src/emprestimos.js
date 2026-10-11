@@ -163,20 +163,20 @@
 
     async function empSalvar(btn){
       empFormLer(); const f = emp.form;
-      if(!String(f.nome).trim()){ alert('Dê um nome ao contrato.'); return; }
-      if(f.modo === 'vincular' && !String(f.vinculo || '').trim()){ alert('Informe o trecho que identifica as parcelas no Contas a pagar.'); return; }
+      if(!String(f.nome).trim()){ toast('Dê um nome ao contrato.'); return; }
+      if(f.modo === 'vincular' && !String(f.vinculo || '').trim()){ toast('Informe o trecho que identifica as parcelas no Contas a pagar.'); return; }
       const reg = { usuario_id: usuarioAtual.id, nome: String(f.nome).trim(), credor: String(f.credor || '').trim() || null, numero_contrato: String(f.numero_contrato || '').trim() || null,
         valor: emNum(f.valor), taxa_mes: emNum(f.taxa_mes), parcelas: Math.max(1, Math.round(emNum(f.parcelas)) || 1), primeira: f.primeira || null, sistema: f.sistema, dono: f.dono, modo: f.modo,
         vinculo: f.modo === 'vincular' ? String(f.vinculo).trim() : null, obs: String(f.obs || '').trim() || null, loja: f.loja || null };
       if(f.modo === 'gerar'){
         const tab = empTabela(reg);
-        if(!tab.length){ alert('Para gerar as parcelas, informe o valor emprestado e a data da primeira parcela.'); return; }
+        if(!tab.length){ toast('Para gerar as parcelas, informe o valor emprestado e a data da primeira parcela.'); return; }
         const tot = tab.reduce((s, l) => s + l.amort + l.juros, 0);
         if(!confirm('Serão lançadas ' + tab.length + ' parcelas no Contas a pagar, de ' + ptDate(tab[0].data) + ' a ' + ptDate(tab[tab.length - 1].data) + ', somando ' + fmt(tot) + ' (' + fmt(reg.valor) + ' de amortização e ' + fmt(tot - reg.valor) + ' de juros).\n\nParcelas deste contrato que já estavam lançadas e em aberto serão refeitas. Continuar?')) return;
       }
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
       const g = f.id ? await supa.from('emprestimos').update(reg).eq('id', f.id).select().single() : await supa.from('emprestimos').insert(reg).select().single();
-      if(g.error){ alert('Não consegui salvar: ' + g.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar contrato'; } return; }
+      if(g.error){ toast('Não consegui salvar: ' + g.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar contrato'; } return; }
       if(emp.pdf){
         const cam = usuarioAtual.id + '/' + g.data.id + '-' + Date.now() + '.pdf';
         const up = await supa.storage.from('contratos').upload(cam, emp.pdf, { contentType: 'application/pdf', upsert: true });
@@ -211,7 +211,7 @@
       const ger = c.modo === 'gerar' ? pagamentos.filter(p => String(p.tiny_key || '').startsWith('emp:' + id + ':') && !p.pago).length : 0;
       if(!confirm('Excluir o contrato "' + c.nome + '"?' + (ger ? ' As ' + ger + ' parcelas em aberto geradas por ele saem do Contas a pagar; as já pagas ficam.' : ' As contas do Contas a pagar não são alteradas.'))) return;
       const r = await supa.from('emprestimos').delete().eq('id', id);
-      if(r.error){ alert('Não consegui excluir: ' + r.error.message); return; }
+      if(r.error){ toast('Não consegui excluir: ' + r.error.message); return; }
       if(ger){ pagamentos = pagamentos.filter(p => !String(p.tiny_key || '').startsWith('emp:' + id + ':') || p.pago); salvar(); }
       if(c.arquivo) try { await supa.storage.from('contratos').remove([c.arquivo]); } catch(e){}
       await empCarregar(); fecharModal('modal-vml'); empDesenhar();
