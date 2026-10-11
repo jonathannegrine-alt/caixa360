@@ -227,18 +227,18 @@
         <!-- Saldo atual -->
         <div class="card" style="margin-bottom:15px;">
           <div class="card-body" style="padding:12px 20px;">
-            <div class="saldo-row">
-              <div class="saldo-field">
+            <div class="saldo-row saldo-cores">
+              <div class="saldo-field sf-mp">
                 <span class="saldo-label">Mercado Pago</span>
                 <input type="text" id="saldo-mp" class="saldo-input money-input" placeholder="0,00" onblur="if(!this.readOnly && this.value.trim()!==''){saldoMP=parseMoney(this.value);this.value=fmtMoney(saldoMP);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
               </div>
               <span class="saldo-op">+</span>
-              <div class="saldo-field">
+              <div class="saldo-field sf-bancos">
                 <span class="saldo-label">Outros bancos</span>
                 <input type="text" id="saldo-inicial" class="saldo-input money-input" placeholder="0,00" onblur="if(!this.readOnly && this.value.trim()!==''){saldoOutros=parseMoney(this.value);this.value=fmtMoney(saldoOutros);atualizarSaldoTotal()}" oninput="onMoneyInput(this)">
               </div>
               <span class="saldo-op">=</span>
-              <div class="saldo-field">
+              <div class="saldo-field sf-total">
                 <span class="saldo-label">Total em caixa</span>
                 <span class="saldo-total" id="saldo-total-label">R$ 0,00</span>
               </div>
@@ -513,6 +513,7 @@
             <!-- os <select> continuam sendo a fonte dos filtros; os botões acima só escolhem o valor -->
             <select id="filtro-periodo" onchange="onFiltroPeridoChange()" style="display:none;">
               <option value="mes">Mês atual (30d)</option>
+              <option value="mescal">Mês do calendário</option>
               <option value="semana">Esta semana (7d)</option>
               <option value="dia">Hoje</option>
               <option value="todos">Todos</option>
@@ -523,6 +524,7 @@
               <option value="todas">Todas</option>
               <option value="pagas">Pagas</option>
               <option value="atrasado">Atrasado</option>
+              <option value="criadas">Criadas</option>
             </select>
             <div id="filtro-custom-range" style="display:none;gap:8px;align-items:center;margin-top:10px;">
               <input type="date" id="filtro-de" onchange="renderPagar()">

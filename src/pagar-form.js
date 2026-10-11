@@ -200,7 +200,7 @@
         `<button class="btn-out btn" style="color:var(--danger);margin-right:auto;" title="${doOlist ? 'A conta some daqui (e não volta na sincronização). No Olist ela continua existindo.' : ''}" onclick="pfExcluir()">${doOlist ? 'Excluir daqui' : 'Excluir'}</button>`,
         !travado && serie.filter(x => !x.pago).length > 1 ? `<button class="btn-out btn" style="color:var(--danger);" onclick="pfExcluir(true)">Excluir as em aberto</button>` : '',
         !p.pago && !travado ? `<button class="btn-out btn" onclick="fecharModal('modal-vml');abrirModalBaixa([${idx}])">Dar baixa</button>` : '',
-        p.pago && !travado ? `<button class="btn-out btn" onclick="pfReabrir()">Reabrir</button>` : '',
+        p.pago && !travado ? `<button class="btn-out btn" onclick="pfReabrir()" title="Desfaz a baixa: a conta volta para em aberto e o valor volta para o saldo">Estornar pagamento</button>` : '',
         `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button>`,
         `<button class="btn" onclick="pfSalvarEdicao()">Salvar</button>`
       ].join('');

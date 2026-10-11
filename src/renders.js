@@ -112,14 +112,16 @@
         const riscoLeve  = reservaMinima > 0 && saldoAcum < reservaMinima && saldoAcum >= 0;
         const riscoForte = saldoAcum < 0;
         const classeRisco = riscoForte ? ' risco-forte' : riscoLeve ? ' risco-leve' : '';
-        const corAcum = riscoForte ? 'var(--danger)' : riscoLeve ? '#e65c00' : 'var(--success)';
+        const corAcum = riscoForte ? 'var(--danger)' : riscoLeve ? '#e65c00' : 'var(--info)';
+        const confDia = Math.min(e.conf, entrada), projDia = Math.max(0, entrada - confDia);
 
-        html += `<div class="cal-day${isHoje ? ' hoje' : ''}${classeRisco}">
+        html += `<div class="cal-day${isHoje ? ' hoje' : ''}${classeRisco}" title="${ptDate(data)}${confDia > 0 ? ' · confirmado ' + fmt(confDia) : ''}${projDia > 0 ? ' · projetado ' + fmt(projDia) : ''}${pag > 0 ? ' · saiu ' + fmt(pag) : ''} · saldo acumulado ${fmt(saldoAcum)}">
           <div class="cal-day-num">${dia}${typeof feriadoTag === 'function' ? feriadoTag(data) : ''}</div>
-          ${entrada > 0 ? `<div class="cal-valor-entrada">+${fmt(entrada)}</div>` : ''}
-          ${pag > 0     ? `<div class="cal-valor-saida">-${fmt(pag)}</div>`     : ''}
-          ${(entrada > 0 || pag > 0) ? `<div class="cal-saldo ${saldoDia >= 0 ? 'text-success' : 'text-danger'}">${fmt(saldoDia)}</div>` : ''}
-          <div class="cal-acum" style="color:${corAcum};">≡ ${fmt(saldoAcum)}</div>
+          ${confDia > 0 ? `<div class="cal-valor-entrada">+${fmtCal(confDia)}</div>` : ''}
+          ${projDia > 0 ? `<div class="cal-valor-proj">+${fmtCal(projDia)}</div>` : ''}
+          ${pag > 0     ? `<div class="cal-valor-saida">-${fmtCal(pag)}</div>`     : ''}
+          ${(entrada > 0 || pag > 0) ? `<div class="cal-saldo ${saldoDia >= 0 ? 'cal-pos' : 'cal-neg'}">${fmtCal(saldoDia)}</div>` : ''}
+          <div class="cal-acum" style="color:${corAcum};">≡ ${fmtCal(saldoAcum)}</div>
         </div>`;
       }
 
@@ -275,6 +277,28 @@
       renderPagar();
     }
 
+    // mês escolhido no botão "Mês" de Contas a pagar ("AAAA-MM")
+    let pagarMesSel = '';
+    function pagarMes(){ return pagarMesSel || getToday().substring(0, 7); }
+    function pagarMesAndar(n){
+      const [a, m] = pagarMes().split('-').map(Number), d = new Date(a, m - 1 + n, 1);
+      pagarMesSel = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      pagarFiltro('mescal', '');
+    }
+    function pagarMesRotulo(){ const [a, m] = pagarMes().split('-'); return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][Number(m) - 1] + '/' + a.substring(2); }
+    // estorno direto na lista: a conta volta a ficar em aberto (dois cliques para confirmar)
+    function pagarEstornar(idx, bt){
+      const p = pagamentos[idx]; if(!p || !p.pago) return;
+      if(bt && bt.dataset.conf !== '1'){ bt.dataset.conf = '1'; bt.textContent = 'Confirmar estorno'; setTimeout(() => { if(bt.isConnected){ bt.dataset.conf = ''; bt.textContent = 'Estornar'; } }, 5000); return; }
+      p.pago = false; p.valorPago = null; p.dataPaga = null; p.desconto = 0; p.juros = 0;
+      if(p.fonte === 'olist'){ p.travas = Array.isArray(p.travas) ? p.travas : []; if(!p.travas.includes('pago')) p.travas.push('pago'); }
+      if(typeof salvar === 'function') salvar();
+      if(typeof saldoRecalcular === 'function') saldoRecalcular();
+      if(typeof recalc === 'function') recalc();
+      renderPagar();
+      if(typeof toast === 'function') toast('Pagamento estornado: a conta voltou para "em aberto".');
+    }
+
     function getPagamentosFiltrados(){
       const busca = (document.getElementById('filtro-busca')?.value || '').toLowerCase();
       const periodo = document.getElementById('filtro-periodo')?.value || '';
@@ -296,11 +320,25 @@
         else if(periodo === 'semana') labelEl.textContent = 'Filtro ativo: Esta semana (' + ptDate(hoje) + ' até ' + ptDate(addDias(hoje, 7)) + ')';
         else if(periodo === 'mes') labelEl.textContent = 'Filtro ativo: Próximos 30 dias (' + ptDate(hoje) + ' até ' + ptDate(addDias(hoje, 30)) + ')';
         else if(periodo === 'custom' && customDe && customAte) labelEl.textContent = 'Filtro ativo: ' + ptDate(customDe) + ' até ' + ptDate(customAte);
+        else if(periodo === 'mescal') labelEl.textContent = (status === 'criadas' ? 'Contas criadas em ' : status === 'pagas' ? 'Contas pagas em ' : 'Contas com vencimento em ') + pagarMesRotulo();
         else labelEl.textContent = '';
       }
 
-      const isPagas = status === 'pagas';
+      const isPagas = status === 'pagas', isCriadas = status === 'criadas', mesSel = pagarMes();
       return pagamentos.filter(p => {
+        // "Criadas": pela data em que a conta foi lançada no sistema, não pelo vencimento
+        if(isCriadas){
+          if(busca && !p.desc.toLowerCase().includes(busca) && !(p.forn || '').toLowerCase().includes(busca)) return false;
+          const c = p.criadoEm || '';
+          if(!c) return false;
+          if(periodo === 'dia' && c !== hoje) return false;
+          if(periodo === 'semana' && (c > hoje || diasDif(c, hoje) > 7)) return false;
+          if(periodo === 'mes' && (c > hoje || diasDif(c, hoje) > 30)) return false;
+          if(periodo === 'mescal' && c.substring(0, 7) !== mesSel) return false;
+          if(periodo === 'custom' && ((customDe && c < customDe) || (customAte && c > customAte))) return false;
+          if(cat && p.cat !== cat) return false;
+          return true;
+        }
         if(busca && !p.desc.toLowerCase().includes(busca) &&
            !(p.forn || '').toLowerCase().includes(busca)) return false;
         // Para pagas, usa dataPaga se disponível, senão data de vencimento
@@ -315,6 +353,7 @@
           if(isPagas){ if(Math.abs(diasDif(hoje, dataRef)) > 30) return false; }
           else if(!isVencida){ if(p.data < hoje || diasDif(hoje, p.data) > 30) return false; }
         }
+        if(periodo === 'mescal' && String(dataRef || '').substring(0, 7) !== mesSel) return false;
         if(periodo === 'custom'){
           if(customDe && p.data < customDe) return false;
           if(customAte && p.data > customAte) return false;
@@ -381,8 +420,16 @@
         const el = document.getElementById(id);
         if(el) el.innerHTML = ops.map(([v, n]) => `<button class="chip ${v === atual ? 'active' : ''}" onclick="pagarFiltro(${arg(v)})">${n}</button>`).join('');
       };
-      chips('pagar-chips-periodo', per, [['dia','Hoje'],['semana','7 dias'],['mes','30 dias'],['todos','Tudo'],['custom','Período']], v => `'${v}',''`);
-      chips('pagar-chips-status', st, [['abertas','Em aberto'],['atrasado','Atrasadas'],['pagas','Pagas'],['todas','Todas']], v => `'','${v}'`);
+      chips('pagar-chips-periodo', per, [['dia','Hoje'],['semana','7 dias'],['mes','30 dias'],['mescal','Mês'],['todos','Tudo'],['custom','Período']], v => `'${v}',''`);
+      // o botão "Mês" ganha o nome do mês e setas para andar
+      const elPer = document.getElementById('pagar-chips-periodo'), btMes = elPer && [...elPer.querySelectorAll('.chip')].find(b => b.textContent === 'Mês');
+      if(btMes){
+        if(per === 'mescal') btMes.outerHTML = `<span class="chip active chip-mes"><button onclick="pagarMesAndar(-1)" title="Mês anterior" aria-label="Mês anterior">‹</button><b>${pagarMesRotulo()}</b><button onclick="pagarMesAndar(1)" title="Próximo mês" aria-label="Próximo mês">›</button></span>`;
+        else btMes.title = 'Escolher um mês inteiro (depois use as setas para trocar)';
+      }
+      chips('pagar-chips-status', st, [['abertas','Em aberto'],['atrasado','Atrasadas'],['pagas','Pagas'],['todas','Todas'],['criadas','Criadas']], v => `'','${v}'`);
+      const elSt = document.getElementById('pagar-chips-status'), btCr = elSt && [...elSt.querySelectorAll('.chip')].find(b => b.textContent === 'Criadas');
+      if(btCr) btCr.title = 'Contas que você lançou no período escolhido, vençam quando vencerem. Bom para ver o que foi criado no mês.';
     }
 
     function renderPagar(){
@@ -438,7 +485,8 @@
         const extra = p.pago && (p.desconto > 0 || p.juros > 0)
           ? `<div class="ap-extra">${p.desconto > 0 ? 'desc. ' + fmt(p.desconto) : ''}${p.desconto > 0 && p.juros > 0 ? ' · ' : ''}${p.juros > 0 ? 'juros ' + fmt(p.juros) : ''}</div>` : '';
         const acao = !p.pago
-          ? `<button class="btn-out btn-sm" onclick="event.stopPropagation();abrirModalBaixa([${idx}])">Dar baixa</button>` : '';
+          ? `<button class="btn-out btn-sm" onclick="event.stopPropagation();abrirModalBaixa([${idx}])">Dar baixa</button>`
+          : `<button class="btn-out btn-sm ap-estorno" title="Desfaz a baixa: a conta volta para em aberto e o valor volta para o saldo" onclick="event.stopPropagation();pagarEstornar(${idx}, this)">Estornar</button>`;
 
         return `<div class="entry ap-row${atr ? ' ap-atr' : ''}${p.pago ? ' ap-pago' : ''}" onclick="editarLanc(${idx})">
           <input type="checkbox" class="cb-pagar" data-idx="${idx}" data-val="${p.val}" onclick="event.stopPropagation();atualizarContPagar()">
@@ -554,15 +602,16 @@
         const riscoLeve = reservaMinima > 0 && saldoAcum < reservaMinima && saldoAcum >= 0;
         const riscoForte = saldoAcum < 0;
         const classeRisco = riscoForte ? ' risco-forte' : riscoLeve ? ' risco-leve' : '';
-        const corAcum = riscoForte ? 'var(--danger)' : riscoLeve ? '#e65c00' : 'var(--success)';
+        const corAcum = riscoForte ? 'var(--danger)' : riscoLeve ? '#e65c00' : 'var(--info)';
+        const confDia = Math.min(e.conf, entrada), projDia = Math.max(0, entrada - confDia);
 
-        html += `<div class="cal-day${isHoje ? ' hoje' : ''}${classeRisco}" onclick="abrirDia('${data}')">
+        html += `<div class="cal-day${isHoje ? ' hoje' : ''}${classeRisco}" onclick="abrirDia('${data}')" title="${ptDate(data)}${confDia > 0 ? ' · confirmado ' + fmt(confDia) : ''}${projDia > 0 ? ' · projetado ' + fmt(projDia) : ''}${pag > 0 ? ' · saiu ' + fmt(pag) : ''} · saldo acumulado ${fmt(saldoAcum)}">
           <div class="cal-day-num">${dia}${typeof feriadoTag === 'function' ? feriadoTag(data) : ''}</div>
-          ${entrada > 0 ? `<div class="cal-valor-entrada">+${fmt(entrada)}</div>` : ''}
-          ${pag > 0 ? `<div class="cal-valor-saida">-${fmt(pag)}</div>` : ''}
-          ${e.proj > 0 && calendarioMode === 'projetado' ? `<div class="cal-valor-proj">~${fmt(e.proj)}</div>` : ''}
-          ${entrada > 0 || pag > 0 ? `<div class="cal-saldo ${saldoDia >= 0 ? 'text-success' : 'text-danger'}">${fmt(saldoDia)}</div>` : ''}
-          <div class="cal-acum" style="color:${corAcum};">≡ ${fmt(saldoAcum)}</div>
+          ${confDia > 0 ? `<div class="cal-valor-entrada">+${fmtCal(confDia)}</div>` : ''}
+          ${projDia > 0 ? `<div class="cal-valor-proj">+${fmtCal(projDia)}</div>` : ''}
+          ${pag > 0 ? `<div class="cal-valor-saida">-${fmtCal(pag)}</div>` : ''}
+          ${entrada > 0 || pag > 0 ? `<div class="cal-saldo ${saldoDia >= 0 ? 'cal-pos' : 'cal-neg'}">${fmtCal(saldoDia)}</div>` : ''}
+          <div class="cal-acum" style="color:${corAcum};">≡ ${fmtCal(saldoAcum)}</div>
         </div>`;
       }
 

@@ -1124,10 +1124,10 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .ini-olho{background:rgba(255,255,255,.16);border:0;border-radius:8px;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;vertical-align:middle;margin-left:8px;color:inherit;padding:0;}
 .ini-olho:hover{background:rgba(255,255,255,.3);}
 .ini-olho svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
-#view-inicio.ini-oculto .sens,#view-inicio.ini-oculto .kpi-value,#view-inicio.ini-oculto .kpi-sub,#view-inicio.ini-oculto .ini-num,#view-inicio.ini-oculto .ini-mini b,
-#view-inicio.ini-oculto .ini-venc .vl,#view-inicio.ini-oculto .ini-lib .v,#view-inicio.ini-oculto .ini-top .vl,#view-inicio.ini-oculto .ini-alerta>div>div,#view-inicio.ini-oculto .pc-metricas small,#view-inicio.ini-oculto .pc-host .alert b,
-#view-inicio.ini-oculto .pc-metricas b,#view-inicio.ini-oculto .pc-metricas strong,#view-inicio.ini-oculto .pc-eixo,#view-inicio.ini-oculto .pc-tip,#view-inicio.ini-oculto .ini-var{filter:blur(8px);user-select:none;pointer-events:none;}
-#view-inicio.ini-oculto .ini-bar{pointer-events:none;}
+#view-inicio .ini-oc .sens,#view-inicio .ini-oc .kpi-value,#view-inicio .ini-oc .kpi-sub,#view-inicio .ini-oc .ini-num,#view-inicio .ini-oc .ini-mini b,
+#view-inicio .ini-oc .ini-venc .vl,#view-inicio .ini-oc .ini-lib .v,#view-inicio .ini-oc .ini-top .vl,#view-inicio .ini-oc .ini-alerta>div>div,#view-inicio .ini-oc .pc-metricas small,#view-inicio .ini-oc .pc-host .alert b,
+#view-inicio .ini-oc .pc-metricas b,#view-inicio .ini-oc .pc-metricas strong,#view-inicio .ini-oc .pc-eixo,#view-inicio .ini-oc .pc-tip,#view-inicio .ini-oc .ini-var{filter:blur(8px);user-select:none;pointer-events:none;}
+#view-inicio .ini-oc .ini-bar{pointer-events:none;}
 
 /* Sugestão de compras: SKU e, na frente, o nome */
 .cp-prod-l{max-width:420px !important;white-space:normal;}
@@ -1176,3 +1176,49 @@ a.pv-venda:hover{border-bottom-style:solid;}
   .an-barra .an-l{display:none;}
   .an-barra .an-c{display:inline;}
 }
+
+/* Início: um olho por bloco */
+.ini-wrap{position:relative;}
+.ini-olho.fl{position:absolute;top:-11px;right:14px;z-index:3;margin:0;width:30px;height:24px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.ini-olho.fl:hover{background:var(--surface);color:var(--primary);border-color:var(--primary);}
+.ini-olho.fl svg{width:15px;height:15px;}
+#view-inicio .ini-oc .ini-alerta b{filter:blur(6px);}
+
+/* Painel financeiro: bloco de saldos com um cartão colorido para cada parte */
+.saldo-cores{align-items:stretch;gap:10px;}
+.saldo-cores .saldo-field{flex:1 1 210px;flex-direction:column;align-items:flex-start;gap:6px;padding:12px 14px;border-radius:12px;border:1px solid var(--border);border-left-width:4px;background:var(--surface-2);}
+.saldo-cores .saldo-field .saldo-input{width:100%;text-align:left;font-size:17px;background:var(--surface);}
+.saldo-cores .sf-mp{border-left-color:#0ea5e9;background:color-mix(in srgb,#0ea5e9 7%,var(--surface));}
+.saldo-cores .sf-bancos{border-left-color:#8b5cf6;background:color-mix(in srgb,#8b5cf6 7%,var(--surface));}
+.saldo-cores .sf-total{border-left-color:var(--success);background:color-mix(in srgb,var(--success) 9%,var(--surface));justify-content:center;}
+.saldo-cores .sf-total .saldo-total{font-size:24px;color:var(--success);}
+.saldo-cores .saldo-op{align-self:center;}
+@media (max-width:700px){.saldo-cores .saldo-op{display:none;}.saldo-cores .saldo-field{flex-basis:100%;}}
+.tip-icon:focus{outline:2px solid var(--primary);outline-offset:1px;}
+
+/* Calendário do fluxo: confirmado verde, projetado roxo, saiu vermelho, resultado/saldo azul (vermelho se negativo); feriado sem vermelho */
+:root{--info:#2563eb;} :root[data-theme="dark"]{--info:#7aa7ff;}
+.cal-valor-entrada{color:var(--success) !important;}
+.cal-valor-proj{color:#8b5cf6 !important;}
+.cal-valor-saida{color:var(--danger) !important;}
+.cal-saldo.cal-pos{color:var(--info);} .cal-saldo.cal-neg{color:var(--danger);}
+.cal-feriado{background:color-mix(in srgb,#0d9488 14%,transparent) !important;color:#0d9488 !important;}
+:root[data-theme="dark"] .cal-feriado{color:#5eead4 !important;}
+.cal-legenda{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--text-muted);padding:10px 4px 0;}
+.cal-legenda i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;}
+.cal-day{overflow:hidden;min-width:0;}
+.cal-day > div{white-space:nowrap;overflow:hidden;text-overflow:clip;}
+@media (max-width:700px){
+  .cal-grid{grid-template-columns:repeat(7,minmax(0,1fr)) !important;}
+  .cal-day{min-height:66px;padding:3px 2px;}
+  .cal-day .cal-feriado{display:block;margin:1px 0 0;max-width:100%;font-size:8px;padding:0 3px;}
+  .cal-valor-entrada,.cal-valor-saida,.cal-valor-proj,.cal-saldo,.cal-acum{font-size:9px;letter-spacing:-.03em;}
+  .cal-header{font-size:10px;padding:5px 0;}
+}
+
+/* Contas a pagar: botão de mês com setas e estorno */
+.chip.chip-mes{display:inline-flex;align-items:center;gap:2px;padding:0 4px;cursor:default;}
+.chip.chip-mes b{padding:0 6px;font-weight:650;min-width:58px;text-align:center;}
+.chip.chip-mes button{background:none;border:0;color:inherit;font-size:18px;line-height:1;width:26px;height:28px;border-radius:999px;cursor:pointer;}
+.chip.chip-mes button:hover{background:rgba(255,255,255,.22);}
+.ap-estorno{opacity:.75;font-size:12px;} .ap-estorno:hover{opacity:1;}

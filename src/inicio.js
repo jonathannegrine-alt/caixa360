@@ -26,31 +26,53 @@
         const porDia = {};
         (serie.data || []).forEach(r => { porDia[String(r.dia).substring(0,10)] = { val: Number(r.bruto) || 0, qtd: Number(r.vendas) || 0, mc: Number(r.mc) || 0 }; });
         const top = (rank.data || []).slice(0, 5).map(t => ({ sku: t.chave, titulo: t.titulo || '', un: Number(t.un) || 0, val: Number(t.bruto) || 0 }));
+        if(serie.error) throw new Error(serie.error.message);
         inicioVendas = { porDia, top, em: Date.now(), tem: (serie.data || []).length > 0, ads: null };
+        try { localStorage.setItem('mk_ini_vendas', JSON.stringify({ conta: contaParam() || '', porDia, top, tem: inicioVendas.tem })); } catch(e){}
         // gasto com publicidade de hoje chega depois (não segura a tela)
         adsHoje.then(r => { if(!r || r.error || !Array.isArray(r.anuncios) || !inicioVendas) return; inicioVendas.ads = r.anuncios.reduce((s, a) => s + (Number(a.investimento) || 0), 0); if(document.getElementById('view-inicio').classList.contains('active')) renderInicio(); });
       } catch(e){
-        inicioVendas = { porDia:{}, top:[], em: Date.now(), tem:false };
+        // falhou: mantém o que já havia na tela e tenta de novo em 20 segundos (não cai para "liberado hoje")
+        if(inicioVendas) inicioVendas.em = Date.now() - 10 * 60 * 1000 + 20000; else inicioVendas = iniVendasGuardadas();
+        setTimeout(() => { if(document.getElementById('view-inicio').classList.contains('active')) inicioCarregarVendas(); }, 21000);
       }
       inicioVendasCarregando = false;
       if(document.getElementById('view-inicio').classList.contains('active')) renderInicio();
     }
 
+    // última leitura guardada neste navegador (mostra na hora, enquanto a nova chega)
+    function iniVendasGuardadas(){
+      try { const g = JSON.parse(localStorage.getItem('mk_ini_vendas') || 'null');
+        if(g && g.conta === (contaParam() || '') && g.porDia) return { porDia: g.porDia, top: g.top || [], em: 0, tem: !!g.tem, ads: null, guardado: true };
+      } catch(e){}
+      return null;
+    }
+
     function inicioSerieVendas(){
       const hoje = getToday();
-      const usaVendas = !!(inicioVendas && inicioVendas.tem);
+      if(!inicioVendas) inicioVendas = iniVendasGuardadas();
+      const usaVendas = !inicioVendas || !!inicioVendas.tem;      // enquanto carrega, o destaque já é "Vendas hoje"
       const mapa = {};
-      if(usaVendas) Object.keys(inicioVendas.porDia).forEach(d => { mapa[d] = inicioVendas.porDia[d]; });
+      if(usaVendas) Object.keys((inicioVendas || {}).porDia || {}).forEach(d => { mapa[d] = inicioVendas.porDia[d]; });
       else extratoHistorico.forEach(e => { mapa[e.data] = { val: Number(e.val_liquido) || 0, qtd: Number(e.qtd_pedidos) || 0 }; });
       const dias = [];
       for(let i = 59; i >= 0; i--){ const d = addDias(hoje, -i); dias.push({ data:d, val:(mapa[d] || {}).val || 0, qtd:(mapa[d] || {}).qtd || 0, mc:(mapa[d] || {}).mc || 0 }); }
-      return { usaVendas, atual: dias.slice(30), anterior: dias.slice(0,30) };
+      return { usaVendas, carregando: !inicioVendas, atual: dias.slice(30), anterior: dias.slice(0,30) };
     }
 
     // Olho: esconde os valores da tela Início (fica guardado neste navegador)
-    function iniOculto(){ try { return localStorage.getItem('mk_ini_oculto') === '1'; } catch(e){ return false; } }
-    function iniOlho(){
-      try { localStorage.setItem('mk_ini_oculto', iniOculto() ? '0' : '1'); } catch(e){}
+    // cada bloco tem o seu: destaque (vendas de hoje), resumo, caixa projetado, vendas de 30 dias, liberações
+    const INI_BLOCOS = ['hero', 'resumo', 'caixa', 'vendas', 'lib'];
+    function iniOcultos(){
+      try { const v = localStorage.getItem('mk_ini_ocultos'); if(v) return JSON.parse(v) || [];
+        return localStorage.getItem('mk_ini_oculto') === '1' ? INI_BLOCOS.slice() : []; } catch(e){ return []; }
+    }
+    function iniOculto(b){ return iniOcultos().includes(b || 'hero'); }
+    function iniOlho(b){
+      b = b || 'hero';
+      const l = iniOcultos(), i = l.indexOf(b);
+      if(i >= 0) l.splice(i, 1); else l.push(b);
+      try { localStorage.setItem('mk_ini_ocultos', JSON.stringify(l)); } catch(e){}
       renderInicio();
     }
 
@@ -123,14 +145,17 @@
       const icoDe = p => { const n = document.querySelector(`.nav-item[onclick="nav('${p}')"] svg`); return n ? n.outerHTML : ''; };
       const seta = v => v === null ? '' : `<span class="ini-var ${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1).replace('.', ',')}%</span>`;
 
-      const oculto = iniOculto();
-      el.classList.toggle('ini-oculto', oculto);
-      const olhoSvg = oculto
+      const oculto = iniOculto('hero');
+      el.classList.remove('ini-oculto');
+      const svgOlho = o => o
         ? '<svg viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c5.5 0 9 6 9 6a15.6 15.6 0 0 1-3.2 3.8M6.5 7.6A15.4 15.4 0 0 0 3 12s3.5 6 9 6a9.3 9.3 0 0 0 3.6-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>'
         : '<svg viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="3"/></svg>';
+      const olhoSvg = svgOlho(oculto);
+      // abre um bloco com o seu olho no canto
+      const bloco = (b, rot) => { const o = iniOculto(b); return `<div class="ini-wrap ${o ? 'ini-oc' : ''}"><button class="ini-olho fl" onclick="iniOlho('${b}')" title="${o ? 'Mostrar' : 'Esconder'} os valores de: ${rot}" aria-label="${o ? 'Mostrar' : 'Esconder'} os valores de ${rot}">${svgOlho(o)}</button>`; };
       const margHoje = vHoje.val > 0 ? vHoje.mc / vHoje.val * 100 : 0;
       el.innerHTML = `
-        <div class="ini-hero">
+        <div class="ini-hero ${oculto ? 'ini-oc' : ''}">
           <div class="ini-hero-txt">
             <div class="ini-data">${dataExt}</div>
             <div class="ini-saud">${saud}! 👋</div>
@@ -142,14 +167,15 @@
             </div>
           </div>
           <div class="ini-hero-saldo">
-            <span>${sv.usaVendas ? 'Vendas hoje' : 'Liberado hoje'} <button class="ini-olho" onclick="iniOlho()" title="${oculto ? 'Mostrar os valores' : 'Esconder os valores'}" aria-label="${oculto ? 'Mostrar os valores' : 'Esconder os valores'}">${olhoSvg}</button></span>
-            <b class="sens">${fmt(vHoje.val)}</b>
+            <span>${sv.usaVendas ? 'Vendas hoje' : 'Liberado hoje'}${sv.carregando ? ' <em style="font-style:normal;opacity:.7;font-size:12px;">carregando…</em>' : ''} <button class="ini-olho" onclick="iniOlho('hero')" title="${oculto ? 'Mostrar os valores' : 'Esconder os valores'}" aria-label="${oculto ? 'Mostrar os valores' : 'Esconder os valores'}">${olhoSvg}</button></span>
+            <b class="sens">${sv.carregando ? '…' : fmt(vHoje.val)}</b>
             <small>${sv.usaVendas ? `<b class="sens">${vHoje.qtd}</b> pedido${vHoje.qtd === 1 ? '' : 's'} · Margem <b class="sens ini-verde">${fmt(vHoje.mc)}</b> <span class="sens ini-verde">(${margHoje.toFixed(1).replace('.', ',')}%)</span>` : `<b class="sens">${vHoje.qtd}</b> pedido${vHoje.qtd === 1 ? '' : 's'}`}</small>
             ${sv.usaVendas && inicioVendas && inicioVendas.ads != null ? `<small>ADS hoje: <b class="sens">${fmt(inicioVendas.ads)}</b> · TACOS <b class="sens">${vHoje.val > 0 ? (inicioVendas.ads / vHoje.val * 100).toFixed(1).replace('.', ',') + '%' : '–'}</b></small>` : ''}
             <small>Ontem: <b class="sens">${fmt(vOntem.val)}</b>${sv.usaVendas && vOntem.qtd ? ` · <span class="sens">${vOntem.qtd}</span> pedidos` : ''}</small>
           </div>
         </div>
 
+        ${bloco('resumo', 'a receber, contas a pagar, vendas e saldo')}
         <div class="kpi-grid k4i">
           <div class="kpi k-mc" onclick="nav('receber')" style="cursor:pointer;">
             <div class="kpi-label">A receber do Mercado Livre</div><div class="kpi-value">${fmt(aReceber)}</div>
@@ -163,8 +189,9 @@
           <div class="kpi k-frete" onclick="nav('dashboard')" style="cursor:pointer;">
             <div class="kpi-label">Saldo em caixa</div><div class="kpi-value">${fmt(saldoAtual)}</div>
             <div class="kpi-sub"><span>Em 30 dias <b>${fmt(fim30)}</b></span>${seta(saldoAtual ? (fim30 - saldoAtual) / Math.abs(saldoAtual) * 100 : null)}</div></div>
-        </div>
+        </div></div>
 
+        ${bloco('caixa', 'caixa projetado e avisos')}
         <div class="ini-grid">
           <div class="pc-host"></div>
           <div class="card">
@@ -173,8 +200,9 @@
               ${alertas.map(a => `<div class="ini-alerta ${a.t}"><span class="ic">${a.i}</span><div><div>${a.tx}</div>${a.la ? `<a onclick="${a.ac}">${a.la} →</a>` : ''}</div></div>`).join('')}
             </div>
           </div>
-        </div>
+        </div></div>
 
+        ${bloco('vendas', 'vendas dos últimos 30 dias e vencimentos')}
         <div class="ini-grid">
           <div class="card">
             <div class="card-header">
@@ -205,8 +233,9 @@
               }).join('') : (atrasadas.length ? '' : '<div class="vazio" style="padding:26px 0;"><b>Nenhuma conta em aberto</b>Lance suas contas para acompanhar os vencimentos.</div>')}
             </div>
           </div>
-        </div>
+        </div></div>
 
+        ${bloco('lib', 'liberações e produtos mais vendidos')}
         <div class="ini-grid">
           <div class="card">
             <div class="card-header"><div class="card-title">Liberações confirmadas — próximos 7 dias</div><a class="ini-link" onclick="nav('receber')">A receber ML →</a></div>
@@ -222,6 +251,6 @@
                 : `<div class="ini-atalhos">${atalhos.map(([p,t,d]) => `<div class="ini-atalho" onclick="nav('${p}')">${icoDe(p)}<div><b>${t}</b><small>${d}</small></div></div>`).join('')}</div>`}
             </div>
           </div>
-        </div>`;
+        </div></div>`;
       renderPainelCaixa();
     }

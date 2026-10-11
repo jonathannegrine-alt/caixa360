@@ -442,3 +442,18 @@
       regressaoAtual = { a, b, xUltimo, dataUltimo };
       modoProjecaoAtivo = b >= 0 ? 'tendencia' : 'media';
     }
+
+    // "?" com explicação: aparece ao passar o mouse; no celular, ao tocar
+    function dica(texto, paraBaixo){
+      const t = String(texto).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+      return '<span class="tip' + (paraBaixo ? ' tip-down' : '') + '"><span class="tip-icon" tabindex="0" role="button" aria-label="Explicação">?</span><span class="tip-box">' + t + '</span></span>';
+    }
+
+    // valor dentro da célula do calendário: no celular vai abreviado (12,3 mil) para caber
+    function fmtCal(v){
+      if(window.innerWidth > 700) return fmt(v);
+      const a = Math.abs(v), s = v < 0 ? '-' : '';
+      if(a >= 1000000) return s + (a / 1000000).toFixed(1).replace('.', ',') + ' mi';
+      if(a >= 1000) return s + (a / 1000).toFixed(a >= 100000 ? 0 : 1).replace('.', ',') + 'k';
+      return s + Math.round(a);
+    }

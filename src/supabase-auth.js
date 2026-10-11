@@ -343,7 +343,7 @@
         id:p.id, desc:p.descricao, forn:p.forn, val:p.val, data:p.data,
         cat:p.cat, pago:p.pago, tipo:p.tipo, grupo_id:p.grupo_id,
         parcela:p.parcela, valorPago:p.valor_pago,
-        dataPaga:p.data_paga||null, desconto:p.desconto||0, juros:p.juros||0,
+        dataPaga:p.data_paga||null, desconto:p.desconto||0, juros:p.juros||0, criadoEm:(p.created_at||'').substring(0,10),
         tiny_key:p.tiny_key||null, fonte:p.fonte||null, competencia:p.competencia||null,
         loja:p.loja||null, formaPgto:p.forma_pgto||null, doc:p.doc||null, emissao:p.emissao||null,
         travas:Array.isArray(p.travas) && p.travas.length ? p.travas : null, oculta:!!p.oculta
