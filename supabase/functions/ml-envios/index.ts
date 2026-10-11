@@ -113,6 +113,47 @@ async function flex(supaUrl: string, dbH: Record<string, string>, userId: string
   return { feitos, faltam }
 }
 
+// Conferência da fatura do Flex: o que aconteceu com cada envio (situação, histórico, motivo do cancelamento, reclamação).
+// Só leitura. envios: [{ envio, pedido, conta }] (até 60 por chamada).
+async function conferirFatura(supaUrl: string, dbH: Record<string, string>, userId: string, clientId: string, secret: string, envios: any[]) {
+  const tks = await tokens(supaUrl, dbH, userId, clientId, secret)
+  const g = async (url: string, tk: string, extra: Record<string, string> = {}) => {
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tk, ...extra } }).catch(() => null)
+    return r && r.ok ? await r.json().catch(() => null) : null
+  }
+  const ML = 'https://api.mercadolibre.com'
+  const motivos = new Map<string, string>()
+  const out = await emLotes((envios || []).slice(0, 60), 6, async (x: any) => {
+    const t: any = tks.find((k: any) => String(k.ml_user_id) === String(x.conta)) || tks[0]
+    if (!t) return { envio: x.envio, erro: 'conta não conectada' }
+    const [s, h, o] = await Promise.all([
+      g(ML + '/shipments/' + x.envio, t.access_token, { 'x-format-new': 'true' }),
+      g(ML + '/shipments/' + x.envio + '/history', t.access_token, { 'x-format-new': 'true' }),
+      x.pedido ? g(ML + '/orders/' + x.pedido, t.access_token) : Promise.resolve(null),
+    ])
+    const res: any = { envio: x.envio, status: s?.status || null, substatus: s?.substatus || null,
+      hist: Array.isArray(h) ? h.map((i: any) => ({ s: i.status, ss: i.substatus || null, d: i.date })) : [] }
+    if (o) {
+      const cd = o.cancel_detail || {}
+      res.pedido = { status: o.status, grupo: cd.group || null, codigo: cd.code || null, por: cd.requested_by || null, quando: cd.date || null,
+        tags: o.tags || [], reembolsado: (o.payments || []).reduce((n: number, p: any) => n + (Number(p.transaction_amount_refunded) || 0), 0) }
+      const med = (o.mediations || [])[0]?.id
+      if (med) {
+        const c = await g(ML + '/post-purchase/v1/claims/' + med, t.access_token)
+        if (c) {
+          res.reclamacao = { id: med, tipo: c.type, motivo: c.reason_id || null, resolucao: c.resolution?.reason || null, quando: c.date_created || null, status: c.status }
+          if (c.reason_id) {
+            if (!motivos.has(c.reason_id)) { const m = await g(ML + '/post-purchase/v1/claims/reasons/' + c.reason_id, t.access_token); motivos.set(c.reason_id, m?.detail || m?.name || '') }
+            res.reclamacao.motivo_nome = motivos.get(c.reason_id) || ''
+          }
+        }
+      }
+    }
+    return res
+  })
+  return { envios: out }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   try {
@@ -135,6 +176,7 @@ Deno.serve(async (req: Request) => {
     const jwtRes = await fetch(`${supaUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authHeader } })
     if (!jwtRes.ok) return resp({ error: 'Sessão inválida — faça login novamente.' }, 401)
     const { id: userId } = await jwtRes.json()
+    if (body?.acao === 'conferir') return resp({ ok: true, ...(await conferirFatura(supaUrl, dbH, userId, clientId, secret, body.envios || [])) })
     if (body?.acao === 'flex') return resp({ ok: true, ...(await flex(supaUrl, dbH, userId, clientId, secret)) })
     return resp({ ok: true, ...(await conferir(supaUrl, dbH, userId, clientId, secret)) })
   } catch (err) {

@@ -45,6 +45,7 @@
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
       else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); if(typeof olistRenderCard === 'function') olistRenderCard(); if(typeof vrRenderCard === 'function') vrRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof iaRenderCard === 'function') iaRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }
       else if(page === 'resultado'){ setResultadoTab('anual'); }
+      else if(page === 'flex'){ if(typeof fxRender === 'function') fxRender(); }
       else if(page === 'emprestimos'){ if(typeof renderEmprestimos === 'function') renderEmprestimos(); }
       else if(page === 'patrimonio'){ renderPatrimonio(); if(typeof renderBalanco === 'function') renderBalanco(); }
       else if(page === 'ordens-compra'){ if(typeof ocRender === 'function') ocRender(); else renderOrdensCompra(); }
