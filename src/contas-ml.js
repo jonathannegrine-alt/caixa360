@@ -22,6 +22,7 @@
       contasML = (data || []).map(t => ({ id: String(t.ml_user_id), apelido: t.apelido || null, atualizado: t.updated_at }));
       if(contaAtiva && !contasML.some(c => c.id === contaAtiva)){ contaAtiva = ''; localStorage.removeItem('mk_conta_ativa'); aplicarContaAtiva(false); }
       renderSeletorContas();
+      if(typeof lojasAposContas === 'function') lojasAposContas();
     }
 
     // Recebe as linhas do banco (com ml_user_id) e atualiza os recortes da conta ativa
@@ -32,6 +33,7 @@
     }
 
     function aplicarContaAtiva(redesenhar){
+      if(typeof lojasAbsorver === 'function'){ lojasSaldosAbsorver(); lojasAbsorver(); lojasRecortar(); lojasTravarSaldos(); }
       const daConta = x => !contaAtiva || x.conta === contaAtiva;
       liberacoes = liberacoesTodas.filter(daConta);
       // extrato: soma as contas selecionadas por dia

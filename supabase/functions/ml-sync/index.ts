@@ -267,6 +267,7 @@ Deno.serve(async (req) => {
     const detalhe = res.map((r, i) => ({
       ml_user_id: String(contas[i].ml_user_id), apelido: contas[i].apelido || null,
       liberacoes: r.liberacoes ?? null, erro: r.error || null, aviso: r.aviso || null,
+      saldoMP: r.saldoMP ?? null,                                         // saldo do Mercado Pago desta conta
       hoje: Array.isArray(r.liberacoesHoje) ? r.liberacoesHoje : null   // liberações de hoje por hora, desta conta
     }))
     const ok = res.filter(r => r.success)

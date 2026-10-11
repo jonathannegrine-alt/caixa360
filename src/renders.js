@@ -436,7 +436,7 @@
           <input type="checkbox" class="cb-pagar" data-idx="${idx}" data-val="${p.val}" onclick="event.stopPropagation();atualizarContPagar()">
           <div class="ap-data"><b>${dm(p.data)}</b><span>${quando(p)}</span></div>
           <div class="entry-main ap-main">
-            <div class="entry-title">${apEsc(p.desc)}${p.parcela ? ' <span class="ap-parc">' + apEsc(p.parcela) + '</span>' : ''}</div>
+            <div class="entry-title">${apEsc(p.desc)}${p.parcela ? ' <span class="ap-parc">' + apEsc(p.parcela) + '</span>' : ''}${typeof lojaEtiqueta === 'function' ? lojaEtiqueta(p) : ''}</div>
             <div class="entry-meta">${apEsc(p.forn || 'Sem fornecedor')}</div>
           </div>
           <span class="ap-cat">${apEsc(p.cat || 'Sem categoria')}</span>

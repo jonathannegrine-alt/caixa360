@@ -444,8 +444,8 @@
       }
 
       // Debitar valor pago do saldo (saldoMP)
-      saldoMP = Math.max(0, saldoMP - totalPago);
-      saldoAtual = saldoMP + saldoOutros;
+      if(typeof lojasDebitarMP === 'function') lojasDebitarMP(totalPago);
+      else { saldoMP = Math.max(0, saldoMP - totalPago); saldoAtual = saldoMP + saldoOutros; }
       const mpEl = document.getElementById('saldo-mp');
       const totalEl = document.getElementById('saldo-total-label');
       if(mpEl) mpEl.value = fmtMoney(saldoMP);

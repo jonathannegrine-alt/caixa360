@@ -7,6 +7,7 @@
       if(mpEl) mpEl.value = saldoMP > 0 ? fmtMoney(saldoMP) : '';
       if(outrosEl) outrosEl.value = saldoOutros > 0 ? fmtMoney(saldoOutros) : '';
       if(totalEl) totalEl.textContent = fmt(saldoAtual);
+      if(typeof lojasTravarSaldos === 'function') lojasTravarSaldos();
 
       // Fator Prudencial
       const pctVal = Math.round(cfgPct * 100);

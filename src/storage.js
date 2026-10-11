@@ -1,6 +1,6 @@
 // ===== STORAGE =====
     function salvar(){
-      localStorage.setItem('mk_pagamentos', JSON.stringify(pagamentos));
+      localStorage.setItem('mk_pagamentos', JSON.stringify(typeof pagTodos === 'function' ? pagTodos() : pagamentos));
       localStorage.setItem('mk_liberacoes', JSON.stringify(liberacoes));
       localStorage.setItem('mk_categorias', JSON.stringify(categorias));
       localStorage.setItem('mk_skus', JSON.stringify(skus));
@@ -26,7 +26,7 @@
       localStorage.setItem('mk_cfg', JSON.stringify({
         cfgDelay, cfgPct, reservaMinima, periodoHistorico,
         saldoAtual, saldoMP, saldoOutros, modoProjecao, periodoHistoricoML,
-        patCfg
+        patCfg, ...(typeof lojasCfg === 'function' ? lojasCfg() : {})
       }));
       salvarCfgSupabase();
     }
@@ -38,7 +38,7 @@
       const s = localStorage.getItem('mk_skus');
       const cfg = localStorage.getItem('mk_cfg');
 
-      if(p) pagamentos = JSON.parse(p);
+      if(p){ pagamentos = JSON.parse(p); if(typeof lojasDefinirTodos === 'function') lojasDefinirTodos(pagamentos); }
       if(l) liberacoes = JSON.parse(l);
       if(c) categorias = JSON.parse(c);
       if(s) skus = JSON.parse(s);
@@ -72,6 +72,7 @@
         reservaMinima = obj.reservaMinima || 0;
         periodoHistorico = obj.periodoHistorico || 30;
         modoProjecao = obj.modoProjecao || 'extrato';
+        if(typeof lojasCarregarCfg === 'function') lojasCarregarCfg(obj);
       }
 
       if(pagamentos.length === 0 && liberacoes.length === 0){

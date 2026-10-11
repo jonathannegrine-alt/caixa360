@@ -9,6 +9,7 @@
     try { olist.ultimo = localStorage.getItem('mk_olist_ultimo') || null; } catch(e){}
 
     const olEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const olTodos = () => (typeof pagTodos === 'function' ? pagTodos() : pagamentos);
     const olEspera = ms => new Promise(r => setTimeout(r, ms));
 
     async function olistChamar(corpo){
@@ -47,6 +48,10 @@
     }
 
     function olistAplicar(contas){
+      if(typeof comTodasAsLojas === 'function') return comTodasAsLojas(() => olistAplicarTudo(contas));
+      return olistAplicarTudo(contas);
+    }
+    function olistAplicarTudo(contas){
       const hoje = getToday();
       const validas = contas.filter(c => c && c.id && c.venc && !String(c.situacao).startsWith('cancel'));
       const jaOlist = pagamentos.filter(p => p.fonte === 'olist').length;
@@ -140,7 +145,7 @@
           const feitos = new Set();
           (j.detalhes || []).forEach(d => {
             feitos.add(d.id);
-            const p = pagamentos.find(x => x.tiny_key === 'olist:' + d.id);
+            const p = olTodos().find(x => x.tiny_key === 'olist:' + d.id);
             if(p){ if(d.categoria) p.cat = olistCategoria(d.categoria); if(d.competencia) p.competencia = d.competencia; }
           });
           lote.filter(id => !feitos.has(id)).forEach(id => ids.unshift(id));   // os que não deu tempo voltam para a fila
@@ -159,7 +164,7 @@
       olist.pagRodando = true;
       try {
         let feitos; try { feitos = new Set(JSON.parse(localStorage.getItem('mk_olist_pago_ok') || '[]')); } catch(e){ feitos = new Set(); }
-        const fila = pagamentos.filter(p => p.fonte === 'olist' && p.pago && p.tiny_key).map(p => Number(String(p.tiny_key).split(':')[1])).filter(id => id && !feitos.has(id));
+        const fila = olTodos().filter(p => p.fonte === 'olist' && p.pago && p.tiny_key).map(p => Number(String(p.tiny_key).split(':')[1])).filter(id => id && !feitos.has(id));
         olist.pagFaltam = fila.length;
         let lotes = 0;
         while(fila.length && typeof usuarioAtual !== 'undefined' && usuarioAtual){
@@ -169,7 +174,7 @@
           const vistos = new Set();
           (j.pagamentos || []).forEach(d => {
             vistos.add(d.id); feitos.add(d.id);
-            const p = pagamentos.find(x => x.tiny_key === 'olist:' + d.id); if(!p) return;
+            const p = olTodos().find(x => x.tiny_key === 'olist:' + d.id); if(!p) return;
             if(d.pago_em) p.dataPaga = d.pago_em;
             if(d.valor_pago > 0) p.valorPago = d.valor_pago;
             if(d.competencia && !p.competencia) p.competencia = d.competencia;

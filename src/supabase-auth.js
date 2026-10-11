@@ -152,6 +152,7 @@
 
         // Resetar variáveis JS
         pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
+      if(typeof lojasDefinirTodos === 'function') lojasDefinirTodos(pagamentos);
         extratoHistorico=[]; diasPipeline=0;
         saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30; periodoHistoricoML=90;
         componentes=[]; composicaoKit=[]; vendasSku=[]; estoqueGalpao=[]; metaComp={};
@@ -160,7 +161,7 @@
 
         // Merge: se Supabase retornou vazio, restaurar do backup local
         let _syncNeeded = false;
-        if(pagamentos.length   === 0 && _lsPag.length    > 0){ pagamentos    = _lsPag;    _syncNeeded = true; }
+        if((typeof pagTodos === 'function' ? pagTodos() : pagamentos).length === 0 && _lsPag.length > 0){ pagamentos = _lsPag; if(typeof lojasDefinirTodos === 'function') lojasDefinirTodos(pagamentos); _syncNeeded = true; }
         if(liberacoes.length   === 0 && _lsLib.length    > 0){ liberacoes    = _lsLib;    _syncNeeded = true; }
         if(skus.length         === 0 && _lsSku.length    > 0){ skus          = _lsSku;    _syncNeeded = true; }
         if(categorias.length   === 0 && _lsCat.length    > 0){ categorias    = _lsCat;    _syncNeeded = true; }
@@ -174,7 +175,7 @@
         if(saldoOutros === 0 && _lsCfg.saldoOutros > 0){ saldoOutros = _lsCfg.saldoOutros; saldoAtual = saldoMP + saldoOutros; }
         if(_lsCfg.patCfg) patCfg = {...patCfg, ..._lsCfg.patCfg};
         // Dados restaurados do localStorage → sincronizar imediatamente para nuvem
-        if(_syncNeeded) salvarSupabase();
+        if(_syncNeeded){ if(!_sinc.base) sincDefinirBase(true); salvarSupabase(); }
 
         document.getElementById('tela-login').classList.remove('ativo');
         document.getElementById('user-bar').style.display = 'block';
@@ -205,10 +206,12 @@
     }
 
     function limparSessaoLocal(){
+      _sinc.base = null; _sinc.cfg = null; _sinc.p11 = null; _sinc.lib = undefined;
       ['mk_pagamentos','mk_liberacoes','mk_skus','mk_categorias','mk_cfg',
        'mk_liberacoes_hoje','mk_ultimo_sync_ml',
        'mk_componentes','mk_composicao','mk_vendas_sku','mk_estoque_galpao','mk_meta_comp','mk_p11_cfg'].forEach(k => localStorage.removeItem(k));
       pagamentos=[]; liberacoes=[]; skus=[]; categorias=[];
+      if(typeof lojasDefinirTodos === 'function') lojasDefinirTodos(pagamentos);
       extratoHistorico=[]; diasPipeline=0;
       saldoMP=0; saldoOutros=0; saldoAtual=0; cfgPct=0.75; reservaMinima=0; periodoHistorico=30; periodoHistoricoML=90;
       componentes=[]; composicaoKit=[]; vendasSku=[]; estoqueGalpao=[]; metaComp={};
@@ -309,6 +312,8 @@
       }
       // Reseta variáveis
       pagamentos = []; liberacoes = []; skus = []; categorias = [];
+      if(typeof lojasDefinirTodos === 'function') lojasDefinirTodos(pagamentos);
+      sincDefinirBase(true);
       componentes = []; estoqueGalpao = []; composicaoKit = []; vendasSku = [];
       saldoMP = 0; saldoOutros = 0; cfgDelay = 7; cfgPct = 0.75; reservaMinima = 0; periodoHistorico = 90;
       alert('✅ Todos os dados foram apagados.');
@@ -322,8 +327,8 @@
 
       const dataCorte90 = addDias(getToday(), -90);
       const [rPag, rLib, rSku, rCat, rCfg, rExt, rSnap] = await Promise.all([
-        supa.from('pagamentos').select('*').eq('usuario_id', uid),
-        supa.from('liberacoes').select('*').eq('usuario_id', uid),
+        supaTudo('pagamentos', uid),
+        supaTudo('liberacoes', uid),
         supa.from('skus').select('*').eq('usuario_id', uid),
         supa.from('categorias').select('*').eq('usuario_id', uid),
         supa.from('configuracoes').select('*').eq('usuario_id', uid).single(),
@@ -336,14 +341,17 @@
         cat:p.cat, pago:p.pago, tipo:p.tipo, grupo_id:p.grupo_id,
         parcela:p.parcela, valorPago:p.valor_pago,
         dataPaga:p.data_paga||null, desconto:p.desconto||0, juros:p.juros||0,
-        tiny_key:p.tiny_key||null, fonte:p.fonte||null, competencia:p.competencia||null
+        tiny_key:p.tiny_key||null, fonte:p.fonte||null, competencia:p.competencia||null,
+        loja:p.loja||null, formaPgto:p.forma_pgto||null, doc:p.doc||null, emissao:p.emissao||null
       }));
+      if(rPag.data && typeof lojasDefinirTodos === 'function') lojasDefinirTodos(pagamentos);
 
       if(rLib.data) liberacoes = rLib.data.map(l => ({data:l.data, val:l.val}));
 
       if(rSku.data) skus = rSku.data.map(s => ({id:s.id, sku:s.sku, custo:s.custo, imposto:s.imposto, titulo:s.titulo||''}));
 
-      if(rCat.data) categorias = rCat.data.map(c => ({id:c.id, nome:c.nome, impactaDRE:c.impacta_dre, tipoPassivo:c.tipo_passivo||'divida', dreGrupo:c.dre_grupo||null}));
+      if(rCat.data) categorias = rCat.data.map(c => ({id:c.id, nome:c.nome, impactaDRE:c.impacta_dre, tipoPassivo:c.tipo_passivo||'divida', dreGrupo:c.dre_grupo||null, grupo:c.grupo||null}));
+      if(rPag.data && rCat.data && rSku.data) sincDefinirBase();
 
       if(rCfg.data && rCfg.data.cfg){
         const c = rCfg.data.cfg;
@@ -357,6 +365,8 @@
         if(c.patCfg) patCfg = {...patCfg, ...c.patCfg};
         if(c.comprasCfg && typeof comprasCarregarCfg === 'function') comprasCarregarCfg(c.comprasCfg);
         saldoAtual = saldoMP + saldoOutros;
+        if(typeof lojasCarregarCfg === 'function'){ lojasCarregarCfg(c); lojasSaldosRecortar(); }
+        _sinc.cfg = JSON.stringify(sincCfgAtual());
       }
 
       if(rExt.data) extratoHistorico = rExt.data.map(e => ({data:e.data, val_liquido:e.val_liquido, qtd_pedidos:e.qtd_pedidos}));
@@ -370,48 +380,151 @@
     }
 
     // ===== SUPABASE — SALVAR DADOS =====
-    async function salvarSupabase(){
-      if(!usuarioAtual) return {ok:false, error:'sem sessão'};
-      const uid = usuarioAtual.id;
+    // Gravação POR LINHA: compara o que está na tela com o que foi lido do banco (a "base") e só inclui, altera
+    // ou exclui as linhas que mudaram. Assim duas abas (ou dois aparelhos) abertas não apagam o trabalho uma da
+    // outra. Depois de gravar, avisa as outras abas, que se atualizam sozinhas.
+    let _sinc = { base: null, rodando: false, pendente: false, espera: [], cfg: null, p11: null, sujo: false };
+    const _abaId = Math.random().toString(36).slice(2);
+    let _canalAbas = null;
+    try { _canalAbas = new BroadcastChannel('caixa360'); } catch(e){}
 
-      // Captura snapshot antes de qualquer await (evita race condition com limparSessaoLocal)
-      const snapPag = pagamentos.map(p => ({
-        usuario_id: uid,
-        descricao: p.desc, forn: p.forn||'', val: p.val, data: p.data,
-        cat: p.cat||'', pago: p.pago||false, tipo: p.tipo||'unico',
-        grupo_id: p.grupo_id||p.grupoId||null, parcela: p.parcela||null, valor_pago: p.valorPago||null,
-        data_paga: p.dataPaga||null, desconto: p.desconto||0, juros: p.juros||0,
-        tiny_key: p.tiny_key||null, fonte: p.fonte||null, competencia: p.competencia||null
-      }));
-      const snapCat = categorias.map(c => ({usuario_id: uid, nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida', dre_grupo: c.dreGrupo||null}));
-      const snapSku = skus.map(s => ({usuario_id: uid, sku: s.sku, custo: s.custo, imposto: s.imposto, titulo: s.titulo||null}));
-
-      // Pagamentos: delete + insert em lotes de 200
-      const { error: ePagDel } = await supa.from('pagamentos').delete().eq('usuario_id', uid);
-      if(ePagDel){ console.error('salvarSupabase pagamentos delete:', ePagDel); return {ok:false, error:'delete pagamentos: ' + ePagDel.message}; }
-      if(snapPag.length > 0){
-        for(let i = 0; i < snapPag.length; i += 200){
-          const { error: ePagIns } = await supa.from('pagamentos').insert(snapPag.slice(i, i+200));
-          if(ePagIns){ console.error('salvarSupabase pagamentos insert lote', i, ePagIns); return {ok:false, error:'insert pagamentos lote ' + i + ': ' + ePagIns.message}; }
-        }
+    async function supaTudo(tabela, uid){
+      const todas = [];
+      for(let de = 0; de < 200000; de += 1000){
+        const r = await supa.from(tabela).select('*').eq('usuario_id', uid).order('id').range(de, de + 999);
+        if(r.error) return { data: null, error: r.error };
+        todas.push(...(r.data || []));
+        if(!r.data || r.data.length < 1000) break;
       }
-
-      // Categorias
-      const { error: eCatDel } = await supa.from('categorias').delete().eq('usuario_id', uid);
-      if(!eCatDel && snapCat.length > 0){
-        const { error: eCatIns } = await supa.from('categorias').insert(snapCat);
-        if(eCatIns){ console.error('salvarSupabase categorias insert:', eCatIns); return {ok:false, error:'insert categorias: ' + eCatIns.message}; }
-      }
-
-      // SKUs
-      const { error: eSkuDel } = await supa.from('skus').delete().eq('usuario_id', uid);
-      if(!eSkuDel && snapSku.length > 0){
-        const { error: eSkuIns } = await supa.from('skus').insert(snapSku);
-        if(eSkuIns){ console.error('salvarSupabase skus insert:', eSkuIns); return {ok:false, error:'insert skus: ' + eSkuIns.message}; }
-      }
-
-      return {ok:true, pagamentos: snapPag.length, categorias: snapCat.length, skus: snapSku.length};
+      return { data: todas, error: null };
     }
+
+    const sincLinhaPag = p => ({
+      descricao: p.desc, forn: p.forn||'', val: p.val, data: p.data,
+      cat: p.cat||'', pago: p.pago||false, tipo: p.tipo||'unico',
+      grupo_id: p.grupo_id||p.grupoId||null, parcela: p.parcela||null, valor_pago: p.valorPago||null,
+      data_paga: p.dataPaga||null, desconto: p.desconto||0, juros: p.juros||0,
+      tiny_key: p.tiny_key||null, fonte: p.fonte||null, competencia: p.competencia||null,
+      loja: p.loja||null, forma_pgto: p.formaPgto||null, doc: p.doc||null, emissao: p.emissao||null
+    });
+    const sincLinhaCat = c => ({ nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida', dre_grupo: c.dreGrupo||null, grupo: c.grupo||null });
+    const sincLinhaSku = s => ({ sku: s.sku, custo: s.custo, imposto: s.imposto, titulo: s.titulo||null });
+    const _sincTabelas = () => [
+      { nome: 'pagamentos', lista: () => (typeof pagTodos === 'function' ? pagTodos() : pagamentos), linha: sincLinhaPag, chave: p => p.tiny_key ? 'k:' + p.tiny_key : null },
+      { nome: 'categorias', lista: () => categorias, linha: sincLinhaCat, chave: c => 'n:' + String(c.nome).trim().toLowerCase() },
+      { nome: 'skus', lista: () => skus, linha: sincLinhaSku, chave: s => 's:' + String(s.sku).trim().toLowerCase() },
+    ];
+
+    // base = retrato do que está no banco. vazio=true: nada no banco (restauração do backup local)
+    function sincDefinirBase(vazio){
+      const base = {};
+      _sincTabelas().forEach(tb => {
+        const m = new Map(), alt = new Map();
+        if(!vazio) tb.lista().forEach(o => { if(!o.id) return; m.set(o.id, JSON.stringify(tb.linha(o))); const k = tb.chave(o); if(k) alt.set(k, o.id); });
+        base[tb.nome] = { m, alt };
+      });
+      _sinc.base = base;
+    }
+
+    async function sincTabela(tb, uid){
+      const b = _sinc.base[tb.nome], lista = tb.lista();
+      const vivos = new Set(), novos = [], alterados = [];
+      if(lista.length === 0 && b.m.size > 5 && !_sinc.permitirVazio) return { ok: false, error: tb.nome + ': lista vazia na tela com ' + b.m.size + ' linhas no banco — nada foi apagado' };
+      lista.forEach(o => {
+        if(o.id && vivos.has(o.id)) delete o.id;                       // objeto copiado: é linha nova
+        if(!o.id){ const k = tb.chave(o), id = k && b.alt.get(k); if(id && !vivos.has(id) && b.m.has(id)) o.id = id; }
+        if(o.id && b.m.has(o.id)){ vivos.add(o.id); const j = JSON.stringify(tb.linha(o)); if(j !== b.m.get(o.id)) alterados.push([o, j]); }
+        else { delete o.id; novos.push(o); }
+      });
+      const apagar = [...b.m.keys()].filter(id => !vivos.has(id));
+      let mudou = 0;
+      for(let i = 0; i < apagar.length; i += 200){
+        const lote = apagar.slice(i, i + 200);
+        const { error } = await supa.from(tb.nome).delete().eq('usuario_id', uid).in('id', lote);
+        if(error) return { ok: false, error: 'excluir ' + tb.nome + ': ' + error.message };
+        lote.forEach(id => b.m.delete(id)); mudou += lote.length;
+      }
+      for(const [o, j] of alterados){
+        const { data, error } = await supa.from(tb.nome).update(JSON.parse(j)).eq('usuario_id', uid).eq('id', o.id).select('id');
+        if(error) return { ok: false, error: 'alterar ' + tb.nome + ': ' + error.message };
+        if(!data || !data.length) return { ok: false, fora: true, error: tb.nome + ': a linha não existe mais no banco (alterada em outra aba)' };
+        b.m.set(o.id, j); mudou++;
+      }
+      for(let i = 0; i < novos.length; i += 200){
+        const lote = novos.slice(i, i + 200), linhas = lote.map(o => ({ usuario_id: uid, ...tb.linha(o) }));
+        const { data, error } = await supa.from(tb.nome).insert(linhas).select('id');
+        if(error) return { ok: false, error: 'incluir ' + tb.nome + ': ' + error.message };
+        if(!data || data.length !== lote.length) return { ok: false, fora: true, error: 'incluir ' + tb.nome + ': resposta incompleta' };
+        lote.forEach((o, k) => { o.id = data[k].id; b.m.set(o.id, JSON.stringify(tb.linha(o))); const c = tb.chave(o); if(c) b.alt.set(c, o.id); });
+        mudou += lote.length;
+      }
+      return { ok: true, mudou, n: lista.length };
+    }
+
+    async function _sincAgora(){
+      if(!usuarioAtual) return { ok: false, error: 'sem sessão' };
+      if(!_sinc.base) return { ok: false, error: 'os dados ainda não terminaram de carregar' };
+      const uid = usuarioAtual.id, r = { ok: true, mudou: 0 };
+      for(const tb of _sincTabelas()){
+        const x = await sincTabela(tb, uid);
+        if(!x.ok) return x;
+        r[tb.nome] = x.n; r.mudou += x.mudou;
+      }
+      return r;
+    }
+
+    function salvarSupabase(){
+      return new Promise(resolver => {
+        _sinc.espera.push(resolver);
+        if(_sinc.rodando){ _sinc.pendente = true; return; }
+        _sincRodar();
+      });
+    }
+    async function _sincRodar(){
+      _sinc.rodando = true;
+      let r, mudou = 0;
+      do {
+        _sinc.pendente = false;
+        const esp = _sinc.espera.splice(0);
+        try { r = await _sincAgora(); } catch(e){ r = { ok: false, error: String(e && e.message || e) }; }
+        if(r.ok) mudou += r.mudou; else console.error('salvarSupabase:', r.error);
+        esp.forEach(f => f(r));
+      } while(_sinc.pendente && r.ok);
+      _sinc.rodando = false;
+      if(mudou) sincAvisarAbas();
+      if(r && r.fora) sincRecarregar('Os dados foram alterados em outra aba. Esta tela foi atualizada; confira e refaça a última alteração se preciso.');
+    }
+
+    // ----- abas -----
+    function sincAvisarAbas(){ try { if(_canalAbas) _canalAbas.postMessage({ t: 'salvo', de: _abaId, uid: usuarioAtual && usuarioAtual.id }); } catch(e){} }
+    function sincOcupado(){
+      return _sinc.rodando || _sinc.pendente || !!document.querySelector('.modal.open') ||
+        (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && !document.activeElement.readOnly && document.activeElement.type !== 'checkbox');
+    }
+    let _sincRecTimer = null, _sincRecarregando = false;
+    async function sincRecarregar(aviso, tentativa){
+      if(!usuarioAtual || _sincRecarregando) return;
+      if(sincOcupado() && (tentativa || 0) < 60){ clearTimeout(_sincRecTimer); _sincRecTimer = setTimeout(() => sincRecarregar(aviso, (tentativa || 0) + 1), 4000); return; }
+      _sincRecarregando = true;
+      try {
+        await carregarDoSupabase();
+        const pag = document.querySelector('.view.active');
+        if(pag && typeof nav === 'function') nav(pag.id.replace('view-', ''), true);
+        if(aviso && typeof toast === 'function') toast(aviso);
+      } catch(e){ console.error('sincRecarregar:', e); }
+      finally { _sincRecarregando = false; }
+    }
+    if(_canalAbas) _canalAbas.onmessage = ev => {
+      const m = ev.data || {};
+      if(m.t !== 'salvo' || m.de === _abaId || !usuarioAtual || m.uid !== usuarioAtual.id) return;
+      clearTimeout(_sincRecTimer); _sincRecTimer = setTimeout(() => sincRecarregar(), 1200);
+    };
+    // voltou para a aba depois de um tempo fora: busca o que mudou em outro aparelho
+    let _sincSaiuEm = 0;
+    document.addEventListener('visibilitychange', () => {
+      if(document.hidden){ _sincSaiuEm = Date.now(); return; }
+      if(_sincSaiuEm && Date.now() - _sincSaiuEm > 120000 && usuarioAtual && _sinc.base) sincRecarregar();
+    });
 
     async function forceSyncNuvem(btn){
       const msg = document.getElementById('msg-sync-nuvem');
@@ -429,18 +542,30 @@
       }
     }
 
-    async function salvarCfgSupabase(){
-      if(!usuarioAtual) return;
+    function sincCfgAtual(){
       const cfg = {saldoMP, saldoOutros, cfgPct, reservaMinima, periodoHistorico, modoProjecao, periodoHistoricoML, patCfg};
       if(typeof comprasCfg !== 'undefined') cfg.comprasCfg = comprasCfg;   // parâmetros da Sugestão de compras
-      await supa.from('configuracoes').upsert({usuario_id: usuarioAtual.id, cfg, updated_at: new Date().toISOString()});
+      if(typeof lojasCfg === 'function') Object.assign(cfg, lojasCfg());   // loja padrão e saldos por loja
+      return cfg;
+    }
+    async function salvarCfgSupabase(){
+      if(!usuarioAtual || !_sinc.base) return;
+      const cfg = sincCfgAtual(), j = JSON.stringify(cfg);
+      if(j === _sinc.cfg) return;
+      const antes = _sinc.cfg; _sinc.cfg = j;
+      const { error } = await supa.from('configuracoes').upsert({usuario_id: usuarioAtual.id, cfg, updated_at: new Date().toISOString()});
+      if(error){ _sinc.cfg = antes; console.error('salvarCfgSupabase:', error); return; }
+      sincAvisarAbas();
     }
 
     async function salvarLiberacoesSupabase(){
       if(!usuarioAtual) return;
       const uid = usuarioAtual.id;
-      await supa.from('liberacoes').delete().eq('usuario_id', uid).eq('ml_user_id', '');
       const manuais = liberacoes.filter(l => !l.conta);
+      const jLib = JSON.stringify(manuais.map(l => [l.data, l.val]));
+      if(jLib === _sinc.lib || (_sinc.lib === undefined && !manuais.length)){ _sinc.lib = jLib; return; }
+      _sinc.lib = jLib;
+      await supa.from('liberacoes').delete().eq('usuario_id', uid).eq('ml_user_id', '');
       if(manuais.length > 0){
         const rows = manuais.map(l => ({usuario_id: uid, ml_user_id: '', data: l.data, val: l.val}));
         await supa.from('liberacoes').insert(rows);
@@ -448,25 +573,31 @@
     }
 
     // ===== SUPABASE — SYNC P11 =====
-    async function salvarP11Supabase(){
+    async function salvarP11Supabase(soMarcar){
       if(!usuarioAtual) return;
       const uid = usuarioAtual.id;
+      if(!_sinc.base) return;
+      const mudouP11 = (k, v) => { const j = JSON.stringify(v); _sinc.p11 = _sinc.p11 || {}; if(_sinc.p11[k] === j) return false; _sinc.p11[k] = j; return !soMarcar; };
       try {
         // Componentes
         const snapComp = componentes.map(c => ({
           usuario_id: uid, codigo: c.codigo, descricao: c.descricao||'',
           custo_unitario: c.custo_unitario||0, fornecedor: c.fornecedor||'', lead_time_dias: c.lead_time_dias||0
         }));
-        await supa.from('sku_componentes').delete().eq('usuario_id', uid);
-        if(snapComp.length > 0) await supa.from('sku_componentes').insert(snapComp);
+        if(mudouP11('comp', snapComp)){
+          await supa.from('sku_componentes').delete().eq('usuario_id', uid);
+          if(snapComp.length > 0) await supa.from('sku_componentes').insert(snapComp);
+        }
 
         // Composição
         const snapComp2 = composicaoKit.map(c => ({
           usuario_id: uid, sku_comercial: c.sku_comercial, titulo_comercial: c.titulo_comercial||'',
           sku_componente: c.sku_componente, qty: c.qty
         }));
-        await supa.from('sku_composicao').delete().eq('usuario_id', uid);
-        if(snapComp2.length > 0) await supa.from('sku_composicao').insert(snapComp2);
+        if(mudouP11('kit', snapComp2)){
+          await supa.from('sku_composicao').delete().eq('usuario_id', uid);
+          for(let i = 0; i < snapComp2.length; i += 500) await supa.from('sku_composicao').insert(snapComp2.slice(i, i + 500));
+        }
 
         // Vendas SKU
         const snapVendas = vendasSku.map(v => ({
@@ -475,8 +606,10 @@
           envio: v.envio||0, liquido: v.liquido||0, unidades_ads: v.unidades_ads||0,
           cancelamentos: v.cancelamentos||0, periodo_dias: v.periodo_dias||30
         }));
-        await supa.from('vendas_sku').delete().eq('usuario_id', uid);
-        if(snapVendas.length > 0) await supa.from('vendas_sku').insert(snapVendas);
+        if(mudouP11('vendas', snapVendas)){
+          await supa.from('vendas_sku').delete().eq('usuario_id', uid);
+          for(let i = 0; i < snapVendas.length; i += 500) await supa.from('vendas_sku').insert(snapVendas.slice(i, i + 500));
+        }
 
         // Estoque componentes
         const snapEst = estoqueGalpao.map(e => ({
@@ -484,8 +617,10 @@
           qtd_galpao: e.qtd_galpao||0, qtd_full: e.qtd_full||0, qtd_full_pendente: e.qtd_full_pendente||0,
           em_transito: e.em_transito||0, custo_medio: e.custo_medio||0, data_atualizacao: e.data_atualizacao||''
         }));
-        await supa.from('estoque_componentes').delete().eq('usuario_id', uid);
-        if(snapEst.length > 0) await supa.from('estoque_componentes').insert(snapEst);
+        if(mudouP11('est', snapEst)){
+          await supa.from('estoque_componentes').delete().eq('usuario_id', uid);
+          for(let i = 0; i < snapEst.length; i += 500) await supa.from('estoque_componentes').insert(snapEst.slice(i, i + 500));
+        }
       } catch(err){ console.error('salvarP11Supabase:', err); }
     }
 
@@ -507,6 +642,7 @@
           vendasSku = rVendas.data.map(v => ({sku:v.sku, titulo:v.titulo, unidades:v.unidades, receita:v.receita, tarifa_ml:v.tarifa_ml, envio:v.envio, liquido:v.liquido, unidades_ads:v.unidades_ads, cancelamentos:v.cancelamentos, periodo_dias:v.periodo_dias}));
         if(rEst.data && rEst.data.length > 0)
           estoqueGalpao = rEst.data.map(e => ({sku:e.sku, descricao:e.descricao, qtd_galpao:e.qtd_galpao, qtd_full:e.qtd_full, qtd_full_pendente:e.qtd_full_pendente||0, em_transito:e.em_transito, custo_medio:e.custo_medio, data_atualizacao:e.data_atualizacao}));
+        salvarP11Supabase(true);   // só registra o retrato do que veio do banco
       } catch(err){ console.error('carregarP11Supabase:', err); }
     }
 

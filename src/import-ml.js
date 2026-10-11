@@ -45,6 +45,7 @@
           const dados = JSON.parse(e.target.result);
           
           pagamentos = dados.pagamentos || [];
+          if(typeof lojasDefinirTodos === 'function') lojasDefinirTodos(pagamentos);
           liberacoes = dados.liberacoes || [];
           categorias = dados.categorias || [];
           
@@ -289,8 +290,8 @@
         if(libs && typeof definirDadosML === 'function') definirDadosML(libs, null);
 
         // Atualizar saldo MP se veio da API
-        if(data.saldoMP !== null && data.saldoMP !== undefined){
-          saldoMP = data.saldoMP;
+        if(typeof lojasSaldoMPDaAPI === 'function' ? lojasSaldoMPDaAPI(data.contas, data.saldoMP) : (data.saldoMP !== null && data.saldoMP !== undefined)){
+          if(typeof lojasSaldoMPDaAPI !== 'function') saldoMP = data.saldoMP;
           saldoAtual = saldoMP + saldoOutros;
           const mpInput = document.getElementById('saldo-mp');
           if(mpInput) mpInput.value = fmtMoney(saldoMP);

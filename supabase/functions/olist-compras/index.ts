@@ -105,6 +105,13 @@ Deno.serve(async (req: Request) => {
       const det = id ? await api(`/contas-pagar/${id}`, a.token) : null
       return resp({ ok: true, lista: { status: lista.status, corpo: JSON.stringify(lista.json).slice(0, 1500) }, detalhe: det ? { status: det.status, corpo: JSON.stringify(det.json).slice(0, 2500) } : null })
     }
+    // diagnóstico: GET em um caminho da API v3 (só leitura), para conhecer o formato de um recurso novo
+    if (acao === 'bruto_caminho') {
+      const caminhos: string[] = (Array.isArray(body?.caminhos) ? body.caminhos : []).map((c: unknown) => String(c)).filter((c: string) => c.startsWith('/') && !c.includes('..') && c.length < 200).slice(0, 8)
+      const out: any[] = []
+      for (const c of caminhos) { const r = await api(c, a.token); out.push({ caminho: c, status: r.status, corpo: JSON.stringify(r.json).slice(0, Number(body?.tam) || 1500) }) }
+      return resp({ ok: true, out })
+    }
     if (acao === 'pagamentos') {
       const ids: number[] = (Array.isArray(body?.ids) ? body.ids : []).map((x: unknown) => Number(x)).filter((x: number) => x > 0).slice(0, 25)
       const out: any[] = []
