@@ -6,6 +6,7 @@
 
     function nav(page, fromPopState){
       localStorage.setItem('mk_last_page', page);
+      try { sessionStorage.setItem('mk_pagina', page); } catch(e){}
       // Empurra estado no histórico do browser (exceto quando chamado pelo próprio popstate)
       if(!fromPopState && usuarioAtual){
         history.pushState({page}, '', location.pathname + location.search);

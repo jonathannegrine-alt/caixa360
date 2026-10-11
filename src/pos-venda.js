@@ -7,7 +7,7 @@
 //   Regras e textos orientação da IA (postura, regras por produto, textos prontos) + imagens de apoio
 // Banco: pos_venda_cfg, pos_venda_casos, pos_venda_log (supabase/migrations/20261012_pos_venda.sql)
 
-    let pv = { aba: 'fila', cfg: null, casos: [], hist: [], imagens: [], carregado: false, rodando: false, erro: '', aviso: '', ocupado: {} };
+    let pv = { aba: 'fila', cfg: null, casos: [], hist: [], imagens: [], carregado: false, rodando: false, erro: '', aviso: '', ocupado: {}, acesso: null };
     const pvE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const PV_ACOES = { mensagem_comprador: 'Enviar mensagem ao comprador', mensagem_mediador: 'Responder ao Mercado Livre (mediação)', reembolso_total: 'Reembolso total, sem devolução', reembolso_parcial: 'Reembolso parcial', liberar_devolucao: 'Liberar a devolução', manual: 'Ação manual no Mercado Livre', nenhuma: 'Nenhuma ação' };
     const PV_EXIGE = { mensagem_comprador: ['send_message_to_complainant'], mensagem_mediador: ['send_message_to_mediator'], reembolso_total: ['refund'], reembolso_parcial: ['allow_partial_refund', 'partial_refund'], liberar_devolucao: ['allow_return'] };
@@ -37,6 +37,7 @@
       pv.imagens = (imgs.data || []).map(x => x.name).filter(n => /\.(png|jpe?g|webp)$/i.test(n));
       pv.carregado = true; pv.erro = '';
       pvSelo();
+      pvChamar({ acao: 'acesso' }).then(a => { if(a && a.ok){ pv.acesso = a; pvDesenhar(); } });
     }
     // número de casos na fila no menu
     function pvSelo(){
@@ -59,13 +60,14 @@
       const j = await pvChamar({ acao: 'rodada' });
       pv.rodando = false;
       if(j.error) pv.aviso = 'Não consegui rodar a análise: ' + j.error;
-      else { const r = j.resumo || {}; pv.aviso = `Rodada feita: ${r.abertas || 0} casos abertos no Mercado Livre, ${r.exigem || 0} pedem ação nossa, ${r.analisados || 0} analisados agora (${r.diretos || 0} resolvidos direto, ${r.fila || 0} na fila).` + ((r.erros || []).length ? ' Avisos: ' + r.erros.slice(0, 3).join(' · ') : ''); }
+      else if(j.resumo && j.resumo.bloqueado){ pv.aviso = j.resumo.bloqueado + ' Veja a aba Automação.'; }
+      else { const r = j.resumo || {}; pv.aviso = `Rodada feita: ${r.abertas || 0} casos abertos no Mercado Livre, ${r.exigem || 0} pedem ação nossa${r.aguardando ? ', ' + r.aguardando + ' já respondidos aguardando o Mercado Livre' : ''}, ${r.analisados || 0} analisados agora (${r.diretos || 0} resolvidos direto, ${r.fila || 0} na fila).` + ((r.erros || []).length ? ' Avisos: ' + r.erros.slice(0, 3).join(' · ') : ''); }
       await pvAtualizar();
     }
 
     async function pvSalvarCfg(campos){
       Object.assign(pv.cfg, campos);
-      const reg = { usuario_id: usuarioAtual.id, ativo: !!pv.cfg.ativo, regras: pv.cfg.regras || '', auto_msg: !!pv.cfg.auto_msg, auto_dinheiro: !!pv.cfg.auto_dinheiro, limite: Number(pv.cfg.limite) || 0, atualizado_em: new Date().toISOString() };
+      const reg = { usuario_id: usuarioAtual.id, ativo: !!pv.cfg.ativo, regras: pv.cfg.regras || '', auto_msg: !!pv.cfg.auto_msg, auto_dinheiro: !!pv.cfg.auto_dinheiro, limite: Number(pv.cfg.limite) || 0, horarios: Array.isArray(pv.cfg.horarios) ? pv.cfg.horarios : null, atualizado_em: new Date().toISOString() };
       const r = await supa.from('pos_venda_cfg').upsert(reg);
       if(r.error){ toast('Não consegui salvar: ' + r.error.message); return false; }
       delete pv.cfg.novo; return true;
@@ -96,11 +98,12 @@
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;"><span class="text-muted" style="font-size:12px;">${ult ? 'Última análise: ' + ult : 'Ainda não analisou'}</span><button class="btn btn-sm" onclick="pvRodada()" ${pv.rodando ? 'disabled' : ''}>${pv.rodando ? 'Analisando… (até 2 min)' : 'Analisar agora'}</button></div>
         </div>
         ${pv.aviso ? `<div class="alert alert-info">${pvE(pv.aviso)}</div>` : ''}
+        ${pv.acesso && !pv.acesso.pode ? `<div class="alert alert-warning"><b>${pvE(pv.acesso.motivo || 'Recurso não liberado.')}</b>&nbsp; Na aba <a class="fx-link" style="color:var(--primary);cursor:pointer;" onclick="pv.aba='modo';pvDesenhar();">Automação</a> você pode usar a sua própria chave de IA ou pedir a liberação.</div>` : ''}
         <div class="kpi-grid k4i">
           <div class="kpi ${fila.length ? 'k-hoje' : 'k-neutro'}"><div class="kpi-label">Esperando você</div><div class="kpi-value">${fila.length}</div><div class="kpi-sub">casos na fila</div></div>
           <div class="kpi ${urg ? 'k-atraso' : 'k-neutro'}"><div class="kpi-label">Vencem em 24 h</div><div class="kpi-value">${urg}</div><div class="kpi-sub">prazo do Mercado Livre</div></div>
           <div class="kpi k-mc"><div class="kpi-label">Resolvidos em 7 dias</div><div class="kpi-value">${resolv}</div><div class="kpi-sub">${diretos} direto pela IA</div></div>
-          <div class="kpi k-neutro"><div class="kpi-label">Modo</div><div class="kpi-value" style="font-size:17px;">${c.ativo ? (c.auto_msg || c.auto_dinheiro ? 'Automático' : 'Só fila') : 'Desligado'}</div><div class="kpi-sub">${c.ativo ? 'analisa sozinha a cada 30 min' : 'só analisa quando você clica'}</div></div>
+          <div class="kpi k-neutro"><div class="kpi-label">Modo</div><div class="kpi-value" style="font-size:17px;">${c.ativo ? (c.auto_msg || c.auto_dinheiro ? 'Automático' : 'Só fila') : 'Desligado'}</div><div class="kpi-sub">${c.ativo ? (Array.isArray(c.horarios) && c.horarios.length ? 'analisa às ' + c.horarios.slice(0, 5).join(', ') + (c.horarios.length > 5 ? '…' : '') : 'analisa sozinha a cada 10 min') : 'só analisa quando você clica'}</div></div>
         </div>
         <div class="chips" style="margin-bottom:14px;">${[['fila', 'Fila (' + fila.length + ')'], ['hist', 'Histórico'], ['regras', 'Regras e textos'], ['modo', 'Automação']].map(([k, t]) => `<button class="chip ${pv.aba === k ? 'active' : ''}" onclick="pv.aba='${k}';pvDesenhar();">${t}</button>`).join('')}</div>
         ${pv.aba === 'fila' ? pvFila(fila) : pv.aba === 'hist' ? pvHist(hist) : pv.aba === 'regras' ? pvRegras() : pvModo()}`;
@@ -122,7 +125,7 @@
         <div class="pv-topo">
           <span class="pv-est pv-${c.tipo === 'mensagem' ? 'msg' : c.estagio === 'dispute' ? 'med' : 'rec'}">${est}</span>
           ${typeof lojaNome === 'function' && lojaNome(c.ml_user_id) ? `<span class="loja-tag" style="margin-left:0;">${pvE(lojaNome(c.ml_user_id))}</span>` : ''}
-          <b>#${pvE(c.venda || c.ref)}</b>
+          <a class="pv-venda" href="${pvLink(c)}" target="_blank" rel="noopener" title="Abrir esta venda no Mercado Livre">#${pvE(c.venda || c.ref)}</a>
           <span class="pv-prod">${pvE(c.produto || '')}${c.sku ? ' · ' + pvE(c.sku) : ''}${c.valor ? ' · ' + fmt(Number(c.valor)) : ''}</span>
           <span class="pv-prazo ${p.cls}">${p.t}</span>
         </div>
@@ -194,7 +197,7 @@
       const dt = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
       return `<div class="card"><div class="card-header"><div class="card-title">Histórico</div><button class="btn-out btn-sm" onclick="pvExportar()">Exportar</button></div><div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Quando</th><th>Venda</th><th>Produto</th><th>Tipo</th><th>O que foi feito</th><th>Decisão</th><th>Resultado</th></tr></thead><tbody>
         ${hist.map(c => `<tr style="cursor:pointer;" onclick="pvVer(${c.id})"><td style="white-space:nowrap;">${dt(c.executado_em || c.analisado_em)}</td>
-          <td style="white-space:nowrap;"><b>#${pvE(c.venda || c.ref)}</b>${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? '<div class="cp-sub">' + pvE(lojaNome(c.ml_user_id)) + '</div>' : ''}</td>
+          <td style="white-space:nowrap;"><a class="pv-venda" href="${pvLink(c)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir esta venda no Mercado Livre">#${pvE(c.venda || c.ref)}</a>${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? '<div class="cp-sub">' + pvE(lojaNome(c.ml_user_id)) + '</div>' : ''}</td>
           <td class="cp-prod" style="max-width:240px;"><b>${pvE(c.produto || '—')}</b><span>${pvE(c.motivo || '')}</span></td>
           <td>${pvE(c.categoria || (c.tipo === 'mensagem' ? 'mensagem' : 'reclamação'))}</td>
           <td style="max-width:260px;">${pvE(PV_ACOES[c.acao] || c.acao || '—')}</td>
@@ -266,15 +269,54 @@
 
     // ----- automação -----
     function pvModo(){
-      const c = pv.cfg || {};
-      const chave = (campo, titulo, texto, extra) => `<label class="pv-chave"><input type="checkbox" ${c[campo] ? 'checked' : ''} onchange="pvChave('${campo}', this.checked)" ${extra || ''}><div><b>${titulo}</b><span>${texto}</span></div></label>`;
-      return `<div class="card"><div class="card-header"><div class="card-title">O que a IA pode fazer sozinha</div></div><div class="card-body">
-        ${chave('ativo', 'Analisar sozinha a cada 30 minutos', 'Sem depender do computador ligado. Desligado, a análise só roda quando você clica em "Analisar agora".')}
-        ${chave('auto_msg', 'Enviar mensagens sem aprovação quando a regra manda passar direto', 'Vale para resposta ao comprador e ao Mercado Livre. Tudo que a regra manda para a fila continua esperando você.', c.ativo ? '' : '')}
+      const c = pv.cfg || {}, a = pv.acesso, hs = Array.isArray(c.horarios) ? c.horarios.slice().sort() : [];
+      const chave = (campo, titulo, texto) => `<label class="pv-chave"><input type="checkbox" ${c[campo] ? 'checked' : ''} onchange="pvChave('${campo}', this.checked)"><div><b>${titulo}</b><span>${texto}</span></div></label>`;
+      const acessoHtml = !a ? '<div class="text-muted">Verificando…</div>'
+        : a.propria ? `<div class="pf-aviso pf-ok" style="margin:0;">Usando a <b>sua chave de IA</b> (o consumo é cobrado direto na sua conta da Anthropic). <button class="btn-out btn-sm" style="margin-left:8px;" onclick="pvChaveIA(true)">Remover chave</button></div>`
+        : a.pode ? `<div class="pf-aviso pf-ok" style="margin:0;">IA liberada para esta conta${a.credito === null ? '' : ' · crédito restante <b>' + fmt(Number(a.credito) || 0) + '</b>'}${a.gasto ? ' · consumo até agora: cerca de ' + fmt(Number(a.gasto)) : ''}.</div>`
+        : `<div class="pf-aviso" style="margin:0;border-color:var(--warning,#d97706);"><b>${pvE(a.motivo || 'Recurso não liberado.')}</b><br>Cada caso analisado consome créditos de inteligência artificial. Para usar, escolha um caminho:
+            <div style="margin-top:8px;"><b>1.</b> Cole a sua chave da Anthropic (console.anthropic.com → API keys). Ela fica guardada só no servidor.</div>
+            <div class="d-flex gap-1" style="margin-top:6px;flex-wrap:wrap;"><input type="password" id="pv-chave-ia" placeholder="sk-ant-..." autocomplete="off" style="flex:1 1 260px;max-width:420px;"><button class="btn btn-sm" onclick="pvChaveIA()">Guardar chave</button></div>
+            <div style="margin-top:10px;"><b>2.</b> Ou fale com o desenvolvedor para liberar o uso com crédito pré-pago.</div></div>`;
+      return `<div class="card"><div class="card-header"><div class="card-title">Acesso à inteligência artificial</div></div><div class="card-body">${acessoHtml}</div></div>
+      <div class="card"><div class="card-header"><div class="card-title">O que a IA pode fazer sozinha</div></div><div class="card-body">
+        ${chave('ativo', 'Analisar sozinha nos horários abaixo', 'Sem depender do computador ligado. Desligado, a análise só roda quando você clica em "Analisar agora".')}
+        <div class="pv-chave" style="cursor:default;"><div style="margin-left:34px;width:100%;"><b>Horários (de Brasília, todos os dias)</b><span>${hs.length ? 'A análise roda nestes horários (até 10 minutos depois).' : 'Sem horários escolhidos: roda a cada 10 minutos, dia e noite.'}</span>
+          <div class="chips" style="margin-top:8px;">${hs.map(h => `<span class="chip active" style="cursor:default;">${h} <a style="cursor:pointer;margin-left:6px;" title="Tirar este horário" onclick="pvHorario('${h}', false)">✕</a></span>`).join('') || '<span class="text-muted" style="font-size:12.5px;">nenhum</span>'}</div>
+          <div class="d-flex gap-1" style="margin-top:10px;flex-wrap:wrap;align-items:center;font-size:13px;">
+            <input type="time" id="pv-h-novo" style="width:120px;"><button class="btn-out btn-sm" onclick="pvHorario(document.getElementById('pv-h-novo').value, true)">Adicionar horário</button>
+            <span class="text-muted" style="margin:0 6px;">ou</span>
+            das <input type="time" id="pv-h-de" value="08:00" style="width:110px;"> às <input type="time" id="pv-h-ate" value="18:00" style="width:110px;"> a cada
+            <select id="pv-h-cada" style="width:auto;"><option value="30">30 min</option><option value="60">1 hora</option><option value="120">2 horas</option><option value="180" selected>3 horas</option><option value="240">4 horas</option></select>
+            <button class="btn-out btn-sm" onclick="pvHorariosGerar()">Preencher</button>
+            ${hs.length ? '<button class="btn-out btn-sm" onclick="pvSalvarCfg({ horarios: null }).then(pvDesenhar)">Limpar</button>' : ''}
+          </div></div></div>
+        ${chave('auto_msg', 'Enviar mensagens sem aprovação quando a regra manda passar direto', 'Vale para resposta ao comprador e ao Mercado Livre. Tudo que a regra manda para a fila continua esperando você.')}
         ${chave('auto_dinheiro', 'Reembolsar e liberar devolução sem aprovação quando a regra manda passar direto', 'Envolve dinheiro. Só ligue depois de ver a IA acertando na fila.')}
-        <div class="pv-chave"><div style="margin-left:34px;"><b>Limite de valor</b><span>Venda acima deste valor sempre vai para a fila, mesmo que a regra mande passar direto.</span>
+        <div class="pv-chave" style="cursor:default;"><div style="margin-left:34px;"><b>Limite de valor</b><span>Venda acima deste valor sempre vai para a fila, mesmo que a regra mande passar direto.</span>
           <div style="margin-top:6px;">R$ <input type="number" min="0" step="10" value="${Number(c.limite) || 0}" style="width:120px;" onchange="pvSalvarCfg({ limite: Number(this.value) || 0 }).then(pvDesenhar)"></div></div></div>
         <div class="alert alert-warning" style="margin-top:14px;">Enquanto a tarefa agendada de pós-venda do Claude no computador estiver ativa, os dois vão olhar os mesmos casos. Quando ligar a automação aqui, pause aquela tarefa para não responder em dobro.</div>
       </div></div>`;
+    }
+    async function pvHorario(h, incluir){
+      if(!/^\d{2}:\d{2}$/.test(h || '')) return;
+      let hs = Array.isArray(pv.cfg.horarios) ? pv.cfg.horarios.slice() : [];
+      hs = incluir ? [...new Set(hs.concat(h))] : hs.filter(x => x !== h);
+      if(await pvSalvarCfg({ horarios: hs.length ? hs.sort() : null })) pvDesenhar();
+    }
+    async function pvHorariosGerar(){
+      const min = s => { const [a, b] = String(s).split(':').map(Number); return a * 60 + b; };
+      const de = min(document.getElementById('pv-h-de').value), ate = min(document.getElementById('pv-h-ate').value), cada = Number(document.getElementById('pv-h-cada').value) || 180;
+      if(!(ate >= de)){ toast('O horário final precisa ser depois do inicial.'); return; }
+      const hs = []; for(let m = de; m <= ate && hs.length < 48; m += cada) hs.push(String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
+      if(await pvSalvarCfg({ horarios: hs })) pvDesenhar();
+    }
+    async function pvChaveIA(remover){
+      const el = document.getElementById('pv-chave-ia'), chave = remover ? '' : (el ? el.value.trim() : '');
+      if(!remover && !chave){ toast('Cole a chave.'); return; }
+      const j = await pvChamar({ acao: 'chave', chave });
+      if(j.error){ toast(j.error); return; }
+      toast(remover ? 'Chave removida.' : 'Chave guardada e testada.');
+      pv.acesso = await pvChamar({ acao: 'acesso' }); pvDesenhar();
     }
     async function pvChave(campo, valor){ if(await pvSalvarCfg({ [campo]: valor })) pvDesenhar(); }

@@ -54,7 +54,9 @@
 
       // Restaurar última página visitada (ou dashboard como padrão)
       // Primeira vez após a criação da página Início: abre nela
-      const lastPage = localStorage.getItem('mk_viu_inicio') ? (localStorage.getItem('mk_last_page') || 'inicio') : 'inicio';
+      // ao entrar no sistema abre sempre no Início; só o F5 (mesma aba) volta para a página em que estava
+      let lastPage = 'inicio'; try { lastPage = sessionStorage.getItem('mk_pagina') || 'inicio'; } catch(e){}
+      if(!document.getElementById('view-' + lastPage)) lastPage = 'inicio';
       localStorage.setItem('mk_viu_inicio', '1');
       nav(['calendario'].includes(lastPage) ? 'dashboard' : lastPage);
     }
@@ -82,7 +84,7 @@
     // ===== BOTÃO VOLTAR DO BROWSER — intercepta para navegar entre páginas do app =====
     window.addEventListener('popstate', function(e){
       if(!usuarioAtual) return; // não logado: deixa o browser agir normalmente
-      const page = (e.state && e.state.page) ? e.state.page : (localStorage.getItem('mk_last_page') || 'inicio');
+      const page = (e.state && e.state.page) ? e.state.page : 'inicio';
       nav(page, true); // fromPopState=true evita loop de pushState
     });
 

@@ -1025,3 +1025,5 @@ input[type="checkbox"]{accent-color:var(--primary);}
 /* ícones dos botões flutuantes no padrão do menu */
 #btn-feedback svg,#btn-cfo svg{display:block;}
 #btn-feedback{background:var(--surface);color:var(--text-2);border:1px solid var(--ctl-border);}
+a.pv-venda{font-weight:700;color:var(--primary);text-decoration:none;border-bottom:1px dashed color-mix(in srgb,var(--primary) 55%,transparent);}
+a.pv-venda:hover{border-bottom-style:solid;}
