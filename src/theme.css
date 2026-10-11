@@ -1305,3 +1305,16 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .dre-seta{display:inline-block;width:16px;color:var(--text-muted);}
 .dre-tab tr.dre-sub td:first-child{padding-left:34px;color:var(--text-2);}
 .dre-tab tr.dre-gsub td{font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--text);}
+
+/* miniatura de foto em qualquer tabela */
+.foto-mini{display:inline-block;width:38px;height:38px;border-radius:8px;border:1px solid var(--border);background:#fff;overflow:hidden;vertical-align:middle;cursor:pointer;flex-shrink:0;}
+.foto-mini img{width:100%;height:100%;object-fit:cover;display:block;}
+.foto-mini.vazia{background:var(--surface-2);border-style:dashed;}
+.foto-mini:hover{border-color:var(--primary);}
+.cp-prod-l .foto-mini{margin-right:9px;width:34px;height:34px;}
+
+/* botões de escolha feitos com radio (simulador) */
+.seg-radio{display:inline-flex;}
+.seg-radio label{cursor:pointer;display:inline-flex;align-items:center;}
+.seg-radio input{position:absolute;opacity:0;pointer-events:none;}
+.seg-radio label:has(input:checked){background:var(--primary);color:#fff;border-color:var(--primary);}

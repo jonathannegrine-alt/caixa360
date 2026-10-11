@@ -693,13 +693,9 @@
               <label class="form-label">Tipo de Pagamento
                 <span class="tip"><span class="tip-icon">?</span><span class="tip-box">À vista: uma parcela. Parcelado: o sistema sugere as melhores datas para cada parcela conforme o fluxo projetado.</span></span>
               </label>
-              <div class="d-flex gap-1">
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
-                  <input type="radio" name="sim-tipo" value="vista" checked onchange="tipoSimulador=this.value;renderFormSimulador()"> À vista
-                </label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
-                  <input type="radio" name="sim-tipo" value="parcelado" onchange="tipoSimulador=this.value;renderFormSimulador()"> Parcelado
-                </label>
+              <div class="seg seg-radio">
+                <label class="btn-toggle"><input type="radio" name="sim-tipo" value="vista" checked onchange="tipoSimulador=this.value;renderFormSimulador()"> À vista</label>
+                <label class="btn-toggle"><input type="radio" name="sim-tipo" value="parcelado" onchange="tipoSimulador=this.value;renderFormSimulador()"> Parcelado</label>
               </div>
             </div>
 
@@ -756,8 +752,8 @@
       
       <!-- SKUS -->
       <div id="view-skus" class="view">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <div><div class="pg-title">Produtos</div><div class="pg-sub">Cadastro de produtos, custos e kits.</div></div>
+        <div class="pg-head">
+          <div><div class="pg-title">Produtos</div><div class="pg-sub">Cadastro de produtos, custos, imposto e kits. Clique numa linha para editar; clique na foto para trocar.</div></div>
           <div class="d-flex gap-1" id="sku-header-btns-lista">
             <button class="btn" onclick="abrirModalSKU()">+ Novo SKU</button>
             <button class="btn-out" onclick="abrirModalImportarProdutos()">Importar dados</button>
@@ -801,6 +797,7 @@
                 <thead>
                   <tr>
                     <th style="width:40px;"><input type="checkbox" id="sku-sel-all" onchange="toggleTodosSKUs(this.checked)"></th>
+                    <th style="width:52px;">Foto</th>
                     <th>SKU</th>
                     <th>Título</th>
                     <th style="text-align:right;">Custo (R$)</th>
@@ -984,12 +981,12 @@
         <!-- Backup -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Backup / Restore</div>
+            <div><div class="card-title">Backup — cópia de segurança</div><div class="pg-sub">Baixa um arquivo com as suas contas a pagar, categorias, produtos e configurações. Serve para guardar uma cópia ou levar os dados para outra conta. Restaurar substitui o que está na tela pelo conteúdo do arquivo.</div></div>
           </div>
           <div class="card-body">
-            <div class="d-flex gap-1">
-              <button class="btn-out" onclick="exportarTudo()">Exportar tudo (JSON)</button>
-              <button class="btn-out" onclick="document.getElementById('import-json').click()">Importar JSON</button>
+            <div class="d-flex gap-1" style="flex-wrap:wrap;">
+              <button class="btn-out" onclick="exportarTudo()">Baixar cópia de tudo</button>
+              <button class="btn-out" onclick="document.getElementById('import-json').click()">Restaurar de uma cópia</button>
               <input type="file" id="import-json" accept=".json" style="display:none" onchange="importarTudo()">
             </div>
           </div>
@@ -998,43 +995,27 @@
         <!-- Categorias -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Categorias de Despesa</div>
-            <button class="btn btn-sm" onclick="adicionarCategoria()">+ Nova</button>
+            <div><div class="card-title">Categorias de Despesa</div><div class="pg-sub">Organizadas em grupos. No DRE as despesas aparecem somadas por grupo; a competência padrão diz em que mês cada uma entra.</div></div>
+            <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="if(typeof dreConfigurar==='function')dreConfigurar()">Editar grupos, DRE e competência</button><button class="btn btn-sm" onclick="adicionarCategoria()">+ Nova</button></div>
           </div>
           <div class="card-body" style="padding:0;">
             <table>
               <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th style="text-align:center;">Impacta DRE</th>
-                  <th style="text-align:center;">
-                    Tipo Passivo
-                    <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><strong>Dívida real:</strong> existiria mesmo encerrando o negócio (fornecedor, imposto, empréstimo).<br><strong>Custo operacional:</strong> para de acumular se encerrar (aluguel, contador, pró-labore). Só dívidas reais entram no cálculo de Saúde Patrimonial.</span></span>
-                  </th>
-                  <th style="text-align:center;width:60px;">Ações</th>
-                </tr>
+                <tr><th>Categoria</th><th>No DRE</th><th>Competência padrão</th><th style="text-align:center;width:60px;"></th></tr>
               </thead>
               <tbody id="tbody-categorias"></tbody>
             </table>
           </div>
         </div>
 
-        <!-- Import Tiny -->
-        <div class="card">
-          <div class="card-header"><div class="card-title">Importar XLS Tiny ERP</div></div>
-          <div class="card-body">
-            <p style="font-size:12px;color:#666;margin-bottom:10px;">Colunas do Tiny: Vencimento | Fornecedor | Histórico | Nº doc | Data emissão | Valor | Saldo | Pago</p>
-            <p style="font-size:11px;color:#999;margin-bottom:8px;">Parcelamentos são detectados automaticamente pelo padrão "Parcela (X/Y)" no histórico.</p>
-            <input type="file" id="tiny-xls" accept=".xls,.xlsx" onchange="importarTinyXLS()">
-            <div id="tiny-status" style="font-size:12px;margin-top:8px;"></div>
-          </div>
-        </div>
+        <!-- A importação de planilha do Tiny saiu da tela: as contas vêm do Olist pela integração (Configurações → Financeiro) -->
+        <div style="display:none;"><input type="file" id="tiny-xls" accept=".xls,.xlsx" onchange="importarTinyXLS()"><div id="tiny-status"></div></div>
 
         <!-- Minha Conta -->
         <!-- Feedbacks enviados -->
         <div class="card mb-2" id="card-feedbacks" style="display:none;">
           <div class="card-header">
-            <div class="card-title">💬 Feedbacks Enviados</div>
+            <div><div class="card-title">Feedbacks — ajuda e sugestões</div><div class="pg-sub">O que foi enviado pelo botão "Ajuda e sugestões". Quem administra o sistema vê as mensagens de todos os usuários.</div></div>
             <button class="btn-out btn-sm" onclick="carregarFeedbacks()">Atualizar</button>
           </div>
           <div id="lista-feedbacks" class="card-body" style="padding:0;max-height:320px;overflow-y:auto;">
@@ -1044,7 +1025,7 @@
 
         <div class="card" id="card-minha-conta" style="display:none;">
           <div class="card-header">
-            <div class="card-title">🔐 Minha Conta</div>
+            <div class="card-title">Minha Conta</div>
           </div>
           <div class="card-body">
             <div class="form-group" style="max-width:380px;">
@@ -1066,7 +1047,7 @@
         <!-- Apagar dados -->
         <div class="card mb-2" style="border:1px solid var(--danger);margin-top:12px;">
           <div class="card-header" style="background:rgba(239,68,68,0.05);">
-            <div class="card-title" style="color:var(--danger);">⚠️ Zona de Perigo</div>
+            <div class="card-title" style="color:var(--danger);">Zona de Perigo</div>
           </div>
           <div class="card-body">
             <p style="font-size:13px;color:var(--gray-700);margin:0 0 12px;">Apagar todos os dados remove permanentemente todos os registros (pagamentos, recebíveis, SKUs, categorias e configurações) do armazenamento local e do servidor.</p>

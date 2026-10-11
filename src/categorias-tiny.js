@@ -1,25 +1,21 @@
 // ===== CATEGORIAS =====
     function renderCategorias(){
-      const tbody = document.getElementById('tbody-categorias');
-      tbody.innerHTML = categorias.map((c, i) => {
-        const tp = c.tipoPassivo || 'divida';
-        return `
-        <tr>
-          <td style="font-size:13px;">${c.nome}</td>
-          <td style="text-align:center;">
-            <input type="checkbox" ${c.impactaDRE ? 'checked' : ''} onchange="categorias[${i}].impactaDRE=this.checked;salvar()">
-          </td>
-          <td style="text-align:center;">
-            <select onchange="categorias[${i}].tipoPassivo=this.value;salvar()" style="font-size:11px;padding:3px 5px;border:1px solid var(--gray-200);border-radius:5px;background:#fff;">
-              <option value="divida" ${tp==='divida'?'selected':''}>💳 Dívida</option>
-              <option value="operacional" ${tp==='operacional'?'selected':''}>🔄 Operacional</option>
-            </select>
-          </td>
-          <td style="text-align:center;">
-            <button class="btn-del btn-sm" onclick="removerCategoria(${i})">✕</button>
-          </td>
+      const tbody = document.getElementById('tbody-categorias'); if(!tbody) return;
+      const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const DRE = { variavel: 'Custo variável (operacional)', fixo: 'Custo fixo', fora: 'Não entra' };
+      const COMP = { vencimento: 'Mês do vencimento', anterior: 'Mês anterior ao vencimento', emissao: 'Mês da emissão' };
+      const ord = categorias.map((c, i) => ({ c, i })).sort((x, y) => (x.c.grupo || 'zzz').localeCompare(y.c.grupo || 'zzz') || x.c.nome.localeCompare(y.c.nome));
+      let ult = null;
+      tbody.innerHTML = ord.map(({ c, i }) => {
+        const g = c.grupo || 'Sem grupo', cab = g !== ult ? `<tr class="dre-grupo"><td colspan="4">${esc(g)}</td></tr>` : ''; ult = g;
+        const onde = typeof dreGrupoDe === 'function' ? dreGrupoDe(c.nome) : (c.impactaDRE ? 'fixo' : 'fora');
+        return cab + `<tr>
+          <td style="font-size:13px;">${esc(c.nome)}</td>
+          <td><span class="v-tag ${onde === 'fora' ? '' : 'conta'}">${DRE[onde] || onde}</span></td>
+          <td class="text-muted" style="font-size:12.5px;">${COMP[c.competencia || 'vencimento'] || ''}</td>
+          <td style="text-align:center;"><button class="btn-del btn-sm" title="Apagar a categoria" onclick="removerCategoria(${i})">✕</button></td>
         </tr>`;
-      }).join('');
+      }).join('') || '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:22px;">Nenhuma categoria cadastrada.</td></tr>';
     }
 
     function adicionarCategoria(){

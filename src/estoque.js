@@ -153,6 +153,30 @@
       }
       if(document.getElementById('view-estoque') && document.getElementById('view-estoque').classList.contains('active')) estDesenhar();
     }
+    // Fotos para outras telas: garante as fotos de uma lista de SKUs (lê as guardadas; o que faltar, captura do anúncio e guarda)
+    let fotosBase = null; const fotosTentadas = new Set();
+    async function fotosPara(lista, depois){
+      if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      let mudou = false;
+      if(!fotosBase){
+        fotosBase = supa.from('sku_fotos_manual').select('sku_norm,url').eq('usuario_id', usuarioAtual.id).limit(5000);
+        const r = await fotosBase; (r.data || []).forEach(x => { if(!estFotos.has(x.sku_norm)){ estFotos.set(x.sku_norm, x.url); mudou = true; } });
+      } else await fotosBase;
+      const falta = [...new Set(lista.map(esN))].filter(k => k && !estFotos.has(k) && !fotosTentadas.has(k));
+      falta.forEach(k => fotosTentadas.add(k));
+      if(falta.length){
+        const a = await supa.rpc('sku_fotos', { p_skus: falta });
+        const novas = (a.data || []).filter(x => x.foto && !estFotos.has(x.sku)).map(x => ({ usuario_id: usuarioAtual.id, sku_norm: x.sku, url: String(x.foto).replace('http://', 'https://') }));
+        if(novas.length){ novas.forEach(n => estFotos.set(n.sku_norm, n.url)); mudou = true; supa.from('sku_fotos_manual').upsert(novas).then(() => {}); }
+      }
+      if(mudou && typeof depois === 'function') depois();
+    }
+    // miniatura para qualquer tabela (clicar abre a janela de foto)
+    function fotoMini(sku){
+      const k = esN(sku), u = estFotos.get(k);
+      return `<span class="foto-mini${u ? '' : ' vazia'}" onclick="event.stopPropagation();estFotoAbrir('${esEsc(k)}')" title="${u ? 'Ver ou trocar a foto' : 'Colocar uma foto'}">${u ? `<img src="${esEsc(u)}" loading="lazy" alt="">` : ''}</span>`;
+    }
+
     function estFotoTd(k){
       const u = estFotos.get(k);
       return `<td class="est-foto" onclick="estFotoAbrir('${esEsc(k)}')" title="${u ? 'Ver ou trocar a foto' : 'Colocar uma foto'}">${u ? `<img src="${esEsc(u)}" loading="lazy" alt="">` : '<span>+ foto</span>'}</td>`;

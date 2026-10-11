@@ -913,7 +913,7 @@
         && (skuFiltroCusto === '' || (skuFiltroCusto === 'sem') === semCusto(s)));
 
       if(filtrados.length === 0){
-        tbody.innerHTML = produtos.length ? '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted);">Nenhum produto neste filtro.</td></tr>' : '';
+        tbody.innerHTML = produtos.length ? '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted);">Nenhum produto neste filtro.</td></tr>' : '';
         vazio.style.display = produtos.length ? 'none' : 'block';
         document.getElementById('sku-sel-count').textContent = '';
         return;
@@ -932,6 +932,7 @@
           || '';
         html += `<tr onclick="editarSKU(${idx})" style="cursor:pointer;" title="Clique para editar">
           <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="sku-cb" data-idx="${idx}" onchange="atualizarContSKUSel()"></td>
+          <td style="padding:4px 6px;">${typeof fotoMini === 'function' ? fotoMini(s.sku) : ''}</td>
           <td class="sku-cod">${esc(s.sku)}</td>
           <td class="sku-tit" title="${esc(titulo)}">${esc(titulo) || '—'}</td>
           <td style="text-align:right;white-space:nowrap;">${semCusto(s) ? '<span class="badge badge-danger">Sem custo</span>' : '<b>' + fmt(Number(s.custo)) + '</b>'}</td>
@@ -943,6 +944,8 @@
       });
 
       tbody.innerHTML = html;
+      // fotos: busca as que faltam e redesenha uma vez
+      if(typeof fotosPara === 'function') fotosPara(filtrados.map(s => s.sku), () => { const v = document.getElementById('view-skus'); if(v && v.classList.contains('active')) renderSKUs(); });
       makeSortable('tbody-skus', [3, 4]);
       initResizableCols('tbody-skus');
       const selAll = document.getElementById('sku-sel-all');

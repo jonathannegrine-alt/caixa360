@@ -250,6 +250,7 @@
       salvar();
       fecharModal('modal-vml');
       dreDesenhar();
+      if(typeof renderCategorias === 'function') renderCategorias();
       if(typeof balDesenhar === 'function' && document.getElementById('bal-host')) try { balDesenhar(); } catch(e){}
     }
 

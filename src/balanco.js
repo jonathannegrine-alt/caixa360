@@ -113,7 +113,8 @@
           <div class="card-header" style="flex-wrap:wrap;gap:10px;">
             <div><div class="card-title">Balanço patrimonial gerencial</div><div class="text-muted" style="font-size:12px;">Posição de hoje, ${ptDate(getToday())}. Não substitui o balanço contábil.</div></div>
             <div class="chips">${contas.length > 1 ? `<span class="text-muted" style="font-size:12px;align-self:center;">${bal.conta ? 'Loja: <b>' + blEsc(nomeConta) + '</b>' : 'Todas as lojas juntas'} · troque no seletor de conta</span>` : ''}
-              <button class="chip" onclick="balExportar()">Exportar</button></div>
+              <button class="chip" onclick="balPdf(this)" title="Baixa o balanço em PDF, pronto para imprimir ou enviar">Baixar PDF</button>
+              <button class="chip" onclick="balExportar()" title="Baixa o balanço em planilha, com as contas classificadas em outra aba">Baixar Excel</button></div>
           </div>
           <div class="card-body">
             <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));">
@@ -121,7 +122,6 @@
               <div class="kpi k-atraso"><div class="kpi-label">Passivo</div><div class="kpi-value">${fmt(B.passivo)}</div><div class="kpi-sub">o que já é devido</div></div>
               <div class="kpi ${B.pl >= 0 ? 'k-venda' : 'k-atraso'}"><div class="kpi-label">Patrimônio líquido</div><div class="kpi-value">${fmt(B.pl)}</div><div class="kpi-sub">ativo menos passivo</div></div>
             </div>
-            ${bal.conta ? `<div class="alert alert-info">Visão de <b>&nbsp;${blEsc(nomeConta)}&nbsp;</b>: caixa, contas a pagar, Full e a receber são só dessa loja. O galpão entra conforme as lojas marcadas em Configurar estoque → Depósitos.</div>` : ''}
             <div class="bl-cols">
               <div><div class="bl-tit">Ativo</div>
                 ${lin('Caixa e bancos', B.caixa, bal.conta ? 'saldos desta loja' : 'saldos informados no Painel financeiro')}
@@ -144,6 +144,7 @@
                 return Object.entries(porCat).sort((a, b) => b[1].ab - a[1].ab).map(([g, x]) => { const c = true, t = balTipoDe(g);
                   return `<tr><td><b>${blEsc(g)}</b></td><td>${c ? `<select onchange="balTipo('${blEsc(g).replace(/'/g, '&#39;')}', this.value)" style="width:auto;">${BAL_TRAT.map(o => `<option value="${o[0]}" ${t === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>` : 'Despesa'}</td><td class="num">${fmt(x.ab)}</td><td class="num"><b>${fmt(x.en)}</b></td><td class="num text-muted">${fmt(x.fo)}</td></tr>`; }).join(''); })()}
               </tbody></table></div></div>` : ''}
+            ${bal.conta ? `<div class="text-muted bal-nota" style="font-size:12px;margin-top:14px;line-height:1.5;">Visão de <b>${blEsc(nomeConta)}</b>: caixa, contas a pagar, Full e a receber são só dessa loja. O galpão entra conforme as lojas marcadas em Configurar estoque → Depósitos.</div>` : ''}
           </div>
         </div>`;
     }
@@ -154,14 +155,57 @@
       balDesenhar();
     }
 
+    function balLinhas(){
+      const B = balCalcular(), nome = bal.conta ? ((typeof contaNome === 'function' && contaNome(bal.conta)) || bal.conta) : 'Todas as lojas';
+      const ativo = [['Caixa e bancos', B.caixa], ['A receber do Mercado Livre', B.receber], ['Estoque no galpão', B.galpao], ['Estoque no Full', B.full]].concat(B.caminhoFull ? [['A caminho do Full', B.caminhoFull]] : []);
+      const passivo = Object.entries(B.grupos).sort((a, b) => b[1] - a[1]);
+      return { B, nome, ativo, passivo };
+    }
     function balExportar(){
-      const B = balCalcular(), nome = bal.conta ? ((typeof contaNome === 'function' && contaNome(bal.conta)) || bal.conta) : 'consolidado';
-      const r = v => Math.round(v * 100) / 100;
-      const linhas = [['BALANÇO PATRIMONIAL GERENCIAL', nome, ptDate(getToday())], [], ['ATIVO', ''], ['Caixa e bancos', r(B.caixa)], ['A receber do Mercado Livre', r(B.receber)], ['Estoque no galpão', r(B.galpao)], ['Estoque no Full', r(B.full)], ['A caminho do Full', r(B.caminhoFull)], ['Total do ativo', r(B.ativo)], [], ['PASSIVO', '']]
-        .concat(Object.entries(B.grupos).sort((a, b) => b[1] - a[1]).map(([g, v]) => [g, r(v)]), [['Total do passivo', r(B.passivo)], [], ['PATRIMÔNIO LÍQUIDO', r(B.pl)]]);
-      const contasCl = B.linhas.map(l => ({ 'Vencimento': l.p.data, 'Descrição': l.p.desc, 'Fornecedor': l.p.forn, 'Categoria': l.p.cat, 'Valor': r(Number(l.p.val) || 0), 'Tratamento': l.motivo }));
+      const { B, nome, ativo, passivo } = balLinhas();
+      const r = v => Math.round(v * 100) / 100, pc = (v, t) => t ? Math.round(v / t * 10000) / 10000 : 0;
+      const n = Math.max(ativo.length, passivo.length);
+      const linhas = [['BALANÇO PATRIMONIAL GERENCIAL'], [nome + ' · posição de ' + ptDate(getToday())], [], ['ATIVO', 'Valor', '% do ativo', '', 'PASSIVO', 'Valor', '% do passivo']];
+      for(let i = 0; i < n; i++){ const a = ativo[i], p = passivo[i]; linhas.push([a ? a[0] : '', a ? r(a[1]) : '', a ? pc(a[1], B.ativo) : '', '', p ? p[0] : '', p ? r(p[1]) : '', p ? pc(p[1], B.passivo) : '']); }
+      linhas.push(['Total do ativo', r(B.ativo), 1, '', 'Total do passivo', r(B.passivo), 1], [], ['PATRIMÔNIO LÍQUIDO (ativo − passivo)', r(B.pl)], [], ['Não substitui o balanço contábil. Estoques a custo médio; passivo conforme o tratamento escolhido para cada categoria.']);
+      const ws = XLSX.utils.aoa_to_sheet(linhas);
+      ws['!cols'] = [{ wch: 38 }, { wch: 18 }, { wch: 13 }, { wch: 4 }, { wch: 44 }, { wch: 18 }, { wch: 13 }];
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }];
+      Object.keys(ws).forEach(k => { if(k[0] === '!') return; const c = ws[k]; if(c.t !== 'n') return; c.z = /^[CG]/.test(k) ? '0.0%' : '"R$" #,##0.00'; });
+      const contasCl = B.linhas.map(l => ({ 'Vencimento': ptDate(l.p.data), 'Descrição': l.p.desc, 'Fornecedor': l.p.forn, 'Categoria': l.p.cat, 'Valor': r(Number(l.p.val) || 0), 'Entra no passivo?': l.entra ? 'Sim' : 'Não', 'Tratamento': l.motivo }));
+      const ws2 = XLSX.utils.json_to_sheet(contasCl);
+      ws2['!cols'] = [{ wch: 12 }, { wch: 50 }, { wch: 34 }, { wch: 34 }, { wch: 16 }, { wch: 16 }, { wch: 40 }];
+      Object.keys(ws2).forEach(k => { if(/^E\d+$/.test(k) && ws2[k].t === 'n') ws2[k].z = '"R$" #,##0.00'; });
+      if(contasCl.length) ws2['!autofilter'] = { ref: 'A1:G' + (contasCl.length + 1) };
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Balanço');
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(contasCl), 'Contas classificadas');
+      XLSX.utils.book_append_sheet(wb, ws, 'Balanço');
+      XLSX.utils.book_append_sheet(wb, ws2, 'Contas classificadas');
       XLSX.writeFile(wb, 'balanco_' + String(nome).toLowerCase().replace(/\s+/g, '_') + '_' + getToday() + '.xlsx');
+    }
+    // Balanço em PDF (uma página, pronto para imprimir)
+    async function balPdf(bt){
+      const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
+      try {
+        const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+        const { B, nome, ativo, passivo } = balLinhas();
+        const n2 = v => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), pc = (v, t) => t ? (v / t * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%' : '';
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), L = doc.internal.pageSize.getWidth();
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Balanço patrimonial gerencial', 40, 52);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100); doc.text(nome + '  ·  posição de ' + ptDate(getToday()), 40, 70);
+        // três números do topo
+        const cx = [[ 'Ativo', B.ativo, [22, 163, 74] ], [ 'Passivo', B.passivo, [220, 38, 38] ], [ 'Patrimônio líquido', B.pl, [79, 70, 229] ]], w = (L - 80 - 20) / 3;
+        cx.forEach((c, i) => { const x = 40 + i * (w + 10); doc.setDrawColor(225); doc.setFillColor(248, 249, 252); doc.roundedRect(x, 86, w, 54, 6, 6, 'FD'); doc.setFillColor(...c[2]); doc.rect(x, 86, 4, 54, 'F');
+          doc.setFontSize(9); doc.setTextColor(110); doc.text(c[0].toUpperCase(), x + 14, 104); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(20); doc.text(n2(c[1]), x + 14, 126); doc.setFont('helvetica', 'normal'); });
+        const tab = (titulo, linhas, total, rotTotal, y, cor) => { doc.autoTable({ startY: y, margin: { left: 40, right: 40 }, head: [[titulo, 'Valor', '%']], body: linhas.map(l => [l[0], n2(l[1]), pc(l[1], total)]), foot: [[rotTotal, n2(total), '100%']],
+          styles: { fontSize: 10, cellPadding: 6 }, headStyles: { fillColor: cor, textColor: 255 }, footStyles: { fillColor: [240, 241, 246], textColor: 20, fontStyle: 'bold' }, columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right', cellWidth: 60 } }, showFoot: 'lastPage' }); return doc.lastAutoTable.finalY; };
+        let y = tab('Ativo — o que a empresa tem', ativo, B.ativo, 'Total do ativo', 158, [22, 163, 74]);
+        y = tab('Passivo — o que já é devido', passivo.length ? passivo : [['Nenhuma conta devida', 0]], B.passivo, 'Total do passivo', y + 18, [220, 38, 38]);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(20); doc.text('Patrimônio líquido (ativo − passivo): ' + n2(B.pl), 40, y + 30);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(120);
+        doc.text(doc.splitTextToSize('Não substitui o balanço contábil. Estoques a custo médio (' + Math.round(B.galpaoUn + B.fullUn).toLocaleString('pt-BR') + ' unidades). Ficaram fora do passivo ' + n2(B.fora) + ' de contas que ainda vão vencer ou de categorias fora do balanço. Gerado pelo Caixa 360 em ' + new Date().toLocaleString('pt-BR') + '.', L - 80), 40, y + 50);
+        doc.save('balanco_' + String(nome).toLowerCase().replace(/\s+/g, '_') + '_' + getToday() + '.pdf');
+      } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + ((e && e.message) || e)); }
+      if(bt){ bt.disabled = false; bt.textContent = rot; }
     }
