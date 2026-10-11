@@ -587,7 +587,13 @@
             <button class="btn-out btn btn-sm" onclick="rfAtualizar()">↻ Atualizar</button>
             <button class="btn-out btn btn-sm" onclick="rfLegenda()">Legendas</button>
             <button class="btn-out btn btn-sm" onclick="rfRanking()">🏆 Ranking de produtos</button>
-            <button class="btn btn-sm" onclick="rfReprocessar()" title="Corrigir o custo e o imposto das vendas já feitas">⚖ Reprocessar custo &amp; imposto</button>
+            <div class="dd-wrap" style="position:relative;display:inline-block;">
+              <button class="btn btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">⚖ Nivelar custo &amp; imposto ▾</button>
+              <div class="dd-menu" style="display:none;position:absolute;left:0;top:110%;z-index:20;min-width:250px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;">
+                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfNivelar()"><b>Nivelar</b><br><small class="text-muted">gravar nas vendas o custo e o imposto que eu informar (ou limpar)</small></div>
+                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfReprocessar()"><b>Reprocessar</b><br><small class="text-muted">regravar com o cadastro atual de Produtos</small></div>
+              </div>
+            </div>
             <button class="btn-out btn btn-sm" onclick="rfNivelarSku()">Nivelar SKU</button>
             <button class="btn-out btn btn-sm" onclick="rfRanking()">🏆 Ranking de produtos</button>
           </div>
@@ -721,60 +727,87 @@
     function rfPeriodoTxt(){ return `${ptDate(rfFiltro.de)} a ${ptDate(rfFiltro.ate)}${contaAtiva ? ' · conta ' + vmlEsc(contaNome(contaAtiva)) : ''}`; }
     function rfFecharMenus(){ document.querySelectorAll('#view-resumo-fin .dd-menu').forEach(m => { m.style.display = 'none'; }); }
 
-    // Uma janela só para corrigir custo e imposto das vendas já feitas: período, SKU (ou todos) e, para cada um,
-    // não mexer / usar o cadastro de Produtos / gravar um valor informado. "Conferir" mostra quantas vendas mudam.
-    function rfNivelar(){ rfReprocessar(); }
-    function rfReprocessar(){
-      rfFecharMenus();
-      const modo = (id, rot) => `<select id="${id}" onchange="rfRepTroca()">
-          <option value="cadastro">Usar o cadastro de Produtos</option>
-          <option value="valor">Informar ${rot}</option>
-          <option value="nada">Não alterar</option></select>`;
-      vmlModal('Reprocessar custo & imposto', `
-        <div class="text-muted" style="margin-bottom:14px;line-height:1.5;">Regrava o custo e o imposto das vendas <b style="color:var(--text)">já feitas</b>. O cadastro de Produtos não muda aqui.${contaAtiva ? ' Loja: <b style="color:var(--text)">' + vmlEsc(contaNome(contaAtiva)) + '</b>.' : ' Vale para <b style="color:var(--text)">todas as lojas</b>.'}</div>
+    // Mesmas funções do Mercado Turbo:
+    //  Nivelar     → grava nas vendas o custo/imposto que você informar (aba Limpar: apaga o custo/imposto das vendas)
+    //  Reprocessar → regrava as vendas com o cadastro atual de Produtos
+    // Em todas: SKU ou todos os SKUs, período, loja atual ou todas. "Conferir" conta as vendas antes de gravar.
+    let rfAj = { tipo: 'rep', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false };
+
+    function rfAjComum(){
+      const varias = typeof contasML !== 'undefined' && contasML.length > 1;
+      return `
+        <div class="form-group"><label class="form-label">SKU</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="aj-sku" value="${vmlEsc(rfFiltro.sku)}" placeholder="Digite um SKU ou marque todos ao lado" oninput="rfAjLimpa()" style="flex:1;">
+            <label style="display:flex;gap:6px;align-items:center;white-space:nowrap;cursor:pointer;font-size:12.5px;font-weight:650;"><input type="checkbox" id="aj-todos" style="width:auto;" onchange="document.getElementById('aj-sku').disabled=this.checked;rfAjLimpa()"> Todos os SKUs</label>
+          </div></div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Vendas de</label><input type="date" id="rep-de" value="${rfFiltro.de}" onchange="rfRepLimpa()"></div>
-          <div class="form-group"><label class="form-label">até</label><input type="date" id="rep-ate" value="${rfFiltro.ate}" onchange="rfRepLimpa()"></div>
+          <div class="form-group"><label class="form-label">Data início</label><input type="date" id="aj-de" value="${rfFiltro.de}" onchange="rfAjLimpa()"></div>
+          <div class="form-group"><label class="form-label">Data fim</label><input type="date" id="aj-ate" value="${rfFiltro.ate}" onchange="rfAjLimpa()"></div>
         </div>
-        <div class="form-group"><label class="form-label">SKU (em branco = todos os SKUs do período)</label><input type="text" id="rep-sku" value="${vmlEsc(rfFiltro.sku)}" placeholder="Ex.: J-2010-Vermelho" oninput="rfRepLimpa()"></div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Custo</label>${modo('rep-cmodo', 'o custo')}
-            <input type="number" step="0.01" min="0" id="rep-custo" placeholder="Custo unitário (R$)" style="display:none;margin-top:6px;" oninput="rfRepLimpa()"></div>
-          <div class="form-group"><label class="form-label">Imposto</label>${modo('rep-imodo', 'o imposto')}
-            <input type="number" step="0.01" min="0" id="rep-imp" placeholder="Imposto (% sobre a venda)" style="display:none;margin-top:6px;" oninput="rfRepLimpa()"></div>
-        </div>
-        <label class="vml-opcao"><input type="radio" name="rep-quais" value="todas" checked onchange="rfRepLimpa()"> <span><b>Todas as vendas do período</b><br><span class="text-muted">Substitui o custo e o imposto que estavam gravados. Muda o resultado passado dessas vendas.</span></span></label>
-        <label class="vml-opcao"><input type="radio" name="rep-quais" value="vazias" onchange="rfRepLimpa()"> <span><b>Só as que estão sem valor</b><br><span class="text-muted">Preenche apenas as vendas sem custo ou sem imposto; as demais ficam como estão.</span></span></label>
-        <div id="rep-msg" style="margin-top:10px;"></div>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn-out btn" id="rep-conf" onclick="rfReprocessarOk(true)">Conferir</button><button class="btn" id="rep-ok" onclick="rfReprocessarOk(false)">Reprocessar</button>`);
+        ${varias ? `<label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13px;margin-top:10px;"><input type="checkbox" id="aj-contas" style="width:auto;" ${contaAtiva ? '' : 'checked disabled'} onchange="rfAjLimpa()"> Realizar em todas as lojas${contaAtiva ? ' (desmarcado: só ' + vmlEsc(contaNome(contaAtiva)) + ')' : ''}</label>` : ''}`;
     }
-    function rfRepTroca(){
-      document.getElementById('rep-custo').style.display = document.getElementById('rep-cmodo').value === 'valor' ? '' : 'none';
-      document.getElementById('rep-imp').style.display = document.getElementById('rep-imodo').value === 'valor' ? '' : 'none';
-      rfRepLimpa();
+    function rfAjOque(){
+      return `<div class="seg" style="margin-top:12px;">${[['custo', 'Somente custo'], ['imposto', 'Somente imposto'], ['ambos', 'Ambos']].map(([v, r]) => `<button type="button" class="btn-toggle ${rfAj.oque === v ? 'active' : ''}" onclick="rfAj.oque='${v}';rfAjDesenhar()">${r}</button>`).join('')}</div>`;
     }
-    function rfRepLimpa(){ const m = document.getElementById('rep-msg'); if(m) m.innerHTML = ''; }
-    async function rfReprocessarOk(simular){
-      const g = id => document.getElementById(id), msg = g('rep-msg');
+    function rfAjDesenhar(){
+      const rodape = `<div id="aj-msg" style="margin-top:12px;"></div>`;
+      const botoes = `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn-out btn" id="aj-conf" onclick="rfAjOk(true)">Conferir</button><button class="btn" id="aj-ok" onclick="rfAjOk(false)">Aplicar</button>`;
+      // guarda o que já foi digitado ao trocar de aba/opção
+      const g = id => document.getElementById(id), ant = g('aj-de') ? { sku: g('aj-sku').value, todos: g('aj-todos').checked, de: g('aj-de').value, ate: g('aj-ate').value, contas: g('aj-contas') ? g('aj-contas').checked : null, vazias: g('aj-vazias') ? g('aj-vazias').checked : null } : null;
+      if(rfAj.tipo === 'rep'){
+        vmlModal('Reprocessar custo & imposto', `
+          <div class="alert alert-info" style="margin-bottom:14px;">Atualiza o custo e o imposto das vendas com os valores <b>atualmente cadastrados</b> em Produtos.</div>
+          ${rfAjComum()}${rfAjOque()}
+          <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:13px;margin-top:14px;line-height:1.45;"><input type="checkbox" id="aj-vazias" style="width:auto;margin-top:3px;" checked onchange="rfAjLimpa()"> <span>Atualizar somente quando o custo/imposto da venda estiver zerado <span style="color:var(--danger)">(não mexe nas vendas que já têm valor)</span></span></label>
+          ${rodape}`, botoes);
+      } else {
+        const abas = `<div class="seg" style="margin-bottom:14px;">${[['nivelar', 'Nivelar'], ['limpar', 'Limpar']].map(([v, r]) => `<button type="button" class="btn-toggle ${rfAj.aba === v ? 'active' : ''}" onclick="rfAj.aba='${v}';rfAjDesenhar()">${r}</button>`).join('')}</div>`;
+        const campo = (id, rot, ph, na) => `<div class="form-group"><label class="form-label">${rot}</label>
+            <div style="display:flex;gap:8px;align-items:center;"><input type="number" step="0.01" min="0" id="${id}" placeholder="${ph}" ${rfAj[na] ? 'disabled' : ''} oninput="rfAjLimpa()" style="flex:1;">
+            <label style="display:flex;gap:5px;align-items:center;white-space:nowrap;cursor:pointer;font-size:12.5px;"><input type="checkbox" style="width:auto;" ${rfAj[na] ? 'checked' : ''} onchange="rfAj.${na}=this.checked;document.getElementById('${id}').disabled=this.checked;rfAjLimpa()"> Não alterar</label></div></div>`;
+        vmlModal('Nivelamento de custo & imposto', rfAj.aba === 'nivelar' ? `${abas}
+          <div class="alert alert-info" style="margin-bottom:14px;">Grava nas vendas do período o custo e o imposto que você informar abaixo. O cadastro de Produtos não muda.</div>
+          ${rfAjComum()}
+          <div class="form-row" style="margin-top:10px;">${campo('aj-custo', 'Custo unitário (R$)', '0,00', 'cNa')}${campo('aj-imp', 'Imposto (%)', '0,00', 'iNa')}</div>
+          <div class="text-muted" style="font-size:12px;line-height:1.5;">Marque "Não alterar" para deixar o custo ou o imposto como está. Se informar zero, é zero que será gravado.</div>
+          ${rodape}` : `${abas}
+          <div class="alert alert-warning" style="margin-bottom:14px;">Apaga o custo e o imposto gravados nas vendas do período. Não tem como desfazer: para voltar, só reprocessando ou nivelando de novo.</div>
+          ${rfAjComum()}${rfAjOque()}${rodape}`, botoes);
+      }
+      if(ant){ g('aj-sku').value = ant.sku; g('aj-todos').checked = ant.todos; g('aj-sku').disabled = ant.todos; g('aj-de').value = ant.de; g('aj-ate').value = ant.ate;
+        if(g('aj-contas') && ant.contas !== null && !g('aj-contas').disabled) g('aj-contas').checked = ant.contas;
+        if(g('aj-vazias') && ant.vazias !== null) g('aj-vazias').checked = ant.vazias; }
+    }
+    function rfAjLimpa(){ const m = document.getElementById('aj-msg'); if(m) m.innerHTML = ''; }
+    function rfNivelar(){ rfFecharMenus(); fecharModal('modal-vml'); rfAj = { tipo: 'niv', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false }; setTimeout(rfAjDesenhar, 0); }
+    function rfReprocessar(){ rfFecharMenus(); fecharModal('modal-vml'); rfAj = { tipo: 'rep', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false }; setTimeout(rfAjDesenhar, 0); }
+
+    async function rfAjOk(simular){
+      const g = id => document.getElementById(id), msg = g('aj-msg');
       const aviso = tx => { msg.innerHTML = `<div class="alert alert-warning">${tx}</div>`; };
-      const de = g('rep-de').value, ate = g('rep-ate').value, sku = g('rep-sku').value.trim();
-      const cm = g('rep-cmodo').value, im = g('rep-imodo').value, c = g('rep-custo').value, i = g('rep-imp').value;
+      const de = g('aj-de').value, ate = g('aj-ate').value, todos = g('aj-todos').checked, sku = todos ? '' : g('aj-sku').value.trim();
+      if(!todos && !sku) return aviso('Digite um SKU ou marque "Todos os SKUs".');
       if(!de || !ate || de > ate) return aviso('Confira as datas do período.');
-      if(cm === 'nada' && im === 'nada') return aviso('Escolha o que alterar: custo, imposto ou os dois.');
-      if(cm === 'valor' && !sku) return aviso('Para informar um custo é preciso escolher o SKU (cada produto tem o seu). Sem SKU, use "Usar o cadastro de Produtos".');
-      if(cm === 'valor' && c === '') return aviso('Informe o custo unitário.');
-      if(im === 'valor' && i === '') return aviso('Informe o imposto.');
-      const bo = g('rep-ok'), bc = g('rep-conf'); bo.disabled = bc.disabled = true;
-      msg.innerHTML = '<div class="text-muted">' + (simular ? 'Conferindo…' : 'Reprocessando…') + '</div>';
-      const { data, error } = await supa.rpc('vendas_ml_ajustar', { p_de: de, p_ate: ate, p_sku: sku || null, p_conta: contaParam(),
-        p_custo_modo: cm, p_custo: cm === 'valor' ? Number(c) : null, p_imp_modo: im, p_imposto: im === 'valor' ? Number(i) : null,
-        p_so_vazias: (document.querySelector('input[name="rep-quais"]:checked') || {}).value === 'vazias', p_simular: !!simular });
-      if(!document.getElementById('rep-msg')) return;
+      let cm = 'nada', im = 'nada', c = null, i = null, vazias = false;
+      if(rfAj.tipo === 'rep'){ if(rfAj.oque !== 'imposto') cm = 'cadastro'; if(rfAj.oque !== 'custo') im = 'cadastro'; vazias = g('aj-vazias').checked; }
+      else if(rfAj.aba === 'limpar'){ if(rfAj.oque !== 'imposto') cm = 'limpar'; if(rfAj.oque !== 'custo') im = 'limpar'; }
+      else {
+        if(!rfAj.cNa){ if(g('aj-custo').value === '') return aviso('Informe o custo ou marque "Não alterar".'); cm = 'valor'; c = Number(g('aj-custo').value); }
+        if(!rfAj.iNa){ if(g('aj-imp').value === '') return aviso('Informe o imposto ou marque "Não alterar".'); im = 'valor'; i = Number(g('aj-imp').value); }
+        if(cm === 'nada' && im === 'nada') return aviso('Os dois estão como "Não alterar": não há o que gravar.');
+      }
+      const conta = g('aj-contas') && g('aj-contas').checked ? null : contaParam();
+      const bo = g('aj-ok'), bc = g('aj-conf'); bo.disabled = bc.disabled = true;
+      msg.innerHTML = '<div class="text-muted">' + (simular ? 'Conferindo…' : 'Aplicando…') + '</div>';
+      const { data, error } = await supa.rpc('vendas_ml_ajustar', { p_de: de, p_ate: ate, p_sku: sku || null, p_conta: conta,
+        p_custo_modo: cm, p_custo: c, p_imp_modo: im, p_imposto: i, p_so_vazias: vazias, p_simular: !!simular });
+      if(!document.getElementById('aj-msg')) return;
       bo.disabled = bc.disabled = false;
       if(error){ msg.innerHTML = `<div class="alert alert-danger">${vmlEsc(error.message)}</div>`; return; }
-      const n = Number(data) || 0;
-      if(simular){ msg.innerHTML = `<div class="alert alert-info"><b>${n.toLocaleString('pt-BR')}</b>&nbsp;venda(s) seriam alteradas. Nada foi gravado ainda.</div>`; return; }
-      vmlModal('Reprocessar custo & imposto', `<div class="alert alert-info"><b>${n.toLocaleString('pt-BR')}</b>&nbsp;venda(s) regravada(s), de ${ptDate(de)} a ${ptDate(ate)}${sku ? ', SKU ' + vmlEsc(sku) : ''}.</div>`);
+      const n = (Number(data) || 0).toLocaleString('pt-BR');
+      if(simular){ msg.innerHTML = `<div class="alert alert-info"><b>${n}</b>&nbsp;venda(s) seriam alteradas. Nada foi gravado ainda.</div>`; return; }
+      msg.innerHTML = `<div class="alert alert-info"><b>${n}</b>&nbsp;venda(s) alterada(s), de ${ptDate(de)} a ${ptDate(ate)}${sku ? ', SKU ' + vmlEsc(sku) : ', todos os SKUs'}.</div>`;
       rfRankDados = null; rfCarregar();
     }
 
