@@ -208,7 +208,11 @@
         const entrada = showProj ? e.total : e.conf;
         const pag = getPag(d);
         saldoAcum += entrada - pag;
-        dias.push({ d, e, entrada, pag, saldoDia: entrada - pag, saldoAcum });
+        // hoje: o que já caiu do Mercado Livre aparece na linha (senão o dia fica zerado e parece negativo no fim da tarde).
+        // No saldo acumulado só entra o que ainda falta cair: o que já caiu está no saldo em caixa.
+        let jaCaiu = 0;
+        if(d === hoje){ try { const hAgora = new Date().getHours(); jaCaiu = JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]').filter(i => parseInt(i.hora) < hAgora).reduce((s, i) => s + (Number(i.val) || 0), 0); } catch(err){} }
+        dias.push({ d, e, entrada, pag, jaCaiu, saldoDia: entrada + jaCaiu - pag, saldoAcum });
         d = addDias(d, 1);
       }
 
@@ -240,8 +244,8 @@
         return `<tr class="fx-row${cls}">
           <td>${ptDate(x.d)}${x.d === hoje ? ' <span class="fx-tag">hoje</span>' : ''}</td>
           <td class="fx-dia">${nomeDia(x.d)}</td>
-          <td class="num ${x.e.conf > 0 ? 'fx-ent' : 'fx-zero'}">${x.e.conf > 0 ? fmt(x.e.conf) : '—'}</td>
-          ${showProj ? `<td class="num fx-proj">${x.e.proj > 0 ? fmt(x.e.proj) : '—'}</td><td class="num" style="font-weight:600;">${fmt(x.entrada)}</td>` : ''}
+          <td class="num ${x.e.conf + (x.jaCaiu || 0) > 0 ? 'fx-ent' : 'fx-zero'}" ${x.jaCaiu ? `title="Já recebido hoje: ${fmt(x.jaCaiu)} · ainda a receber hoje: ${fmt(x.e.conf)}"` : ''}>${x.e.conf + (x.jaCaiu || 0) > 0 ? fmt(x.e.conf + (x.jaCaiu || 0)) : '—'}${x.jaCaiu ? `<div class="fx-sub">${fmt(x.jaCaiu)} já recebido</div>` : ''}</td>
+          ${showProj ? `<td class="num fx-proj">${x.e.proj > 0 ? fmt(x.e.proj) : '—'}</td><td class="num" style="font-weight:600;">${fmt(x.entrada + (x.jaCaiu || 0))}</td>` : ''}
           <td class="num">${x.pag > 0 ? `<a class="fx-link" onclick="planDiaDetalhe('${x.d}')" title="Ver as contas deste dia">${fmt(x.pag)}</a>` : '—'}</td>
           <td class="num ${x.saldoDia < 0 ? 'text-danger' : x.saldoDia > 0 ? 'text-success' : 'fx-zero'}">${fmt(x.saldoDia)}</td>
           <td class="num fx-acum${emRisco ? ' text-danger' : ''}"><span class="fx-bar" style="width:${larg}%;"></span><span class="fx-acum-v">${fmt(x.saldoAcum)}</span></td>
