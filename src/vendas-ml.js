@@ -596,6 +596,75 @@
             <button class="btn-out btn btn-sm" onclick="rfLegenda()">Legendas</button>
             <button class="btn-out btn btn-sm" onclick="rfRanking()">🏆 Ranking de produtos</button>
             <div class="dd-wrap" style="position:relative;display:inline-block;">
+              <button class="btn btn-sm" title="${podeExportar ? 'Exportar todas as vendas filtradas' : 'Período grande: exporta apenas a página atual'}" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">⬇ Exportar ▾</button>
+              <div class="dd-menu" style="display:none;position:absolute;right:0;top:110%;z-index:20;min-width:150px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;">
+                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfExportar('xlsx')">Excel (.xlsx)</div>
+                <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfExportar('csv')">CSV</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        ${vmlAvisoPermissao()}
+        ${d.erro ? `<div class="alert alert-danger">Erro ao consultar as vendas: ${vmlEsc(d.erro)}</div>` : ''}
+
+        <div class="kpi-grid k5">
+          <div class="kpi k-venda">
+            <div class="kpi-label" title="Valor dos produtos${vmlFreteComprador ? ' + frete pago pelo comprador' : ''} das vendas aprovadas">Vendas aprovadas</div>
+            <div class="kpi-value">R$ ${vmlNum(vendas)}</div>
+            <div class="kpi-sub"><span>Canceladas <b>R$ ${vmlNum(c.valor)}</b></span></div>
+            <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11.5px;color:var(--text-muted);cursor:pointer;">
+              <input type="checkbox" ${vmlFreteComprador ? 'checked' : ''} onchange="rfToggleFrete(this.checked)" style="width:auto;"> Considerar frete do comprador
+            </label>
+          </div>
+          <div class="kpi k-custo"><div class="kpi-label" title="Valores do cadastro de Produtos">Custo &amp; imposto</div><div class="kpi-value">R$ ${vmlNum(n('custo') + n('imposto'))}</div><div class="kpi-sub"><span>Custo <b>R$ ${vmlNum(n('custo'))}</b></span><span>Imposto <b>R$ ${vmlNum(n('imposto'))}</b></span></div></div>
+          <div class="kpi k-tarifa"><div class="kpi-label">Tarifa de venda</div><div class="kpi-value">R$ ${vmlNum(n('tarifa'))}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('tarifa') / n('bruto') * 100 : 0)}</b> das vendas</span></div></div>
+          <div class="kpi k-frete"><div class="kpi-label">Frete total</div><div class="kpi-value">R$ ${vmlNum(n('frete_comp') + n('frete_vend'))}</div><div class="kpi-sub"><span>Comprador <b>R$ ${vmlNum(n('frete_comp'))}</b></span><span>Vendedor <b>R$ ${vmlNum(n('frete_vend'))}</b></span></div></div>
+          <div class="kpi k-mc"><div class="kpi-label" title="Vendas aprovadas − custo − imposto − tarifa − frete do vendedor">Margem de contribuição</div><div class="kpi-value">R$ ${vmlNum(n('mc'))}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('mc') / n('bruto') * 100 : 0)}</b></span>${a.sem_custo ? `<span class="sem-custo">${a.sem_custo} sem custo/imposto</span>` : ''}</div></div>
+        </div>
+        <div class="kpi-grid k4">
+          <div class="kpi k-neutro"><div class="kpi-label">Por tipo de envio</div>
+            <div class="kpi-sub" style="margin-top:9px;display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;">
+              <span>Full <b>${log('Full')}</b></span><span>Flex <b>${log('Flex')}</b></span>
+              <span>Coleta <b>${log('Coleta')}</b></span><span>Agência/Places <b>R$ ${vmlNum((porEnvio['Agência'] || 0) + (porEnvio['Places'] || 0))}</b></span>
+              <span>Outros <b>R$ ${vmlNum(outros)}</b></span>
+            </div></div>
+          <div class="kpi k-neutro"><div class="kpi-label">Qtd. vendas aprovadas</div><div class="kpi-value">${n('qtd').toLocaleString('pt-BR')}</div><div class="kpi-sub"><span><b>${n('un').toLocaleString('pt-BR')}</b> unidades</span><span>Canceladas <b>${c.qtd || 0}</b> (${c.un || 0} un.)</span></div></div>
+          <div class="kpi k-neutro"><div class="kpi-label">Ticket médio por venda</div><div class="kpi-value">R$ ${vmlNum(n('qtd') ? vendas / n('qtd') : 0)}</div></div>
+          <div class="kpi k-neutro"><div class="kpi-label">Ticket médio da margem</div><div class="kpi-value">R$ ${vmlNum(n('qtd') ? n('mc') / n('qtd') : 0)}</div><div class="kpi-sub"><span><b>${vmlPct(n('bruto') ? n('mc') / n('bruto') * 100 : 0)}</b></span></div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:minmax(0,1.9fr) minmax(280px,1fr);gap:16px;" class="responsive-grid-2">
+          <div class="card"><div class="card-header"><div class="card-title">Filtrar busca</div><span class="text-muted">${nDias} dia${nDias > 1 ? 's' : ''}</span></div><div class="card-body">
+            <div class="filtros">
+              <div style="grid-column:span 2;"><label>Data início</label><div class="dt-nav">
+                <input type="date" value="${f.de}" onchange="rfSetData('de', this.value)">
+                <button class="ico-btn" title="Dia anterior" onclick="rfMoverDia(-1)">‹</button>
+                <button class="ico-btn" title="Próximo dia" onclick="rfMoverDia(1)">›</button></div></div>
+              <div><label>Data fim</label><input type="date" value="${f.ate}" onchange="rfSetData('ate', this.value)"></div>
+              <div><label>Nº pedido / carrinho</label><input type="text" value="${vmlEsc(f.pedido)}" onchange="rfSet('pedido', this.value)"></div>
+              <div><label>Título ou MLB</label><input type="text" value="${vmlEsc(f.titulo)}" onchange="rfSet('titulo', this.value)"></div>
+              <div><label>SKU</label><input type="text" value="${vmlEsc(f.sku)}" onchange="rfSet('sku', this.value)"></div>
+              <div><label>Status da venda</label>${sel('status', f.status, [['todas','Todos'],['aprovadas','Aprovados'],['canceladas','Cancelados']])}</div>
+              <div><label>Modalidade</label>${sel('modalidade', f.modalidade, [['todas','Todos'],['Premium','Premium'],['Clássico','Clássico'],['Grátis','Grátis']])}</div>
+              <div><label>Tipo do frete</label>${sel('frete', f.frete, [['todos','Todos'],['Full','Full'],['Flex','Flex'],['Coleta','Coleta'],['Agência','Agência'],['Places','Places'],['Outros','Outros']])}</div>
+              <div><label>Custo &amp; imposto</label>${sel('custo', f.custo, [['todos','Todos'],['sem-custo','Somente vendas sem custo'],['sem-imposto','Somente vendas sem imposto'],['sem-um','Sem custo ou sem imposto'],['sem-ambos','Sem custo e sem imposto']])}</div>
+            </div>
+            <div class="chips" style="margin-top:14px;">
+              ${[['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Mês atual'],['12m','12 meses']].map(([k,l]) => `<button class="chip" onclick="rfAtalho('${k}')">${l}</button>`).join('')}
+            </div>
+          </div></div>
+          <div class="card"><div class="card-header"><div class="card-title">Para onde vai cada real</div></div><div class="card-body">
+            ${rfDonut([
+              { nome:'Frete', v:n('frete_vend'), cor:'#3b82f6' }, { nome:'Tarifa', v:n('tarifa'), cor:'#eab308' },
+              { nome:'M. contribuição', v:n('mc'), cor:'#10b981' }, { nome:'Custo', v:n('custo'), cor:'#f97316' }, { nome:'Imposto', v:n('imposto'), cor:'#ef4444' }])}
+            <div class="text-muted" style="font-size:11px;margin-top:10px;">* O frete pago pelo comprador não entra no gráfico.</div>
+          </div></div>
+        </div>
+
+        <div class="card">
+          ${podeExportar ? '' : `<div class="alert alert-info" style="margin:14px 16px 0;"><b>Visualização otimizada para muitas vendas.</b>&nbsp;Os totais consideram o período inteiro; a exportação em Excel ou CSV considera apenas a página atual.</div>`}
+          <div class="rf-ferr">
+            <div class="dd-wrap" style="position:relative;display:inline-block;">
               <button class="btn btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">⚖ Nivelar custo &amp; imposto ▾</button>
               <div class="dd-menu" style="display:none;position:absolute;left:0;top:110%;z-index:20;min-width:250px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;">
                 <div class="dd-item" style="padding:8px 10px;cursor:pointer;border-radius:7px;" onclick="rfNivelar()"><b>Nivelar</b><br><small class="text-muted">gravar nas vendas o custo e o imposto que eu informar (ou limpar)</small></div>
