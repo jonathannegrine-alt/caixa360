@@ -579,7 +579,10 @@
       if(!usuarioAtual) return;
       const uid = usuarioAtual.id;
       if(!_sinc.base) return;
-      const mudouP11 = (k, v) => { const j = JSON.stringify(v); _sinc.p11 = _sinc.p11 || {}; if(_sinc.p11[k] === j) return false; _sinc.p11[k] = j; return !soMarcar; };
+      const mudouP11 = (k, v) => { const j = JSON.stringify(v); _sinc.p11 = _sinc.p11 || {}; if(_sinc.p11[k] === j) return false;
+        // lista vazia na tela com dados no banco: só apaga quando o usuário pediu (evita perder kits por tela ainda carregando)
+        if(!soMarcar && Array.isArray(v) && v.length === 0 && _sinc.p11[k] && _sinc.p11[k].length > 2 && !_sinc.permitirVazioP11) return false;
+        _sinc.p11[k] = j; return !soMarcar; };
       try {
         // Componentes
         const snapComp = componentes.map(c => ({

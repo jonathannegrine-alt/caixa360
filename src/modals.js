@@ -64,7 +64,9 @@
       if(total === 0){ alert('Nenhum kit cadastrado.'); return; }
       if(!confirm('Apagar TODOS os ' + total + ' kits cadastrados? Esta ação não pode ser desfeita.')) return;
       composicaoKit = [];
+      if(typeof _sinc !== 'undefined') _sinc.permitirVazioP11 = true;
       salvar(); renderComposicoesTab();
+      setTimeout(() => { if(typeof _sinc !== 'undefined') _sinc.permitirVazioP11 = false; }, 5000);
     }
     function abrirModalImportarEstoque(){
       document.getElementById('modal-importar-estoque').classList.add('open');
