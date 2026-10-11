@@ -14,7 +14,7 @@ const CORS = {
 const resp = (body: object, status = 200) => new Response(JSON.stringify(body), { headers: CORS, status })
 const DIAS = 25          // olha as vendas dos últimos N dias
 const MAX_ENVIOS = 220   // por conta, por chamada
-const MAX_UF = 450        // vendas sem estado do comprador preenchidas por conta, por chamada (histórico vai aos poucos)
+const MAX_UF = 1400        // vendas sem estado do comprador preenchidas por conta, por chamada (histórico vai aos poucos)
 const ufDe = (s: any): string | null => { const id = String(s?.destination?.shipping_address?.state?.id || s?.receiver_address?.state?.id || ''); const m = id.match(/([A-Z]{2})$/); return m ? m[1] : null }
 
 async function emLotes<T, R>(lista: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
@@ -75,7 +75,7 @@ async function estados(supaUrl: string, dbH: Record<string, string>, userId: str
   for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
     const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&uf=is.null&shipping_id=not.is.null&select=shipping_id&order=data_venda.desc&limit=${MAX_UF * 2}`, { headers: dbH }).then(r => r.json()).catch(() => [])
     const ids = [...new Set((Array.isArray(vendas) ? vendas : []).map((v: any) => String(v.shipping_id)))].slice(0, MAX_UF)
-    await emLotes(ids, 8, async sid => {
+    await emLotes(ids, 12, async sid => {
       const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: { Authorization: `Bearer ${t.access_token}`, 'x-format-new': 'true' } }).catch(() => null)
       if (!r) return
       // envio que o ML não entrega mais (404/403) fica marcado para não ser tentado de novo

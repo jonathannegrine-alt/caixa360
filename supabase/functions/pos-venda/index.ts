@@ -334,7 +334,7 @@ Deno.serve(async (req: Request) => {
           const caso = {
             loja: tk.apelido || tk.conta, tipo: cl.stage === 'dispute' ? 'mediação (o Mercado Livre intermedia)' : 'reclamação', aberto_em: cl.date_created,
             problema: det?.json?.problem || '', situacao_no_ml: det?.json?.title || '', orientacao_do_ml: det?.json?.description || '',
-            motivo: motivo.json?.detail || motivo.json?.name || cl.reason_id, prazo_para_responder: prazo,
+            motivo: [motivo.json?.name, motivo.json?.detail].filter(Boolean).join(' — ') || cl.reason_id, prazo_para_responder: prazo,
             o_que_o_comprador_espera: (Array.isArray(esperado.json) ? esperado.json : []).filter((e: any) => e.player_role === 'complainant').map((e: any) => e.expected_resolution),
             acoes_disponiveis: disp.map(a => Object.keys(EXIGE).find(k => EXIGE[k].includes(a)) || ('(manual) ' + a)),
             pedido: ped, fotos_do_comprador: fotos.length, fotos_nao_lidas: anexos.length - fotos.length,

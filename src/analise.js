@@ -95,7 +95,7 @@
       host.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Análise de vendas</div><div class="pg-sub">Crescimento, produtos, compradores, estados, cancelamentos e anúncios pagos — direto das vendas do Mercado Livre.</div></div>
-          ${an.aba === 'geral' ? '' : `<div class="seg">${[30, 60, 90].map(d => `<button class="${an.dias === d ? 'active' : ''}" onclick="anDias(${d})">${d} dias</button>`).join('')}</div>`}
+          ${an.aba === 'geral' ? '' : `<div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${an.dias === d ? 'active' : ''}" onclick="anDias(${d})">${d} dias</button>`).join('')}</div>`}
         </div>
         <div class="chips" style="margin-bottom:14px;">${abas.map(([k, t]) => `<button class="chip ${an.aba === k ? 'active' : ''}" onclick="anAba('${k}')">${t}</button>`).join('')}</div>
         ${an.erro ? `<div class="alert alert-danger">Não consegui carregar: ${anE(an.erro)}</div>` : ''}
@@ -193,7 +193,7 @@
       const tot = com.reduce((s, x) => s + x.bruto, 0), totV = com.reduce((s, x) => s + x.vendas, 0), semV = sem.reduce((s, x) => s + x.vendas, 0);
       const max = Math.max(1, ...com.map(x => x.bruto));
       const cobertura = totV + semV ? totV / (totV + semV) * 100 : 0;
-      if(!com.length) return `<div class="card"><div class="vazio"><div class="vazio-ico"></div><b>O estado de cada venda ainda está sendo buscado</b>O Mercado Livre informa o estado no envio de cada pedido. O Caixa 360 busca sozinho, das vendas mais novas para as mais antigas (cerca de 3.500 por hora). Volte em alguns minutos.</div></div>`;
+      if(!com.length) return `<div class="card"><div class="vazio"><div class="vazio-ico"></div><b>O estado de cada venda ainda está sendo buscado</b>O Mercado Livre informa o estado no envio de cada pedido. O Caixa 360 busca sozinho, das vendas mais novas para as mais antigas (alguns milhares por hora). Volte em alguns minutos.</div></div>`;
       const reg = { Sudeste: ['SP', 'RJ', 'MG', 'ES'], Sul: ['PR', 'SC', 'RS'], Nordeste: ['BA', 'PE', 'CE', 'MA', 'PB', 'RN', 'AL', 'SE', 'PI'], 'Centro-Oeste': ['GO', 'DF', 'MT', 'MS'], Norte: ['PA', 'AM', 'RO', 'TO', 'AC', 'AP', 'RR'] };
       const porReg = Object.entries(reg).map(([n, ufs]) => ({ n, bruto: com.filter(x => ufs.includes(x.uf)).reduce((s, x) => s + x.bruto, 0) })).sort((a, b) => b.bruto - a.bruto);
       return `
@@ -249,7 +249,7 @@
         ${avisos.length ? `<div class="alert alert-warning">${avisos.map(anE).join(' · ')}</div>` : ''}
         <div class="card"><div class="card-header"><div class="card-title">Anúncios pagos por anúncio</div><input type="text" placeholder="Buscar título ou MLB" value="${anE(an.busca)}" oninput="an.busca=this.value;clearTimeout(an._t);an._t=setTimeout(()=>{anDesenhar();const i=document.querySelector('#an-host .card-header input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},350)" style="max-width:260px;"></div>
         ${anTabela(filt, [
-          { k: 'titulo', t: 'Anúncio', fmt: l => `<div class="an-anuncio">${l.foto ? `<img src="${anE(l.foto)}" loading="lazy" alt="">` : ''}<div class="cp-prod" style="max-width:320px;"><b>${anE(l.titulo)}</b><span>${anE(l.item_id)}${l.status && l.status !== 'active' ? ' · ' + anE(l.status === 'paused' ? 'pausado' : l.status) : ''}${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? ' · ' + anE(lojaNome(l.conta)) : ''}</span></div></div>` },
+          { k: 'titulo', t: 'Anúncio', fmt: l => `<div class="an-anuncio">${l.foto ? `<img src="${anE(l.foto)}" loading="lazy" alt="">` : ''}<div class="cp-prod" style="max-width:320px;"><b>${anE(l.titulo)}</b><span>${anE(l.item_id)}${l.status && l.status !== 'active' ? ' · ' + anE(({ paused: 'pausado', hold: 'suspenso', idle: 'parado', recommended: 'recomendado' })[l.status] || l.status) : ''}${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? ' · ' + anE(lojaNome(l.conta)) : ''}</span></div></div>` },
           { k: 'impressoes', t: 'Impressões', num: 1, fmt: l => anN(l.impressoes) }, { k: 'cliques', t: 'Cliques', num: 1, fmt: l => anN(l.cliques) },
           { k: 'ctr', t: 'CTR', num: 1, fmt: l => anN(l.ctr, 2) + '%' }, { k: 'cpc', t: 'CPC', num: 1, fmt: l => fmt(l.cpc) },
           { k: 'investimento', t: 'Investimento', num: 1, fmt: l => '<b>' + fmt(l.investimento) + '</b>' }, { k: 'vendas_ads', t: 'Vendas ADS', num: 1, fmt: l => fmt(l.vendas_ads) },

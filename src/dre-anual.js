@@ -30,7 +30,8 @@
       g = String(g || '');
       if(/tribut|imposto/i.test(g)) return 'fora';                       // o imposto já entra por venda (linha Imposto ML)
       if(/estoque|compra|mercadoria/i.test(g)) return 'fora';            // o custo da mercadoria já vem das vendas
-      if(/distribui|resultado|lucro|investimento|empr[eé]stimo|financiamento/i.test(g)) return 'fora';
+      if(/amortiza/i.test(g)) return 'fora';                             // devolver o principal de um empréstimo não é despesa
+      if(/distribui|resultado|lucro|investimento/i.test(g)) return 'fora';
       if(/custo/i.test(g)) return 'variavel';
       return 'fixo';
     }
