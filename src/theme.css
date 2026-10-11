@@ -1149,3 +1149,9 @@ a.pv-venda:hover{border-bottom-style:solid;}
 
 /* Estoque: barra dos produtos marcados para a folha de contagem */
 .est-sel-barra{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 18px;font-size:13px;border-top:1px solid var(--border);}
+
+/* Estoque: miniatura do produto */
+.est-foto{width:48px;padding:4px 6px !important;cursor:pointer;}
+.est-foto img{width:40px;height:40px;object-fit:cover;border-radius:8px;display:block;border:1px solid var(--border);background:#fff;}
+.est-foto span{display:flex;width:40px;height:40px;align-items:center;justify-content:center;border:1px dashed var(--ctl-border,var(--border));border-radius:8px;font-size:9.5px;color:var(--text-muted);text-align:center;line-height:1.1;}
+.est-foto:hover img,.est-foto:hover span{border-color:var(--primary);}

@@ -135,6 +135,82 @@
       return [...mapa.values()];
     }
 
+    // ----- foto do produto -----
+    // A foto fica gravada (tabela sku_fotos_manual): ou é enviada pelo usuário (bucket "produtos"), ou é a do anúncio,
+    // capturada uma vez e guardada. Não é buscada de novo a cada tela.
+    let estFotos = new Map(), estFotosOk = false;
+    async function estFotosCarregar(){
+      if(estFotosOk || typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      estFotosOk = true;
+      const r = await supa.from('sku_fotos_manual').select('sku_norm,url').eq('usuario_id', usuarioAtual.id).limit(5000);
+      (r.data || []).forEach(x => estFotos.set(x.sku_norm, x.url));
+      // produto ainda sem foto: captura a do anúncio agora e deixa salva
+      const todos = [...new Set(est.saldo.map(s => esN(s.sku)).concat(estoqueGalpao.map(g => esN(g.sku))))].filter(k => k && !estFotos.has(k));
+      if(todos.length && !r.error){
+        const a = await supa.rpc('sku_fotos', { p_skus: todos });
+        const novas = (a.data || []).filter(x => x.foto && !estFotos.has(x.sku)).map(x => ({ usuario_id: usuarioAtual.id, sku_norm: x.sku, url: String(x.foto).replace('http://', 'https://') }));
+        if(novas.length){ novas.forEach(n => estFotos.set(n.sku_norm, n.url)); await supa.from('sku_fotos_manual').upsert(novas); }
+      }
+      if(document.getElementById('view-estoque') && document.getElementById('view-estoque').classList.contains('active')) estDesenhar();
+    }
+    function estFotoTd(k){
+      const u = estFotos.get(k);
+      return `<td class="est-foto" onclick="estFotoAbrir('${esEsc(k)}')" title="${u ? 'Ver ou trocar a foto' : 'Colocar uma foto'}">${u ? `<img src="${esEsc(u)}" loading="lazy" alt="">` : '<span>+ foto</span>'}</td>`;
+    }
+    function estFotoAbrir(k){
+      const u = estFotos.get(k), g = estoqueGalpao.find(x => esN(x.sku) === k), s = skus.find(x => esN(x.sku) === k);
+      vmlModal('Foto — ' + esEsc((g && g.sku) || (s && s.sku) || k), `
+        <div style="text-align:center;min-height:120px;">${u ? `<img src="${esEsc(u)}" alt="" style="max-width:100%;max-height:52vh;border-radius:10px;">` : '<div class="vazio"><b>Sem foto</b>Envie uma foto do produto ou use a do anúncio.</div>'}</div>
+        <div class="text-muted" style="font-size:12.5px;margin-top:10px;line-height:1.5;">A foto aparece no estoque e na folha de contagem. A do anúncio é capturada uma vez e fica guardada; ela não muda se o anúncio mudar.</div>`,
+        `${u ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="estFotoRemover('${esEsc(k)}')">Remover</button>` : '<span style="margin-right:auto;"></span>'}
+         <button class="btn-out" onclick="estFotoDoAnuncio('${esEsc(k)}', this)">Usar a foto do anúncio</button>
+         <label class="btn" style="cursor:pointer;margin:0;">Enviar foto<input type="file" accept="image/*" aria-label="Foto do produto" style="display:none" onchange="estFotoEnviar('${esEsc(k)}', this.files[0])"></label>`);
+    }
+    // reduz a imagem no navegador (lado maior 600 px, JPEG) antes de enviar
+    function estFotoReduzir(file){
+      return new Promise((ok, erro) => { const u = URL.createObjectURL(file), im = new Image();
+        im.onload = () => { const r = Math.min(1, 600 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * r); c.height = Math.round(im.height * r);
+          const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); c.toBlob(b => b ? ok(b) : erro(new Error('não consegui converter a imagem')), 'image/jpeg', 0.85); };
+        im.onerror = () => { URL.revokeObjectURL(u); erro(new Error('este arquivo não é uma imagem que eu consiga ler')); }; im.src = u; });
+    }
+    async function estFotoGravar(k, file){
+      const blob = await estFotoReduzir(file), caminho = usuarioAtual.id + '/' + k.replace(/[^a-z0-9._-]+/g, '_') + '.jpg';
+      const up = await supa.storage.from('produtos').upload(caminho, blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '31536000' });
+      if(up.error) throw up.error;
+      const url = supa.storage.from('produtos').getPublicUrl(caminho).data.publicUrl + '?v=' + Date.now();
+      const r = await supa.from('sku_fotos_manual').upsert({ usuario_id: usuarioAtual.id, sku_norm: k, url, atualizado_em: new Date().toISOString() });
+      if(r.error) throw r.error;
+      estFotos.set(k, url);
+    }
+    async function estFotoEnviar(k, file){
+      if(!file) return;
+      try { await estFotoGravar(k, file); fecharModal('modal-vml'); estDesenhar(); if(typeof toast === 'function') toast('Foto gravada.'); }
+      catch(err){ if(typeof toast === 'function') toast('Não consegui gravar a foto: ' + err.message); }
+    }
+    async function estFotoDoAnuncio(k, btn){
+      if(btn){ btn.disabled = true; btn.textContent = 'Buscando…'; }
+      await supa.from('sku_fotos_manual').delete().eq('usuario_id', usuarioAtual.id).eq('sku_norm', k);
+      const a = await supa.rpc('sku_fotos', { p_skus: [k] }), f = (a.data || [])[0];
+      if(!f || !f.foto){ if(typeof toast === 'function') toast('Este produto não tem anúncio com foto. Envie uma foto.'); const u = estFotos.get(k); if(u) await supa.from('sku_fotos_manual').upsert({ usuario_id: usuarioAtual.id, sku_norm: k, url: u }); if(btn){ btn.disabled = false; btn.textContent = 'Usar a foto do anúncio'; } return; }
+      const url = String(f.foto).replace('http://', 'https://');
+      await supa.from('sku_fotos_manual').upsert({ usuario_id: usuarioAtual.id, sku_norm: k, url }); estFotos.set(k, url);
+      fecharModal('modal-vml'); estDesenhar();
+    }
+    async function estFotoRemover(k){
+      await supa.from('sku_fotos_manual').delete().eq('usuario_id', usuarioAtual.id).eq('sku_norm', k);
+      estFotos.delete(k); fecharModal('modal-vml'); estDesenhar();
+    }
+    // várias fotos de uma vez: o nome de cada arquivo é o SKU (ex.: J-2010-Rosa.jpg)
+    async function estFotosLote(inp){
+      const arqs = [...(inp.files || [])]; inp.value = ''; if(!arqs.length) return;
+      const conhecidos = new Set(est.saldo.map(s => esN(s.sku)).concat(estoqueGalpao.map(g => esN(g.sku)), skus.map(s => esN(s.sku))));
+      let ok = 0; const fora = [];
+      for(const f of arqs){ const k = esN(f.name.replace(/\.[^.]+$/, '')); if(!conhecidos.has(k)){ fora.push(f.name); continue; } try { await estFotoGravar(k, f); ok++; } catch(err){ fora.push(f.name); } }
+      estDesenhar();
+      if(typeof toast === 'function') toast(ok + ' foto(s) gravada(s).' + (fora.length ? ' Não reconheci: ' + fora.slice(0, 5).join(', ') + (fora.length > 5 ? '…' : '') + ' (o nome do arquivo precisa ser o SKU).' : ''));
+      window._estLote = { ok, fora };
+    }
+
     // ordenar pelas colunas (clique no título) e marcar produtos para a folha de contagem
     let estOrd = { col: '', dir: -1 }, estSel = new Set();
     function estOrdenar(col){ estOrd = { col, dir: estOrd.col === col ? -estOrd.dir : (col === 'sku' ? 1 : -1) }; estDesenhar(); }
@@ -149,6 +225,9 @@
     function estSelHtml(){
       return estSel.size ? `<b>${estSel.size}</b> produto${estSel.size === 1 ? '' : 's'} marcado${estSel.size === 1 ? '' : 's'} <button class="btn btn-sm" onclick="estFolhaContagem()">Folha de contagem (PDF)</button><button class="btn-out btn-sm" onclick="estSel.clear();estDesenhar()">Desmarcar</button>`
         : '<span class="text-muted">Marque os produtos na primeira coluna para imprimir a folha de contagem.</span>';
+    }
+    function estLoteHtml(){
+      return '<label class="btn-out btn-sm" style="cursor:pointer;margin:0 0 0 auto;" title="Escolha várias fotos de uma vez. O nome de cada arquivo precisa ser o SKU do produto.">Fotos em lote<input type="file" accept="image/*" multiple aria-label="Fotos dos produtos em lote" style="display:none" onchange="estFotosLote(this)"></label>';
     }
 
     // Folha para a equipe contar: produtos marcados, na ordem da tela, com o estoque do sistema e o espaço para anotar.
@@ -198,6 +277,7 @@
 
     function estDesenhar(){
       const host = document.getElementById('est-host'); if(!host) return;
+      if(!estFotosOk && est.carregadoEm) estFotosCarregar();
       if(est.dep !== 'total' && est.depositos.length && !estVisiveis().some(d => d.id === est.dep)) est.dep = 'total';
       if(est.dep === 'total') return estDesenharTotal();
       const dep = est.depositos.find(d => d.id === est.dep) || est.depositos[0];
@@ -246,10 +326,11 @@
           <input type="text" id="est-busca" placeholder="Buscar por SKU ou nome" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)">
           <div class="chips">${[['', 'Todos'], ['caminho', 'Com compra a caminho'], ['ocupado', 'Com ocupado'], ['zerado', 'Zerados'], ['semcusto', 'Sem custo']].map(([k, t]) => `<button class="chip ${est.so === k ? 'active' : ''}" onclick="est.so='${k}';estDesenhar();">${t}</button>`).join('')}</div>
         </div>
-        <div id="est-sel-barra" class="est-sel-barra">${estSelHtml()}</div>
-        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th>${estTh('sku', 'Produto')}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('ocupado', 'Ocupado', 1, 'Vendido ou separado, ainda não saiu')}${estTh('disp', 'Disponível', 1, 'Físico menos ocupado')}${estTh('fisico', 'Estoque físico', 1, 'O que está no depósito')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}<th></th></tr></thead><tbody>
+        <div class="est-sel-barra"><span id="est-sel-barra" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${estSelHtml()}</span>${estLoteHtml()}</div>
+        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th><th style="width:48px;"></th>${estTh('sku', 'Produto')}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('ocupado', 'Ocupado', 1, 'Vendido ou separado, ainda não saiu')}${estTh('disp', 'Disponível', 1, 'Físico menos ocupado')}${estTh('fisico', 'Estoque físico', 1, 'O que está no depósito')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}<th></th></tr></thead><tbody>
           ${lista.length ? lista.map(l => `<tr>
             <td><input type="checkbox" class="est-flag" data-k="${esEsc(l.k)}" style="width:auto;" ${estSel.has(l.k) ? 'checked' : ''} onchange="estMarcar(this.dataset.k, this.checked)"></td>
+            ${estFotoTd(l.k)}
             <td class="cp-prod" style="max-width:440px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
             <td class="num">${l.caminho ? esInt(l.caminho) : '<span class="text-muted">—</span>'}</td>
             <td class="num">${l.ocupado ? esInt(l.ocupado) : '<span class="text-muted">—</span>'}</td>
@@ -258,7 +339,7 @@
             <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td>
             <td class="num">${l.custo ? fmt(Math.max(0, l.fisico) * l.custo) : '—'}</td>
             <td style="text-align:right;"><button class="btn-out btn-sm" onclick="estMovimentos('${esEsc(l.k)}')">Movimentações</button></td>
-          </tr>`).join('') : '<tr><td colspan="9"><div class="vazio"><b>Nada nesta lista</b>Troque a busca ou o filtro.</div></td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="10"><div class="vazio"><b>Nada nesta lista</b>Troque a busca ou o filtro.</div></td></tr>'}
         </tbody></table></div></div>`;
     }
 
@@ -292,9 +373,9 @@
           <div class="kpi k-hoje"><div class="kpi-label">A caminho</div><div class="kpi-value">${esInt(cam)} un.</div><div class="kpi-sub">comprado e ainda não conferido</div></div>
         </div>
         <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou nome" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)"></div>
-        <div id="est-sel-barra" class="est-sel-barra">${estSelHtml()}</div>
-        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th>${estTh('sku', 'Produto')}${deps.map(d => estTh('d' + d.id, esEsc(d.nome), 1)).join('')}${estTh('total', 'Total', 1)}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}</tr></thead><tbody>
-          ${lista.length ? lista.map(l => `<tr><td><input type="checkbox" class="est-flag" data-k="${esEsc(l.k)}" style="width:auto;" ${estSel.has(l.k) ? 'checked' : ''} onchange="estMarcar(this.dataset.k, this.checked)"></td><td class="cp-prod" style="max-width:420px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
+        <div class="est-sel-barra"><span id="est-sel-barra" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${estSelHtml()}</span>${estLoteHtml()}</div>
+        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th><th style="width:48px;"></th>${estTh('sku', 'Produto')}${deps.map(d => estTh('d' + d.id, esEsc(d.nome), 1)).join('')}${estTh('total', 'Total', 1)}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}</tr></thead><tbody>
+          ${lista.length ? lista.map(l => `<tr><td><input type="checkbox" class="est-flag" data-k="${esEsc(l.k)}" style="width:auto;" ${estSel.has(l.k) ? 'checked' : ''} onchange="estMarcar(this.dataset.k, this.checked)"></td>${estFotoTd(l.k)}<td class="cp-prod" style="max-width:420px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
             ${deps.map(d => `<td class="num">${l.por[d.id] ? esInt(l.por[d.id]) : '<span class="text-muted">—</span>'}</td>`).join('')}
             <td class="num"><b>${esInt(l.total)}</b></td><td class="num">${l.caminho ? esInt(l.caminho) : '<span class="text-muted">—</span>'}</td>
             <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td><td class="num">${l.custo ? fmt(Math.max(0, l.total) * l.custo) : '—'}</td></tr>`).join('') : '<tr><td colspan="12"><div class="vazio"><b>Nada nesta lista</b>Troque a busca.</div></td></tr>'}
