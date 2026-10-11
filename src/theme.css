@@ -1076,3 +1076,7 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .saldo-loja input{padding:7px 9px;border:1px solid var(--ctl-border);border-radius:8px;background:var(--surface);color:var(--text);font-size:14px;width:100%;}
 .saldo-loja i{grid-column:1/-1;font-style:normal;font-size:12px;color:var(--text-2);text-align:right;}
 .fx-sub{font-size:10.5px;font-weight:400;color:var(--text-muted);line-height:1.2;}
+/* rótulo do assistente: abre para a esquerda do botão, sem sair da tela */
+.cfo-btn-flutuante{overflow:visible !important;width:52px !important;padding:0 !important;justify-content:center;}
+.cfo-btn-flutuante .cfo-rot{position:absolute;right:calc(100% + 8px);top:50%;transform:translateY(-50%) translateX(8px);max-width:none !important;margin:0 !important;background:var(--text);color:var(--surface);padding:7px 13px;border-radius:999px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.22);pointer-events:none;opacity:0;transition:opacity .2s,transform .2s;}
+.cfo-btn-flutuante:hover .cfo-rot,.cfo-btn-flutuante:focus-visible .cfo-rot{opacity:1;transform:translateY(-50%) translateX(0);}
