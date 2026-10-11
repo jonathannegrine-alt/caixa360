@@ -43,8 +43,9 @@
             if(nome === 'ml-inventory') return resp((await dado('inventory', h)) || { ok: true, itens: [], contas: [] });
             if(nome === 'ml-ads'){
               const ads = (await dado('ads', h)) || { ok: true, anuncios: [], contas: [] };
-              // os dados de exemplo são de 30 dias: para um pedido de um dia só (Início), mostra a média diária
-              if(corpo && corpo.de && corpo.de === corpo.ate) return resp({ ok: true, contas: [], anuncios: (ads.anuncios || []).map(a => { const o = Object.assign({}, a); ['cliques', 'impressoes', 'investimento', 'vendas_ads', 'diretas', 'indiretas', 'un_ads', 'un_organicas', 'organicas'].forEach(k => { o[k] = Math.round((Number(o[k]) || 0) / 30 * 100) / 100; }); return o; }) });
+              // os dados de exemplo são de 30 dias: para um pedido de um dia só (Início), mostra a média diária proporcional à hora
+              const agora = new Date(), parte = Math.max(0.05, (agora.getHours() * 60 + agora.getMinutes()) / 1440);   // dia em curso: só a parte que já passou
+              if(corpo && corpo.de && corpo.de === corpo.ate) return resp({ ok: true, contas: [], anuncios: (ads.anuncios || []).map(a => { const o = Object.assign({}, a); ['cliques', 'impressoes', 'investimento', 'vendas_ads', 'diretas', 'indiretas', 'un_ads', 'un_organicas', 'organicas'].forEach(k => { o[k] = Math.round((Number(o[k]) || 0) / 30 * parte * 100) / 100; }); return o; }) });
               return resp(ads);
             }
             if(DESLIGADAS.includes(nome)) return resp({ error: 'Na demonstração esta função fica desligada. Crie a sua conta para usar com a sua loja.' });
