@@ -6,7 +6,9 @@
 // (−) TOTAL CUSTO FIXO         categorias de despesa marcadas como "custo fixo"
 // (=) LUCRO LÍQUIDO            com linha de %
 // Linhas do ML: RPC vendas_ml_por_mes (custo e imposto gravados em cada venda).
-// Despesas: lançamentos de Contas a pagar, pelo mês do vencimento; a categoria define o grupo (categorias[].dreGrupo).
+// Despesas: lançamentos de Contas a pagar, pelo mês de competência (sem competência, o do vencimento).
+// Onde cada categoria entra: escolha do usuário (categorias[].dreGrupo) ou, sem escolha, o grupo que ela tem
+// no plano de contas do Olist (categorias[].grupo, importado por olistImportarCategorias).
 
     let dreAno = new Date().getFullYear();
     let dreSoPagas = false;
@@ -20,8 +22,19 @@
     function dreGrupoDe(nomeCat){
       const c = categorias.find(x => x.nome === nomeCat);
       if(c && c.dreGrupo) return c.dreGrupo;
+      if(c && c.grupo) return drePadraoDoGrupo(c.grupo);
       return (c && c.impactaDRE) ? 'fixo' : 'fora';     // padrão: o que já impactava o DRE entra como fixo
     }
+    // grupo do plano de contas do Olist → onde entra no DRE
+    function drePadraoDoGrupo(g){
+      g = String(g || '');
+      if(/tribut|imposto/i.test(g)) return 'fora';                       // o imposto já entra por venda (linha Imposto ML)
+      if(/estoque|compra|mercadoria/i.test(g)) return 'fora';            // o custo da mercadoria já vem das vendas
+      if(/distribui|resultado|lucro|investimento|empr[eé]stimo|financiamento/i.test(g)) return 'fora';
+      if(/custo/i.test(g)) return 'variavel';
+      return 'fixo';
+    }
+    function dreGrupoOlist(nomeCat){ const c = categorias.find(x => x.nome === nomeCat); return (c && c.grupo) || ''; }
 
     async function renderDREAnual(){
       const el = document.getElementById('res-anual-view');
@@ -47,11 +60,12 @@
     function dreDespesas(){
       const out = { variavel:{}, fixo:{} };
       pagamentos.forEach(p => {
-        if(!p.data || p.data.substring(0,4) !== String(dreAno)) return;
+        const ref = /^\d{4}-\d{2}/.test(p.competencia || '') ? p.competencia : p.data;
+        if(!ref || ref.substring(0,4) !== String(dreAno)) return;
         if(dreSoPagas && !p.pago) return;
         const g = dreGrupoDe(p.cat);
         if(g !== 'variavel' && g !== 'fixo') return;
-        const nome = p.cat || 'Sem categoria', m = parseInt(p.data.substring(5,7));
+        const nome = p.cat || 'Sem categoria', m = parseInt(ref.substring(5,7));
         if(!out[g][nome]) out[g][nome] = {};
         out[g][nome][m] = (out[g][nome][m] || 0) + (Number(p.pago && p.valorPago ? p.valorPago : p.val) || 0);
       });
@@ -65,7 +79,7 @@
         ['Vendas Canceladas ML', 'canc'], ['Imposto ML', 'imp'], ['Frete Vendedor ML', 'frete'],
         ['Custo dos Produtos ML', 'custo'], ['Tarifa de Venda ML', 'tarifa']
       ].map(([nome, k]) => ({ nome, v: Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, val(i + 1, k)])) }));
-      const linhasDe = g => Object.keys(desp[g]).sort((a,b) => a.localeCompare(b)).map(nome => ({ nome, v: desp[g][nome] }));
+      const linhasDe = g => Object.keys(desp[g]).map(nome => ({ nome, v: desp[g][nome], grupo: dreGrupoOlist(nome) })).sort((a,b) => a.grupo.localeCompare(b.grupo) || a.nome.localeCompare(b.nome));
       const variaveis = linhasDe('variavel'), fixas = linhasDe('fixo');
       const soma = (linhas, m) => linhas.reduce((s,l) => s + (l.v[m] || 0), 0);
       const meses = DRE_MESES.map((_, i) => {
@@ -87,6 +101,7 @@
       const cel = (v, cls) => `<td class="num ${cls || ''}">${dreNum(v)}</td>`;
       const linha = (rot, fn, cls, totalV) => `<tr class="${cls || ''}"><td>${rot}</td>${D.meses.map(x => cel(fn(x))).join('')}${cel(totalV)}</tr>`;
       const linhaItem = l => `<tr><td>${dreEsc(l.nome)}</td>${D.meses.map(x => cel(l.v[x.m] || 0)).join('')}${cel(Object.values(l.v).reduce((s,v) => s + v, 0))}</tr>`;
+      const comGrupo = linhas => { let ult = null; return linhas.map(l => { const cab = l.grupo && l.grupo !== ult ? `<tr class="dre-grupo"><td colspan="14">${dreEsc(l.grupo)}</td></tr>` : ''; ult = l.grupo || ult; return cab + linhaItem(l); }).join(''); };
       const pct = (a, b) => b ? (a / b * 100).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + '%' : '–';
       const linhaPct = k => `<tr class="dre-pct"><td></td>${D.meses.map(x => `<td class="num">${pct(x[k], x.entrada)}</td>`).join('')}<td class="num">${pct(tot(k), tot('entrada'))}</td></tr>`;
       const diasNoMes = m => new Date(dreAno, m, 0).getDate();
@@ -112,8 +127,8 @@
             </div>
             <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer;"><input type="checkbox" ${dreSoPagas ? 'checked' : ''} onchange="dreSoPagas=this.checked;dreDesenhar();" style="width:auto;"> Somente despesas pagas</label>
-              <button class="btn-out btn btn-sm" onclick="dreConfigurar()">⚙ Configurar categorias</button>
-              <button class="btn-out btn btn-sm" onclick="dreExportar()">⬇ Exportar</button>
+              <button class="btn-out btn btn-sm" onclick="dreConfigurar()">Configurar categorias</button>
+              <button class="btn-out btn btn-sm" onclick="dreExportar()">Exportar</button>
               <select onchange="dreAno=parseInt(this.value);renderDREAnual();" style="width:auto;">${anos.map(a => `<option ${a === dreAno ? 'selected' : ''}>${a}</option>`).join('')}</select>
             </div>
           </div>
@@ -127,11 +142,11 @@
                 ${linha('Faturamento ML', x => x.entrada, '', tot('entrada'))}
                 ${linha('(−) TOTAL CUSTO OPERACIONAL', x => x.operacional, 'dre-saida', tot('operacional'))}
                 ${D.linhasML.map(linhaItem).join('')}
-                ${D.variaveis.map(linhaItem).join('')}
+                ${comGrupo(D.variaveis)}
                 ${linha('(=) MARGEM DE CONTRIBUIÇÃO', x => x.mc, 'dre-res', tot('mc'))}
                 ${linhaPct('mc')}
                 ${linha('(−) TOTAL CUSTO FIXO', x => x.fixo, 'dre-saida', tot('fixo'))}
-                ${D.fixas.length ? D.fixas.map(linhaItem).join('') : `<tr><td colspan="14" class="text-muted" style="font-style:italic;">Nenhuma categoria marcada como custo fixo</td></tr>`}
+                ${D.fixas.length ? comGrupo(D.fixas) : `<tr><td colspan="14" class="text-muted" style="font-style:italic;">Nenhuma categoria marcada como custo fixo</td></tr>`}
                 ${linha('(=) LUCRO LÍQUIDO', x => x.lucro, 'dre-res dre-lucro', tot('lucro'))}
                 ${linhaPct('lucro')}
               </tbody>
@@ -139,7 +154,7 @@
           </div>
           <div class="text-muted" style="font-size:11.5px;padding:12px 18px;line-height:1.6;">
             Faturamento ML = valor dos produtos das vendas aprovadas e canceladas (as canceladas saem em seguida). Custo e imposto são os gravados em cada venda.
-            Despesas entram pelo mês do vencimento em Contas a pagar. ● = mês com vendas ainda sendo importadas do Mercado Livre.
+            Despesas entram pelo mês de competência (sem competência, o do vencimento). ● = mês com vendas ainda sendo importadas do Mercado Livre.
             ${!dreDados.carregado ? ' Carregando vendas…' : ''}
           </div>
         </div>`;
@@ -156,20 +171,35 @@
       await renderDREAnual();
     }
 
-    function dreConfigurar(){
-      const usadas = [...new Set(pagamentos.map(p => p.cat).filter(Boolean))];
-      const nomes = [...new Set(categorias.map(c => c.nome).concat(usadas))].sort((a,b) => a.localeCompare(b));
-      vmlModal('Categorias no DRE', `
-        <div class="text-muted" style="margin-bottom:12px;line-height:1.55;">Diga onde cada categoria de Contas a pagar entra. <b style="color:var(--text)">Compra de mercadoria e amortização de empréstimo não entram</b>: o custo da mercadoria já vem das vendas (Custo dos Produtos ML) e amortização não é despesa.</div>
+    function dreConfigurar(aviso){
+      const usadas = [...new Set((typeof pagTodos === 'function' ? pagTodos() : pagamentos).map(p => p.cat).filter(Boolean))];
+      const nomes = [...new Set(categorias.map(c => c.nome).concat(usadas))].sort((a,b) => (dreGrupoOlist(a) || 'zzz').localeCompare(dreGrupoOlist(b) || 'zzz') || a.localeCompare(b));
+      const temOlist = typeof olist !== 'undefined' && olist.v3;
+      const trat = typeof BAL_TRAT !== 'undefined' ? BAL_TRAT : null;
+      let ult = null;
+      vmlModal('Categorias: onde cada uma entra', `
+        ${aviso ? `<div class="alert alert-info">${aviso}</div>` : ''}
+        <div class="text-muted" style="margin-bottom:12px;line-height:1.55;">Para cada categoria de Contas a pagar, diga onde ela entra no <b style="color:var(--text)">DRE</b> e no <b style="color:var(--text)">balanço</b>. Quem ainda não foi escolhido segue o grupo do plano de contas do Olist.
+          <b style="color:var(--text)">Compra de mercadoria, imposto e amortização não entram no DRE</b>: o custo e o imposto já vêm de cada venda, e amortização não é despesa.</div>
         <div style="max-height:52vh;overflow:auto;">
-          <table><thead><tr><th>Categoria</th><th style="width:210px;">No DRE</th></tr></thead><tbody>
-          ${nomes.map((n,i) => { const g = dreGrupoDe(n); return `<tr><td>${dreEsc(n)}</td><td><select data-cat="${dreEsc(n)}" class="dre-cfg-sel">
+          <table><thead><tr><th>Categoria</th><th style="width:230px;">No DRE</th>${trat ? '<th style="width:270px;">No balanço (o que eu devo hoje)</th>' : ''}</tr></thead><tbody>
+          ${nomes.map(n => { const g = dreGrupoDe(n), go = dreGrupoOlist(n), tb = trat && typeof balTipoDe === 'function' ? balTipoDe(n) : '';
+            const cab = go !== ult ? `<tr class="dre-grupo"><td colspan="3">${dreEsc(go || 'Sem grupo no Olist')}</td></tr>` : ''; ult = go;
+            return cab + `<tr><td>${dreEsc(n)}</td><td><select data-cat="${dreEsc(n)}" class="dre-cfg-sel">
               <option value="fora" ${g === 'fora' ? 'selected' : ''}>Não entra</option>
               <option value="variavel" ${g === 'variavel' ? 'selected' : ''}>Custo variável (operacional)</option>
-              <option value="fixo" ${g === 'fixo' ? 'selected' : ''}>Custo fixo</option></select></td></tr>`; }).join('') || '<tr><td colspan="2" class="text-muted">Nenhuma categoria cadastrada.</td></tr>'}
+              <option value="fixo" ${g === 'fixo' ? 'selected' : ''}>Custo fixo</option></select></td>
+              ${trat ? `<td><select data-cat="${dreEsc(n)}" class="dre-cfg-bal">${trat.map(o => `<option value="${o[0]}" ${tb === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></td>` : ''}</tr>`; }).join('') || '<tr><td colspan="3" class="text-muted">Nenhuma categoria cadastrada.</td></tr>'}
           </tbody></table>
         </div>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="dreSalvarConfig()">Salvar</button>`);
+        `${temOlist ? '<button class="btn-out btn" style="margin-right:auto;" onclick="dreImportarOlist(this)">Atualizar categorias do Olist</button>' : ''}<button class="btn-out btn" onclick="fecharModal(\'modal-vml\')">Cancelar</button><button class="btn" onclick="dreSalvarConfig()">Salvar</button>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
+    }
+    async function dreImportarOlist(btn){
+      if(btn){ btn.disabled = true; btn.textContent = 'Buscando…'; }
+      const r = typeof olistImportarCategorias === 'function' ? await olistImportarCategorias() : { erro: 'Olist não conectado' };
+      dreConfigurar(r.erro ? 'Não consegui buscar as categorias: ' + dreEsc(r.erro) : r.total + ' categorias do Olist conferidas' + (r.novas ? ', ' + r.novas + ' novas' : '') + (r.mudaram ? ', ' + r.mudaram + ' com grupo atualizado' : '') + '.');
+      dreDesenhar();
     }
 
     function dreSalvarConfig(){
@@ -177,12 +207,19 @@
         const nome = sel.getAttribute('data-cat'), g = sel.value;
         let c = categorias.find(x => x.nome === nome);
         if(!c){ c = { nome, impactaDRE:false, tipoPassivo:'operacional' }; categorias.push(c); }
-        c.dreGrupo = g;
+        // só grava como escolha o que difere do padrão do grupo (assim, se o grupo mudar no Olist, acompanha)
+        c.dreGrupo = (c.grupo && drePadraoDoGrupo(c.grupo) === g) ? null : g;
         c.impactaDRE = g !== 'fora';
       });
+      const selBal = document.querySelectorAll('.dre-cfg-bal');
+      if(selBal.length && typeof comprasCfg !== 'undefined'){
+        comprasCfg.balanco = comprasCfg.balanco || {}; comprasCfg.balanco.tipos = comprasCfg.balanco.tipos || {};
+        selBal.forEach(sel => { comprasCfg.balanco.tipos[String(sel.getAttribute('data-cat')).trim().toLowerCase()] = sel.value; });
+      }
       salvar();
       fecharModal('modal-vml');
       dreDesenhar();
+      if(typeof balDesenhar === 'function' && document.getElementById('bal-host')) try { balDesenhar(); } catch(e){}
     }
 
     function dreExportar(){

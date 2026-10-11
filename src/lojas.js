@@ -148,3 +148,37 @@
       const nome = lojaNome(lojaDe(p)); if(!nome) return '';
       return `<span class="loja-tag">${contaEsc(nome)}</span>`;
     }
+
+    // ----- Configurações → Mercado Livre: lista das contas, desconectar cada uma, loja padrão -----
+    async function atualizarStatusMLConfig(){
+      const el = document.getElementById('cfg-ml-status'), bt = document.getElementById('cfg-btn-desconectar');
+      if(!el) return;
+      if(bt) bt.style.display = 'none';
+      if(!usuarioAtual){ el.textContent = 'Faça login para ver o status.'; return; }
+      if(!contasML.length){
+        const { data } = await supa.from('ml_tokens').select('ml_user_id').eq('usuario_id', usuarioAtual.id).limit(1);
+        if(data && data.length) await carregarContasML();
+      }
+      if(!contasML.length){ el.innerHTML = '<span style="color:var(--danger);font-weight:600;">Nenhuma conta conectada</span> — clique em "Conectar / Reconectar" abaixo.'; return; }
+      const padrao = lojaPadraoId();
+      el.innerHTML = `<div class="cfg-contas">${contasML.map(c => `
+        <div class="cfg-conta">
+          <div class="cfg-conta-nome"><b>${contaEsc(c.apelido || 'Conta ' + c.id)}</b><span>nº ${c.id}${c.atualizado ? ' · acesso renovado em ' + new Date(c.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''}</span></div>
+          ${contasML.length > 1 ? (c.id === padrao ? '<span class="badge badge-success" title="Contas a pagar sem loja marcada (as do Olist, por exemplo) pertencem a esta loja">Loja padrão</span>'
+            : `<button class="btn-out btn-sm" title="Contas a pagar sem loja marcada passam a pertencer a esta loja" onclick="lojasDefinirPadrao('${c.id}');atualizarStatusMLConfig()">Tornar padrão</button>`) : ''}
+          <button class="btn-out btn-sm" style="color:var(--danger);" onclick="desconectarContaML('${c.id}', this)">Desconectar</button>
+        </div>`).join('')}</div>
+        ${contasML.length > 1 ? '<div class="text-muted" style="font-size:12px;margin-top:8px;">Loja padrão: é a dona das contas a pagar que chegam sem loja marcada (as que vêm do Olist, por exemplo).</div>' : ''}`;
+    }
+    async function desconectarContaML(id, bt){
+      if(bt && bt.dataset.conf !== '1'){ bt.dataset.conf = '1'; bt.textContent = 'Confirmar'; setTimeout(() => { if(bt.isConnected){ bt.dataset.conf = ''; bt.textContent = 'Desconectar'; } }, 5000); return; }
+      if(bt) bt.disabled = true;
+      const { error } = await supa.from('ml_tokens').delete().eq('usuario_id', usuarioAtual.id).eq('ml_user_id', id);
+      if(error){ toast('Não consegui desconectar: ' + error.message); if(bt) bt.disabled = false; return; }
+      if(contaAtiva === String(id)) trocarContaML('');
+      contasML = contasML.filter(c => c.id !== String(id));
+      await carregarContasML();
+      atualizarStatusMLConfig();
+      if(typeof verificarConexaoML === 'function') verificarConexaoML();
+      toast('Conta desconectada. Os dados já importados continuam guardados.');
+    }

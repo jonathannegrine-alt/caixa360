@@ -100,6 +100,23 @@
       return r;
     }
 
+    // Categorias financeiras do Olist com o grupo do plano de contas (o DRE usa o grupo para saber onde a categoria entra)
+    async function olistImportarCategorias(){
+      if(typeof olistChamarCompras !== 'function') return { erro: 'Olist não conectado' };
+      const j = await olistChamarCompras({ acao: 'categorias' });
+      if(!j || j.error || !Array.isArray(j.categorias)) return { erro: (j && j.error) || 'sem resposta' };
+      const r = { total: j.categorias.length, novas: 0, mudaram: 0 };
+      j.categorias.forEach(x => {
+        if(!x.nome) return;
+        let c = categorias.find(k => String(k.nome).trim().toLowerCase() === x.nome.toLowerCase());
+        if(!c){ c = { nome: x.nome, impactaDRE: true, tipoPassivo: 'operacional' }; categorias.push(c); r.novas++; }
+        if((c.grupo || '') !== (x.grupo || '')){ c.grupo = x.grupo || null; r.mudaram++; }
+      });
+      if(r.novas || r.mudaram) salvar();
+      try { localStorage.setItem('mk_olist_cat_em', String(Date.now())); } catch(e){}
+      return r;
+    }
+
     function olistRedesenhar(){
       try { if(typeof recalc === 'function') recalc(); } catch(e){}
       const v = document.querySelector('.view.active');
@@ -128,6 +145,7 @@
         const faltam = (j.contas || []).filter(c => !c.temDetalhe && !String(c.situacao).startsWith('cancel'));
         if(faltam.length) olistDetalhes(faltam);   // categoria e competência, em segundo plano
         olistPagamentos();                          // data real de pagamento (API nova), em segundo plano
+        if(olist.v3 && Date.now() - Number(localStorage.getItem('mk_olist_cat_em') || 0) > 86400000) olistImportarCategorias().then(() => olistRedesenhar()).catch(() => {});
       } finally { olist.sincronizando = false; if(manual || document.getElementById('cfg-olist-card')) olistRenderCard(); }
     }
 

@@ -18,7 +18,13 @@
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
       const r = await supa.from('emprestimos').select('*').eq('usuario_id', usuarioAtual.id).order('id');
       if(r.error){ emp.erro = r.error.message; return; }
-      emp.lista = r.data || []; emp.carregado = true; emp.erro = '';
+      emp.todos = r.data || []; emp.carregado = true; emp.erro = '';
+      empRecortar();
+    }
+    // contratos da loja escolhida no seletor (sem loja marcada = loja padrão)
+    function empRecortar(){
+      const loja = typeof lojaAtiva === 'function' ? lojaAtiva() : '';
+      emp.lista = (emp.todos || []).filter(c => !loja || (c.loja || (typeof lojaPadraoId === 'function' ? lojaPadraoId() : '')) === loja);
     }
 
     // as contas do Contas a pagar que pertencem a um contrato
@@ -50,6 +56,7 @@
       const el = document.getElementById('view-emprestimos'); if(!el) return;
       if(!emp.carregado){ el.innerHTML = '<div class="vazio"><b>Carregando os empréstimos…</b></div>'; await empCarregar(); }
       if(typeof olist !== 'undefined' && olist.conectado === null && typeof olistStatus === 'function') try { await olistStatus(); } catch(e){}
+      empRecortar();
       empDesenhar();
     }
 
@@ -63,7 +70,7 @@
       el.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Empréstimos</div><div class="pg-sub">Cada contrato com o que já foi pago, o que falta e o saldo devedor.</div></div>
-          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="empLerPdf()">Ler contrato em PDF</button><button class="btn btn-sm" onclick="empNovo()">+ Novo contrato</button></div>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="empNovo()">+ Novo contrato</button><button class="btn btn-sm" onclick="empLerPdf()">Cadastrar contrato com IA</button></div>
         </div>
         ${emp.erro ? `<div class="alert alert-danger">${emEsc(emp.erro)}</div>` : ''}
         <div class="kpi-grid k4i">
@@ -74,37 +81,45 @@
         </div>
         ${res.length ? `<div class="card"><div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Contrato</th><th>Parcelas</th><th class="num">Saldo devedor</th><th class="num">Juros a pagar</th><th class="num">Já pago</th><th>Próxima parcela</th><th>Termina em</th><th></th></tr></thead><tbody>
           ${res.map(({ c, r }) => { const pct = r.total ? Math.round(r.pagas / r.total * 100) : 0; return `<tr>
-            <td class="cp-prod" style="max-width:300px;"><b>${emEsc(c.nome)}</b><span>${emEsc(c.credor || '')}${c.dono && c.dono !== 'empresa' ? ' · ' + EM_DONO[c.dono] : ''}</span><i>${c.modo === 'gerar' ? 'parcelas geradas aqui' : 'parcelas vindas do Olist'}${r.total ? '' : ' · nenhuma conta encontrada'}</i></td>
+            <td class="cp-prod" style="max-width:300px;"><b>${emEsc(c.nome)}</b><span>${emEsc(c.credor || '')}${c.dono && c.dono !== 'empresa' ? ' · ' + EM_DONO[c.dono] : ''}</span><i>${c.modo === 'gerar' ? 'parcelas geradas aqui' : 'parcelas vindas do Olist'}${r.total ? '' : ' · nenhuma conta encontrada'}${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? ' · ' + emEsc(lojaNome(c.loja || lojaPadraoId())) : ''}</i></td>
             <td><div class="cp-cob"><div class="cp-cob-n"><b>${r.pagas}</b> de ${r.total || c.parcelas} pagas</div><div class="cp-cob-t"><span class="cp-cob-v" style="width:${Math.max(3, pct)}%;"></span></div></div></td>
             <td class="num"><b>${fmt(r.saldo)}</b></td><td class="num">${fmt(r.jurosAbertos)}</td><td class="num">${fmt(r.pago)}</td>
             <td>${r.prox ? `${dt(r.prox.data)}<div class="cp-sub">${fmt(r.valorProx)}${r.atrasadas ? ' · <span class="text-danger">' + r.atrasadas + ' em atraso</span>' : ''}</div>` : '<span class="cp-sit cp-ok">Quitado</span>'}</td>
             <td>${dt(r.fim)}</td>
-            <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="empVer(${c.id})">Parcelas</button> <button class="btn-out btn-sm" onclick="empEditar(${c.id})">Editar</button></td></tr>`; }).join('')}
-        </tbody></table></div></div>` : `<div class="card"><div class="vazio"><div class="vazio-ico"></div><b>Nenhum contrato cadastrado</b>Clique em "Ler contrato em PDF" para o robô preencher, ou use uma das sugestões abaixo.</div></div>`}
+            <td style="text-align:right;white-space:nowrap;">${c.arquivo ? `<button class="btn-out btn-sm" title="Baixar o PDF do contrato" onclick="empBaixar(${c.id})">PDF</button> ` : ''}<button class="btn-out btn-sm" onclick="empVer(${c.id})">Parcelas</button> <button class="btn-out btn-sm" onclick="empEditar(${c.id})">Editar</button></td></tr>`; }).join('')}
+        </tbody></table></div></div>` : `<div class="card"><div class="vazio"><div class="vazio-ico"></div><b>Nenhum contrato cadastrado</b>Clique em "Cadastrar contrato com IA" e envie o PDF: o robô preenche e você confere. Ou use uma das sugestões abaixo.</div></div>`}
         ${sug.length ? `<div class="card"><div class="card-header"><div class="card-title">Contas que parecem empréstimo e ainda não têm contrato</div><span class="text-muted" style="font-size:12px;">Um clique cria o contrato já ligado a essas parcelas</span></div>
           <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Descrição das parcelas</th><th>Credor</th><th class="num">Parcelas lançadas</th><th class="num">Em aberto</th><th></th></tr></thead><tbody>
-          ${sug.slice(0, 25).map((o, i) => `<tr><td><b>${emEsc(o.desc)}</b></td><td class="cp-forn" style="max-width:260px;">${emEsc(o.forn || '—')}</td><td class="num">${o.n}</td><td class="num">${fmt(o.aberto)}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="empDeSugestao(${i})">Cadastrar contrato</button></td></tr>`).join('')}
+          ${sug.slice(0, 25).map((o, i) => `<tr><td><b>${emEsc(o.desc)}</b></td><td class="cp-forn" style="max-width:260px;">${emEsc(o.forn || '—')}</td><td class="num">${o.n}</td><td class="num">${fmt(o.aberto)}</td><td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="empDeSugestao(${i})">Cadastrar</button> <button class="btn btn-sm" title="Envie o PDF do contrato: o robô preenche valor, juros e parcelas" onclick="empDeSugestao(${i}, true)">Cadastrar com IA</button></td></tr>`).join('')}
           </tbody></table></div></div>` : ''}`;
     }
 
     // ----- formulário -----
     function empModoPadrao(){ return typeof olist !== 'undefined' && olist.conectado ? 'vincular' : 'gerar'; }
     function empNovo(dados){
-      emp.form = Object.assign({ id: null, nome: '', credor: '', numero_contrato: '', valor: '', taxa_mes: '', parcelas: '', primeira: '', sistema: 'price', dono: 'empresa', modo: empModoPadrao(), vinculo: '', obs: '' }, dados || {});
+      emp.form = Object.assign({ id: null, nome: '', credor: '', numero_contrato: '', valor: '', taxa_mes: '', parcelas: '', primeira: '', sistema: 'price', dono: 'empresa', modo: empModoPadrao(), vinculo: '', obs: '', loja: typeof lojaNova === 'function' ? lojaNova() : null, arquivo: null }, dados || {});
+      emp.pdf = null;
       empForm();
     }
-    function empEditar(id){ const c = emp.lista.find(x => x.id === id); if(c){ emp.form = Object.assign({}, c, { primeira: c.primeira || '' }); empForm(); } }
-    function empDeSugestao(i){ const o = empSugestoes()[i]; if(!o) return; empNovo({ nome: o.desc, credor: o.forn, vinculo: o.desc, modo: 'vincular', parcelas: o.n, primeira: o.primeira }); }
+    function empEditar(id){ const c = emp.lista.find(x => x.id === id); if(c){ emp.form = Object.assign({}, c, { primeira: c.primeira || '' }); emp.pdf = null; empForm(); } }
+    function empDeSugestao(i, comIA){ const o = empSugestoes()[i]; if(!o) return; empNovo({ nome: o.desc, credor: o.forn, vinculo: o.desc, modo: 'vincular', parcelas: o.n, primeira: o.primeira }); if(comIA) empLerPdf(true); }
     function empFormLer(){
       const f = emp.form; if(!f) return;
-      ['nome', 'credor', 'numero_contrato', 'valor', 'taxa_mes', 'parcelas', 'primeira', 'sistema', 'dono', 'modo', 'vinculo', 'obs'].forEach(k => { const el = document.getElementById('emp-' + k); if(el) f[k] = el.value; });
+      ['nome', 'credor', 'numero_contrato', 'valor', 'taxa_mes', 'parcelas', 'primeira', 'sistema', 'dono', 'modo', 'vinculo', 'obs', 'loja'].forEach(k => { const el = document.getElementById('emp-' + k); if(el) f[k] = el.value; });
     }
     function empForm(aviso){
       const f = emp.form, opt = (v, t, sel) => `<option value="${v}" ${String(sel) === v ? 'selected' : ''}>${t}</option>`;
       const achadas = f.modo === 'vincular' && f.vinculo ? pagamentos.filter(p => emN((p.desc || '') + ' ' + (p.forn || '')).includes(emN(f.vinculo))).length : 0;
       vmlModal(f.id ? 'Editar contrato' : 'Novo contrato de empréstimo', `
         ${aviso ? `<div class="alert alert-info">${aviso}</div>` : ''}
+        <div class="emp-pdf">
+          <div><b>Contrato em PDF</b><span>${emp.pdf ? emEsc(emp.pdf.name) + ' — será guardado ao salvar' : f.arquivo ? 'Guardado na nuvem' : 'Nenhum arquivo guardado'}</span></div>
+          ${f.arquivo && !emp.pdf && f.id ? `<button class="btn-out btn-sm" onclick="empBaixar(${f.id})">Baixar</button>` : ''}
+          <button class="btn-out btn-sm" onclick="empFormLer();empAnexar()">${emp.pdf || f.arquivo ? 'Trocar arquivo' : 'Anexar PDF'}</button>
+          <button class="btn btn-sm" title="O robô lê o PDF e preenche os campos para você conferir" onclick="empFormLer();empLerPdf(true)">Preencher com IA</button>
+        </div>
         <div class="form-row">
+          ${typeof lojaSelect === 'function' && lojaSelect('emp-loja', f.loja) ? `<div class="form-group"><label class="form-label">Loja</label>${lojaSelect('emp-loja', f.loja || lojaPadraoId())}</div>` : ''}
           <div class="form-group"><label class="form-label">Nome do contrato</label><input type="text" id="emp-nome" value="${emEsc(f.nome)}" placeholder="Ex.: Pronampe Sicoob"></div>
           <div class="form-group"><label class="form-label">Banco ou credor</label><input type="text" id="emp-credor" value="${emEsc(f.credor || '')}"></div>
           <div class="form-group"><label class="form-label">Nº do contrato</label><input type="text" id="emp-numero_contrato" value="${emEsc(f.numero_contrato || '')}"></div>
@@ -152,7 +167,7 @@
       if(f.modo === 'vincular' && !String(f.vinculo || '').trim()){ alert('Informe o trecho que identifica as parcelas no Contas a pagar.'); return; }
       const reg = { usuario_id: usuarioAtual.id, nome: String(f.nome).trim(), credor: String(f.credor || '').trim() || null, numero_contrato: String(f.numero_contrato || '').trim() || null,
         valor: emNum(f.valor), taxa_mes: emNum(f.taxa_mes), parcelas: Math.max(1, Math.round(emNum(f.parcelas)) || 1), primeira: f.primeira || null, sistema: f.sistema, dono: f.dono, modo: f.modo,
-        vinculo: f.modo === 'vincular' ? String(f.vinculo).trim() : null, obs: String(f.obs || '').trim() || null };
+        vinculo: f.modo === 'vincular' ? String(f.vinculo).trim() : null, obs: String(f.obs || '').trim() || null, loja: f.loja || null };
       if(f.modo === 'gerar'){
         const tab = empTabela(reg);
         if(!tab.length){ alert('Para gerar as parcelas, informe o valor emprestado e a data da primeira parcela.'); return; }
@@ -162,21 +177,33 @@
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
       const g = f.id ? await supa.from('emprestimos').update(reg).eq('id', f.id).select().single() : await supa.from('emprestimos').insert(reg).select().single();
       if(g.error){ alert('Não consegui salvar: ' + g.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar contrato'; } return; }
+      if(emp.pdf){
+        const cam = usuarioAtual.id + '/' + g.data.id + '-' + Date.now() + '.pdf';
+        const up = await supa.storage.from('contratos').upload(cam, emp.pdf, { contentType: 'application/pdf', upsert: true });
+        if(up.error) toast('O contrato foi salvo, mas não consegui guardar o PDF: ' + up.error.message);
+        else { if(f.arquivo) try { await supa.storage.from('contratos').remove([f.arquivo]); } catch(e){}
+          await supa.from('emprestimos').update({ arquivo: cam }).eq('id', g.data.id); }
+        emp.pdf = null;
+      }
       if(reg.modo === 'gerar') empGerar(g.data);
       await empCarregar(); fecharModal('modal-vml'); empDesenhar();
     }
 
     // cria as parcelas no Contas a pagar (as já pagas ficam como estão)
     function empGerar(c){
+      if(typeof lojasAbrir === 'function') lojasAbrir();
+      try { empGerarTudo(c); } finally { if(typeof lojasFechar === 'function') lojasFechar(); }
+      salvar(); if(typeof recalc === 'function') try { recalc(); } catch(e){}
+    }
+    function empGerarTudo(c){
       const pref = 'emp:' + c.id + ':', pagas = new Set(pagamentos.filter(p => String(p.tiny_key || '').startsWith(pref) && p.pago).map(p => p.tiny_key));
       pagamentos = pagamentos.filter(p => !String(p.tiny_key || '').startsWith(pref) || p.pago);
       const cat = nome => { if(!categorias.some(x => emN(x.nome) === emN(nome))) categorias.push({ nome, impactaDRE: !/amortiza/i.test(nome), tipoPassivo: /amortiza/i.test(nome) ? 'divida' : 'operacional' }); return nome; };
       empTabela(c).forEach(l => {
-        const par = l.k + '/' + l.n, base = { forn: c.credor || '', data: l.data, pago: false, tipo: 'parcelado', parcela: par, grupo_id: 'g_emp_' + c.id, fonte: 'emprestimo', desconto: 0, juros: 0 };
+        const par = l.k + '/' + l.n, base = { forn: c.credor || '', data: l.data, pago: false, tipo: 'parcelado', parcela: par, grupo_id: 'g_emp_' + c.id, fonte: 'emprestimo', desconto: 0, juros: 0, loja: c.loja || null };
         if(l.amort > 0 && !pagas.has(pref + l.k + ':a')) pagamentos.push({ ...base, desc: c.nome, val: l.amort, cat: cat('Amortização de empréstimo'), tiny_key: pref + l.k + ':a' });
         if(l.juros > 0 && !pagas.has(pref + l.k + ':j')) pagamentos.push({ ...base, desc: 'Juros ' + c.nome, val: l.juros, cat: cat('Juros de empréstimo'), tiny_key: pref + l.k + ':j' });
       });
-      salvar(); if(typeof recalc === 'function') try { recalc(); } catch(e){}
     }
 
     async function empExcluir(id){
@@ -186,6 +213,7 @@
       const r = await supa.from('emprestimos').delete().eq('id', id);
       if(r.error){ alert('Não consegui excluir: ' + r.error.message); return; }
       if(ger){ pagamentos = pagamentos.filter(p => !String(p.tiny_key || '').startsWith('emp:' + id + ':') || p.pago); salvar(); }
+      if(c.arquivo) try { await supa.storage.from('contratos').remove([c.arquivo]); } catch(e){}
       await empCarregar(); fecharModal('modal-vml'); empDesenhar();
     }
 
@@ -200,15 +228,30 @@
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
     }
 
-    // ----- robô: lê o PDF do contrato e preenche o formulário -----
-    function empLerPdf(){
-      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.pdf'; inp.id = 'emp-pdf';
+    // ----- PDF do contrato: anexar, baixar e ler com o robô -----
+    function empEscolherPdf(aoEscolher){
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.pdf,application/pdf'; inp.id = 'emp-pdf';
       inp.onchange = () => { const f = inp.files[0]; if(!f) return;
-        if(f.size > 6 * 1024 * 1024){ alert('O PDF tem mais de 6 MB. Envie um arquivo menor ou preencha à mão.'); return; }
-        const rd = new FileReader(); rd.onload = () => empLerEnviar(String(rd.result).split(',')[1] || '', f.name); rd.readAsDataURL(f); };
+        if(f.size > 6 * 1024 * 1024){ toast('O PDF tem mais de 6 MB. Envie um arquivo menor.'); return; }
+        aoEscolher(f); };
       inp.click();
     }
-    async function empLerEnviar(base64, nome){
+    function empAnexar(){ empEscolherPdf(f => { emp.pdf = f; empForm(); }); }
+    async function empBaixar(id){
+      const c = (emp.todos || []).find(x => x.id === id); if(!c || !c.arquivo) return;
+      const r = await supa.storage.from('contratos').createSignedUrl(c.arquivo, 300);
+      if(r.error || !r.data){ toast('Não consegui abrir o PDF: ' + (r.error ? r.error.message : '')); return; }
+      window.open(r.data.signedUrl, '_blank');
+    }
+    // noForm = true: o formulário já está aberto (novo, edição ou sugestão) e o robô só completa os campos
+    function empLerPdf(noForm){
+      empEscolherPdf(f => {
+        const rd = new FileReader();
+        rd.onload = () => empLerEnviar(String(rd.result).split(',')[1] || '', f.name, f, noForm === true ? emp.form : null);
+        rd.readAsDataURL(f);
+      });
+    }
+    async function empLerEnviar(base64, nome, arquivo, formAberto){
       vmlModal('Lendo o contrato…', `<div class="vazio"><b>O robô está lendo ${emEsc(nome || 'o contrato')}</b>Leva de 10 a 40 segundos. Depois você confere os dados antes de salvar.</div>`, ' ');
       let j;
       try {
@@ -216,9 +259,16 @@
         const r = await fetch(SUPA_URL + '/functions/v1/ler-contrato', { method: 'POST', headers: { Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ pdf: base64 }) });
         j = await r.json();
       } catch(e){ j = { error: 'sem conexão com o servidor' }; }
-      if(!j || j.error || !j.dados){ empNovo(); empForm('Não consegui ler o contrato' + (j && j.error ? ': ' + emEsc(j.error) : '') + '. Preencha à mão.'); return; }
-      const d = j.dados;
-      empNovo({ nome: d.nome || d.credor || '', credor: d.credor || '', numero_contrato: d.numero_contrato || '', valor: d.valor != null ? String(d.valor).replace('.', ',') : '', taxa_mes: d.taxa_mes != null ? String(Math.round(d.taxa_mes * 10000) / 10000).replace('.', ',') : '',
-        parcelas: d.parcelas || '', primeira: d.primeira_parcela || '', sistema: ['price', 'sac', 'outro'].includes(d.sistema) ? d.sistema : 'price', obs: d.observacao || '' });
+      const falhou = !j || j.error || !j.dados;
+      const d = falhou ? {} : j.dados;
+      const lido = falhou ? {} : { nome: d.nome || d.credor || '', credor: d.credor || '', numero_contrato: d.numero_contrato || '', valor: d.valor != null ? String(d.valor).replace('.', ',') : '', taxa_mes: d.taxa_mes != null ? String(Math.round(d.taxa_mes * 10000) / 10000).replace('.', ',') : '',
+        parcelas: d.parcelas || '', primeira: d.primeira_parcela || '', sistema: ['price', 'sac', 'outro'].includes(d.sistema) ? d.sistema : 'price', obs: d.observacao || '' };
+      if(formAberto){
+        // completa o que o robô leu sem apagar o que já estava preenchido de propósito (nome, trecho, loja)
+        emp.form = formAberto;
+        Object.keys(lido).forEach(k => { if(lido[k] !== '' && lido[k] != null && (k !== 'nome' || !String(formAberto.nome || '').trim())) emp.form[k] = lido[k]; });
+      } else empNovo(lido);
+      emp.pdf = arquivo || null;
+      if(falhou){ empForm('Não consegui ler o contrato' + (j && j.error ? ': ' + emEsc(j.error) : '') + '. Preencha à mão; o PDF fica anexado.'); return; }
       empForm('O robô preencheu com o que leu no contrato. <b>&nbsp;Confira cada campo&nbsp;</b> antes de salvar' + (d.valor_parcela ? ': a parcela informada no contrato é ' + fmt(Number(d.valor_parcela) || 0) + '.' : '.'));
     }

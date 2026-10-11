@@ -15,7 +15,10 @@
     const esInt = n => Math.round(Number(n) || 0).toLocaleString('pt-BR');
     const ES_MOTIVO = { carga_inicial: 'Carga inicial', compra: 'Chegada de compra', venda: 'Venda enviada', envio_full: 'Envio ao Full', contagem: 'Contagem de estoque', ajuste: 'Ajuste manual', transferencia: 'Transferência', devolucao: 'Devolução' };
 
-    function estDepProprio(){ return est.depositos.find(d => d.tipo === 'proprio' && d.ativo) || null; }
+    function estDepProprio(){ return estVisiveis().find(d => d.tipo === 'proprio') || est.depositos.find(d => d.tipo === 'proprio' && d.ativo) || null; }
+    // depósitos da tela: os marcados para mostrar e, com uma loja escolhida no seletor, só os dela
+    function estDaLoja(d, loja){ if(!loja) return true; if(d.tipo === 'full') return !d.ml_user_id || String(d.ml_user_id) === loja; return !Array.isArray(d.lojas) || !d.lojas.length || d.lojas.map(String).includes(loja); }
+    function estVisiveis(){ const loja = typeof lojaAtiva === 'function' ? lojaAtiva() : ''; return est.depositos.filter(d => d.ativo && estDaLoja(d, loja)); }
     function estSaldoDe(depId, sku){ const r = est.saldo.find(s => Number(s.deposito_id) === Number(depId) && s.sku_norm === esN(sku)); return r ? Number(r.fisico) || 0 : 0; }
 
     async function estCarregar(forcar){
@@ -134,10 +137,11 @@
 
     function estDesenhar(){
       const host = document.getElementById('est-host'); if(!host) return;
+      if(est.dep !== 'total' && est.depositos.length && !estVisiveis().some(d => d.id === est.dep)) est.dep = 'total';
       if(est.dep === 'total') return estDesenharTotal();
       const dep = est.depositos.find(d => d.id === est.dep) || est.depositos[0];
       if(!dep){ host.innerHTML = `<div class="alert alert-danger">${esEsc(est.erro || 'Não consegui carregar os depósitos.')}</div>`; return; }
-      const abas = `<div class="chips" style="margin-bottom:14px;"><button class="chip" onclick="est.dep='total';estDesenhar();">Total</button>${est.depositos.filter(d => d.ativo).map(d => `<button class="chip ${d.id === dep.id ? 'active' : ''}" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estGerenciarDepositos()" title="Depósitos, regras do ocupado e mapeamento dos anúncios">Configurar estoque</button></div>`;
+      const abas = `<div class="chips" style="margin-bottom:14px;"><button class="chip" onclick="est.dep='total';estDesenhar();">Total</button>${estVisiveis().map(d => `<button class="chip ${d.id === dep.id ? 'active' : ''}" onclick="est.dep=${d.id};estDesenhar();">${esEsc(d.nome)}</button>`).join('')}<button class="chip" onclick="estGerenciarDepositos()" title="Depósitos, regras do ocupado e mapeamento dos anúncios">Configurar estoque</button></div>`;
       const cab = `<div class="pg-head"><div><div class="pg-title">Estoque</div><div class="pg-sub">Quanto existe em cada depósito, o que está a caminho e o que já está vendido e ainda não saiu.</div></div>
         <div class="d-flex gap-1" style="flex-wrap:wrap;">${dep.tipo === 'full' ? `<button class="btn-out btn-sm" onclick="estAtualizarFull(this)">Atualizar do Mercado Livre</button>` : `<button class="btn-out btn-sm" onclick="estAjuste()">Ajuste manual</button><button class="btn-out btn-sm" onclick="esoEnvios()">Envios ao Full</button><button class="btn btn-sm" onclick="esoContagens()">Contagem de estoque</button>`}</div></div>`;
       const erro = est.erro ? `<div class="alert alert-danger">${esEsc(est.erro)}</div>` : '';
@@ -197,7 +201,7 @@
     // Total: soma de todos os depósitos visíveis, produto a produto (o Full entra com os kits abertos nos componentes)
     function estDesenharTotal(){
       const host = document.getElementById('est-host'); if(!host) return;
-      const deps = est.depositos.filter(d => d.ativo);
+      const deps = estVisiveis();
       const abrir = (sku, q) => typeof esoAbrir === 'function' ? esoAbrir(sku, q) : [{ sku, qtd: q }];
       const mapa = new Map(), pega = sku => { const k = esN(sku); if(!mapa.has(k)) mapa.set(k, { k, sku, nome: '', por: {}, caminho: 0, custo: 0 }); return mapa.get(k); };
       deps.forEach(d => {

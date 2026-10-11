@@ -32,11 +32,12 @@
       if(estCfgAba === 'mapa') return esoMapeamento();
       vmlModal('Configurar estoque', estCfgTopo() + `
         <div class="text-muted" style="margin-bottom:12px;">Escolha quais estoques aparecem na tela. Cada loja do Mercado Livre tem o seu Full, atualizado sozinho; os outros você atualiza por compra, venda, contagem ou planilha. A aba <b>Total</b> soma os que estiverem marcados.</div>
-        <table class="cp-tab"><thead><tr><th>Mostrar</th><th>Nome</th><th>Tipo</th><th class="num">Produtos com saldo</th><th></th></tr></thead><tbody>
+        <table class="cp-tab"><thead><tr><th>Mostrar</th><th>Nome</th><th>Tipo</th>${typeof lojasVarias === 'function' && lojasVarias() ? '<th>Lojas que usam</th>' : ''}<th class="num">Produtos com saldo</th><th></th></tr></thead><tbody>
           ${est.depositos.map(d => { const n = est.saldo.filter(s => Number(s.deposito_id) === d.id && Number(s.fisico) !== 0).length; return `<tr style="${d.ativo ? '' : 'opacity:.55;'}">
             <td><input type="checkbox" ${d.ativo ? 'checked' : ''} onchange="estDepAtivo(${d.id}, this.checked)" title="Mostrar este estoque na tela e somar no Total"></td>
             <td><input type="text" value="${esEsc(d.nome)}" onchange="estDepRenomear(${d.id}, this.value)" style="min-width:200px;"></td>
             <td>${d.tipo === 'full' ? 'Full do Mercado Livre' + (d.ml_user_id && typeof contaNome === 'function' && contaNome(d.ml_user_id) ? ' · ' + esEsc(contaNome(d.ml_user_id)) : '') : 'Próprio'}</td>
+            ${typeof lojasVarias === 'function' && lojasVarias() ? `<td>${d.tipo === 'full' ? '<span class="text-muted">a própria loja</span>' : contasML.map(c => `<label style="display:inline-flex;gap:5px;align-items:center;margin-right:10px;font-size:12.5px;white-space:nowrap;"><input type="checkbox" ${!Array.isArray(d.lojas) || !d.lojas.length || d.lojas.map(String).includes(c.id) ? 'checked' : ''} onchange="estDepLoja(${d.id}, '${c.id}', this.checked)">${esEsc(c.apelido || c.id)}</label>`).join('')}</td>` : ''}
             <td class="num">${d.tipo === 'full' ? '—' : n}</td>
             <td style="text-align:right;white-space:nowrap;">${d.tipo === 'full' ? '' : `<button class="btn-out btn-sm" style="color:var(--danger);" onclick="estDepExcluir(${d.id})">Excluir</button>`}</td></tr>`; }).join('')}
         </tbody></table>
@@ -53,6 +54,16 @@
       const r = await supa.from('estoque_depositos').update({ nome }).eq('id', id);
       if(r.error){ alert('Não consegui renomear: ' + r.error.message); return; }
       await estCarregar(true); estDesenhar();
+    }
+    // quais lojas usam o galpão (vale para o balanço e para a tela de estoque de cada loja)
+    async function estDepLoja(id, loja, marcado){
+      const d = est.depositos.find(x => x.id === id); if(!d) return;
+      let l = Array.isArray(d.lojas) && d.lojas.length ? d.lojas.map(String) : contasML.map(c => c.id);
+      l = marcado ? [...new Set(l.concat(loja))] : l.filter(x => x !== loja);
+      if(!l.length){ toast('Pelo menos uma loja precisa usar o depósito.'); estGerenciarDepositos(); return; }
+      const r = await supa.from('estoque_depositos').update({ lojas: l.length === contasML.length ? null : l }).eq('id', id);
+      if(r.error){ toast('Não consegui salvar: ' + r.error.message); return; }
+      await estCarregar(true); estDesenhar(); estGerenciarDepositos();
     }
     async function estDepAtivo(id, ativo){
       if(!ativo && est.depositos.filter(d => d.ativo).length <= 1){ alert('Precisa ficar pelo menos um depósito ativo.'); return; }

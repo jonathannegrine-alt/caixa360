@@ -5,9 +5,11 @@
 //   PASSIVO = só o que já é devido na data: tudo que venceu, mais as parcelas futuras do que é DÍVIDA
 //             (amortização de empréstimo, compra de mercadoria, imposto apurado). Despesa futura e juros futuros ficam fora.
 // Quem é dívida e quem é despesa vem da categoria (Configurações → Categorias, coluna "Tipo passivo").
-// Filtro por loja: "as duas" soma tudo; uma loja mostra o estoque dos produtos que ELA vende (o galpão é
-// repartido pela venda de cada loja nos últimos 90 dias), o Full e o a receber dela. Caixa e dívidas não são
-// separados por loja (toda dívida financia a operação inteira).
+// Segue o seletor de loja da barra lateral: "Todas" soma tudo; uma loja mostra o caixa, as contas a pagar, o Full
+// e o a receber DELA. O galpão vai para as lojas marcadas em Configurar estoque → Depósitos ("quais lojas usam");
+// quando mais de uma usa o mesmo galpão, cada produto é repartido pela venda de cada loja nos últimos 90 dias.
+// Tratamento de cada categoria no passivo (comprasCfg.balanco.tipos): divida = tudo que está em aberto;
+// operacional = só o que já venceu; mes = o que já venceu + o que vence até o fim deste mês; nunca = não entra.
 // Desenha no topo da página Saúde patrimonial (#bal-host).
 
     let bal = { conta: '', aberto: false, classOk: false };
@@ -22,6 +24,13 @@
       return /amortiza|capital de giro|empr[eé]stimo|financiamento|mercadoria|fornecedor|^compras?$|simples nacional|\bdas\b|imposto/i.test(nome || '') ? 'divida' : 'operacional';
     }
     function balClassificarCategorias(){}
+    const BAL_TRAT = [['divida', 'Dívida: entra tudo que está em aberto'], ['mes', 'Despesa do mês: vencidas + as deste mês'], ['operacional', 'Despesa: só o que já venceu'], ['nunca', 'Nunca entra no balanço']];
+    function balLojasDoGalpao(){
+      const deps = (typeof est !== 'undefined' && est.depositos) || [];
+      const proprios = deps.filter(d => d.tipo !== 'full' && d.ativo !== false);
+      if(!proprios.length || proprios.some(d => !Array.isArray(d.lojas) || !d.lojas.length)) return [];
+      return [...new Set(proprios.flatMap(d => d.lojas.map(String)))];
+    }
 
     // participação de cada loja na venda de cada produto (90 dias), com o kit aberto nos componentes
     function balParticipacao(){
@@ -34,8 +43,17 @@
     }
 
     function balCalcular(){
-      const hoje = getToday(), conta = bal.conta;
-      const part = balParticipacao(), fatia = k => { if(!conta) return 1; const o = part.get(k); if(!o) return 0; const t = Object.values(o).reduce((s, v) => s + v, 0); return t > 0 ? (o[conta] || 0) / t : 0; };
+      const hoje = getToday(), conta = bal.conta = (typeof lojaAtiva === 'function' ? lojaAtiva() : '');
+      const fimMes = hoje.slice(0, 8) + '31';
+      // lojas que usam o galpão (união dos depósitos próprios); vazio = todas
+      const usam = balLojasDoGalpao();
+      const part = balParticipacao(), fatia = k => {
+        if(!conta) return 1;
+        if(usam.length && !usam.includes(conta)) return 0;
+        if(usam.length === 1) return 1;
+        const o = part.get(k); if(!o) return 0;
+        const t = Object.keys(o).filter(c => !usam.length || usam.includes(c)).reduce((s, c) => s + o[c], 0);
+        return t > 0 ? (o[conta] || 0) / t : 0; };
       const custoDe = k => { const e = estoqueGalpao.find(x => blN(x.sku) === k), s = skus.find(x => blN(x.sku) === k); return (e && Number(e.custo_medio) > 0 ? Number(e.custo_medio) : 0) || (s && Number(s.custo)) || 0; };
       const kits = typeof esoKits === 'function' ? esoKits() : new Map();
       const abrir = (sku, q) => kits.has(blN(sku)) ? kits.get(blN(sku)).map(c => ({ k: blN(c.sku), q: q * c.qtd })) : [{ k: blN(sku), q }];
@@ -53,7 +71,10 @@
       const ativo = caixa + receber + galpao + full + caminhoFull;
 
       // PASSIVO
-      const linhas = pagamentos.filter(p => !p.pago).map(p => { const t = balTipoDe(p.cat || ''), vencida = p.data <= hoje; return { p, t, entra: vencida || t === 'divida', motivo: vencida ? 'já venceu' : t === 'divida' ? 'dívida a vencer' : 'despesa futura (fora)' }; });
+      const linhas = pagamentos.filter(p => !p.pago).map(p => {
+        const t = balTipoDe(p.cat || ''), vencida = p.data <= hoje;
+        const entra = t === 'nunca' ? false : t === 'divida' ? true : t === 'mes' ? (vencida || p.data <= fimMes) : vencida;
+        return { p, t, entra, motivo: t === 'nunca' ? 'categoria fora do balanço' : vencida ? 'já venceu' : t === 'divida' ? 'dívida a vencer' : entra ? 'vence neste mês' : 'despesa futura (fora)' }; });
       const grupos = {};
       linhas.filter(l => l.entra).forEach(l => { const g = l.p.cat || 'Sem categoria'; grupos[g] = (grupos[g] || 0) + (Number(l.p.val) || 0); });
       const passivo = Object.values(grupos).reduce((s, v) => s + v, 0);
@@ -90,7 +111,7 @@
         <div class="card" style="margin-bottom:16px;">
           <div class="card-header" style="flex-wrap:wrap;gap:10px;">
             <div><div class="card-title">Balanço patrimonial gerencial</div><div class="text-muted" style="font-size:12px;">Posição de hoje, ${ptDate(getToday())}. Não substitui o balanço contábil.</div></div>
-            <div class="chips">${[['', contas.length > 1 ? 'As duas lojas' : 'Tudo']].concat(contas.length > 1 ? contas.map(c => [String(c.id), 'Só ' + (c.apelido || c.id)]) : []).map(([k, t]) => `<button class="chip ${bal.conta === k ? 'active' : ''}" onclick="bal.conta='${k}';balDesenhar();">${blEsc(t)}</button>`).join('')}
+            <div class="chips">${contas.length > 1 ? `<span class="text-muted" style="font-size:12px;align-self:center;">${bal.conta ? 'Loja: <b>' + blEsc(nomeConta) + '</b>' : 'Todas as lojas juntas'} · troque no seletor de conta</span>` : ''}
               <button class="chip" onclick="balExportar()">Exportar</button></div>
           </div>
           <div class="card-body">
@@ -99,10 +120,10 @@
               <div class="kpi k-atraso"><div class="kpi-label">Passivo</div><div class="kpi-value">${fmt(B.passivo)}</div><div class="kpi-sub">o que já é devido</div></div>
               <div class="kpi ${B.pl >= 0 ? 'k-venda' : 'k-atraso'}"><div class="kpi-label">Patrimônio líquido</div><div class="kpi-value">${fmt(B.pl)}</div><div class="kpi-sub">ativo menos passivo</div></div>
             </div>
-            ${bal.conta ? `<div class="alert alert-info">Visão de <b>&nbsp;${blEsc(nomeConta)}&nbsp;</b>: o estoque é o dos produtos que essa loja vende (o galpão é repartido pela venda de cada loja em 90 dias), mais o Full e o a receber dela. Caixa e dívidas não são separados por loja.</div>` : ''}
+            ${bal.conta ? `<div class="alert alert-info">Visão de <b>&nbsp;${blEsc(nomeConta)}&nbsp;</b>: caixa, contas a pagar, Full e a receber são só dessa loja. O galpão entra conforme as lojas marcadas em Configurar estoque → Depósitos.</div>` : ''}
             <div class="bl-cols">
               <div><div class="bl-tit">Ativo</div>
-                ${lin('Caixa e bancos', B.caixa, 'saldos informados no Painel financeiro')}
+                ${lin('Caixa e bancos', B.caixa, bal.conta ? 'saldos desta loja' : 'saldos informados no Painel financeiro')}
                 ${lin('A receber do Mercado Livre', B.receber, 'liberações já confirmadas')}
                 ${lin('Estoque no galpão', B.galpao, un(B.galpaoUn) + ' a custo médio')}
                 ${lin('Estoque no Full', B.full, un(B.fullUn) + ', kits abertos nos componentes')}
@@ -113,14 +134,14 @@
               <div><div class="bl-tit">Passivo</div>
                 ${gr.length ? gr.map(([g, v]) => lin(blEsc(g), v)).join('') : '<div class="text-muted" style="padding:10px 0;">Nenhuma conta devida.</div>'}
                 <div class="bl-lin bl-tot"><span>Total do passivo</span><b>${fmt(B.passivo)}</b></div>
-                <div class="text-muted" style="font-size:12px;margin-top:6px;">Ficaram de fora ${fmt(B.fora)} de despesas e juros que ainda vão vencer. <a class="fx-link" style="color:var(--primary);" onclick="bal.aberto=!bal.aberto;balDesenhar();">${bal.aberto ? 'Esconder' : 'Ver'} as contas classificadas</a></div>
+                <div class="text-muted" style="font-size:12px;margin-top:6px;">Ficaram de fora ${fmt(B.fora)} de contas que ainda vão vencer ou de categorias fora do balanço. <a class="fx-link" style="color:var(--primary);" onclick="bal.aberto=!bal.aberto;balDesenhar();">${bal.aberto ? 'Esconder' : 'Ver'} as contas classificadas</a></div>
               </div>
             </div>
-            ${bal.aberto ? `<div style="margin-top:14px;"><div class="text-muted" style="font-size:12.5px;margin-bottom:8px;">Cada categoria é <b>dívida</b> (parcelas futuras entram) ou <b>despesa</b> (só entra o que já venceu). Troque aqui se alguma estiver errada.</div>
+            ${bal.aberto ? `<div style="margin-top:14px;"><div class="text-muted" style="font-size:12.5px;margin-bottom:8px;">Pense assim: <b>se eu fechasse a empresa hoje, o que teria de pagar?</b> Escolha o tratamento de cada categoria.</div>
               <div style="overflow-x:auto;max-height:420px;"><table class="cp-tab"><thead><tr><th>Categoria</th><th>Tratamento</th><th class="num">Em aberto</th><th class="num">Entra no passivo</th><th class="num">Fica fora</th></tr></thead><tbody>
               ${(() => { const porCat = {}; B.linhas.forEach(l => { const g = l.p.cat || 'Sem categoria'; porCat[g] = porCat[g] || { ab: 0, en: 0, fo: 0 }; const v = Number(l.p.val) || 0; porCat[g].ab += v; if(l.entra) porCat[g].en += v; else porCat[g].fo += v; });
                 return Object.entries(porCat).sort((a, b) => b[1].ab - a[1].ab).map(([g, x]) => { const c = true, t = balTipoDe(g);
-                  return `<tr><td><b>${blEsc(g)}</b></td><td>${c ? `<select onchange="balTipo('${blEsc(g).replace(/'/g, '&#39;')}', this.value)" style="width:auto;"><option value="divida" ${t === 'divida' ? 'selected' : ''}>Dívida: parcelas futuras entram</option><option value="operacional" ${t !== 'divida' ? 'selected' : ''}>Despesa: só o que já venceu</option></select>` : 'Despesa'}</td><td class="num">${fmt(x.ab)}</td><td class="num"><b>${fmt(x.en)}</b></td><td class="num text-muted">${fmt(x.fo)}</td></tr>`; }).join(''); })()}
+                  return `<tr><td><b>${blEsc(g)}</b></td><td>${c ? `<select onchange="balTipo('${blEsc(g).replace(/'/g, '&#39;')}', this.value)" style="width:auto;">${BAL_TRAT.map(o => `<option value="${o[0]}" ${t === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>` : 'Despesa'}</td><td class="num">${fmt(x.ab)}</td><td class="num"><b>${fmt(x.en)}</b></td><td class="num text-muted">${fmt(x.fo)}</td></tr>`; }).join(''); })()}
               </tbody></table></div></div>` : ''}
           </div>
         </div>`;

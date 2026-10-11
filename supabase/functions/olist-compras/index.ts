@@ -112,6 +112,18 @@ Deno.serve(async (req: Request) => {
       for (const c of caminhos) { const r = await api(c, a.token); out.push({ caminho: c, status: r.status, corpo: JSON.stringify(r.json).slice(0, Number(body?.tam) || 1500) }) }
       return resp({ ok: true, out })
     }
+    // categorias financeiras com o grupo do plano de contas (usado no DRE)
+    if (acao === 'categorias') {
+      const out: any[] = []
+      for (let offset = 0; offset < 1000; offset += 100) {
+        const r = await api('/categorias-receita-despesa?limit=100&offset=' + offset, a.token)
+        if (r.status !== 200) return resp({ error: 'O Olist não devolveu as categorias (http ' + r.status + ').' })
+        const itens = Array.isArray(r.json?.itens) ? r.json.itens : []
+        for (const x of itens) out.push({ id: x.id, nome: String(x.descricao || '').trim(), grupo: String(x.grupo || '').trim() })
+        if (itens.length < 100) break
+      }
+      return resp({ ok: true, categorias: out })
+    }
     if (acao === 'pagamentos') {
       const ids: number[] = (Array.isArray(body?.ids) ? body.ids : []).map((x: unknown) => Number(x)).filter((x: number) => x > 0).slice(0, 25)
       const out: any[] = []
