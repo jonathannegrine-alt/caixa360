@@ -1296,3 +1296,12 @@ a.pv-venda:hover{border-bottom-style:solid;}
 
 /* selo de novidades no menu (perguntas, mensagens, sugestões) */
 .nav-item .nav-selo{margin-left:auto;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#ef4444;color:#fff;font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;line-height:1;}
+
+/* DRE: grupo com total, abre e fecha */
+.dre-tab tr.dre-gsub{cursor:pointer;}
+.dre-tab tr.dre-gsub td{font-weight:650;}
+.dre-tab tr.dre-gsub td small{font-weight:500;color:var(--text-muted);margin-left:4px;}
+.dre-tab tr.dre-gsub:hover td{background:var(--surface-2);}
+.dre-seta{display:inline-block;width:16px;color:var(--text-muted);}
+.dre-tab tr.dre-sub td:first-child{padding-left:34px;color:var(--text-2);}
+.dre-tab tr.dre-gsub td{font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--text);}
