@@ -5,6 +5,9 @@
     }
 
     function nav(page, fromPopState){
+      // trocar de página fecha qualquer janela que tenha ficado aberta (algumas abrem por style, outras por classe)
+      document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
+      document.querySelectorAll('.modal').forEach(m => { if(m.style.display && m.style.display !== 'none') m.style.display = 'none'; });
       localStorage.setItem('mk_last_page', page);
       try { sessionStorage.setItem('mk_pagina', page); } catch(e){}
       // Empurra estado no histórico do browser (exceto quando chamado pelo próprio popstate)

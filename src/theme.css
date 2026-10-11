@@ -1081,3 +1081,36 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .cfo-btn-flutuante .cfo-rot{position:absolute;right:calc(100% + 8px);top:50%;transform:translateY(-50%) translateX(8px);max-width:none !important;margin:0 !important;background:var(--text);color:var(--surface);padding:7px 13px;border-radius:999px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.22);pointer-events:none;opacity:0;transition:opacity .2s,transform .2s;}
 .cfo-btn-flutuante:hover .cfo-rot,.cfo-btn-flutuante:focus-visible .cfo-rot{opacity:1;transform:translateY(-50%) translateX(0);}
 .vml-opcao{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--ctl-border);border-radius:10px;margin-top:8px;cursor:pointer;line-height:1.45;font-size:13.5px;}.vml-opcao input{width:auto;margin-top:3px;}.vml-opcao:has(input:checked){border-color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,transparent);}
+
+/* ===== CELULAR ===== */
+@media (max-width:768px){
+  /* o menu fica ACIMA da camada escura (antes ficava embaixo e os toques só fechavam o menu) */
+  .sidebar{z-index:1001 !important;width:264px !important;left:0;top:0;transform:translateX(-105%);}
+  .sidebar.mob-open{transform:translateX(0);}
+  .sidebar-overlay{z-index:1000;}
+  .sidebar .logo{padding-left:62px;}
+}
+@media (max-width:768px){
+  /* indicadores em duas colunas (antes cada um ocupava a tela inteira) */
+  .kpi-grid,.kpi-grid.k4i,.kpi-grid.k4,.kpi-grid.k5{grid-template-columns:1fr 1fr !important;gap:8px;}
+  .kpi{padding:11px 12px !important;min-width:0;}
+  .kpi-label{font-size:10px;}
+  .kpi-value{font-size:16.5px;overflow-wrap:anywhere;}
+  .kpi-sub{font-size:11px;flex-wrap:wrap;}
+  .pg-head{flex-direction:column;align-items:flex-start;gap:10px;}
+  /* cabeçalho de tabela fixo só atrapalha em tela pequena */
+  thead th,.fx-table thead th{position:static !important;}
+  .dre-tab td:first-child,.dre-tab th:first-child{min-width:150px;}
+  /* "De onde vêm os números" da Sugestão de compras: texto embaixo do selo, botão por último */
+  .cp-fonte{flex-wrap:wrap;gap:8px;}
+  .cp-fonte-t{flex:1 1 calc(100% - 96px);}
+  .cp-fonte .btn-out{margin-left:88px;}
+  /* janelas ocupam a largura da tela */
+  .modal-content{width:96vw !important;max-width:96vw !important;}
+  .modal-footer{flex-wrap:wrap;gap:8px;}
+  .form-row{grid-template-columns:1fr !important;}
+  .saldo-lojas{grid-template-columns:1fr;}
+  .cfo-btn-flutuante{bottom:14px;right:12px;}
+  .oc-totais{grid-template-columns:1fr 1fr;}
+  .an-barras{overflow-x:auto;}
+}
