@@ -48,6 +48,26 @@ Deno.serve(async (req: Request) => {
     if (!jwtRes.ok) return resp({ error: 'Sessão inválida — faça login novamente.' }, 401)
     const { id: userId } = await jwtRes.json()
 
+    // visitas dos anúncios por dia (soma das contas pedidas), para a aba "Visitas e conversão"
+    if (body?.acao === 'visitas') {
+      const dias = Math.min(150, Math.max(7, Number(body?.dias) || 30))
+      const contas = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&select=ml_user_id`, { headers: dbH }).then(r => r.json()).catch(() => [])
+      const porDia: Record<string, number> = {}
+      let lidas = 0
+      for (const c of (Array.isArray(contas) ? contas : [])) {
+        if (body?.conta && String(body.conta) !== String(c.ml_user_id)) continue
+        const tkc = await token(supaUrl, dbH, userId, String(c.ml_user_id), clientId, secret)
+        if (!tkc) continue
+        const r = await fetch(`${ML}/users/${c.ml_user_id}/items_visits/time_window?last=${dias}&unit=day`, { headers: { Authorization: 'Bearer ' + tkc } }).catch(() => null)
+        const j = r && r.ok ? await r.json().catch(() => null) : null
+        if (!j) continue
+        lidas++
+        for (const x of (j.results || [])) { const d = String(x.date || '').substring(0, 10); if (d) porDia[d] = (porDia[d] || 0) + (Number(x.total) || 0) }
+      }
+      if (!lidas) return resp({ ok: false, motivo: 'O Mercado Livre não devolveu as visitas agora. Tente de novo em instantes.' })
+      return resp({ ok: true, dias: Object.keys(porDia).sort().map(d => ({ dia: d, visitas: porDia[d] })) })
+    }
+
     const pedido = String(body?.pedido || '').replace(/\D/g, '')
     if (!pedido) return resp({ error: 'Informe o número da venda.' }, 400)
     const linhas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&order_id=eq.${pedido}&select=order_id,pack_id,shipping_id,ml_user_id,logistic_type,etiqueta_em&limit=1`, { headers: dbH }).then(r => r.json()).catch(() => [])

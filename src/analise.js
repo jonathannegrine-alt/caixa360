@@ -35,7 +35,7 @@
       if(!host){ [...view.children].forEach(el => { el.style.display = 'none'; }); host = document.createElement('div'); host.id = 'an-host'; view.appendChild(host); }
       const conta = typeof contaParam === 'function' ? contaParam() : null;
       const chave = (conta || '') + '|' + an.dias + '|' + (an.de || '') + '|' + (an.ate || '');
-      if(an.chave !== chave){ an.chave = chave; an.dados = null; an.rank = null; an.rankMlb = null; an.ads = null; an.adsErro = ''; if(an.contaMeses !== (conta || '')){ an.meses = null; an.contaMeses = conta || ''; } }
+      if(an.chave !== chave){ an.chave = chave; an.dados = null; an.rank = null; an.rankMlb = null; an.ads = null; an.adsErro = ''; an.vis = null; an.visErro = ''; an.recompra = null; if(an.contaMeses !== (conta || '')){ an.meses = null; an.contaMeses = conta || ''; } }
       anDesenhar();
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
       const p = anPeriodo(), ano = new Date().getFullYear();
@@ -67,6 +67,22 @@
           anDesenhar();
         }
         if(an.aba === 'ads' && !an.ads && !an.adsErro) await anCarregarAds(chave, conta, p);
+        if(an.aba === 'compradores' && !an.recompra){
+          const rc = await supa.rpc('vendas_ml_recompra', { p_de: p.de, p_ate: p.ate, p_conta: conta });
+          if(an.chave !== chave) return;
+          an.recompra = rc.data || []; anDesenhar();
+        }
+        if(an.aba === 'visitas' && !an.vis && !an.visErro){
+          const sd = await supa.auth.getSession(), s = sd && sd.data && sd.data.session;
+          const [v, d] = await Promise.all([
+            fetch(SUPA_URL + '/functions/v1/ml-venda', { method: 'POST', headers: { Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'visitas', dias: Math.min(150, diasDif(p.de, getToday()) + 1), conta: conta || undefined }) }).then(x => x.json()).catch(() => ({ error: 'sem conexão com o servidor' })),
+            supa.rpc('vendas_ml_por_dia', { p_de: p.de, p_ate: p.ate, p_conta: conta })
+          ]);
+          if(an.chave !== chave) return;
+          if(!v || !v.ok) an.visErro = (v && (v.motivo || v.error)) || (v && v.demo ? 'Na demonstração as visitas ficam desligadas: elas vêm direto da conta do Mercado Livre.' : 'não foi possível ler as visitas');
+          else an.vis = { dias: v.dias.filter(x => x.dia >= p.de && x.dia <= p.ate), vendas: d.data || [] };
+          anDesenhar();
+        }
         an.erro = '';
       } catch(e){ an.erro = (e && e.message) || String(e); anDesenhar(); }
     }
@@ -102,8 +118,8 @@
 
     function anDesenhar(){
       const host = document.getElementById('an-host'); if(!host) return;
-      const abas = [['geral', 'Visão geral'], ['produtos', 'Produtos'], ['compradores', 'Compradores'], ['estados', 'Estados'], ['cancel', 'Cancelamentos'], ['ads', 'ADS']];
-      const corpo = an.aba === 'geral' ? anGeral() : an.aba === 'produtos' ? anProdutos() : an.aba === 'compradores' ? anCompradores() : an.aba === 'estados' ? anEstados() : an.aba === 'cancel' ? anCancel() : anAds();
+      const abas = [['geral', 'Visão geral'], ['produtos', 'Produtos'], ['compradores', 'Compradores'], ['estados', 'Estados'], ['visitas', 'Visitas e conversão'], ['cancel', 'Cancelamentos'], ['ads', 'ADS']];
+      const corpo = an.aba === 'geral' ? anGeral() : an.aba === 'produtos' ? anProdutos() : an.aba === 'compradores' ? anCompradores() : an.aba === 'estados' ? anEstados() : an.aba === 'visitas' ? anVisitas() : an.aba === 'cancel' ? anCancel() : anAds();
       host.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Análise de vendas</div><div class="pg-sub">Crescimento, produtos, compradores, estados, cancelamentos e anúncios pagos — direto das vendas do Mercado Livre.</div></div>
@@ -178,6 +194,7 @@
           ${anKpi('k-hoje', 'Produtos vendidos', anN(linhas.length), linhas.filter(l => l.curva === 'A').length + ' fazem 80% do faturamento')}
           ${anKpi(semCusto ? 'k-atraso' : 'k-neutro', 'Sem custo cadastrado', anN(semCusto), semCusto ? 'a margem deles aparece maior do que é' : 'todos com custo')}
         </div>
+        ${anProdExtras(linhas, tot, totUn)}
         <div class="card"><div class="card-header"><div class="card-title">Rentabilidade por produto</div><input type="text" placeholder="Buscar SKU ou título" value="${anE(an.busca)}" oninput="an.busca=this.value;clearTimeout(an._t);an._t=setTimeout(()=>{anDesenhar();const i=document.querySelector('#an-host .card-header input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},350)" style="max-width:260px;"></div>
         ${anTabela(filt, [
           { k: 'curva', t: 'Curva', fmt: l => `<span class="an-curva an-${l.curva}">${l.curva}</span>` },
@@ -187,6 +204,28 @@
           { k: 'custo', t: 'Custo', num: 1, fmt: l => l.custo ? fmt(l.custo) : '<span class="text-danger">sem custo</span>' },
           { k: 'mc', t: 'Margem R$', num: 1, fmt: l => fmt(l.mc) }, { k: 'mc_pct', t: 'Margem %', num: 1, fmt: l => `<span class="${l.mc_pct < 10 ? 'text-danger' : ''}">${anN(l.mc_pct, 1)}%</span>` }
         ], 'bruto')}</div>`;
+    }
+
+    function anProdExtras(linhas, tot, totUn){
+      if(!linhas.length) return '';
+      const top = linhas.slice().sort((a, b) => b.bruto - a.bruto).slice(0, 10), max = Math.max(1, ...top.map(x => x.bruto));
+      const tk = l => l.vendas ? l.bruto / l.vendas : 0;
+      const lider = top[0], maisUn = linhas.slice().sort((a, b) => b.un - a.un)[0];
+      const leitura = lider ? `<b>${anE(lider.chave)}</b> lidera o faturamento com ${anN(lider.part, 1)}% do período` + (maisUn && maisUn.chave !== lider.chave ? `. Em unidades, quem mais vende é <b>${anE(maisUn.chave)}</b> (${anP(maisUn.un, totUn)} do volume, ${anN(maisUn.part, 1)}% do valor e margem de ${anN(maisUn.mc_pct, 1)}%).` : ', e também é o que mais vende em unidades.') : '';
+      // faixas de ticket: quartis do ticket médio dos produtos
+      const ts = linhas.filter(l => l.vendas > 0).map(tk).sort((a, b) => a - b), q = p => ts.length ? ts[Math.min(ts.length - 1, Math.floor(ts.length * p))] : 0;
+      const c1 = Math.round(q(0.25)), c2 = Math.round(q(0.5)), c3 = Math.round(q(0.75));
+      const fx = [['Até ' + fmt(c1), l => tk(l) <= c1], [fmt(c1) + ' a ' + fmt(c2), l => tk(l) > c1 && tk(l) <= c2], [fmt(c2) + ' a ' + fmt(c3), l => tk(l) > c2 && tk(l) <= c3], ['Acima de ' + fmt(c3), l => tk(l) > c3]]
+        .map(([rot, f]) => { const g = linhas.filter(l => l.vendas > 0 && f(l)); return { rot, skus: g.length, vendas: g.reduce((s, l) => s + l.vendas, 0), bruto: g.reduce((s, l) => s + l.bruto, 0), mc: g.reduce((s, l) => s + l.mc, 0) }; });
+      const maxF = Math.max(1, ...fx.map(x => x.bruto));
+      return `
+        <div class="alert alert-info an-leitura">${leitura}</div>
+        <div class="an-duo">
+          <div class="card"><div class="card-header"><div class="card-title">Os 10 produtos que mais faturam</div><span class="text-muted" style="font-size:12px;">barra = faturamento · à direita, margem</span></div>
+            <div class="card-body"><div class="an-ufs">${top.map((x, i) => `<div class="an-uf an-top"><b class="an-pos p${i < 3 ? i + 1 : 0}">${i + 1}</b><span class="an-uf-n" title="${anE(x.titulo || '')}">${anE(x.chave)}</span><div class="an-uf-t"><i style="width:${Math.max(1, x.bruto / max * 100)}%"></i></div><span class="an-uf-v">${fmt(x.bruto)}</span><span class="an-uf-p">${anN(x.part, 1)}%</span><span class="an-uf-q ${x.mc_pct < 10 ? 'text-danger' : ''}">margem ${anN(x.mc_pct, 1)}%</span></div>`).join('')}</div></div></div>
+          <div class="card"><div class="card-header"><div class="card-title">Faixas de ticket médio</div>${typeof dica === 'function' ? dica('Os produtos divididos em quatro grupos pelo valor médio de cada venda. Mostra onde está o dinheiro: nos produtos baratos de giro ou nos de valor alto.', true) : ''}</div>
+            <div class="card-body"><div class="an-ufs">${fx.map(x => `<div class="an-fx"><div><b>${x.rot}</b><small>${x.skus} produto${x.skus === 1 ? '' : 's'} · ${anN(x.vendas)} vendas</small></div><div class="an-uf-t"><i style="width:${Math.max(1, x.bruto / maxF * 100)}%"></i></div><span class="an-uf-v">${fmt(x.bruto)}</span><span class="an-uf-p">${anP(x.bruto, tot)}</span><span class="an-uf-q">margem ${anP(x.mc, x.bruto)}</span></div>`).join('')}</div></div></div>
+        </div>`;
     }
 
     // ----- compradores -----
@@ -200,6 +239,7 @@
           ${anKpi('k-hoje', 'Já eram clientes', anN(c.ja_clientes), 'tinham comprado antes deste período')}
           ${anKpi('k-frete', 'Faturamento de quem voltou', fmt(Number(c.bruto_recorrentes) || 0), anP(c.bruto_recorrentes, c.bruto) + ' do faturamento')}
         </div>
+        ${anCompExtras(top)}
         <div class="card"><div class="card-header"><div class="card-title">Quem mais comprou</div><span class="text-muted" style="font-size:12px;">50 maiores do período · o Mercado Livre só informa o apelido</span></div>
         ${anTabela(top, [
           { k: 'apelido', t: 'Comprador', fmt: l => '<b>' + anE(l.apelido || l.comprador_id) + '</b>' },
@@ -209,24 +249,95 @@
         ], 'pedidos')}</div>`;
     }
 
+    function anCompExtras(top){
+      const volta = top.filter(x => x.pedidos > 1 && x.primeira && x.ultima).map(x => { const dias = diasDif(String(x.primeira).slice(0, 10), String(x.ultima).slice(0, 10)); return { ...x, dias, cada: dias / (x.pedidos - 1) }; }).filter(x => x.dias > 0).sort((a, b) => b.pedidos - a.pedidos || a.cada - b.cada).slice(0, 10);
+      const maxD = Math.max(1, ...volta.map(x => x.dias));
+      const rc = an.recompra, totRc = (rc || []).reduce((s, x) => s + Number(x.bruto), 0);
+      return `<div class="an-duo">
+        <div class="card"><div class="card-header"><div class="card-title">Intervalo entre compras</div>${typeof dica === 'function' ? dica('Para quem comprou mais de uma vez no período: quantos dias se passaram entre a primeira e a última compra, e de quanto em quanto tempo a pessoa volta.', true) : ''}</div>
+          <div class="card-body">${volta.length ? `<div class="an-ufs">${volta.map(x => `<div class="an-fx"><div><b>${anE(x.apelido || x.comprador_id)}</b><small>${x.pedidos} compras</small></div><div class="an-uf-t"><i style="width:${Math.max(2, x.dias / maxD * 100)}%"></i></div><span class="an-uf-v">${x.dias} dia${x.dias === 1 ? '' : 's'}</span><span class="an-uf-q" style="grid-column:span 2;">volta a cada ${anN(x.cada, x.cada < 10 ? 1 : 0)} dia${x.cada === 1 ? '' : 's'}</span></div>`).join('')}</div>` : '<div class="text-muted">Ninguém voltou a comprar em dias diferentes neste período.</div>'}</div></div>
+        <div class="card"><div class="card-header"><div class="card-title">Anúncios que geram recompra</div><span class="text-muted" style="font-size:12px;">comprados por quem fez mais de um pedido</span></div>
+          <div class="card-body" style="max-height:420px;overflow:auto;">${!rc ? '<div class="text-muted">Carregando…</div>' : rc.length ? rc.map(x => `<div class="an-rc">${x.thumbnail ? `<img src="${anE(x.thumbnail)}" loading="lazy" alt="">` : '<span class="an-rc-s"></span>'}<div><b>${anE(x.titulo || x.item_id)}</b><small>${anN(x.compradores)} comprador${Number(x.compradores) === 1 ? '' : 'es'} · ${anN(x.pedidos)} pedidos</small></div><div class="an-rc-v"><b>${fmt(Number(x.bruto))}</b><small>${anP(Number(x.bruto), totRc)}</small></div></div>`).join('') : '<div class="text-muted">Nenhum comprador fez mais de um pedido neste período.</div>'}</div></div>
+      </div>`;
+    }
+
     // ----- estados -----
+    // mapa em blocos: cada estado é um quadrado na posição aproximada dele no país (coluna, linha)
+    const AN_MAPA = { RR:[1,0], AP:[2,0], AM:[0,1], PA:[1,1], MA:[2,1], CE:[3,1], RN:[4,1], AC:[0,2], RO:[1,2], TO:[2,2], PI:[3,2], PB:[4,2], MT:[1,3], GO:[2,3], BA:[3,3], PE:[4,3], MS:[1,4], DF:[2,4], MG:[3,4], AL:[4,4], SP:[2,5], ES:[3,5], SE:[4,5], PR:[2,6], RJ:[3,6], SC:[2,7], RS:[2,8] };
     function anEstados(){
       if(!an.dados) return anVazio('Carregando os estados…');
       const todos = (an.dados.estados || []).map(x => ({ uf: x.uf, vendas: Number(x.vendas), un: Number(x.un), bruto: Number(x.bruto) }));
-      const com = todos.filter(x => AN_UF[x.uf]), sem = todos.filter(x => !AN_UF[x.uf]);
+      const com = todos.filter(x => AN_UF[x.uf]).sort((a, b) => b.bruto - a.bruto), sem = todos.filter(x => !AN_UF[x.uf]);
       const tot = com.reduce((s, x) => s + x.bruto, 0), totV = com.reduce((s, x) => s + x.vendas, 0), semV = sem.reduce((s, x) => s + x.vendas, 0);
       const max = Math.max(1, ...com.map(x => x.bruto));
       const cobertura = totV + semV ? totV / (totV + semV) * 100 : 0;
       if(!com.length) return `<div class="card"><div class="vazio"><div class="vazio-ico"></div><b>O estado de cada venda ainda está sendo buscado</b>O Mercado Livre informa o estado no envio de cada pedido. O Caixa 360 busca sozinho, das vendas mais novas para as mais antigas (alguns milhares por hora). Volte em alguns minutos.</div></div>`;
       const reg = { Sudeste: ['SP', 'RJ', 'MG', 'ES'], Sul: ['PR', 'SC', 'RS'], Nordeste: ['BA', 'PE', 'CE', 'MA', 'PB', 'RN', 'AL', 'SE', 'PI'], 'Centro-Oeste': ['GO', 'DF', 'MT', 'MS'], Norte: ['PA', 'AM', 'RO', 'TO', 'AC', 'AP', 'RR'] };
       const porReg = Object.entries(reg).map(([n, ufs]) => ({ n, bruto: com.filter(x => ufs.includes(x.uf)).reduce((s, x) => s + x.bruto, 0) })).sort((a, b) => b.bruto - a.bruto);
+      let ac = 0, n80 = 0; for(const x of com){ ac += x.bruto; n80++; if(ac >= tot * 0.8) break; }
+      const por = {}; com.forEach(x => { por[x.uf] = x; });
+      const mapa = Object.entries(AN_MAPA).map(([uf, [c, l]]) => { const x = por[uf], f = x ? x.bruto / max : 0;
+        return `<button class="an-mp${x ? '' : ' vazio'}" style="grid-column:${c + 1};grid-row:${l + 1};--f:${(0.10 + f * 0.9).toFixed(2)};" onclick="anCidades('${uf}')" title="${AN_UF[uf]}${x ? ': ' + fmt(x.bruto) + ' · ' + anN(x.vendas) + ' vendas · ' + anP(x.bruto, tot) : ': sem vendas no período'}"><b>${uf}</b>${x ? '<small>' + anP(x.bruto, tot, x.bruto / tot < 0.01 ? 1 : 0) + '</small>' : ''}</button>`; }).join('');
       return `
-        <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));">${porReg.map((r, i) => anKpi(i === 0 ? 'k-venda' : 'k-neutro', r.n, fmt(r.bruto), anP(r.bruto, tot) + ' do faturamento')).join('')}</div>
+        <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));">
+          ${anKpi('k-venda', 'Faturamento', fmt(tot), anN(totV) + ' vendas aprovadas')}
+          ${anKpi('k-frete', 'Ticket médio', totV ? fmt(tot / totV) : '–', 'por venda')}
+          ${anKpi('k-mc', 'Cobertura', com.length + ' de 27 estados', com.length === 27 ? 'vendeu para o país inteiro' : (27 - com.length) + ' sem venda no período')}
+          ${anKpi('k-hoje', 'Concentração', n80 + ' estado' + (n80 === 1 ? '' : 's'), 'somam 80% do faturamento')}
+          ${anKpi('k-neutro', 'Região que mais compra', porReg[0].n, anP(porReg[0].bruto, tot) + ' do faturamento')}
+        </div>
+        <div class="alert alert-info an-leitura"><b>${AN_UF[com[0].uf]}</b> concentrou ${anP(com[0].bruto, tot)} do faturamento do período${com[1] ? ', seguido de ' + AN_UF[com[1].uf] + ' (' + anP(com[1].bruto, tot) + ')' : ''}. ${porReg.map(r => r.n + ' ' + anP(r.bruto, tot, 0)).join(' · ')}.</div>
         ${cobertura < 98 ? `<div class="alert alert-info">${anN(cobertura, 0)}% das vendas do período já têm o estado. O restante está sendo buscado no Mercado Livre e entra sozinho.</div>` : ''}
-        <div class="card"><div class="card-header"><div class="card-title">Vendas por estado</div><span class="text-muted" style="font-size:12px;">estado de entrega · vendas aprovadas em ${an.dias} dias</span></div>
-          <div class="card-body"><div class="an-ufs">
-            ${com.sort((a, b) => b.bruto - a.bruto).map(x => `<div class="an-uf"><b title="${AN_UF[x.uf]}">${x.uf}</b><span class="an-uf-n">${AN_UF[x.uf]}</span><div class="an-uf-t"><i style="width:${Math.max(1, x.bruto / max * 100)}%"></i></div><span class="an-uf-v">${fmt(x.bruto)}</span><span class="an-uf-p">${anP(x.bruto, tot)}</span><span class="an-uf-q">${anN(x.vendas)} vendas</span></div>`).join('')}
-          </div></div></div>`;
+        <div class="an-duo an-duo-mapa">
+          <div class="card"><div class="card-header"><div class="card-title">Ranking de estados</div><span class="text-muted" style="font-size:12px;">clique num estado para ver as cidades</span></div>
+            <div class="card-body" style="max-height:560px;overflow:auto;"><div class="an-ufs">
+              ${com.map((x, i) => `<div class="an-uf an-est" onclick="anCidades('${x.uf}')"><b class="an-pos p${i < 3 ? i + 1 : 0}">${i + 1}</b><span class="an-uf-n"><b style="color:var(--text);">${AN_UF[x.uf]}</b><br>${anN(x.vendas)} vendas · ticket ${fmt(x.vendas ? x.bruto / x.vendas : 0)}</span><div class="an-uf-t"><i style="width:${Math.max(1, x.bruto / max * 100)}%"></i></div><span class="an-uf-v">${fmt(x.bruto)}</span><span class="an-uf-p">${anP(x.bruto, tot)}</span></div>`).join('')}
+            </div></div></div>
+          <div class="card"><div class="card-header"><div class="card-title">Mapa de vendas</div><span class="text-muted" style="font-size:12px;">quanto mais forte a cor, maior o faturamento</span></div>
+            <div class="card-body"><div class="an-mapa">${mapa}</div></div></div>
+        </div>`;
+    }
+    // cidades de um estado (janela)
+    async function anCidades(uf){
+      const p = anPeriodo(), conta = typeof contaParam === 'function' ? contaParam() : null;
+      const abrir = corpo => { if(typeof vmlModal === 'function') vmlModal(AN_UF[uf] + ' — vendas por cidade', corpo); };
+      abrir('<div class="vazio">Carregando as cidades…</div>');
+      const r = await supa.rpc('vendas_ml_cidades', { p_de: p.de, p_ate: p.ate, p_uf: uf, p_conta: conta });
+      if(r.error){ abrir('<div class="alert alert-danger">Não consegui carregar: ' + anE(r.error.message) + '</div>'); return; }
+      const l = (r.data || []).map(x => ({ cidade: x.cidade, vendas: Number(x.vendas), bruto: Number(x.bruto) })), tot = l.reduce((s, x) => s + x.bruto, 0), totV = l.reduce((s, x) => s + x.vendas, 0);
+      if(!l.length){ abrir('<div class="vazio"><b>Sem vendas para ' + AN_UF[uf] + ' neste período</b></div>'); return; }
+      const falta = l.find(x => /ainda não buscada/.test(x.cidade));
+      abrir(`<div class="text-muted" style="margin-bottom:10px;">${ptDate(p.de)} a ${ptDate(p.ate)} · ${fmt(tot)} em ${anN(totV)} vendas · ${l.length - (falta ? 1 : 0)} cidades</div>
+        ${falta ? `<div class="alert alert-info">${anN(falta.vendas)} vendas ainda sem a cidade: o sistema está buscando no Mercado Livre, das mais novas para as mais antigas.</div>` : ''}
+        <div style="max-height:56vh;overflow:auto;"><table class="cp-tab an-tab"><thead><tr><th>Cidade</th><th class="num">Vendas</th><th class="num">%</th><th class="num">Faturamento</th><th class="num">%</th><th class="num">Ticket</th></tr></thead><tbody>
+        ${l.map(x => `<tr><td>${anE(x.cidade)}</td><td class="num">${anN(x.vendas)}</td><td class="num text-muted">${anP(x.vendas, totV)}</td><td class="num"><b>${fmt(x.bruto)}</b></td><td class="num text-muted">${anP(x.bruto, tot)}</td><td class="num">${fmt(x.vendas ? x.bruto / x.vendas : 0)}</td></tr>`).join('')}
+        </tbody></table></div>`);
+    }
+
+    // ----- visitas e conversão -----
+    function anVisitas(){
+      if(an.visErro) return `<div class="alert alert-warning">Visitas: ${anE(an.visErro)}</div>`;
+      if(!an.vis) return anVazio('Buscando as visitas no Mercado Livre…');
+      const vd = {}; an.vis.vendas.forEach(r => { vd[String(r.dia).slice(0, 10)] = { qtd: Number(r.vendas) || 0, bruto: Number(r.bruto) || 0, tarifa: Number(r.tarifa) || 0 }; });
+      const dias = an.vis.dias.map(x => ({ dia: x.dia, visitas: Number(x.visitas) || 0, ...(vd[x.dia] || { qtd: 0, bruto: 0, tarifa: 0 }) }));
+      if(!dias.length) return anVazio('O Mercado Livre não devolveu visitas para este período.');
+      const S = k => dias.reduce((s, d) => s + d[k], 0), vis = S('visitas'), ped = S('qtd'), bruto = S('bruto');
+      const sem = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((n, i) => { const g = dias.filter(d => parseDate(d.dia).getDay() === i); const v = g.reduce((s, d) => s + d.visitas, 0), q = g.reduce((s, d) => s + d.qtd, 0); return { n, dias: g.length, vis: g.length ? v / g.length : 0, conv: v ? q / v * 100 : 0 }; }).filter(x => x.dias);
+      const maisV = sem.slice().sort((a, b) => b.vis - a.vis)[0], maisC = sem.slice().sort((a, b) => b.conv - a.conv)[0], medV = vis / dias.length, conv = vis ? ped / vis * 100 : 0;
+      const maxV = Math.max(1, ...dias.map(d => d.visitas)), maxS = Math.max(1, ...sem.map(x => x.vis)), maxC = Math.max(0.01, ...sem.map(x => x.conv));
+      return `
+        <div class="kpi-grid k4i">
+          ${anKpi('k-venda', 'Visitas', anN(vis), anN(medV) + ' por dia')}
+          ${anKpi('k-mc', 'Conversão', anN(conv, 2) + '%', anN(ped) + ' vendas em ' + anN(vis) + ' visitas')}
+          ${anKpi('k-frete', 'Venda por visita', vis ? fmt(bruto / vis) : '–', 'faturamento ÷ visitas')}
+          ${anKpi('k-hoje', 'Visitas para uma venda', ped ? anN(vis / ped, 0) : '–', 'em média')}
+        </div>
+        <div class="alert alert-info an-leitura"><b>${maisV.n}</b> é o dia com mais visitas (${anN(maisV.vis)} em média, ${anN((maisV.vis / medV - 1) * 100, 0)}% acima da média). <b>${maisC.n}</b> é o dia que mais converte: ${anN(maisC.conv, 2)}% dos visitantes compram, contra ${anN(conv, 2)}% na média.</div>
+        <div class="card"><div class="card-header"><div class="card-title">Visitas por dia</div><span class="text-muted" style="font-size:12px;">passe o mouse para ver a conversão do dia</span></div>
+          <div class="card-body"><div class="an-vis">${dias.map(d => `<div class="an-vis-b" title="${ptDate(d.dia)} · ${anN(d.visitas)} visitas · ${anN(d.qtd)} vendas · conversão ${d.visitas ? anN(d.qtd / d.visitas * 100, 2) : '0'}%"><i style="height:${Math.max(2, d.visitas / maxV * 100)}%"></i></div>`).join('')}</div>
+          <div class="ini-bars-eixo"><span>${ptDate(dias[0].dia).substring(0, 5)}</span><span>${ptDate(dias[Math.floor(dias.length / 2)].dia).substring(0, 5)}</span><span>${ptDate(dias[dias.length - 1].dia).substring(0, 5)}</span></div></div></div>
+        <div class="card"><div class="card-header"><div class="card-title">Dia da semana</div><span class="text-muted" style="font-size:12px;">visitas médias e conversão</span></div>
+          <div class="card-body"><div class="an-ufs">${sem.map(x => `<div class="an-fx an-sem"><div><b>${x.n}</b></div><div class="an-uf-t"><i style="width:${Math.max(1, x.vis / maxS * 100)}%"></i></div><span class="an-uf-v">${anN(x.vis)} visitas</span><div class="an-uf-t"><i class="an-conv" style="width:${Math.max(1, x.conv / maxC * 100)}%"></i></div><span class="an-uf-q">${anN(x.conv, 2)}%</span></div>`).join('')}</div></div></div>`;
     }
 
     // ----- cancelamentos -----
