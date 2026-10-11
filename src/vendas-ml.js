@@ -142,29 +142,51 @@
     // ===================================================================
     const VD_CAMPOS = { sku:'sku', venda:'order_txt', carrinho:'pack_txt', mlb:'item_id', titulo:'titulo', apelido:'comprador_apelido', nome:'comprador_nome' };
 
-    function vdConsulta(sel, opts){
-      const f = vdFiltro;
-      let q = supa.from('vendas_ml_calc').select(sel, opts).eq('usuario_id', usuarioAtual.id).gte('dia', f.de).lte('dia', f.ate);
-      if(contaAtiva) q = q.eq('ml_user_id', contaAtiva);
-      if(f.status === 'aprovadas') q = q.eq('situacao', 'aprovada');
-      if(f.status === 'canceladas') q = q.eq('situacao', 'cancelada');
-      if(f.status === 'pendentes') q = q.eq('situacao', 'pendente');
-      if(f.envio !== 'todas') q = q.eq('envio', f.envio);
-      if(f.semCusto) q = q.or('tem_custo.eq.false,tem_imposto.eq.false');
-      const t = f.termo.trim();
-      if(t) q = q.ilike(VD_CAMPOS[f.campo] || 'sku', '%' + t.replace(/[%,()]/g, ' ') + '%');
-      return q;
+    // Com termo de busca, procura em TODAS as vendas (como no Mercado Turbo): o período e os filtros de situação/envio
+    // só valem com a busca vazia. Nº da venda acha também pelo nº do carrinho; SKU e anúncio batem o código inteiro
+    // (se não houver nenhum, vdCarregar tenta de novo por parte do SKU); título e comprador batem por parte do texto.
+    function vdConsulta(sel, opts, semConta){
+      const f = vdFiltro, t = f.termo.trim();
+      let q = supa.from('vendas_ml_calc').select(sel, opts).eq('usuario_id', usuarioAtual.id);
+      if(contaAtiva && !semConta) q = q.eq('ml_user_id', contaAtiva);
+      if(!t){
+        q = q.gte('dia', f.de).lte('dia', f.ate);
+        if(f.status === 'aprovadas') q = q.eq('situacao', 'aprovada');
+        if(f.status === 'canceladas') q = q.eq('situacao', 'cancelada');
+        if(f.status === 'pendentes') q = q.eq('situacao', 'pendente');
+        if(f.envio !== 'todas') q = q.eq('envio', f.envio);
+        if(f.semCusto) q = q.or('tem_custo.eq.false,tem_imposto.eq.false');
+        return q;
+      }
+      const limpo = t.replace(/[%,()]/g, ' ').trim();
+      if(f.campo === 'venda' || f.campo === 'carrinho'){ const n = t.replace(/\D/g, '') || '0'; return q.or('order_txt.eq.' + n + ',pack_txt.eq.' + n); }
+      if(f.campo === 'mlb') return q.ilike('item_id', limpo.replace(/^(mlb)\s*-\s*/i, '$1'));
+      if(f.campo === 'sku' && !f.parcial) return q.ilike('sku', limpo);
+      return q.ilike(VD_CAMPOS[f.campo] || 'sku', '%' + limpo + '%');
     }
 
     async function vdCarregar(){
       if(!usuarioAtual) return;
-      const seq = ++vmlSeq, f = vdFiltro;
+      const seq = ++vmlSeq, f = vdFiltro, buscando = !!f.termo.trim();
       const ini = (f.pagina - 1) * f.porPagina;
-      const [pag, tot] = await Promise.all([
-        vdConsulta('*', { count:'exact' }).order('data_venda', {ascending:false}).range(ini, ini + f.porPagina - 1),
+      const pagina = () => vdConsulta('*', { count:'exact' }).order('data_venda', {ascending:false}).range(ini, ini + f.porPagina - 1);
+      let [pag, tot] = await Promise.all([
+        pagina(),
         supa.rpc('vendas_ml_totais', { p_de:f.de, p_ate:f.ate, p_conta:contaParam() })
       ]);
       if(seq !== vmlSeq) return;
+      if(buscando && f.campo === 'sku' && !f.parcial && !pag.error && !pag.count){   // nenhum SKU com esse código inteiro: tenta por parte dele
+        f.parcial = true; pag = await pagina();
+        if(seq !== vmlSeq) return;
+        if(!pag.count) f.parcial = false;
+      }
+      let outraLoja = 0;
+      if(buscando && contaAtiva && !pag.error && !pag.count){   // nada nesta loja: avisa se a venda está na outra
+        const r = await vdConsulta('order_id', { count:'exact', head:true }, true);
+        if(seq !== vmlSeq) return;
+        outraLoja = r.count || 0;
+      }
+      vdDados.outraLoja = outraLoja;
       const linhas = pag.data || [];
       // quantas vendas tem cada carrinho que aparece na página
       const packs = [...new Set(linhas.map(v => v.pack_id).filter(Boolean))];
@@ -174,7 +196,7 @@
         (data || []).forEach(r => { carrinhos[r.pack_id] = (carrinhos[r.pack_id] || 0) + 1; });
         if(seq !== vmlSeq) return;
       }
-      vdDados = { linhas, total: pag.count || 0, tot: tot.data || null, carrinhos, carregado:true, erro: pag.error?.message || tot.error?.message };
+      vdDados = { linhas, total: pag.count || 0, tot: tot.data || null, carrinhos, carregado:true, erro: pag.error?.message || tot.error?.message, outraLoja };
       vdDesenhar();
     }
 
@@ -197,6 +219,8 @@
       const paginas = Math.max(1, Math.ceil(d.total / f.porPagina));
       const envios = (t.envios_todos || []).slice().sort((x,y) => y.qtd - x.qtd);
       const atalhos = [['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Mês atual']];
+      const buscando = !!f.termo.trim();
+      const rotCampo = { sku:'SKU', venda:'nº da venda', carrinho:'nº do carrinho', mlb:'anúncio', titulo:'título', apelido:'apelido do comprador', nome:'nome do comprador' }[f.campo] || 'SKU';
       const nDias = vmlDiasEntre(f.de, f.ate);
       const podeExportar = nDias <= VML_EXPORT_MAX_DIAS && d.total <= VML_EXPORT_MAX_LINHAS;
 
@@ -240,11 +264,12 @@
               </select></div>
             <div style="grid-column:span 2;"><label>Termo de busca</label>
               <input type="text" id="vd-termo" placeholder="Digite e pressione Enter" value="${vmlEsc(f.termo)}" onkeydown="if(event.key==='Enter'){vdBuscar();}"></div>
-            <div><button class="btn btn-sm" style="width:100%;padding:9px;" onclick="vdBuscar()">Filtrar</button></div>
+            <div style="display:flex;gap:6px;"><button class="btn btn-sm" style="flex:1;padding:9px;" onclick="vdBuscar()">Filtrar</button>${buscando ? '<button class="btn-out btn btn-sm" style="padding:9px 12px;white-space:nowrap;" onclick="vdLimpar()">Limpar busca</button>' : ''}</div>
           </div>
+          ${buscando ? `<div class="alert alert-info" style="margin:12px 0 0;">Buscando <b>${vmlEsc(rotCampo)}</b> "${vmlEsc(f.termo.trim())}" em <b>todas as vendas</b>, das mais novas para as mais antigas${f.campo === 'sku' && f.parcial ? ' (nenhum SKU tem exatamente esse código; mostrando os que contêm o trecho)' : ''}. O período e os filtros abaixo não valem durante a busca.</div>` : ''}
         </div></div>
 
-        <div class="chips" style="margin:2px 0 14px;">
+        <div class="chips" style="margin:2px 0 14px;${buscando ? 'opacity:.45;pointer-events:none;' : ''}">
           ${[['todas','Todas',t.linhas || 0],['aprovadas','Aprovadas',a.qtd || 0],['pendentes','Pgto. pendente',t.pend || 0],['canceladas','Canceladas',c.qtd || 0]]
             .map(([k,l,n]) => `<button class="chip ${f.status === k ? 'active' : ''}" onclick="vdSet('status','${k}')">${l}<span class="n">${Number(n).toLocaleString('pt-BR')}</span></button>`).join('')}
           <span style="width:1px;background:var(--border);margin:0 6px;"></span>
@@ -260,7 +285,7 @@
             ${vmlPaginacao(f.pagina, paginas, 'vdIr')}
           </div>
           <div>
-            ${d.linhas.length ? d.linhas.map(v => vdCard(v)).join('') : `<div class="vazio"><b>Nenhuma venda encontrada</b>${vmlSync.rodando ? 'Buscando no Mercado Livre…' : 'Ajuste o período ou os filtros.'}</div>`}
+            ${d.linhas.length ? d.linhas.map(v => vdCard(v)).join('') : `<div class="vazio"><b>Nenhuma venda encontrada</b>${buscando ? (d.outraLoja ? `Nesta loja não há. Na outra loja ${d.outraLoja === 1 ? 'há 1 venda' : 'há ' + d.outraLoja.toLocaleString('pt-BR') + ' vendas'} com esse termo: escolha "Todas as lojas" na barra lateral.` : 'Procurei em todas as datas. Confira o campo escolhido em "Buscar por".') : (vmlSync.rodando ? 'Buscando no Mercado Livre…' : 'Ajuste o período ou os filtros.')}</div>`}
           </div>
           ${d.linhas.length ? `<div class="card-header" style="border-bottom:none;border-top:1px solid var(--border);"><span class="text-muted">Página ${f.pagina} de ${paginas.toLocaleString('pt-BR')}</span>${vmlPaginacao(f.pagina, paginas, 'vdIr')}</div>` : ''}
         </div>`;
@@ -326,7 +351,8 @@
 
     function vdIr(p){ vdFiltro.pagina = p; vdCarregar(); window.scrollTo(0,0); }
     function vdSet(campo, val){ vdFiltro[campo] = val; vdFiltro.pagina = 1; vdCarregar(); }
-    function vdBuscar(){ vdFiltro.termo = document.getElementById('vd-termo').value; vdFiltro.pagina = 1; vdCarregar(); }
+    function vdBuscar(){ vdFiltro.termo = document.getElementById('vd-termo').value; vdFiltro.parcial = false; vdFiltro.pagina = 1; vdCarregar(); }
+    function vdLimpar(){ vdFiltro.termo = ''; vdFiltro.parcial = false; vdFiltro.pagina = 1; vdCarregar(); }
     // " · hoje", " · 7 dias"… ou as datas, para o indicador dizer de que período ele é
     function vdRotPeriodo(){
       const f = vdFiltro, n = { hoje: 'hoje', ontem: 'ontem', '7d': '7 dias', '30d': '30 dias', mes: 'mês atual' }[f.atalho];
