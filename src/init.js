@@ -8,6 +8,7 @@
       if(outrosEl) outrosEl.value = saldoOutros > 0 ? fmtMoney(saldoOutros) : '';
       if(totalEl) totalEl.textContent = fmt(saldoAtual);
       if(typeof lojasTravarSaldos === 'function') lojasTravarSaldos();
+      if(typeof saldoRecalcular === 'function') saldoRecalcular();
 
       // Fator Prudencial
       const pctVal = Math.round(cfgPct * 100);
@@ -104,7 +105,8 @@
         if(v !== saldoOutros){ saldoOutros = v; changed = true; }
       }
       if(changed){
-        saldoAtual = saldoMP + saldoOutros;
+        if(typeof saldoInformado === 'function') saldoInformado();
+        saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0);
         salvarCfg(); // localStorage é síncrono — garante o save antes do unload
       }
     });

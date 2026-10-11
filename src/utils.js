@@ -167,9 +167,11 @@
     }
     
     function atualizarSaldoTotal(){
-      saldoAtual = saldoMP + saldoOutros;
+      if(typeof saldoInformado === 'function') saldoInformado();   // a partir de agora o saldo anda sozinho
+      saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0);
       const label = document.getElementById('saldo-total-label');
       if(label) label.textContent = fmt(saldoAtual);
+      if(typeof saldoNota === 'function') saldoNota();
       salvarCfg();
       recalc();
     }

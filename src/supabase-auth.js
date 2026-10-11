@@ -171,8 +171,8 @@
         if(_lsEst.length    > 0 && _lsEst.length    >= estoqueGalpao.length) estoqueGalpao = _lsEst;
         if(_lsFullML){ try{ const _o=JSON.parse(_lsFullML); estoqueFullML=_o.itens||[]; estoqueFullML._syncAt=_o.syncAt||null; estoqueFullML._fonte=_o.fonte||'xls'; }catch(e){} }
         // Para saldo: Supabase pode estar desatualizado (save async não concluiu antes do F5)
-        if(saldoMP === 0 && _lsCfg.saldoMP > 0){ saldoMP = _lsCfg.saldoMP; saldoAtual = saldoMP + saldoOutros; }
-        if(saldoOutros === 0 && _lsCfg.saldoOutros > 0){ saldoOutros = _lsCfg.saldoOutros; saldoAtual = saldoMP + saldoOutros; }
+        if(saldoMP === 0 && _lsCfg.saldoMP > 0){ saldoMP = _lsCfg.saldoMP; saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0); }
+        if(saldoOutros === 0 && _lsCfg.saldoOutros > 0){ saldoOutros = _lsCfg.saldoOutros; saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0); }
         if(_lsCfg.patCfg) patCfg = {...patCfg, ..._lsCfg.patCfg};
         // Dados restaurados do localStorage → sincronizar imediatamente para nuvem
         if(_syncNeeded){ if(!_sinc.base) sincDefinirBase(true); salvarSupabase(); }
@@ -365,7 +365,7 @@
         if(c.periodoHistoricoML !== undefined) periodoHistoricoML = c.periodoHistoricoML;
         if(c.patCfg) patCfg = {...patCfg, ...c.patCfg};
         if(c.comprasCfg && typeof comprasCarregarCfg === 'function') comprasCarregarCfg(c.comprasCfg);
-        saldoAtual = saldoMP + saldoOutros;
+        saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0);
         if(typeof lojasCarregarCfg === 'function'){ lojasCarregarCfg(c); lojasSaldosRecortar(); }
         _sinc.cfg = JSON.stringify(sincCfgAtual());
       }

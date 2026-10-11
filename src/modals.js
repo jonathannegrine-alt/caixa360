@@ -133,6 +133,7 @@
     }
     
     function recalc(){
+      if(typeof saldoRecalcular === 'function') saldoRecalcular();
       atualizarRegressao();
       if(document.getElementById('view-dashboard').classList.contains('active')){
         renderDashboard();

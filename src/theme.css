@@ -1051,3 +1051,21 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .oc-totais input{padding:5px 8px;border:1px solid var(--ctl-border);border-radius:7px;background:var(--surface);color:var(--text);font-size:14px;width:100%;}
 .oc-totais .oc-geral{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,var(--surface));}
 .oc-totais .oc-geral b{font-size:17px;color:var(--primary);}
+
+/* saldo automático */
+.saldo-auto-nota{font-size:12px;color:var(--text-muted);margin-top:10px;line-height:1.55;}
+/* feedback saiu do canto da tela: fica em "Ajuda e sugestões", na barra lateral */
+#btn-feedback{display:none !important;}
+.side-foot .tema-toggle + .tema-toggle{margin-top:6px;}
+/* botão do assistente: estrelas que cintilam e rótulo que abre ao passar o mouse */
+.cfo-btn-flutuante{width:auto !important;min-width:52px;height:52px;border-radius:26px !important;padding:0 14px !important;gap:0;overflow:hidden;background:linear-gradient(135deg,var(--primary),#8b5cf6) !important;transition:box-shadow .25s,transform .2s;}
+.cfo-btn-flutuante:hover{box-shadow:0 6px 26px color-mix(in srgb,var(--primary) 60%,transparent);transform:translateY(-1px);}
+.cfo-btn-flutuante .cfo-rot{max-width:0;opacity:0;white-space:nowrap;font-size:14px;font-weight:600;letter-spacing:.01em;transition:max-width .3s ease,opacity .25s ease,margin .3s ease;margin-right:0;}
+.cfo-btn-flutuante:hover .cfo-rot,.cfo-btn-flutuante:focus-visible .cfo-rot{max-width:120px;opacity:1;margin-right:9px;}
+.cfo-estrelas path{transform-box:fill-box;transform-origin:center;animation:cfo-cintila 2.6s ease-in-out infinite;}
+.cfo-estrelas path:nth-child(2){animation-delay:.7s;}
+.cfo-estrelas path:nth-child(3){animation-delay:1.4s;}
+@keyframes cfo-cintila{0%,100%{transform:scale(1);opacity:1;}45%{transform:scale(.55);opacity:.45;}60%{transform:scale(1.15);opacity:1;}}
+.cfo-btn-flutuante::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:0 0 0 0 color-mix(in srgb,var(--primary) 55%,transparent);animation:cfo-pulso 3.2s ease-out infinite;pointer-events:none;}
+@keyframes cfo-pulso{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--primary) 50%,transparent);}70%,100%{box-shadow:0 0 0 14px transparent;}}
+@media (prefers-reduced-motion:reduce){.cfo-estrelas path,.cfo-btn-flutuante::after{animation:none;}}

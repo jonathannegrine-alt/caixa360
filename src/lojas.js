@@ -69,7 +69,7 @@
         saldoMP = vivos.reduce((t, id) => t + n(saldosLoja[id].mp), 0);
         saldoOutros = vivos.reduce((t, id) => t + n(saldosLoja[id].outros), 0);
       }
-      saldoAtual = saldoMP + saldoOutros;
+      saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0);
     }
     // saldo do Mercado Pago que o ml-sync devolve por conta
     function lojasSaldoMPDaAPI(contas, total){
@@ -81,13 +81,13 @@
         const s = saldosLoja[x.ml_user_id] || (saldosLoja[x.ml_user_id] = { mp: 0, outros: 0 });
         s.mp = Number(x.saldoMP) || 0;
       });
-      if(!veio){ if(total === null || total === undefined) return false; if(lojasVarias()) return false; saldoMP = total; saldoAtual = saldoMP + saldoOutros; return true; }
+      if(!veio){ if(total === null || total === undefined) return false; if(lojasVarias()) return false; saldoMP = total; saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0); return true; }
       if(_lj.ativo || lojasVarias()) lojasSaldosRecortar();
-      else { saldoMP = (contas || []).reduce((t, x) => t + (Number(x.saldoMP) || 0), 0); saldoAtual = saldoMP + saldoOutros; }
+      else { saldoMP = (contas || []).reduce((t, x) => t + (Number(x.saldoMP) || 0), 0); saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0); }
       return true;
     }
     function lojasDebitarMP(valor){
-      if(_lj.ativo || !lojasVarias()){ saldoMP = Math.max(0, saldoMP - valor); saldoAtual = saldoMP + saldoOutros; return; }
+      if(_lj.ativo || !lojasVarias()){ saldoMP = Math.max(0, saldoMP - valor); saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0); return; }
       const s = saldosLoja[lojaPadraoId()] || (saldosLoja[lojaPadraoId()] = { mp: 0, outros: 0 });
       s.mp = Math.max(0, (Number(s.mp) || 0) - valor); lojasSaldosRecortar();
     }
@@ -122,11 +122,15 @@
     // ----- configuração (vai dentro de configuracoes.cfg) -----
     function lojasCfg(){
       lojasSaldosAbsorver();
+      try { localStorage.setItem('mk_saldo_em', JSON.stringify(saldoEm)); } catch(e){}
       try { if(lojaPadrao) localStorage.setItem('mk_loja_padrao', lojaPadrao); localStorage.setItem('mk_saldos_loja', JSON.stringify(saldosLoja)); } catch(e){}
-      return { lojaPadrao: lojaPadrao || null, saldosLoja };
+      return { lojaPadrao: lojaPadrao || null, saldosLoja, saldoEm, saldoAutoLigado };
     }
     function lojasCarregarCfg(c){
       if(!c) return;
+      if(c.saldoEm && typeof c.saldoEm === 'object' && Object.keys(c.saldoEm).length) saldoEm = c.saldoEm;
+      else { try { const s = JSON.parse(localStorage.getItem('mk_saldo_em') || 'null'); if(s && typeof s === 'object') saldoEm = s; } catch(e){} }
+      if(c.saldoAutoLigado === false) saldoAutoLigado = false;
       if(c.lojaPadrao) lojaPadrao = String(c.lojaPadrao);
       else { try { lojaPadrao = localStorage.getItem('mk_loja_padrao') || lojaPadrao; } catch(e){} }   // cópia local: sobrevive a uma aba antiga que regrave a configuração
       if(c.saldosLoja && typeof c.saldosLoja === 'object' && Object.keys(c.saldosLoja).length) saldosLoja = c.saldosLoja;
@@ -191,3 +195,53 @@
       if(typeof verificarConexaoML === 'function') verificarConexaoML();
       toast('Conta desconectada. Os dados já importados continuam guardados.');
     }
+
+    // ===== SALDO QUE ANDA SOZINHO =====
+    // O saldo digitado vale para o momento em que foi informado (saldoEm[loja]). Dali em diante o sistema soma o que
+    // o Mercado Livre liberou e desconta as contas baixadas, e o "Total em caixa" (saldoAtual) acompanha.
+    // Ao digitar um saldo novo, a contagem recomeça daquele momento. Sem data informada, nada é somado.
+    let saldoEm = {};                 // { [ml_user_id | '_']: 'AAAA-MM-DDTHH:MM' }
+    let saldoAutoLigado = true;
+
+    function saldoLojasDaVez(){
+      if(_lj.ativo) return [_lj.loja];
+      return typeof contasML !== 'undefined' && contasML.length ? contasML.map(c => c.id) : ['_'];
+    }
+    function saldoInformado(){
+      const d = new Date(), agora = dateStr(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      if(!_lj.ativo && lojasVarias()) return;          // em "Todas" os campos não são editáveis
+      saldoLojasDaVez().forEach(k => { saldoEm[k] = agora; });
+    }
+    function saldoMovimento(loja){
+      const em = saldoEm[loja]; if(!em || !saldoAutoLigado) return null;
+      const emD = em.slice(0, 10), emH = Number(em.slice(11, 13)), hoje = getToday(), horaAgora = new Date().getHours();
+      const daLoja = c => loja === '_' || String(c || '') === loja;
+      // dias inteiros já passados (extrato) + as horas de hoje que já caíram
+      let entrou = (typeof extratoTodos !== 'undefined' ? extratoTodos : []).filter(e => daLoja(e.conta) && e.data > emD && e.data < hoje).reduce((s, e) => s + (Number(e.val_liquido) || 0), 0);
+      try {
+        const porConta = JSON.parse(localStorage.getItem('mk_liberacoes_hoje_contas') || 'null');
+        const horas = porConta ? Object.keys(porConta).filter(daLoja).flatMap(c => porConta[c] || []) : (loja === '_' ? JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]') : []);
+        horas.forEach(i => { const h = parseInt(i.hora); if(h < horaAgora && (emD < hoje || h >= emH)) entrou += Number(i.val) || 0; });
+      } catch(e){}
+      const pagas = (typeof pagTodos === 'function' ? pagTodos() : pagamentos).filter(p => p.pago && !p.oculta && (loja === '_' || lojaDe(p) === loja) && String(p.dataPaga || '') > emD);
+      const saiu = pagas.reduce((s, p) => s + (Number(p.valorPago != null ? p.valorPago : p.val) || 0), 0);
+      return { em, entrou, saiu, n: pagas.length };
+    }
+    function saldoAuto(){
+      return saldoLojasDaVez().reduce((t, k) => { const m = saldoMovimento(k); return t + (m ? m.entrou - m.saiu : 0); }, 0);
+    }
+    function saldoRecalcular(){
+      saldoAtual = (Number(saldoMP) || 0) + (Number(saldoOutros) || 0) + saldoAuto();
+      const label = document.getElementById('saldo-total-label'); if(label) label.textContent = fmt(saldoAtual);
+      saldoNota();
+    }
+    function saldoNota(){
+      const el = document.getElementById('saldo-auto-nota'); if(!el) return;
+      const ms = saldoLojasDaVez().map(k => saldoMovimento(k)).filter(Boolean);
+      const dt = s => ptDate(s.slice(0, 10)).slice(0, 5) + ' às ' + s.slice(11, 16);
+      if(!saldoAutoLigado){ el.innerHTML = 'Atualização automática do saldo desligada. <a class="fx-link" style="color:var(--primary);cursor:pointer;" onclick="saldoAutoTrocar(true)">Ligar</a>'; return; }
+      if(!ms.length){ el.innerHTML = 'Digite o saldo de hoje nos campos acima: dali em diante ele anda sozinho, somando o que o Mercado Livre liberar e descontando as contas que você der baixa.'; return; }
+      const ent = ms.reduce((s, m) => s + m.entrou, 0), sai = ms.reduce((s, m) => s + m.saiu, 0), n = ms.reduce((s, m) => s + m.n, 0), mais = ms.map(m => m.em).sort()[0];
+      el.innerHTML = `Saldo informado em <b>${dt(mais)}</b>${ms.length > 1 ? ' (a loja mais antiga)' : ''}: ${fmt((Number(saldoMP) || 0) + (Number(saldoOutros) || 0))}. Desde então: <b class="text-success">+ ${fmt(ent)}</b> liberado pelo Mercado Livre e <b class="text-danger">− ${fmt(sai)}</b> em ${n} conta${n === 1 ? '' : 's'} baixada${n === 1 ? '' : 's'}. Para acertar, digite o saldo real de novo. <a class="fx-link" style="color:var(--primary);cursor:pointer;" onclick="saldoAutoTrocar(false)">Desligar</a>`;
+    }
+    function saldoAutoTrocar(v){ saldoAutoLigado = !!v; saldoRecalcular(); if(typeof salvarCfg === 'function') salvarCfg(); if(typeof recalc === 'function') recalc(); }

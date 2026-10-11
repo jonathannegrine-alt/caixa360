@@ -292,7 +292,7 @@
         // Atualizar saldo MP se veio da API
         if(typeof lojasSaldoMPDaAPI === 'function' ? lojasSaldoMPDaAPI(data.contas, data.saldoMP) : (data.saldoMP !== null && data.saldoMP !== undefined)){
           if(typeof lojasSaldoMPDaAPI !== 'function') saldoMP = data.saldoMP;
-          saldoAtual = saldoMP + saldoOutros;
+          saldoAtual = saldoMP + saldoOutros + (typeof saldoAuto === 'function' ? saldoAuto() : 0);
           const mpInput = document.getElementById('saldo-mp');
           if(mpInput) mpInput.value = fmtMoney(saldoMP);
           salvarCfg();
