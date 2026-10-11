@@ -60,7 +60,7 @@
             <td style="text-align:right;white-space:nowrap;">${fmt(x.qtd * x.preco)}</td>
             <td><button class="ico-btn" title="Tirar da lista" onclick="clItens.splice(${i}, 1); comprasListaDesenhar()">✕</button></td></tr>`).join('')}
         </tbody><tfoot><tr><td colspan="2">${clItens.length} produtos</td><td style="text-align:right;"><b>${un.toLocaleString('pt-BR')}</b></td><td></td><td style="text-align:right;"><b>${fmt(total)}</b></td><td></td></tr></tfoot></table></div>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn-out btn" onclick="comprasListaPlanilha()">Baixar planilha</button><button class="btn" onclick="comprasListaPdf(this)">Baixar PDF</button>`);
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn-out btn" onclick="comprasListaPlanilha()">Baixar planilha</button><button class="btn-out btn" title="Abre uma ordem de compra nova com estes itens" onclick="comprasListaOrdem()">Criar ordem de compra</button><button class="btn" onclick="comprasListaPdf(this)">Baixar PDF</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
     }
 
@@ -101,4 +101,16 @@
       const linhas = clItens.filter(x => x.qtd > 0).map(x => ({ 'SKU': x.sku, 'Produto': x.nome, 'Fornecedor': x.forn, 'Quantidade': x.qtd, 'Último preço pago': Math.round(x.preco * 100) / 100, 'Subtotal': Math.round(x.qtd * x.preco * 100) / 100 }));
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas), 'Lista de compras');
       XLSX.writeFile(wb, 'lista_de_compras_' + getToday() + '.xlsx');
+    }
+
+    // leva os itens da lista para uma ordem de compra nova (página Ordens de compra)
+    async function comprasListaOrdem(){
+      const itens = clItens.filter(x => x.qtd > 0).map(x => ({ sku: x.sku, qtd: x.qtd, valor: x.preco }));
+      if(!itens.length){ toast('Nenhum produto com quantidade.'); return; }
+      const forns = [...new Set(clItens.map(x => x.forn).filter(Boolean))];
+      fecharModal('modal-vml'); nav('ordens-compra');
+      if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
+      if(typeof ocCriar !== 'function') return;
+      ocCriar(itens);
+      if(forns.length === 1){ ocNova.fornecedor = forns[0]; ocCriarDesenhar(); }
     }
