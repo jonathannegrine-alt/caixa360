@@ -335,12 +335,14 @@
 
         <div class="card">
           <div class="card-header"><div class="card-title">${lista.length} produto${lista.length === 1 ? '' : 's'} · ${cpInt(unLista)} unidades · ${fmt(totalLista)}</div>
-            <span class="text-muted" style="font-size:12px;">Clique no título de uma coluna para ordenar e arraste a borda para mudar a largura. Altere os <b>dias desejados</b> para simular.</span></div>
+            <span class="text-muted" style="font-size:12px;">Clique no título de uma coluna para ordenar e arraste a borda para mudar a largura. Altere os <b>dias desejados</b> para simular. Marque produtos para gerar a <b>lista de compras</b>.</span></div>
+          <div id="cp-sel-barra" class="cp-sel-barra" style="display:none;"></div>
           <div style="overflow-x:auto;">
             <table class="cp-tab">
-              <thead><tr>${CP_COLS.map(c => `<th class="${c[3] ? 'num' : ''} ${comprasOrd.col === c[0] ? 'ord' : ''}" title="${cpEsc(c[4])}" onclick="comprasOrdenar('${c[0]}')">${c[1]}${seta(c[0])}</th>`).join('')}<th></th></tr></thead>
+              <thead><tr><th style="width:30px;"><input type="checkbox" title="Marcar todos da lista" onclick="event.stopPropagation();comprasMarcarTodos(this.checked)"></th>${CP_COLS.map(c => `<th class="${c[3] ? 'num' : ''} ${comprasOrd.col === c[0] ? 'ord' : ''}" title="${cpEsc(c[4])}" onclick="comprasOrdenar('${c[0]}')">${c[1]}${seta(c[0])}</th>`).join('')}<th></th></tr></thead>
               <tbody id="tbody-compras">
                 ${lista.length ? lista.map(l => `<tr class="cp-l-${cpNorm(l.sit).replace(/\s/g,'')}">
+                  <td><input type="checkbox" class="cp-check" data-k="${cpEsc(l.k)}" ${typeof comprasSel !== 'undefined' && comprasSel[l.k] ? 'checked' : ''} onchange="comprasMarcar(this.dataset.k, this.checked)"></td>
                   <td>${selo(l.sit)}</td>
                   <td class="cp-prod"><b>${cpEsc(l.it.sku)}</b><span title="${cpEsc(l.it.nome)}">${cpEsc(l.it.nome || '—')}</span>${l.vende ? `<i>${cpEsc(l.vende)}</i>` : ''}</td>
                   <td class="cp-forn">${cpEsc(l.it.forn || '—')}</td>
@@ -351,13 +353,14 @@
                   <td class="num cp-comprar">${l.sug > 0 ? `<b>${cpInt(l.sug)}</b>` : '<span class="text-muted">—</span>'}${l.mult > 1 ? `<div class="cp-sub">caixa de ${l.mult}</div>` : ''}</td>
                   <td class="num">${l.sug > 0 ? (l.custo ? `<b>${fmt(l.valor)}</b><div class="cp-sub">${fmt(l.custo)} cada</div>` : '<span class="badge badge-warning">sem custo</span>') : '<span class="text-muted">—</span>'}</td>
                   <td><button class="btn-out btn-sm" title="Ver como este número foi calculado" onclick="comprasDetalhe('${cpEsc(l.k)}')">Ver conta</button></td>
-                </tr>`).join('') : `<tr><td colspan="10"><div class="vazio"><b>Nada nesta lista</b>Troque os filtros acima.</div></td></tr>`}
+                </tr>`).join('') : `<tr><td colspan="11"><div class="vazio"><b>Nada nesta lista</b>Troque os filtros acima.</div></td></tr>`}
               </tbody>
             </table>
           </div>
         </div>
         ${C.fora.size ? `<div class="alert alert-warning">Vendas sem SKU no anúncio ficaram fora do cálculo (${[...C.fora.values()].reduce((s,v) => s + v, 0)} unidades em 120 dias). Use "Nivelar SKU" no Resumo Financeiro para corrigir.</div>` : ''}`;
       if(typeof initResizableCols === 'function') initResizableCols('tbody-compras');
+      if(typeof comprasSelBarra === 'function') comprasSelBarra();
     }
 
     let cpBuscaT = null;

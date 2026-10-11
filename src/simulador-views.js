@@ -237,7 +237,7 @@
         const isHoje = data === hoje;
 
         html += `<div class="cal-day ${isHoje?'hoje':''}" onclick="abrirDia('${data}')">
-          <div class="cal-day-num">${dia}</div>
+          <div class="cal-day-num">${dia}${typeof feriadoTag === 'function' ? feriadoTag(data) : ''}</div>
           ${total > 0 ? `<div class="cal-valor-saida">-${fmt(total)}</div>
           <div style="font-size:9px;color:#666;">${contas.length} conta(s)</div>` : ''}
         </div>`;
@@ -299,7 +299,7 @@
         const clickAttr = isHoje && hojeTotalRec > 0 ? ' onclick="abrirModalHoje()" style="cursor:pointer;"' : '';
 
         html += `<div class="cal-day ${isHoje?'hoje':''}"${clickAttr}>
-          <div class="cal-day-num">${dia}</div>
+          <div class="cal-day-num">${dia}${typeof feriadoTag === 'function' ? feriadoTag(data) : ''}</div>
           ${total > 0 ? `<div class="cal-valor-entrada">${isHoje?'⏰ ':''}+${fmt(total)}</div>` : ''}
           ${isHoje && hojeTotalRec > 0 ? `<div style="font-size:.6rem;color:var(--accent);margin-top:1px;">ver horas</div>` : ''}
         </div>`;

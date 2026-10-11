@@ -142,6 +142,24 @@
       return dateStr(d);
     }
     
+    // ===== FERIADOS NACIONAIS =====
+    // Fixos + os que dependem da Páscoa (Carnaval, Sexta-feira Santa, Corpus Christi). Bancos não compensam nesses dias.
+    const _feriadosAno = {};
+    function feriadosBR(ano){
+      if(_feriadosAno[ano]) return _feriadosAno[ano];
+      const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3),
+        h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451),
+        mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+      const pascoa = new Date(ano, mes - 1, dia), mais = n => { const x = new Date(pascoa); x.setDate(x.getDate() + n); return dateStr(x); };
+      const m2 = {};
+      [['01-01', 'Confraternização Universal'], ['04-21', 'Tiradentes'], ['05-01', 'Dia do Trabalho'], ['09-07', 'Independência'], ['10-12', 'Nossa Senhora Aparecida'],
+       ['11-02', 'Finados'], ['11-15', 'Proclamação da República'], ['11-20', 'Consciência Negra'], ['12-25', 'Natal']].forEach(([d2, n]) => { m2[ano + '-' + d2] = n; });
+      m2[mais(-48)] = 'Carnaval'; m2[mais(-47)] = 'Carnaval'; m2[mais(-2)] = 'Sexta-feira Santa'; m2[mais(60)] = 'Corpus Christi';
+      return (_feriadosAno[ano] = m2);
+    }
+    function feriadoNome(data){ return data ? (feriadosBR(Number(String(data).slice(0, 4)))[data] || '') : ''; }
+    function feriadoTag(data){ const n = feriadoNome(data); return n ? `<span class="cal-feriado" title="Feriado nacional: ${n}">${n}</span>` : ''; }
+
     function nomeDia(data){
       const d = parseDate(data);
       const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -302,8 +320,8 @@
       const maxCompra = calcMaxCompra();
       if(maxCompra > 0){
         insights.push({ tipo:'ok', icon:'✅',
-          texto:`Você pode comprometer até <strong>${fmt(maxCompra)}</strong> hoje sem romper a reserva mínima nos próximos ${horizonte} dias.`,
-          sub: reservaMinima > 0 ? `Reserva mínima protegida: ${fmt(reservaMinima)}` : 'Configure a reserva mínima em Configurações para uma análise mais precisa.'
+          texto:`Você pode comprometer até <strong>${fmt(maxCompra)}</strong> hoje sem romper a reserva mínima nos próximos ${horizonte} dias, contando ${typeof planilhaMode !== 'undefined' && planilhaMode === 'confirmado' ? '<strong>só os recebimentos já confirmados</strong> do Mercado Livre' : 'os recebimentos confirmados <strong>e a projeção de vendas</strong>'}.`,
+          sub: (reservaMinima > 0 ? `Reserva mínima protegida: ${fmt(reservaMinima)}. ` : 'Configure a reserva mínima em Configurações para uma análise mais precisa. ') + 'O modo (confirmado ou com projeção) é o escolhido no Fluxo de Caixa.'
         });
       } else {
         insights.push({ tipo:'danger', icon:'🔴',

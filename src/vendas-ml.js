@@ -285,7 +285,7 @@
           </div>
 
           <div class="v-prod">
-            ${v.thumbnail ? `<img class="v-thumb" src="${vmlEsc(v.thumbnail)}" loading="lazy" alt="">` : '<div class="v-thumb"></div>'}
+            ${v.thumbnail ? (/^MLB\d+$/.test(v.item_id || '') ? `<a href="https://produto.mercadolivre.com.br/${v.item_id.replace('MLB', 'MLB-')}" target="_blank" rel="noopener" title="Abrir o anúncio"><img class="v-thumb" src="${vmlEsc(v.thumbnail)}" loading="lazy" alt=""></a>` : `<img class="v-thumb" src="${vmlEsc(v.thumbnail)}" loading="lazy" alt="">`) : '<div class="v-thumb"></div>'}
             <div style="min-width:0;">
               <div class="v-tit"><span class="v-qtd">${c.qtd}x</span>${vmlEsc(v.titulo || '—')}</div>
               <div class="v-meta">
@@ -315,9 +315,9 @@
 
           <div class="v-acoes">
             <div class="v-status ${st === 'aprovada' ? 'ok' : (st === 'cancelada' ? 'canc' : 'pend')}">${st === 'aprovada' ? 'Aprovada' : (st === 'cancelada' ? 'Cancelada' : 'Pagamento pendente')}</div>
-            <button class="btn-out btn btn-sm" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}','${v.ml_user_id || ''}')">💬 Mensagens</button>
+            <button class="btn-out btn btn-sm v-bt-msg" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}','${v.ml_user_id || ''}')">Mensagens</button>
             <button class="btn-out btn btn-sm" onclick="vdPagamento('${v.order_id}')">Detalhes</button>
-            <a class="btn-out btn btn-sm" style="text-align:center;text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${v.order_id}/detalhe" target="_blank" rel="noopener">Abrir no ML ↗</a>
+            <a class="btn-out btn btn-sm v-bt-ml" style="text-align:center;text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${v.order_id}/detalhe" target="_blank" rel="noopener">Abrir no ML</a>
           </div>
         </div>`;
     }

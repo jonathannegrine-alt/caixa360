@@ -115,7 +115,7 @@
         const corAcum = riscoForte ? 'var(--danger)' : riscoLeve ? '#e65c00' : 'var(--success)';
 
         html += `<div class="cal-day${isHoje ? ' hoje' : ''}${classeRisco}">
-          <div class="cal-day-num">${dia}</div>
+          <div class="cal-day-num">${dia}${typeof feriadoTag === 'function' ? feriadoTag(data) : ''}</div>
           ${entrada > 0 ? `<div class="cal-valor-entrada">+${fmt(entrada)}</div>` : ''}
           ${pag > 0     ? `<div class="cal-valor-saida">-${fmt(pag)}</div>`     : ''}
           ${(entrada > 0 || pag > 0) ? `<div class="cal-saldo ${saldoDia >= 0 ? 'text-success' : 'text-danger'}">${fmt(saldoDia)}</div>` : ''}
@@ -549,7 +549,7 @@
         const corAcum = riscoForte ? 'var(--danger)' : riscoLeve ? '#e65c00' : 'var(--success)';
 
         html += `<div class="cal-day${isHoje ? ' hoje' : ''}${classeRisco}" onclick="abrirDia('${data}')">
-          <div class="cal-day-num">${dia}</div>
+          <div class="cal-day-num">${dia}${typeof feriadoTag === 'function' ? feriadoTag(data) : ''}</div>
           ${entrada > 0 ? `<div class="cal-valor-entrada">+${fmt(entrada)}</div>` : ''}
           ${pag > 0 ? `<div class="cal-valor-saida">-${fmt(pag)}</div>` : ''}
           ${e.proj > 0 && calendarioMode === 'projetado' ? `<div class="cal-valor-proj">~${fmt(e.proj)}</div>` : ''}
@@ -786,7 +786,7 @@
     }
     
     function calcularMaxPagar(data){
-      let min = 0, max = 100000, resultado = 0;
+      let min = 0, max = 20000000, resultado = 0;
       
       while(min <= max){
         const meio = Math.floor((min + max) / 2);

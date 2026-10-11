@@ -73,7 +73,7 @@
         <li class="nav-item sec-oculta" data-sec="ope" onclick="nav('ordens-compra')"><svg viewBox="0 0 24 24"><path d="M8 3h8l1 4H7l1-4z"/><rect x="5" y="7" width="14" height="14" rx="2"/><path d="M9 12h6M9 16h4"/></svg><span>Ordens de Compra</span></li>
         <li class="nav-item sec-oculta" data-sec="ope" onclick="nav('simulador')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg><span>Simulador de compras</span></li>
         <li class="nav-sec" data-sec="sis" onclick="toggleNavSec('sis')"><span>Sistema</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></li>
-        <li class="nav-item sec-oculta" data-sec="sis" onclick="nav('config')"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Configurações</span></li>
+        <li class="nav-item sec-oculta" data-sec="sis" onclick="nav('config')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.100-1.500 1.7 1.7 0 0 0-1.800.300l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.500-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.500-1.100 1.7 1.7 0 0 0-.300-1.800l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.800.300H9a1.7 1.7 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.500 1.7 1.7 0 0 0 1.800-.300l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.300 1.800V9a1.7 1.7 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.500 1z"/></svg><span>Configurações</span></li>
       </ul>
       <div class="side-foot">
         <button class="tema-toggle" onclick="alternarTema()" title="Alternar entre tema claro e escuro">
@@ -131,10 +131,10 @@
     </div>
 
     <!-- BOTÃO FEEDBACK -->
-    <button id="btn-feedback" class="ativo" onclick="abrirFeedback()" title="Enviar feedback">💬</button>
+    <button id="btn-feedback" class="ativo" onclick="abrirFeedback()" title="Enviar sugestão ou problema"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.4A8 8 0 1 1 21 12z"/><path d="M12 8v4.5"/><path d="M12 15.6h.01"/></svg></button>
 
     <!-- CFO CONSELHEIRO — botão flutuante -->
-    <button class="cfo-btn-flutuante ativo" id="btn-cfo" onclick="toggleCFO()" title="CFO Conselheiro">🤖</button>
+    <button class="cfo-btn-flutuante ativo" id="btn-cfo" onclick="toggleCFO()" title="Conselheiro financeiro (IA)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.2L18 8.8l-4.4 1.6L12 14.6l-1.6-4.2L6 8.8l4.4-1.6z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/><path d="M5.5 15.5l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg></button>
 
     <!-- CFO CONSELHEIRO — modal chat -->
     <div class="cfo-modal" id="cfo-modal">
@@ -945,32 +945,16 @@
           </div>
         </div>
         
-        <!-- Motor de Reposição (P11) -->
+        <!-- Regras de reposição: ficam na Sugestão de compras -->
         <div class="card mb-2">
-          <div class="card-header"><div class="card-title">Motor de Reposição — Regras Globais</div></div>
+          <div class="card-header"><div class="card-title">Regras de reposição de estoque</div></div>
           <div class="card-body">
-            <div style="font-size:11px;color:#666;margin-bottom:12px;">Estas são as regras padrão para todos os componentes. Você pode sobrescrevê-las individualmente em cada componente.</div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Meta FULL (dias)</label>
-                <input type="number" id="cfg-meta-full" value="30" min="0" max="365" oninput="metaFullDias=+this.value||30;salvar();renderEstoqueIfActive()">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Meta galpão (dias)</label>
-                <input type="number" id="cfg-meta-galpao" value="30" min="0" max="365" oninput="metaGalpaoDias=+this.value||30;salvar();renderEstoqueIfActive()">
-              </div>
+            <div style="font-size:13px;margin-bottom:12px;line-height:1.55;">Para quantos dias ter estoque, prazo do fornecedor, estoque de segurança, sazonalidade e produtos fora de linha ficam em um lugar só: as <b>Regras de compra</b> da Sugestão de compras.</div>
+            <button type="button" class="btn-out" onclick="nav('compras');setTimeout(function(){ if(typeof comprasParametros === 'function') comprasParametros(); }, 600)">Abrir Regras de compra</button>
+            <div style="display:none;">
+              <input type="number" id="cfg-meta-full" value="30"><input type="number" id="cfg-meta-galpao" value="30">
+              <input type="number" id="cfg-dias-seg" value="15"><input type="number" id="cfg-alerta-critico" value="15">
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Dias de segurança</label>
-                <input type="number" id="cfg-dias-seg" value="15" min="0" max="90" oninput="diasSeguranca=+this.value||15;salvar();renderEstoqueIfActive()">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Alerta crítico (dias)</label>
-                <input type="number" id="cfg-alerta-critico" value="15" min="0" max="90" oninput="alertaCriticoDias=+this.value||15;salvar();renderEstoqueIfActive()">
-              </div>
-            </div>
-            <div style="font-size:11px;color:#999;">Meta total = FULL + Galpão + Segurança. Ex: 30+30+15 = 75 dias de cobertura.</div>
           </div>
         </div>
 
@@ -2374,6 +2358,7 @@
   <script src="src/analise.js"></script>
   <script src="src/config-abas.js"></script>
   <script src="src/compras.js"></script>
+  <script src="src/compras-lista.js"></script>
   <script src="src/ia-conector.js"></script>
   <script src="src/olist.js"></script>
   <script src="src/compras-ordens.js"></script>

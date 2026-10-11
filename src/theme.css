@@ -1005,3 +1005,23 @@ input[type="checkbox"]{accent-color:var(--primary);}
 .pv-chave div{display:flex;flex-direction:column;gap:2px;font-size:13.5px;}
 .pv-chave div span{font-size:12.5px;color:var(--text-muted);}
 @media(max-width:860px){.pv-corpo{grid-template-columns:1fr;}.pv-prod{flex-basis:100%;white-space:normal;}}
+.cp-sel-barra{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;background:color-mix(in srgb,var(--primary) 10%,var(--surface));border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:13px;position:sticky;top:0;z-index:5;}
+
+/* contraste sutil entre linhas e colunas das tabelas */
+.rf-table tbody tr:nth-child(even) td,.fx-table tbody tr:nth-child(even) td,.cp-tab tbody tr:nth-child(even) td,.dre-tab tbody tr:nth-child(even):not(.dre-res):not(.dre-entrada):not(.dre-saida):not(.dre-grupo) td{background:color-mix(in srgb,var(--text) 3.2%,transparent);}
+.rf-table td+td,.rf-table th+th,.fx-table td+td,.fx-table th+th,.dre-tab td+td,.dre-tab th+th{border-left:1px solid color-mix(in srgb,var(--text) 6%,transparent);}
+.rf-table tbody tr:hover td,.fx-table tbody tr:hover td,.cp-tab tbody tr:hover td{background:color-mix(in srgb,var(--primary) 7%,transparent);}
+.venda:nth-of-type(even){background:color-mix(in srgb,var(--text) 2.4%,var(--surface));}
+.venda>div+div{border-left:1px solid color-mix(in srgb,var(--text) 6%,transparent);padding-left:14px;}
+@media (max-width:1100px){.venda>div+div{border-left:0;padding-left:0;}}
+/* botões da venda */
+.btn-out.v-bt-msg{border-color:var(--primary);color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent);}
+.btn-out.v-bt-ml{border-color:#e6c200;color:#3b3400;background:#ffe600;font-weight:600;}
+.btn-out.v-bt-ml:hover{background:#ffd900;}
+.v-prod a{flex:none;line-height:0;}
+.v-prod a:hover .v-thumb{outline:2px solid var(--primary);}
+/* feriado no calendário */
+.cal-feriado{display:inline-block;margin-left:5px;font-size:9.5px;font-weight:600;line-height:1.3;padding:0 5px;border-radius:999px;background:color-mix(in srgb,var(--danger) 13%,transparent);color:var(--danger);max-width:calc(100% - 22px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;}
+/* ícones dos botões flutuantes no padrão do menu */
+#btn-feedback svg,#btn-cfo svg{display:block;}
+#btn-feedback{background:var(--surface);color:var(--text-2);border:1px solid var(--ctl-border);}
