@@ -215,7 +215,7 @@
     function saldoInformado(){
       const d = new Date(), agora = dateStr(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
       if(!_lj.ativo && lojasVarias()) return;          // em "Todas" os campos não são editáveis
-      saldoLojasDaVez().forEach(k => { saldoEm[k] = agora; });
+      saldoLojasDaVez().forEach(k => { saldoEm[k] = agora; saldoEm[k + '#base'] = { d: getToday(), v: hojeRecebido(k) }; });
     }
     function saldoMovimento(loja){
       const em = saldoEm[loja]; if(!em || !saldoAutoLigado) return null;
@@ -223,11 +223,9 @@
       const daLoja = c => loja === '_' || String(c || '') === loja;
       // dias inteiros já passados (extrato) + as horas de hoje que já caíram
       let entrou = (typeof extratoTodos !== 'undefined' ? extratoTodos : []).filter(e => daLoja(e.conta) && e.data > emD && e.data < hoje).reduce((s, e) => s + (Number(e.val_liquido) || 0), 0);
-      try {
-        const porConta = JSON.parse(localStorage.getItem('mk_liberacoes_hoje_contas') || 'null');
-        const horas = porConta ? Object.keys(porConta).filter(daLoja).flatMap(c => porConta[c] || []) : (loja === '_' ? JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]') : []);
-        horas.forEach(i => { const h = parseInt(i.hora); if(h < horaAgora && (emD < hoje || h >= emH)) entrou += Number(i.val) || 0; });
-      } catch(e){}
+      // hoje: o que já caiu; se o saldo foi informado hoje, só o que caiu depois daquele momento
+      const rec = hojeRecebido(loja), base = saldoEm[loja + '#base'];
+      entrou += emD < hoje ? rec : Math.max(0, rec - (base && base.d === hoje ? Number(base.v) || 0 : rec));
       const pagas = (typeof pagTodos === 'function' ? pagTodos() : pagamentos).filter(p => p.pago && !p.oculta && (loja === '_' || lojaDe(p) === loja) && String(p.dataPaga || '') > emD);
       const saiu = pagas.reduce((s, p) => s + (Number(p.valorPago != null ? p.valorPago : p.val) || 0), 0);
       return { em, entrou, saiu, n: pagas.length };
@@ -266,7 +264,44 @@
       const s = saldosLoja[loja] || (saldosLoja[loja] = { mp: 0, outros: 0 });
       s[campo] = parseMoney(valor);
       const d = new Date(); saldoEm[loja] = dateStr(d) + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      saldoEm[loja + '#base'] = { d: getToday(), v: hojeRecebido(loja) };
       lojasSaldosRecortar(); saldoRecalcular(); lojasTravarSaldos();
       if(typeof salvarCfg === 'function') salvarCfg();
       if(typeof recalc === 'function') recalc();
+    }
+
+    // ===== O QUE CAIU HOJE =====
+    // A lista de "liberações de hoje" do Mercado Livre vai perdendo o que já foi liberado, então não serve para saber
+    // quanto caiu. O total do dia vem do que estava confirmado para hoje na véspera (foto diária em snapshots_ml,
+    // já carregada pela curva; ou a cópia que o navegador guarda das liberações futuras). Recebido = total − pendente.
+    function hojeGuardarPrevisto(){
+      try {
+        const hoje = getToday(), m = JSON.parse(localStorage.getItem('mk_previsto_dia') || '{}');
+        (typeof liberacoesTodas !== 'undefined' ? liberacoesTodas : []).forEach(x => { if(x.data > hoje && x.data <= addDias(hoje, 3)){ m[x.data] = m[x.data] || {}; m[x.data][x.conta || '_'] = 0; } });
+        (typeof liberacoesTodas !== 'undefined' ? liberacoesTodas : []).forEach(x => { if(x.data > hoje && x.data <= addDias(hoje, 3)) m[x.data][x.conta || '_'] += Number(x.val) || 0; });
+        Object.keys(m).forEach(d => { if(d < addDias(hoje, -2)) delete m[d]; });
+        localStorage.setItem('mk_previsto_dia', JSON.stringify(m));
+      } catch(e){}
+    }
+    // loja: ml_user_id, ou '' / '_' para todas
+    function hojeTotalPrevisto(loja){
+      const hoje = getToday(), todas = !loja || loja === '_', da = c => todas || String(c || '') === loja;
+      let foto = 0, dataFoto = '';
+      if(typeof curva !== 'undefined' && curva.linhas) curva.linhas.forEach(s => { if(s.data_recebimento === hoje && s.data_captura < hoje && s.data_captura >= addDias(hoje, -4) && s.data_captura > dataFoto) dataFoto = s.data_captura; });
+      if(dataFoto) curva.linhas.forEach(s => { if(s.data_recebimento === hoje && s.data_captura === dataFoto && da(s.ml_user_id)) foto += Number(s.val) || 0; });
+      let local = 0;
+      try { const m = (JSON.parse(localStorage.getItem('mk_previsto_dia') || '{}'))[hoje] || {}; Object.keys(m).forEach(c => { if(da(c === '_' ? '' : c) || todas) local += Number(m[c]) || 0; }); } catch(e){}
+      return Math.max(foto, local);
+    }
+    function hojePendente(loja){
+      const todas = !loja || loja === '_', hAgora = new Date().getHours();
+      try {
+        const porConta = JSON.parse(localStorage.getItem('mk_liberacoes_hoje_contas') || 'null');
+        const horas = porConta ? Object.keys(porConta).filter(c => todas || c === loja).flatMap(c => porConta[c] || []) : JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]');
+        return { falta: horas.filter(i => parseInt(i.hora) >= hAgora).reduce((s, i) => s + (Number(i.val) || 0), 0), visto: horas.filter(i => parseInt(i.hora) < hAgora).reduce((s, i) => s + (Number(i.val) || 0), 0) };
+      } catch(e){ return { falta: 0, visto: 0 }; }
+    }
+    function hojeRecebido(loja){
+      const p = hojePendente(loja);
+      return Math.max(0, p.visto, hojeTotalPrevisto(loja) - p.falta);
     }

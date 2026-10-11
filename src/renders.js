@@ -211,7 +211,7 @@
         // hoje: o que já caiu do Mercado Livre aparece na linha (senão o dia fica zerado e parece negativo no fim da tarde).
         // No saldo acumulado só entra o que ainda falta cair: o que já caiu está no saldo em caixa.
         let jaCaiu = 0;
-        if(d === hoje){ try { const hAgora = new Date().getHours(); jaCaiu = JSON.parse(localStorage.getItem('mk_liberacoes_hoje') || '[]').filter(i => parseInt(i.hora) < hAgora).reduce((s, i) => s + (Number(i.val) || 0), 0); } catch(err){} }
+        if(d === hoje){ try { jaCaiu = typeof hojeRecebido === 'function' ? hojeRecebido(typeof contaAtiva !== 'undefined' ? contaAtiva : '') : 0; } catch(err){} }
         dias.push({ d, e, entrada, pag, jaCaiu, saldoDia: entrada + jaCaiu - pag, saldoAcum });
         d = addDias(d, 1);
       }

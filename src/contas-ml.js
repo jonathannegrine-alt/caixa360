@@ -30,6 +30,7 @@
     function definirDadosML(libRows, extRows){
       if(libRows) liberacoesTodas = libRows.map(l => ({ data: l.data, val: l.val, conta: l.ml_user_id || '' }));
       if(extRows) extratoTodos = extRows.map(e => ({ data: e.data, val_liquido: e.val_liquido, qtd_pedidos: e.qtd_pedidos, conta: e.ml_user_id || '' }));
+      if(libRows && typeof hojeGuardarPrevisto === 'function') hojeGuardarPrevisto();
       aplicarContaAtiva(false);
     }
 
