@@ -389,10 +389,11 @@
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas.length ? linhas : [{ SKU: '', 'Produto': '', 'Quantidade contada': '' }]), 'Contagem');
       XLSX.writeFile(wb, 'contagem_de_estoque_modelo.xlsx');
     }
-    function esoContagemPlanilha(){
+    function esoContagemPlanilha(arq){
       const dep = est.depositos.find(d => d.id === esoCtDep);
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.xlsx,.xls,.csv'; inp.id = 'eso-planilha';
-      inp.onchange = () => { const f = inp.files[0]; if(!f) return; const rd = new FileReader(); rd.onload = e => {
+      const _ler = () => {
+        const f = arq || inp.files[0]; if(!f) return; const rd = new FileReader(); rd.onload = e => {
         try {
           const wb = XLSX.read(e.target.result, { type: 'array' }), rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
           if(!rows.length){ alert('A planilha está vazia.'); return; }
@@ -410,7 +411,8 @@
           const quando = m ? new Date().getFullYear() + '-' + m[1] + '-' + m[2] + 'T' + m[3] + ':' + m[4] : new Date().toISOString().substring(0, 16);
           esoContagemRevisar([...mapa.values()], upseller ? 'Planilha da UpSeller' : 'Planilha modelo', f.name, quando);
         } catch(err){ alert('Não consegui ler a planilha: ' + err.message); } }; rd.readAsArrayBuffer(f); };
-      inp.click();
+      inp.onchange = () => (typeof impGuarda === 'function' ? impGuarda(arq || inp.files[0], ["contagem_modelo","upseller_estoque"], true) : Promise.resolve(true)).then(ok => { if(ok) _ler(); });
+      if(arq) inp.onchange(); else inp.click();
     }
     function esoContagemDigitar(){
       const dep = est.depositos.find(d => d.id === esoCtDep);

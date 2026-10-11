@@ -523,11 +523,11 @@
     }
 
     // Relatório de Compras da UpSeller: fornecedor da última compra de cada SKU
-    function comprasImportarPO(){
+    function comprasImportarPO(arq){
       const inp = document.createElement('input');
       inp.type = 'file'; inp.accept = '.xlsx,.xls';
-      inp.onchange = () => {
-        const file = inp.files[0]; if(!file) return;
+      const _ler = () => {
+        const file = arq || inp.files[0]; if(!file) return;
         const rd = new FileReader();
         rd.onload = e => {
           try {
@@ -546,7 +546,8 @@
         };
         rd.readAsArrayBuffer(file);
       };
-      inp.click();
+      inp.onchange = () => (typeof impGuarda === 'function' ? impGuarda(arq || inp.files[0], ["upseller_compras"], false) : Promise.resolve(true)).then(ok => { if(ok) _ler(); });
+      if(arq) inp.onchange(); else inp.click();
     }
 
     function comprasExportar(){

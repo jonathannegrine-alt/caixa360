@@ -49,8 +49,10 @@
     }
 
     // ---------- leitura do PDF ----------
-    async function fxEscolher(inp){
-      const file = inp.files && inp.files[0]; inp.value = ''; if(!file) return;
+    async function fxEscolher(inp){ const file = inp.files && inp.files[0]; inp.value = ''; return fxArquivo(file); }
+    async function fxArquivo(file){
+      if(!file) return;
+      if(!/\.pdf$/i.test(file.name || '') && file.type !== 'application/pdf'){ fx.erro = 'este arquivo não é um PDF. A fatura do transportador vem em PDF.'; fx.fat = null; fx.linhas = []; fxDesenhar(); return; }
       fx.erro = ''; fx.fat = null; fx.linhas = []; fx.lendo = 'Lendo o PDF…'; fxDesenhar();
       try {
         await fxScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');

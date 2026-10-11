@@ -425,11 +425,11 @@
 
     // Carga pela Lista de Estoque da UpSeller: o físico de cada produto passa a ser o "Estoque Atual" da planilha.
     // Grava só a DIFERENÇA para o saldo atual (como uma contagem), e traz o custo médio.
-    function estCargaPlanilha(){
+    function estCargaPlanilha(arq){
       const dep = est.depositos.find(d => d.id === est.dep); if(!dep) return;
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.xlsx,.xls';
-      inp.onchange = () => {
-        const file = inp.files[0]; if(!file) return;
+      const _ler = () => {
+        const file = arq || inp.files[0]; if(!file) return;
         const rd = new FileReader();
         rd.onload = async e => {
           try {
@@ -464,5 +464,6 @@
         };
         rd.readAsArrayBuffer(file);
       };
-      inp.click();
+      inp.onchange = () => (typeof impGuarda === 'function' ? impGuarda(arq || inp.files[0], ["upseller_estoque"], true) : Promise.resolve(true)).then(ok => { if(ok) _ler(); });
+      if(arq) inp.onchange(); else inp.click();
     }
