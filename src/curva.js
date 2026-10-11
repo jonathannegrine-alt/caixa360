@@ -9,6 +9,13 @@
 // patCfg.curvaDesde (AAAA-MM-DD): ignora fotos anteriores a essa data (quando a coleta antiga não era confiável).
 
     const CURVA_MIN = 14, CURVA_DIAS = 45;
+    // data de corte: fica em patCfg.curvaDesde e numa cópia local (sobrevive a uma aba antiga que regrave a configuração)
+    function curvaCorte(){
+      let d = (typeof patCfg !== 'undefined' && patCfg && patCfg.curvaDesde) || '';
+      try { if(d) localStorage.setItem('mk_curva_desde', d); else d = localStorage.getItem('mk_curva_desde') || ''; } catch(e){}
+      if(d && typeof patCfg !== 'undefined' && patCfg && !patCfg.curvaDesde) patCfg.curvaDesde = d;
+      return d;
+    }
     let curva = { linhas: [], f: {}, n: {}, carregada: false, ate: 0 };
 
     async function curvaCarregar(){
@@ -29,7 +36,7 @@
       curva.f = {}; curva.n = {}; curva.ate = 0;
       if(!curva.carregada) return;
       const conta = typeof contaAtiva !== 'undefined' ? contaAtiva : '';
-      const corte = (typeof patCfg !== 'undefined' && patCfg && patCfg.curvaDesde) || '';
+      const corte = curvaCorte();
       const foto = new Map(), dias = new Set();
       curva.linhas.forEach(s => {
         if(conta && String(s.ml_user_id || '') !== conta) return;
@@ -72,7 +79,7 @@
     function curvaStatusHtml(){
       if(!curva.carregada) return '';
       const ativos = Object.keys(curva.f).map(Number).filter(d => d >= 8 && curvaFator(d));
-      const corte = (typeof patCfg !== 'undefined' && patCfg && patCfg.curvaDesde) || '';
+      const corte = curvaCorte();
       let txt;
       if(ativos.length){
         const de = Math.min(...ativos), ate = Math.max(...ativos);

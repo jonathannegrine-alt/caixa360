@@ -145,7 +145,7 @@
         const faltam = (j.contas || []).filter(c => !c.temDetalhe && !String(c.situacao).startsWith('cancel'));
         if(faltam.length) olistDetalhes(faltam);   // categoria e competência, em segundo plano
         olistPagamentos();                          // data real de pagamento (API nova), em segundo plano
-        if(olist.v3 && Date.now() - Number(localStorage.getItem('mk_olist_cat_em') || 0) > 86400000) olistImportarCategorias().then(() => olistRedesenhar()).catch(() => {});
+        if(olist.v3 && (Date.now() - Number(localStorage.getItem('mk_olist_cat_em') || 0) > 86400000 || !categorias.some(c => c.grupo))) olistImportarCategorias().then(() => olistRedesenhar()).catch(() => {});
       } finally { olist.sincronizando = false; if(manual || document.getElementById('cfg-olist-card')) olistRenderCard(); }
     }
 

@@ -17,7 +17,8 @@
     function lojaPadraoId(){
       const cs = typeof contasML !== 'undefined' ? contasML : [];
       if(lojaPadrao && (!cs.length || cs.some(c => c.id === lojaPadrao))) return lojaPadrao;
-      return cs[0] ? cs[0].id : '';
+      // sem escolha gravada: a conta mais antiga (menor número no Mercado Livre) — não depende da ordem de leitura
+      return cs.length ? cs.map(c => c.id).sort((a, b) => Number(a) - Number(b))[0] : '';
     }
     function lojaDe(p){ return (p && p.loja) || lojaPadraoId(); }
     function lojaAtiva(){ return _lj.ativo ? _lj.loja : ''; }
@@ -117,11 +118,17 @@
     }
 
     // ----- configuração (vai dentro de configuracoes.cfg) -----
-    function lojasCfg(){ lojasSaldosAbsorver(); return { lojaPadrao: lojaPadrao || null, saldosLoja }; }
+    function lojasCfg(){
+      lojasSaldosAbsorver();
+      try { if(lojaPadrao) localStorage.setItem('mk_loja_padrao', lojaPadrao); localStorage.setItem('mk_saldos_loja', JSON.stringify(saldosLoja)); } catch(e){}
+      return { lojaPadrao: lojaPadrao || null, saldosLoja };
+    }
     function lojasCarregarCfg(c){
       if(!c) return;
       if(c.lojaPadrao) lojaPadrao = String(c.lojaPadrao);
-      if(c.saldosLoja && typeof c.saldosLoja === 'object') saldosLoja = c.saldosLoja;
+      else { try { lojaPadrao = localStorage.getItem('mk_loja_padrao') || lojaPadrao; } catch(e){} }   // cópia local: sobrevive a uma aba antiga que regrave a configuração
+      if(c.saldosLoja && typeof c.saldosLoja === 'object' && Object.keys(c.saldosLoja).length) saldosLoja = c.saldosLoja;
+      else { try { const s = JSON.parse(localStorage.getItem('mk_saldos_loja') || 'null'); if(s && typeof s === 'object') saldosLoja = s; } catch(e){} }
     }
     function lojasDefinirPadrao(id){
       lojasAbsorver(); lojaPadrao = String(id || ''); lojasRecortar();
