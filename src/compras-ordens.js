@@ -90,7 +90,7 @@
       host.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Ordens de compra</div><div class="pg-sub">As ordens vêm do Olist. Aqui você confere a chegada da mercadoria; o que ainda não chegou conta como estoque a caminho.</div></div>
-          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="ocAtualizar(this)">Atualizar do Olist</button><button class="btn btn-sm" onclick="ocCriar()">+ Nova ordem</button></div>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="if(typeof pepsAbrir==='function')pepsAbrir()" title="Fila de lotes de cada produto: o custo das vendas acompanha o preço de cada compra">Custo por lote</button><button class="btn-out btn-sm" onclick="ocAtualizar(this)">Atualizar do Olist</button><button class="btn btn-sm" onclick="ocCriar()">+ Nova ordem</button></div>
         </div>
         ${oc.erro ? `<div class="alert alert-danger">${ocEsc(oc.erro)}</div>` : ''}
         <div class="kpi-grid k4i">
@@ -127,7 +127,7 @@
       const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return;
       const r = ocResumo(o), aberta = r.sit === 'A receber' || r.sit === 'Parcial';
       const hist = oc.receb.filter(x => Number(x.ordem_id) === Number(id));
-      const dth = t => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const dth = t => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
       vmlModal(`Ordem nº ${ocEsc(o.numero || o.id)} — ${ocEsc(o.fornecedor || '')}`, `
         ${r.antiga ? '<div class="alert alert-info">Esta ordem já estava como atendida no Olist antes de a conferência existir aqui, então aparece como recebida.</div>' : ''}
         <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">Comprado</th><th class="num">Já recebido</th><th class="num">Falta</th>${aberta ? '<th class="num">Chegou agora <a class="fx-link" style="color:var(--primary);font-size:11px;margin-left:6px;" onclick="ocReceberTudo()">receber tudo</a></th>' : ''}</tr></thead><tbody>
@@ -135,7 +135,11 @@
             ${aberta ? `<td class="num"><input type="number" min="0" step="1" class="cp-dias oc-qtd" style="width:110px !important;" data-sku="${ocEsc(i.sku)}" data-falta="${i.falta}" placeholder="0" ${i.falta ? '' : 'disabled'}></td>` : ''}</tr>`).join('')}
         </tbody></table></div>
         ${aberta ? `
-          <div class="form-group" style="margin-top:14px;"><label class="form-label">Observação (opcional)</label><input type="text" id="oc-obs" placeholder="Ex.: conferido por Ricardo, 2 caixas avariadas"></div>
+          <div class="form-row" style="margin-top:14px;">
+            <div class="form-group" style="max-width:210px;"><label class="form-label">Data em que chegou</label><input type="date" id="oc-data" value="${getToday()}" max="${getToday()}"></div>
+            <div class="form-group"><label class="form-label">Observação (opcional)</label><input type="text" id="oc-obs" placeholder="Ex.: conferido por Ricardo, 2 caixas avariadas"></div>
+          </div>
+          <div class="text-muted" style="font-size:12px;margin:-4px 0 10px;">Se a mercadoria chegou em outro dia, informe a data certa: o custo por lote usa essa data para saber a partir de quando o preço desta compra vale.</div>
           <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;"><input type="checkbox" id="oc-ja" style="margin-top:3px;"><span><b>Estas unidades já estão contadas no estoque do galpão</b><br><span class="text-muted">Marque quando estiver registrando uma chegada antiga, que já entrou na última lista de estoque importada. Sem marcar, a quantidade é somada ao galpão.</span></span></label>` : ''}
         ${hist.length ? `<div class="form-label" style="margin-top:18px;">Chegadas já lançadas</div><table><tbody>
           ${hist.map(h => `<tr><td>${dth(h.recebido_em)}</td><td><b>${ocEsc(h.sku)}</b></td><td style="text-align:right;">${ocInt(h.qtd)} un.</td><td class="text-muted" style="font-size:12px;">${h.somou === false ? 'sem somar ao galpão' : 'somado ao galpão'}${h.obs ? ' · ' + ocEsc(h.obs) : ''}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="ocDesfazer(${h.id})">Desfazer</button></td></tr>`).join('')}
@@ -176,10 +180,13 @@
       const acima = linhas.filter(l => l.qtd > l.falta);
       if(acima.length && !confirm('Em ' + acima.length + ' produto(s) a quantidade informada é maior do que a que faltava (' + acima.map(l => l.sku).join(', ') + '). Lançar assim mesmo?')) return;
       if(btn){ btn.disabled = true; btn.textContent = 'Lançando…'; }
-      const { data, error } = await supa.from('compras_recebimentos').insert(linhas.map(l => ({ usuario_id: usuarioAtual.id, ordem_id: Number(id), sku: l.sku, qtd: l.qtd, obs: obs || null, somou: !ja }))).select();
+      // chegada de hoje fica com a hora de agora; de outro dia, meio-dia daquele dia
+      const dia = (document.getElementById('oc-data')?.value || '').trim(), quando = dia && dia !== getToday() ? new Date(dia + 'T12:00:00').toISOString() : new Date().toISOString();
+      const { data, error } = await supa.from('compras_recebimentos').insert(linhas.map(l => ({ usuario_id: usuarioAtual.id, ordem_id: Number(id), sku: l.sku, qtd: l.qtd, obs: obs || null, somou: !ja, recebido_em: quando }))).select();
       if(error){ alert('Não consegui lançar a chegada: ' + error.message); if(btn){ btn.disabled = false; btn.textContent = 'Lançar chegada'; } return; }
       oc.receb = (data || []).concat(oc.receb);
       if(!ja) await ocNoEstoque(linhas.map(l => { const it = (o.itens || []).find(i => ocN(i.sku) === ocN(l.sku)); return { sku: l.sku, qtd: l.qtd, descricao: it && it.descricao, custo_unit: it && Number(it.valor) > 0 ? Number(it.valor) : null }; }), 'compra', 'OC ' + (o.numero || o.id), obs);
+      if(typeof pepsRecalcular === 'function') pepsRecalcular(false);   // a chegada vira um lote de custo
       fecharModal('modal-vml');
       ocDesenhar();
     }
@@ -191,6 +198,7 @@
       if(error){ alert('Não consegui desfazer: ' + error.message); return; }
       oc.receb = oc.receb.filter(x => Number(x.id) !== Number(recId));
       if(h.somou !== false){ const o = oc.ordens.find(x => Number(x.id) === Number(h.ordem_id)); await ocNoEstoque([{ sku: h.sku, qtd: -Number(h.qtd) }], 'ajuste', 'OC ' + ((o && o.numero) || h.ordem_id), 'Chegada desfeita'); }
+      if(typeof pepsRecalcular === 'function') pepsRecalcular(false);
       ocDesenhar();
       ocConferir(h.ordem_id);
     }

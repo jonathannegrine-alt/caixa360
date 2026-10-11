@@ -41,7 +41,8 @@ begin
 
   update public.vendas_ml v
      set custo_unit  = case when coalesce(a.fc, false) then a.c else v.custo_unit  end,
-         imposto_pct = case when coalesce(a.fi, false) then a.i else v.imposto_pct end
+         imposto_pct = case when coalesce(a.fi, false) then a.i else v.imposto_pct end,
+         custo_manual = case when coalesce(a.fc, false) then (p_custo_modo = 'valor') else v.custo_manual end
     from _alvo a
    where v.ctid = a.id and v.usuario_id = uid;
   get diagnostics n = row_count;
