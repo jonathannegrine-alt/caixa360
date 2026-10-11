@@ -57,15 +57,17 @@
     function lojasSaldosAbsorver(){
       const n = v => Number(v) || 0;
       if(_lj.ativo) saldosLoja[_lj.loja] = { mp: n(saldoMP), outros: n(saldoOutros) };
-      else if(!lojasVarias() && lojaPadraoId()) saldosLoja[lojaPadraoId()] = { mp: n(saldoMP), outros: n(saldoOutros) };
+      // loja única: só depois que a lista de contas carregou (antes disso não dá para saber se há uma ou várias,
+      // e o saldo somado das lojas acabava gravado na loja padrão)
+      else if(_lj.contasOk && contasML.length === 1) saldosLoja[contasML[0].id] = { mp: n(saldoMP), outros: n(saldoOutros) };
     }
     function lojasSaldosRecortar(){
       const ids = Object.keys(saldosLoja);
-      if(!ids.length || (!_lj.ativo && !lojasVarias())) return;
+      if(!ids.length || (!_lj.ativo && !lojasVarias() && (_lj.contasOk || ids.length < 2))) return;
       const n = v => Number(v) || 0;
       if(_lj.ativo){ const s = saldosLoja[_lj.loja] || {}; saldoMP = n(s.mp); saldoOutros = n(s.outros); }
       else {
-        const vivos = ids.filter(id => contasML.some(c => c.id === id));
+        const vivos = ids.filter(id => !/#/.test(id) && (!_lj.contasOk || contasML.some(c => c.id === id)));
         saldoMP = vivos.reduce((t, id) => t + n(saldosLoja[id].mp), 0);
         saldoOutros = vivos.reduce((t, id) => t + n(saldosLoja[id].outros), 0);
       }
@@ -111,6 +113,7 @@
 
     // chamado quando a lista de contas do ML termina de carregar
     function lojasAposContas(){
+      _lj.contasOk = true;
       if(!contasML.length) return;
       if(!Object.keys(saldosLoja).length && (saldoMP || saldoOutros)){
         // primeira vez: o saldo que existia era um só; fica na loja padrão até o ML informar o de cada conta
