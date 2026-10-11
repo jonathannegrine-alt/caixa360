@@ -40,6 +40,14 @@ gestaomk/
                         seleção múltipla pagar
     relatorios-cfo.js ← fmtM/fmtP utils, alertas internos, P5 DRE, P6 Comparativo Mensal,
                         P12 Saúde Patrimonial, CFO Conselheiro (IA)
+    lojas.js          ← LOJAS SEPARADAS: pagamentosTodos (tudo) x pagamentos (recorte da loja ativa), saldosLoja,
+                        lojaPadrao; pagTodos()/lojasAbrir()/lojasFechar() para quem precisa do conjunto completo;
+                        lista de contas ML em Configurações (desconectar, loja padrão); toast()
+    curva.js          ← curva de maturação dos recebíveis (snapshots_ml x extrato); curvaFator(dias) usado em getEntrada
+    pagar-form.js     ← formulário de conta a pagar no modelo Olist (substitui abrirModalLanc/editarLanc/abrirModalSerie)
+    analise.js        ← página Análise de vendas (anRender): 12 meses, produtos, compradores, estados, cancelamentos, ADS
+    pos-venda.js      ← página Pós-venda com IA (fila, histórico, regras, automação) — Edge Function pos-venda
+    compras-lista.js  ← marcar produtos na Sugestão de compras e gerar lista em PDF (jsPDF sob demanda)
     contas-ml.js      ← GRUPOS DE CONTAS ML: contasML, contaAtiva ("" = todas), liberacoesTodas/extratoTodos,
                         aplicarContaAtiva() recorta liberacoes e extratoHistorico; seletor na barra lateral
     vendas-ml.js      ← páginas Vendas (renderVendas, gráfico comparativo) e Resumo Financeiro (renderResumoFin,
@@ -118,7 +126,7 @@ Dados em `localStorage` (sync) + Supabase (async, fire-and-forget):
 
 ### Navigation pages
 
-`inicio` (página inicial) · `dashboard` · `planilha` · `pagar` · `receber` · `simulador` · `vendas` · `resumo-fin` · `perguntas` · `mensagens` · `compras` · `skus` · `estoque` · `ordens-compra` · `analise` · `resultado` · `patrimonio` · `config`  
+`inicio` (página inicial) · `dashboard` · `planilha` · `pagar` · `emprestimos` · `receber` · `simulador` · `vendas` · `resumo-fin` · `posvenda` · `perguntas` · `mensagens` · `compras` · `skus` · `estoque` · `ordens-compra` · `analise` · `resultado` · `patrimonio` · `config`  
 Cada página → `id="view-{page}"` em `index.html` e `render{Page}()` em `renders.js`
 
 ## Development workflow
@@ -150,6 +158,14 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - Edge Functions (supabase/functions/): ml-callback, ml-sync, ml-snapshot (cron diário 06:00 BRT), ml-vendas
   (cron ml-vendas-sync a cada 15 min), ml-atendimento, mcp (conector de IA, chave pessoal), ml-inventory, cfo-chat. Deploy: `supabase functions deploy <nome> --project-ref qasrccmtrllotukyeiax`
   (ml-sync, ml-snapshot, ml-vendas, ml-atendimento, mcp e ml-callback com `--no-verify-jwt`)
+- GRAVAÇÃO POR LINHA: salvarSupabase() compara com a base lida do banco (_sinc.base) e só inclui/altera/exclui o que
+  mudou (pagamentos, categorias, skus); nunca apagar-tudo-e-inserir. Depois de gravar avisa as outras abas
+  (BroadcastChannel 'caixa360'), que recarregam sozinhas (sincRecarregar). Leitura paginada com supaTudo().
+- LOJAS: pagamentos.loja / emprestimos.loja = ml_user_id (vazio = loja padrão em cfg.lojaPadrao). Código que varre
+  TODAS as contas a pagar deve usar pagTodos() ou lojasAbrir()/lojasFechar(), nunca o array pagamentos direto.
+- PÓS-VENDA: tabelas pos_venda_cfg/casos/log; função pos-venda (--no-verify-jwt; cron 'pos-venda' aos 12 e 42 min, só
+  para pos_venda_cfg.ativo). Nada é enviado ao ML sem aprovação, a não ser com auto_msg/auto_dinheiro ligados.
+- Outras funções novas: ml-ads (anúncios pagos), ml-envios também grava vendas_ml.uf (estado do comprador).
 - VÁRIAS CONTAS ML POR USUÁRIO: ml_tokens tem PK (usuario_id, ml_user_id). Todo PATCH/DELETE em ml_tokens e toda
   gravação em liberacoes/extrato_historico/snapshots_ml/vendas_ml/vendas_ml_dias precisa do ml_user_id.
 - Custo por venda: vendas_ml.custo_unit/imposto_pct ficam gravados (RPC vendas_ml_carimbar); mudar o cadastro
