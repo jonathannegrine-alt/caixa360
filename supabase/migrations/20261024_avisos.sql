@@ -55,3 +55,6 @@ do $$ declare t text; begin
     execute format('create trigger demo_so_leitura before insert or update or delete on public.%I for each row execute function demo.bloqueia()', t);
   end loop;
 end $$;
+
+-- O administrador é a conta dona do sistema (o e-mail de login dela pode ser diferente do e-mail de contato).
+insert into public.app_admin (email) select lower(email) from auth.users where id = 'd8a29095-56ad-447a-b72f-e463df5ccf78' on conflict do nothing;
