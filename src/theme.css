@@ -1275,3 +1275,21 @@ a.pv-venda:hover{border-bottom-style:solid;}
   .an-uf.an-est{grid-template-columns:24px 1fr 96px 44px;}.an-uf.an-est .an-uf-t{display:none;}.an-uf.an-est .an-uf-n{display:block;}
   .an-fx,.an-fx.an-sem{grid-template-columns:1fr 96px 60px;}.an-fx .an-uf-t,.an-fx .an-uf-p{display:none;}
 }
+
+/* Central de promoções e conferência de frete */
+.pm-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;}
+.pm-card{text-align:left;border:1px solid var(--border);border-left:4px solid var(--primary);background:var(--surface-2);border-radius:12px;padding:11px 13px;cursor:pointer;display:flex;flex-direction:column;gap:2px;color:var(--text);font:inherit;}
+.pm-card:hover{border-color:var(--primary);} .pm-card.on{background:var(--primary);color:#fff;border-color:var(--primary);}
+.pm-card b{font-size:13.5px;} .pm-card span{font-size:12px;opacity:.8;} .pm-card small{font-size:11.5px;opacity:.75;} .pm-card i{font-style:normal;font-weight:650;} .pm-card .pm-urg{color:var(--danger);} .pm-card.on .pm-urg{color:#fff;}
+.pm-an{display:flex;gap:10px;align-items:center;min-width:260px;max-width:380px;}
+.pm-an img,.pm-sem{width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--surface-2);flex-shrink:0;}
+.pm-an b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px;}
+.pm-an small,.pm-tab td small{display:block;font-size:11.5px;color:var(--text-muted);}
+.pm-tab td.pm-promo,.pm-tab th.pm-promo{background:color-mix(in srgb,var(--primary) 6%,transparent);}
+.pm-tab .pm-baixa{color:#d97706;}
+.fr-visto{opacity:.5;}
+.v-tag.fr-so{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);}
+.fr-fam{padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.fr-fam-l{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+.fr-fam-l span{border:1px solid var(--border);border-radius:8px;padding:4px 9px;font-size:12.5px;background:var(--surface-2);}
+.fr-fam-l span.dif{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent);}

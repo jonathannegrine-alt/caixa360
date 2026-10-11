@@ -95,6 +95,18 @@ Deno.serve(async (req: Request) => {
       return resp({ ok: true, origem: 'mercado_livre', pdf: b64(buf), envio: sid })
     }
 
+    // DANFE (PDF da nota) para imprimir: só existe para nota que o emissor do Mercado Livre conhece
+    if (body?.acao === 'danfe') {
+      const inv = await g(`${ML}/users/${v.ml_user_id}/invoices/orders/${pedido}`)
+      const loc = String(inv?.attributes?.danfe_location || '')
+      const candidatos = [loc ? (loc.startsWith('http') ? loc : ML + (loc.startsWith('/') ? '' : '/') + loc) : '', inv?.id ? `${ML}/users/${v.ml_user_id}/invoices/documents/danfe/${inv.id}` : ''].filter(Boolean)
+      for (const url of candidatos) {
+        const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tk } }).catch(() => null)
+        if (r && r.ok && (r.headers.get('content-type') || '').includes('pdf')) return resp({ ok: true, pdf: b64(await r.arrayBuffer()) })
+      }
+      return resp({ ok: false, motivo: 'O Mercado Livre não entregou o PDF desta nota. Use a chave de acesso para consultar e imprimir no portal da nota fiscal.' })
+    }
+
     if (body?.acao === 'nota') {
       const inv = await g(`${ML}/users/${v.ml_user_id}/invoices/orders/${pedido}`)
       if (inv && (inv.attributes?.invoice_key || inv.invoice_number)) {

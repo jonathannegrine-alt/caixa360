@@ -469,15 +469,27 @@
       // o que acabou de ser lido passa a aparecer no cartão
       if(e && vdDados.extra){ const x = vdDados.extra[orderId] || (vdDados.extra[orderId] = {}); x.cidade = e.cidade || x.cidade; x.uf = e.uf || x.uf; x.cep = e.cep || x.cep; x.rastreio = e.rastreio || x.rastreio; x.envio_status = e.status || x.envio_status; }
     }
+    // abre um PDF (base64) em outra aba, pronto para imprimir
+    function vdAbrirPdf(b64){
+      const bin = atob(b64), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u], { type: 'application/pdf' }));
+      const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+    async function vdDanfe(orderId, bt){
+      const rot = bt.textContent; bt.disabled = true; bt.textContent = 'Buscando a nota…';
+      let d; try { d = await vdFuncao({ acao: 'danfe', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
+      bt.disabled = false; bt.textContent = rot;
+      const m = document.getElementById('vd-danfe-msg');
+      if(d && d.ok && d.pdf){ vdAbrirPdf(d.pdf); if(m) m.textContent = 'Nota aberta em outra aba.'; }
+      else if(m) m.textContent = (d && (d.motivo || d.error)) || 'Não foi possível abrir a nota.';
+    }
     async function vdEtiqueta(orderId, bt){
       const msg = document.getElementById('vd-det-msg'), rot = bt.textContent; bt.disabled = true; bt.textContent = 'Buscando etiqueta…'; if(msg) msg.textContent = '';
       let d; try { d = await vdFuncao({ acao: 'etiqueta', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
       bt.disabled = false; bt.textContent = rot;
       if(d && d.ok && d.pdf){
-        const bin = atob(d.pdf), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-        const url = URL.createObjectURL(new Blob([u], { type: 'application/pdf' }));
-        const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.download = ''; a.removeAttribute('download'); document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        vdAbrirPdf(d.pdf);
         if(msg) msg.textContent = d.origem === 'guardada' ? 'Etiqueta aberta (cópia guardada no Caixa 360).' : 'Etiqueta aberta e cópia guardada por 12 meses.';
       } else if(msg) msg.textContent = (d && (d.motivo || d.error)) || 'Não foi possível abrir a etiqueta.';
     }
@@ -491,7 +503,7 @@
       el.innerHTML = `<div class="vd-sec vd-foco"><h4>Nota fiscal <small class="text-muted" style="font-weight:500;">· ${vmlEsc(d.origem)}</small></h4><div class="vd-cols">
         ${l('Número', vmlEsc(String(d.numero)) + (d.serie ? ' · série ' + vmlEsc(String(d.serie)) : ''))}${l('Emitida em', d.emitida ? ptDate(String(d.emitida).substring(0, 10)) : '')}${l('Valor', d.valor ? 'R$ ' + vmlNum(d.valor) : '')}${l('Situação', vmlEsc(String(d.situacao || '')))}
         ${d.chave ? `<div class="vd-l vd-larga"><span class="text-muted">Chave de acesso</span><b style="word-break:break-all;">${vmlEsc(d.chave)} ${cp(d.chave)}</b></div>` : ''}
-        </div>${d.chave ? `<div style="margin-top:8px;font-size:12.5px;"><a href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=" target="_blank" rel="noopener">Consultar no portal da nota fiscal</a> <span class="text-muted">(cole a chave copiada)</span></div>` : ''}</div>`;
+        </div><div class="vd-acoes" style="margin-top:10px;"><button class="btn btn-sm" onclick="vdDanfe('${orderId}', this)" title="Abre o PDF da nota (DANFE) em outra aba para imprimir. Nada é guardado.">🖨 Imprimir nota (DANFE)</button>${d.chave ? `<a href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=" target="_blank" rel="noopener" style="font-size:12.5px;">Consultar no portal da nota fiscal</a>` : ''}<span id="vd-danfe-msg" class="text-muted" style="font-size:12.5px;"></span></div></div>`;
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
     // separa "N sem custo ou imposto" em custo e imposto (duas contagens rápidas)

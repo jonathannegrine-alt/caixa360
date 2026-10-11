@@ -276,7 +276,7 @@
       const porReg = Object.entries(reg).map(([n, ufs]) => ({ n, bruto: com.filter(x => ufs.includes(x.uf)).reduce((s, x) => s + x.bruto, 0) })).sort((a, b) => b.bruto - a.bruto);
       let ac = 0, n80 = 0; for(const x of com){ ac += x.bruto; n80++; if(ac >= tot * 0.8) break; }
       const por = {}; com.forEach(x => { por[x.uf] = x; });
-      const mapa = Object.entries(AN_MAPA).map(([uf, [c, l]]) => { const x = por[uf], f = x ? x.bruto / max : 0;
+      const mapa = Object.entries(AN_MAPA).map(([uf, [c, l]]) => { const x = por[uf], f = x ? Math.sqrt(x.bruto / max) : 0;   // raiz: os estados menores não somem ao lado de SP
         return `<button class="an-mp${x ? '' : ' vazio'}" style="grid-column:${c + 1};grid-row:${l + 1};--f:${(0.10 + f * 0.9).toFixed(2)};" onclick="anCidades('${uf}')" title="${AN_UF[uf]}${x ? ': ' + fmt(x.bruto) + ' · ' + anN(x.vendas) + ' vendas · ' + anP(x.bruto, tot) : ': sem vendas no período'}"><b>${uf}</b>${x ? '<small>' + anP(x.bruto, tot, x.bruto / tot < 0.01 ? 1 : 0) + '</small>' : ''}</button>`; }).join('');
       return `
         <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));">
