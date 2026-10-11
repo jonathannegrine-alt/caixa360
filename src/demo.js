@@ -41,11 +41,16 @@
           if(p.startsWith('/functions/v1/')){
             const nome = p.split('/')[3];
             if(nome === 'ml-inventory') return resp((await dado('inventory', h)) || { ok: true, itens: [], contas: [] });
-            if(nome === 'ml-ads') return resp((await dado('ads', h)) || { ok: true, anuncios: [], contas: [] });
+            if(nome === 'ml-ads'){
+              const ads = (await dado('ads', h)) || { ok: true, anuncios: [], contas: [] };
+              // os dados de exemplo são de 30 dias: para um pedido de um dia só (Início), mostra a média diária
+              if(corpo && corpo.de && corpo.de === corpo.ate) return resp({ ok: true, contas: [], anuncios: (ads.anuncios || []).map(a => { const o = Object.assign({}, a); ['cliques', 'impressoes', 'investimento', 'vendas_ads', 'diretas', 'indiretas', 'un_ads', 'un_organicas', 'organicas'].forEach(k => { o[k] = Math.round((Number(o[k]) || 0) / 30 * 100) / 100; }); return o; }) });
+              return resp(ads);
+            }
             if(DESLIGADAS.includes(nome)) return resp({ error: 'Na demonstração esta função fica desligada. Crie a sua conta para usar com a sua loja.' });
             return resp({ ok: true, demo: true });
           }
-          if(p.startsWith('/storage/v1/')) return m === 'GET' ? orig(input, init) : resp({ Key: 'demo' });
+          if(p.startsWith('/storage/v1/')){ if(m === 'GET') return orig(input, init); if(p.includes('/object/list/')) return resp([]); aviso(); return resp({ Key: 'demo' }); }
           if(p.startsWith('/rest/v1/')){
             const alvo = p.slice(9);
             if(alvo === 'ml_tokens'){
@@ -76,6 +81,9 @@
         const f = document.createElement('div'); f.className = 'demo-faixa';
         f.innerHTML = '<b>Demonstração</b><span>Dados fictícios. Mexa à vontade: nada é gravado.</span><a href="' + location.pathname + '">Criar minha conta</a>';
         document.body.appendChild(f);
+        // menu todo aberto na primeira visita, para o visitante ver o que existe
+        if(!localStorage.getItem('mk_nav_secs')){ localStorage.setItem('mk_nav_secs', JSON.stringify([...new Set([...document.querySelectorAll('.nav-sec[data-sec]')].map(s => s.dataset.sec))])); if(typeof aplicarNavSecs === 'function') aplicarNavSecs(); }
+        window.sair = function(){ location.href = location.pathname; };   // sair da demonstração = ir para a tela de entrada
         const m = document.getElementById('login-sync-msg'); if(m) m.textContent = 'Abrindo a demonstração…';
         const sy = document.getElementById('login-sync'), fo = document.querySelector('.login-form'), ta = document.querySelector('.login-tabs');
         if(sy) sy.style.display = 'flex'; if(fo) fo.style.display = 'none'; if(ta) ta.style.display = 'none';
