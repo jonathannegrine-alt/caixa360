@@ -151,11 +151,13 @@
       const xc = g.mL + (g.W - g.mL - g.mR) / g.n * (i + 0.5);
       cur.setAttribute('x1', xc); cur.setAttribute('x2', xc); cur.style.display = '';
       const dia = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][parseDate(d.data).getDay()];
+      const ant = i > 0 && painelSerie[i - 1] ? painelSerie[i - 1].saldo : null, var1 = ant == null ? null : d.saldo - ant;
       tip.innerHTML = `<b>${dia}, ${ptDate(d.data)}</b>
+        <div class="tot" style="border-top:0;margin-top:2px;padding-top:0;"><span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#6366f1;margin-right:6px;"></i>Saldo projetado</span><span style="color:${d.saldo < 0 ? 'var(--danger)' : '#6366f1'}">${fmt(d.saldo)}</span></div>
+        ${var1 == null ? '' : `<div><span>Variação no dia</span><span style="color:${var1 < 0 ? 'var(--danger)' : 'var(--success)'}">${var1 < 0 ? '− ' : '+ '}${fmt(Math.abs(var1))}</span></div>`}
         <div><span>Entrada confirmada</span><span style="color:var(--success)">${fmt(d.conf)}</span></div>
         ${d.proj > 0 ? `<div><span>Entrada projetada</span><span style="color:var(--success)">${fmt(d.proj)}</span></div>` : ''}
-        <div><span>Contas a pagar</span><span style="color:var(--danger)">${fmt(d.saida)}</span></div>
-        <div class="tot"><span>Saldo no fim do dia</span><span>${fmt(d.saldo)}</span></div>`;
+        <div><span>Contas a pagar</span><span style="color:var(--danger)">${fmt(d.saida)}</span></div>`;
       tip.style.display = 'block';
       const px = xc / g.W * r.width;
       tip.style.left = Math.min(Math.max(8, px + 14), r.width - tip.offsetWidth - 8) + 'px';
