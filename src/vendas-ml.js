@@ -754,7 +754,8 @@
       const rodape = `<div id="aj-msg" style="margin-top:12px;"></div>`;
       const botoes = `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn-out btn" id="aj-conf" onclick="rfAjOk(true)">Conferir</button><button class="btn" id="aj-ok" onclick="rfAjOk(false)">Aplicar</button>`;
       // guarda o que já foi digitado ao trocar de aba/opção
-      const g = id => document.getElementById(id), ant = g('aj-de') ? { sku: g('aj-sku').value, todos: g('aj-todos').checked, de: g('aj-de').value, ate: g('aj-ate').value, contas: g('aj-contas') ? g('aj-contas').checked : null, vazias: g('aj-vazias') ? g('aj-vazias').checked : null } : null;
+      const g = id => document.getElementById(id), ant = !rfAj.novo && g('aj-de') ? { sku: g('aj-sku').value, todos: g('aj-todos').checked, de: g('aj-de').value, ate: g('aj-ate').value, contas: g('aj-contas') ? g('aj-contas').checked : null, vazias: g('aj-vazias') ? g('aj-vazias').checked : null } : null;
+      rfAj.novo = false;
       if(rfAj.tipo === 'rep'){
         vmlModal('Reprocessar custo & imposto', `
           <div class="alert alert-info" style="margin-bottom:14px;">Atualiza o custo e o imposto das vendas com os valores <b>atualmente cadastrados</b> em Produtos.</div>
@@ -780,8 +781,8 @@
         if(g('aj-vazias') && ant.vazias !== null) g('aj-vazias').checked = ant.vazias; }
     }
     function rfAjLimpa(){ const m = document.getElementById('aj-msg'); if(m) m.innerHTML = ''; }
-    function rfNivelar(){ rfFecharMenus(); fecharModal('modal-vml'); rfAj = { tipo: 'niv', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false }; setTimeout(rfAjDesenhar, 0); }
-    function rfReprocessar(){ rfFecharMenus(); fecharModal('modal-vml'); rfAj = { tipo: 'rep', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false }; setTimeout(rfAjDesenhar, 0); }
+    function rfNivelar(){ rfFecharMenus(); fecharModal('modal-vml'); rfAj = { tipo: 'niv', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false, novo: true }; rfAjDesenhar(); }
+    function rfReprocessar(){ rfFecharMenus(); fecharModal('modal-vml'); rfAj = { tipo: 'rep', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false, novo: true }; rfAjDesenhar(); }
 
     async function rfAjOk(simular){
       const g = id => document.getElementById(id), msg = g('aj-msg');
