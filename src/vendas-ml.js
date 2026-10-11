@@ -781,8 +781,8 @@
         if(g('aj-vazias') && ant.vazias !== null) g('aj-vazias').checked = ant.vazias; }
     }
     function rfAjLimpa(){ const m = document.getElementById('aj-msg'); if(m) m.innerHTML = ''; }
-    function rfNivelar(){ rfFecharMenus(); fecharModal('modal-vml'); rfAj = { tipo: 'niv', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false, novo: true }; rfAjDesenhar(); }
-    function rfReprocessar(){ rfFecharMenus(); fecharModal('modal-vml'); rfAj = { tipo: 'rep', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false, novo: true }; rfAjDesenhar(); }
+    function rfNivelar(){ rfFecharMenus(); rfAj = { tipo: 'niv', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false, novo: true }; rfAjDesenhar(); }
+    function rfReprocessar(){ rfFecharMenus(); rfAj = { tipo: 'rep', aba: 'nivelar', oque: 'ambos', cNa: false, iNa: false, novo: true }; rfAjDesenhar(); }
 
     async function rfAjOk(simular){
       const g = id => document.getElementById(id), msg = g('aj-msg');
