@@ -4,7 +4,10 @@
 // Olist não troca mais o grupo dela.
     const CAT_CORES = ['#4f46e5', '#0891b2', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#0d9488', '#be185d', '#65a30d', '#475569'];
     const catEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    function catGrupos(){ return [...new Set(categorias.map(c => c.grupo).filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
+    // grupos vazios (ainda sem categoria) ficam guardados no navegador e na configuração do usuário
+    function catVazios(){ try { return JSON.parse(localStorage.getItem('mk_cat_grupos') || '[]').filter(g => typeof g === 'string' && g.trim()); } catch(e){ return []; } }
+    function catVaziosGravar(l){ try { localStorage.setItem('mk_cat_grupos', JSON.stringify([...new Set(l)])); } catch(e){} if(typeof salvarCfg === 'function') try { salvarCfg(); } catch(e){} }
+    function catGrupos(){ return [...new Set(categorias.map(c => c.grupo).filter(Boolean).concat(catVazios()))].sort((a, b) => a.localeCompare(b)); }
     function catDepois(){ salvar(); renderCategorias(); atualizarSelectCategorias(); if(typeof dreDesenhar === 'function'){ try { dreDesenhar(); } catch(e){} } }
     function renderCategorias(){
       const tbody = document.getElementById('tbody-categorias'); if(!tbody) return;
@@ -50,14 +53,14 @@
     // novo grupo: nasce com a primeira categoria (um grupo só existe enquanto tem categoria dentro)
     function catNovoGrupo(){
       const soltas = categorias.filter(c => !c.grupo).map(c => c.nome).sort((a, b) => a.localeCompare(b));
-      catJanela('Novo grupo de categorias', catCampo('cat-gnome', 'Nome do grupo', '', 'Ex.: Despesas administrativas') + catCampo('cat-gprim', 'Primeira categoria do grupo', '', 'Ex.: Contador') +
+      catJanela('Novo grupo de categorias', catCampo('cat-gnome', 'Nome do grupo', '', 'Ex.: Despesas administrativas') + catCampo('cat-gprim', 'Primeira categoria do grupo (opcional)', '', 'Ex.: Contador') +
         (soltas.length ? `<div class="text-muted" style="font-size:12.5px;line-height:1.5;">Ou deixe o campo acima vazio e escolha uma categoria que está sem grupo:<br><select id="cat-gsolta" style="width:100%;margin-top:6px;"><option value="">— nenhuma —</option>${soltas.map(n => `<option value="${catEsc(n)}">${catEsc(n)}</option>`).join('')}</select></div>` : ''), 'catSalvarGrupo()', 'Criar grupo');
     }
     function catSalvarGrupo(){
       const g = (document.getElementById('cat-gnome').value || '').trim(), prim = (document.getElementById('cat-gprim').value || '').trim(), solta = (document.getElementById('cat-gsolta') || {}).value || '';
       if(!g){ catErro('Dê um nome para o grupo.'); return; }
       if(catGrupos().some(x => x.toLowerCase() === g.toLowerCase())){ catErro('Já existe um grupo com esse nome.'); return; }
-      if(!prim && !solta){ catErro('Informe a primeira categoria do grupo (ou escolha uma que está sem grupo).'); return; }
+      if(!prim && !solta){ catVaziosGravar(catVazios().concat([g])); fecharModal('modal-vml'); catDepois(); return; }
       if(prim){ if(categorias.find(c => c.nome.toLowerCase() === prim.toLowerCase())){ catErro('Já existe uma categoria chamada "' + prim + '". Escolha outro nome ou mova a existente.'); return; } categorias.push({ nome: prim, impactaDRE: true, tipoPassivo: 'divida', grupo: g, grupoManual: true }); }
       else { const c = categorias.find(x => x.nome === solta); if(c){ c.grupo = g; c.grupoManual = true; } }
       fecharModal('modal-vml'); catDepois();
@@ -68,6 +71,7 @@
       if(!novo){ catErro('Dê um nome para o grupo.'); return; }
       if(novo !== antigo && catGrupos().some(x => x.toLowerCase() === novo.toLowerCase())){ catErro('Já existe um grupo com esse nome. Para juntar os dois, mova as categorias.'); return; }
       categorias.forEach(c => { if(c.grupo === antigo){ c.grupo = novo; c.grupoManual = true; } });
+      if(catVazios().includes(antigo)) catVaziosGravar(catVazios().map(x => x === antigo ? novo : x));
       fecharModal('modal-vml'); catDepois();
     }
     // excluir grupo: as categorias não são apagadas, só mudam de grupo
@@ -80,6 +84,7 @@
     function catSalvarExclusao(g){
       const dest = document.getElementById('cat-gdest').value || null;
       categorias.forEach(c => { if(c.grupo === g){ c.grupo = dest; c.grupoManual = true; } });
+      catVaziosGravar(catVazios().filter(x => x !== g));
       fecharModal('modal-vml'); catDepois();
     }
     function catMover(idx, grupo){ const c = categorias[idx]; if(!c) return; c.grupo = grupo || null; c.grupoManual = true; catDepois(); }
