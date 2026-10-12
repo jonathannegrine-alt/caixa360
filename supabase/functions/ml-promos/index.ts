@@ -57,16 +57,25 @@ Deno.serve(async (req: Request) => {
       if (!ids.length) return resp({ ok: true, itens: [] })
       const linhas: any[] = []
       const taxas = new Map<string, number>()
-      // último envio de cada anúncio, um do Full e um de agência/coleta: é dele que sai a medida que o ML registrou para o produto
-      const vs: any[] = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&item_id=in.(${ids.join(',')})&status=eq.paid&shipping_id=not.is.null&logistic_type=neq.self_service&select=item_id,shipping_id,logistic_type&order=data_venda.desc&limit=4000`, { headers: dbH }).then(r => r.json()).catch(() => [])
-      const ultimo = new Map<string, string>()
-      for (const v of (Array.isArray(vs) ? vs : [])) { const k = v.item_id + '|' + (v.logistic_type === 'fulfillment' ? 'full' : 'ag'); if (!ultimo.has(k)) ultimo.set(k, String(v.shipping_id)) }
+      // Medida que o ML registrou: a do PACOTE dos últimos envios de 1 unidade do anúncio (um conjunto do Full e um de
+      // agência/coleta). A medida "do item" em /shipments/{id}/items não serve: às vezes vem de outra origem
+      // (optimal_box) com números que não são os da embalagem. Lê até 3 envios e fica com a medida que mais se repete.
+      const vs: any[] = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&item_id=in.(${ids.join(',')})&status=eq.paid&qtd=eq.1&shipping_id=not.is.null&logistic_type=neq.self_service&select=item_id,shipping_id,logistic_type&order=data_venda.desc&limit=6000`, { headers: dbH }).then(r => r.json()).catch(() => [])
+      const lista = Array.isArray(vs) ? vs : []
+      const vezes = new Map<string, number>(); for (const v of lista) vezes.set(String(v.shipping_id), (vezes.get(String(v.shipping_id)) || 0) + 1)
+      const ultimos = new Map<string, string[]>()
+      for (const v of lista) { if (vezes.get(String(v.shipping_id)) !== 1) continue; const k = v.item_id + '|' + (v.logistic_type === 'fulfillment' ? 'full' : 'ag'); const l = ultimos.get(k) || []; if (l.length < 3) { l.push(String(v.shipping_id)); ultimos.set(k, l) } }
       const medidaEnvio = async (item: string, tipo: string) => {
-        const sid = ultimo.get(item + '|' + tipo); if (!sid) return null
-        const si: any = await g(`${ML}/shipments/${sid}/items`)
-        const e = (Array.isArray(si) ? si : []).find((x: any) => x?.item_id === item); const d = e?.dimensions
-        if (!d || !(Number(d.height) > 0)) return null
-        return { a: Number(d.height), l: Number(d.width), c: Number(d.length), g: Number(d.weight) || null, envio: sid, origem: e?.dimensions_source?.origin || null }
+        const sids = ultimos.get(item + '|' + tipo) || []; if (!sids.length) return null
+        const lidas = await Promise.all(sids.map(async sid => {
+          const r = await fetch(`${ML}/shipments/${sid}`, { headers: { Authorization: 'Bearer ' + tk, 'x-format-new': 'true' } }).catch(() => null)
+          const j: any = r && r.ok ? await r.json().catch(() => null) : null; const d = j?.dimensions
+          return d && Number(d.height) > 0 && Number(d.width) > 0 && Number(d.length) > 0 ? { a: Number(d.height), l: Number(d.width), c: Number(d.length), g: Number(d.weight) || null, envio: sid, origem: 'pacote' } : null
+        }))
+        const ok = lidas.filter(Boolean) as any[]; if (!ok.length) return null
+        const cont = new Map<string, number>(); ok.forEach(m => { const k = [m.a, m.l, m.c].sort((x, y) => x - y).join('x'); cont.set(k, (cont.get(k) || 0) + 1) })
+        const melhor = [...cont.entries()].sort((x, y) => y[1] - x[1])[0][0]
+        return ok.find(m => [m.a, m.l, m.c].sort((x, y) => x - y).join('x') === melhor)
       }
       for (let i = 0; i < ids.length; i += 20) {
         const lote = ids.slice(i, i + 20)
