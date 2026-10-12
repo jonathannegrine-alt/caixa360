@@ -3,8 +3,8 @@
 // O DRE soma por mês do dia da cobrança: a competência sai exata mesmo com a fatura indo do dia 23 ao dia 22.
 //
 // A API de faturamento aceita só 5 consultas por minuto por conta. Por isso a função trabalha aos poucos:
-// cada chamada faz no máximo 4 consultas por conta e guarda onde parou (ml_fatura_periodos.prox).
-//   cron (a cada 2 min)  body { cron: true, secret }   → todas as contas com algo a ler
+// cada chamada faz no máximo 4 consultas ao todo e guarda onde parou (ml_fatura_periodos.prox).
+//   cron (a cada minuto)   body { cron: true, secret }   → todas as contas com algo a ler
 //   tela                 body { acao: 'sync' } + JWT    → as contas do usuário (a tela repete até acabar)
 // Passos por conta:  1) lista de faturas (1 vez por dia)   GET /billing/integration/monthly/periods
 //                    2) resumo da fatura → tipos de cobrança que ela tem; tipo novo é sondado e classificado
@@ -44,9 +44,14 @@ Deno.serve(async (req: Request) => {
     const tiposRows = await db('ml_fatura_tipos?select=sub_type,classe').then(r => r.json()).catch(() => [])
     const tipos = new Map<string, string>((Array.isArray(tiposRows) ? tiposRows : []).map((t: any) => [String(t.sub_type), String(t.classe)]))
     const inicio = Date.now(), saida: any[] = []
+    // o limite de 5 consultas por minuto parece valer para o aplicativo inteiro: o orçamento é da chamada toda,
+    // e a cada minuto a fila começa por uma conta diferente
+    let usadas = 0, limite = false
+    const gira = Math.floor(Date.now() / 60000) % contas.length
+    const fila = [...contas.slice(gira), ...contas.slice(0, gira)]
 
-    for (const t of contas) {
-      if (Date.now() - inicio > 100000) break
+    for (const t of fila) {
+      if (Date.now() - inicio > 100000 || limite || usadas >= POR_CHAMADA) break
       const conta = String(t.ml_user_id), uid = String(t.usuario_id), chave = `usuario_id=eq.${uid}&ml_user_id=eq.${conta}`
       const info: any = { conta, consultas: 0 }
       saida.push(info)
@@ -68,10 +73,9 @@ Deno.serve(async (req: Request) => {
           token = novo.access_token
           await db(`ml_tokens?${chave}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ access_token: novo.access_token, refresh_token: novo.refresh_token, expires_at: new Date(Date.now() + (Number(novo.expires_in) || 21600) * 1000).toISOString(), updated_at: new Date().toISOString() }) })
         }
-        let limite = false
         const ml = async (caminho: string) => {
-          if (limite || info.consultas >= POR_CHAMADA) return null
-          info.consultas++
+          if (limite || usadas >= POR_CHAMADA) return null
+          info.consultas++; usadas++
           const r = await fetch(ML + caminho, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000) }).catch(() => null)
           if (!r) return null
           if (r.status === 429) { limite = true; info.limite = true; return null }
@@ -98,7 +102,7 @@ Deno.serve(async (req: Request) => {
 
         // 2 e 3) faturas pendentes, da mais nova para a mais antiga
         for (const p of periodos.filter(x => !x.completo)) {
-          if (limite || info.consultas >= POR_CHAMADA) break
+          if (limite || usadas >= POR_CHAMADA) break
           const pk = `${chave}&periodo=eq.${p.periodo}`
           if (!Array.isArray(p.tipos)) {
             const s = await ml(`/periods/key/${p.periodo}/summary/details?group=ML&document_type=BILL`)
@@ -123,7 +127,7 @@ Deno.serve(async (req: Request) => {
             await db(`ml_fatura_periodos?${pk}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ tipos: p.tipos, prox: 0, completo: !!p.completo }) })
             if (p.completo) continue
           }
-          while (!p.completo && !limite && info.consultas < POR_CHAMADA) {
+          while (!p.completo && !limite && usadas < POR_CHAMADA) {
             const d = await ml(`/periods/key/${p.periodo}/group/ML/details?document_type=BILL&limit=${PAGINA}&offset=${p.prox}&detail_sub_types=${encodeURIComponent(p.tipos.join(','))}&sort_by=ID&order_by=ASC`)
             if (!d) break
             const R: any[] = d.results || []

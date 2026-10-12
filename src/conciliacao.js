@@ -96,6 +96,24 @@
     };
     const CN_AVULSA = { 'Anúncios MClicks': 'Publicidade (Product Ads)', 'Armazenamento Full': 'Armazenagem no Full', 'Cobrança de DIFAL': 'DIFAL (imposto interestadual)', 'Inconformidade no envio ao Full': 'Multa por envio fora do padrão ao Full', 'Estoque antigo no Full': 'Estoque antigo no Full', 'Movimentações de empréstimo': 'Juros de empréstimo do Mercado Pago', 'E-Shop': 'Mensalidade da Minha página' };
 
+    // planilha × fatura lida pela API (src/fatura-ml.js): cada tipo da planilha cai numa classe da fatura
+    const CN_FATURA = { 'Anúncios MClicks': 'pub', 'Armazenamento Full': 'full', 'Estoque antigo no Full': 'full', 'Inconformidade no envio ao Full': 'full', 'Cobrança de DIFAL': 'difal', 'E-Shop': 'loja' };
+    const CN_FATURA_NOME = { pub: 'Publicidade, já sem a bonificação', full: 'Full: armazenagem, estoque antigo e multas', difal: 'DIFAL', loja: 'Mensalidade da loja' };
+    function cnFaturaQuadro(avulsas){
+      if(!cn.fat) return '';
+      const pl = {}, fa = {};
+      avulsas.forEach(a => { const k = CN_FATURA[a.tipo]; if(k) pl[k] = (pl[k] || 0) + Number(a.valor || 0); });
+      cn.fat.forEach(x => { if(CN_FATURA_NOME[x.classe]) fa[x.classe] = (fa[x.classe] || 0) + Number(x.valor || 0); });
+      const ks = Object.keys(CN_FATURA_NOME).filter(k => pl[k] || fa[k]);
+      if(!ks.length) return '';
+      const semFatura = !cn.fat.length;
+      return `<div class="card"><div class="card-header"><div class="card-title">Planilha × fatura lida direto do Mercado Livre</div></div>
+        <div class="text-muted" style="margin-bottom:10px;">A fatura é lida sozinha, todo dia, e é ela que alimenta o DRE quando você escolhe a entrada automática. Aqui os dois números ficam lado a lado, somando as cobranças de ${cnD(cn.de)} a ${cnD(cn.ate)}.</div>
+        ${semFatura ? '<div class="alert alert-info">A fatura deste período ainda não foi lida. A primeira leitura leva cerca de uma hora.</div>' : `<div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Cobrança</th><th class="num">Na planilha</th><th class="num">Na fatura</th><th class="num">Diferença</th><th></th></tr></thead><tbody>
+        ${ks.map(k => { const a = pl[k] || 0, b = fa[k] || 0, d = Math.round((b - a) * 100) / 100, ok = Math.abs(d) < 0.05;
+          return `<tr><td><b>${CN_FATURA_NOME[k]}</b></td><td class="num">${cnR(a)}</td><td class="num">${cnR(b)}</td><td class="num" style="font-weight:700;${ok ? '' : 'color:var(--danger);'}">${ok ? '–' : cnR(d)}</td><td>${ok ? '<span class="v-tag conta">confere</span>' : '<span class="v-tag">diferente</span>'}</td></tr>`; }).join('')}
+        </tbody></table></div>`}</div>`;
+    }
     async function cnRender(){
       const view = document.getElementById('view-conciliacao'); if(!view) return;
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
@@ -104,8 +122,8 @@
       if(cv && (!cn.de || cn.contaPer !== conta)){ cn.de = cv.de; cn.ate = cv.ate; cn.contaPer = conta; cn.res = null; cn.div = null; }
       if(cv && !cn.res){
         cn.carregando = true; cn.erro = ''; cnDesenhar();
-        const [a, b] = await Promise.all([supa.rpc('concil_resumo', { p_de: cn.de, p_ate: cn.ate, p_conta: conta }), supa.rpc('concil_divergencias', { p_de: cn.de, p_ate: cn.ate, p_conta: conta })]);
-        if(a.error || b.error) cn.erro = (a.error || b.error).message; else { cn.res = a.data || {}; cn.div = b.data || []; }
+        const [a, b, f] = await Promise.all([supa.rpc('concil_resumo', { p_de: cn.de, p_ate: cn.ate, p_conta: conta }), supa.rpc('concil_divergencias', { p_de: cn.de, p_ate: cn.ate, p_conta: conta }), supa.rpc('ml_fatura_detalhe', { p_de: cn.de, p_ate: cn.ate, p_conta: conta })]);
+        if(a.error || b.error) cn.erro = (a.error || b.error).message; else { cn.res = a.data || {}; cn.div = b.data || []; cn.fat = f.error ? null : (f.data || []); }
       }
       cn.carregando = false; cnDesenhar();
     }
@@ -196,7 +214,7 @@
           <div class="text-muted" style="margin-bottom:10px;">São valores que o Mercado Livre cobra na fatura ou desconta do saldo e que não entram na margem de nenhuma venda. Para o lucro do mês ficar certo, precisam estar no seu DRE.</div>
           ${avulsas.length ? `<div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Cobrança</th><th>Como aparece no relatório</th><th class="num">Lançamentos</th><th class="num">Valor</th></tr></thead><tbody>
             ${avulsas.map(a => `<tr><td><b>${cnE(CN_AVULSA[a.tipo] || a.tipo)}</b></td><td class="text-muted">${cnE(a.nome)}</td><td class="num">${a.n}</td><td class="num" style="font-weight:700;">${cnR(a.valor)}</td></tr>`).join('')}
-            </tbody><tfoot><tr><td colspan="3"><b>Total do período</b></td><td class="num"><b>${cnR(totAv)}</b></td></tr></tfoot></table></div>` : '<div class="vazio"><b>Nenhuma cobrança fora das vendas no período</b>Este quadro vem do relatório "por vendas".</div>'}</div>`;
+            </tbody><tfoot><tr><td colspan="3"><b>Total do período</b></td><td class="num"><b>${cnR(totAv)}</b></td></tr></tfoot></table></div>` : '<div class="vazio"><b>Nenhuma cobrança fora das vendas no período</b>Este quadro vem do relatório "por vendas".</div>'}</div>` + cnFaturaQuadro(avulsas);
       } else if(cn.aba === 'dias'){
         const dias = {}; (R.dias || []).forEach(x => { const d = dias[x.data] = dias[x.data] || { lib: 0, est: 0, env: 0, cash: 0, sai: 0, outros: 0 }; const v = Number(x.v) || 0;
           if(x.tipo === 'Liberação') d.lib += v; else if(x.tipo === 'Estorno de liberação') d.est += v; else if(/envio/i.test(x.tipo)) d.env += v; else if(x.tipo === 'Cashback') d.cash += v; else if(/Cofrinhos|Pagamento de crédito|Transferência/i.test(x.tipo)) d.sai += v; else d.outros += v; });

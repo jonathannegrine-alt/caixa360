@@ -85,7 +85,20 @@
         const jm = r.contas.filter(p => /juros/i.test(p.desc || '') && String(p.data || '').slice(0, 7) === ym).reduce((s, p) => s + (Number(p.val) || 0), 0);
         juros += jm > 0 ? jm : r.saldo * tx / 100; });
       const ant = gfMes(gfMesAnt(ym));
-      return { contratos: lista.length, saldo, juros, taxa: saldo ? taxaPond / saldo : 0, parado: gfParado(), lucroAnt: ant.lucro, mesAnt: ant.ym };
+      // sem contrato no módulo de Empréstimos: lê de Contas a pagar (categorias de juros e de amortização/empréstimo)
+      let doPagar = false, contratos = lista.length;
+      if(!lista.length){
+        const P = typeof pagTodos === 'function' ? pagTodos() : (typeof pagamentos !== 'undefined' ? pagamentos : []);
+        const txt = p => (p.cat || '') + ' ' + (p.desc || ''), ehJuros = p => /juros/i.test(txt(p)) && !/juros de mora|multa/i.test(p.cat || '');
+        const ehPrincipal = p => !/juros/i.test(p.cat || '') && /amortiza|empr[eé]stimo|capital de giro|financiamento/i.test(p.cat || '');
+        const nomes = new Set();
+        P.forEach(p => {
+          if(ehJuros(p) && String(p.data || '').slice(0, 7) === ym) juros += Number(p.val) || 0;
+          if(ehPrincipal(p) && !p.pago){ saldo += Number(p.val) || 0; nomes.add(String(p.grupo_id || p.desc || p.cat).replace(/\s*\d+\s*\/\s*\d+\s*$/, '').trim().toLowerCase()); }
+        });
+        contratos = nomes.size; doPagar = contratos > 0 || juros > 0;
+      }
+      return { contratos, saldo, juros, taxa: saldo ? taxaPond / saldo : 0, parado: gfParado(), lucroAnt: ant.lucro, mesAnt: ant.ym, doPagar };
     }
 
     // ---------- bloco no Início e em Empréstimos ----------
@@ -97,7 +110,7 @@
         <div class="gf-barra"><i style="width:${pct}%;background:${cor(E.porDia - E.meta)}"></i></div>
         <div class="text-muted gf-nota">Para pagar ${fmt(E.precisa)} no mês: despesas fixas ${fmt(E.fixo)}${E.variavel ? ', outras despesas ' + fmt(E.variavel) : ''}${E.parcelas ? ' e parcelas de empréstimo ' + fmt(E.parcelas) : ''}. ${E.n > 0 ? 'Até ontem a margem somou ' + fmt(E.mcAcum) + ' em ' + E.n + ' dia' + (E.n > 1 ? 's' : '') + '.' : 'O mês começa hoje.'}</div></div>`;
       const cobre = V.juros > 0 ? V.lucroAnt / V.juros : null;
-      const dv = V.contratos || (V.parado && V.parado.valor > 0) ? `<div class="card gf-card"><div class="card-header"><div class="card-title">Custo da dívida</div><span class="text-muted" style="font-size:12px;">${V.contratos} contrato${V.contratos === 1 ? '' : 's'} · saldo ${fmt(V.saldo)}</span></div>
+      const dv = V.contratos || V.juros > 0 || (V.parado && V.parado.valor > 0) ? `<div class="card gf-card"><div class="card-header"><div class="card-title">Custo da dívida</div><span class="text-muted" style="font-size:12px;" ${V.doPagar ? 'title="Lido de Contas a pagar: categorias de juros e de amortização de empréstimo. Cadastrando os contratos em Financeiro → Empréstimos, passa a valer o cadastro."' : ''}>${V.contratos} ${V.doPagar ? 'empréstimo' : 'contrato'}${V.contratos === 1 ? '' : 's'} · ${V.doPagar ? 'a pagar' : 'saldo'} ${fmt(V.saldo)}${V.doPagar ? ' · de Contas a pagar' : ''}</span></div>
         <div class="gf-eq"><div><small>Juros neste mês</small><b style="color:var(--danger)">${fmt(V.juros)}</b></div><div><small title="Estoque acima de 90 dias de venda, a preço de custo">Parado em estoque</small><b>${V.parado ? fmt(V.parado.valor) : '—'}</b></div><div><small>Lucro de ${gfMesNome(V.mesAnt).split(' de ')[0]}</small><b style="color:${cor(V.lucroAnt)}">${fmt(V.lucroAnt)}</b></div></div>
         <div class="text-muted gf-nota">${V.juros > 0 ? (cobre >= 1 ? 'O lucro do mês passado cobre os juros ' + cobre.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' vez' + (cobre >= 2 ? 'es' : '') + '.' : (V.lucroAnt > 0 ? 'Os juros levam ' + Math.round(V.juros / V.lucroAnt * 100) + '% do lucro do mês passado.' : 'O mês passado não deu lucro para cobrir os juros.')) : (V.contratos ? 'Sem juros lançados para este mês.' : 'Nenhum empréstimo cadastrado: cadastre em Financeiro → Empréstimos para o juro aparecer aqui.')}${V.parado && V.parado.valor > 0 && V.taxa > 0 ? ' O estoque parado, à taxa média de ' + V.taxa.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '% ao mês, custa ' + fmt(V.parado.valor * V.taxa / 100) + ' por mês em juros.' : ''}${V.parado && V.parado.itens.length ? ' Maiores: ' + V.parado.itens.slice(0, 3).map(i => String(i.sku).toUpperCase() + ' ' + fmt(i.valor)).join(', ') + '.' : ''}</div></div>` : '';
       const antM = gfMesAnt(E.ym), fech = `<div class="gf-fech-l"><a onclick="gfFechamento('${antM}', this)">Fechamento de ${gfMesNome(antM)} em PDF</a> · <a onclick="gfFechamento('${E.ym}', this)">parcial de ${gfMesNome(E.ym).split(' de ')[0]}</a></div>`;
