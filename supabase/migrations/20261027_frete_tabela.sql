@@ -109,6 +109,12 @@ end $$;
 grant select on public.ml_itens_base to authenticated;
 grant all on public.ml_itens_base to service_role;
 
+-- Medida do produto registrada pelo ML nos envios (por unidade): Full e agência/coleta separados.
+alter table public.ml_itens_base
+  add column if not exists full_a numeric, add column if not exists full_l numeric, add column if not exists full_c numeric, add column if not exists full_g numeric, add column if not exists full_envio text,
+  add column if not exists ag_a numeric, add column if not exists ag_l numeric, add column if not exists ag_c numeric, add column if not exists ag_g numeric, add column if not exists ag_envio text, add column if not exists ag_origem text,
+  add column if not exists env_lido timestamptz;
+
 -- Peso e medidas conferidos pelo próprio usuário na expedição (opcional). Quem não preenche fica com o peso tarifável do ML.
 create table if not exists public.frete_medidas (
   usuario_id uuid not null references auth.users(id) on delete cascade,
@@ -142,18 +148,20 @@ returns table (ml_user_id text, item_id text) language sql stable as $$
   where v.usuario_id = auth.uid() and v.status = 'paid' and v.item_id is not null and coalesce(v.logistic_type, '') <> 'self_service'
     and (v.data_venda at time zone 'America/Sao_Paulo')::date between p_de and p_ate
     and (coalesce(p_conta, '') = '' or v.ml_user_id = p_conta)
-    and (b.item_id is null or b.lido_em < now() - interval '7 days')
+    and (b.item_id is null or b.lido_em < now() - interval '7 days' or b.env_lido is null or b.env_lido < now() - interval '7 days')
   group by 1, 2 order by count(*) desc limit 400
 $$;
 grant execute on function public.frete_itens_sem_base(date, date, text) to authenticated;
 
 -- Conferência: cada venda (envio com um item só, sem Flex) contra a tabela.
 --   frete devido = tabela[linha de peso do anúncio][faixa do PREÇO DE VENDA] x quantidade
---   linha de peso = a em que o anúncio foi cobrado naquele dia/semana (o peso tarifável lido no ML é o de HOJE e não
---   vale para trás quando houve remedição; ele entra só quando não há venda para servir de base).
+--   linha de peso = a da medida que o próprio ML registrou para o produto nos envios (Full: medição do centro de
+--   distribuição; agência/coleta: a do envio), pelo maior entre o peso e o peso cúbico (A x L x C / 6000).
+--   Sem medida lida, usa a faixa em que o anúncio foi cobrado naquele dia/semana.
 -- Classes: certo | preco (cobrado numa faixa de preço acima) | peso (linha de peso acima) | multiplo (2x, 3x ou 4x o devido)
 --          | total (várias unidades cobradas pelo total do pedido) | outro | peso_menos | preco_menos | sem_base
-create or replace function public.frete_conferencia_tab(p_de date, p_ate date, p_conta text default null)
+drop function if exists public.frete_conferencia_tab(date, date, text);
+create or replace function public.frete_conferencia_tab(p_de date, p_ate date, p_conta text default null, p_envio text default null)
 returns jsonb language sql stable as $$
   with ver as (select distinct desde from public.frete_tabela),
   base as materialized (
@@ -164,6 +172,7 @@ returns jsonb language sql stable as $$
       and coalesce(v.frete_vendedor, 0) > 0 and coalesce(v.logistic_type, '') <> 'self_service' and v.qtd > 0
       and (v.data_venda at time zone 'America/Sao_Paulo')::date between p_de and p_ate
       and (coalesce(p_conta, '') = '' or v.ml_user_id = p_conta)
+      and (coalesce(p_envio, '') = '' or (p_envio = 'full' and v.logistic_type = 'fulfillment') or (p_envio = 'ag' and coalesce(v.logistic_type, '') <> 'fulfillment'))
   ),
   s as materialized (
     select b.*, (select max(desde) from ver where desde <= b.dia) as versao, public.frete_faixa(b.preco_unit) as bv, round(b.f / b.qtd, 2) as u
@@ -179,11 +188,22 @@ returns jsonb language sql stable as $$
   habd as materialized (select distinct on (ml_user_id, item_id, versao, dia) ml_user_id, item_id, versao, dia, linha from habc where n >= 3 order by ml_user_id, item_id, versao, dia, n desc, linha),
   habw as materialized (select distinct on (ml_user_id, item_id, versao, sem) ml_user_id, item_id, versao, sem, linha from (select ml_user_id, item_id, versao, date_trunc('week', dia)::date as sem, linha, sum(n) as n from habc group by 1, 2, 3, 4, 5) y order by ml_user_id, item_id, versao, sem, n desc, linha),
   hab as materialized (select distinct on (ml_user_id, item_id, versao) ml_user_id, item_id, versao, linha from (select ml_user_id, item_id, versao, linha, sum(n) as n from habc group by 1, 2, 3, 4) y order by ml_user_id, item_id, versao, n desc, linha),
-  pes as materialized (select p.ml_user_id, p.item_id, p.peso_g from public.ml_itens_base p where p.usuario_id = auth.uid() and p.peso_g > 0),
+  pes as materialized (
+    select p.ml_user_id, p.item_id, nullif(p.peso_g, 0) as peso_g,
+           p.full_a, p.full_l, p.full_c, p.full_g, p.ag_a, p.ag_l, p.ag_c, p.ag_g,
+           nullif(greatest(coalesce(p.full_a * p.full_l * p.full_c / 6.0, 0), coalesce(p.full_g, 0)), 0) as full_conta,
+           nullif(greatest(coalesce(p.ag_a * p.ag_l * p.ag_c / 6.0, 0), coalesce(p.ag_g, 0)), 0) as ag_conta
+    from public.ml_itens_base p where p.usuario_id = auth.uid()
+  ),
   c as materialized (
     select s.*, p.peso_g, h.linha as hab,
+           case when s.logistic_type = 'fulfillment' then p.full_a else p.ag_a end as ma, case when s.logistic_type = 'fulfillment' then p.full_l else p.ag_l end as ml,
+           case when s.logistic_type = 'fulfillment' then p.full_c else p.ag_c end as mc, case when s.logistic_type = 'fulfillment' then p.full_g else p.ag_g end as mg,
+           case when s.logistic_type = 'fulfillment' then p.full_conta else p.ag_conta end as mconta,
            (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g) as lp,
-           coalesce(hd.linha, hw.linha, h.linha, (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g)) as ld
+           (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and (case when s.logistic_type = 'fulfillment' then p.full_conta else p.ag_conta end) <= t.peso_ate_g) as lm,
+           coalesce((select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and (case when s.logistic_type = 'fulfillment' then p.full_conta else p.ag_conta end) <= t.peso_ate_g),
+                    hd.linha, hw.linha, h.linha, (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g)) as ld
     from c0 s
     left join pes p on p.ml_user_id = s.ml_user_id and p.item_id = s.item_id
     left join habd hd on hd.ml_user_id = s.ml_user_id and hd.item_id = s.item_id and hd.versao = s.versao and hd.dia = s.dia
@@ -218,14 +238,15 @@ returns jsonb language sql stable as $$
     'fora', (select count(*) from base where n_env > 1),
     'anuncios', (select count(distinct item_id) from r),
     'com_peso', (select count(distinct item_id) from r where peso_g is not null),
+    'com_medida', (select count(*) from r where lm is not null),
     'resumo', (select coalesce(jsonb_object_agg(classe, jsonb_build_object('n', n, 'mais', mais, 'menos', menos, 'n_mais', n_mais, 'n_menos', n_menos)), '{}'::jsonb) from (
         select classe, count(*) as n, coalesce(sum(dif) filter (where dif > 0.02), 0) as mais, coalesce(-sum(dif) filter (where dif < -0.02), 0) as menos,
                count(*) filter (where dif > 0.02) as n_mais, count(*) filter (where dif < -0.02) as n_menos from r group by 1) x),
     'lista', (select coalesce(jsonb_agg(to_jsonb(x) order by x.data_venda desc), '[]'::jsonb) from (
-        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, lp, bv, versao, faixa_acima, linha_acima, u
+        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, lp, lm, ma, ml, mc, mg, mconta, bv, versao, faixa_acima, linha_acima, u
         from r where classe in ('preco', 'peso', 'multiplo', 'total', 'outro') and dif > 0.02 order by data_venda desc limit 4000) x),
     'menos', (select coalesce(jsonb_agg(to_jsonb(x) order by x.data_venda desc), '[]'::jsonb) from (
-        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, lp, bv, versao, u
+        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, lp, lm, ma, ml, mc, mg, mconta, bv, versao, u
         from r where classe not in ('certo', 'sem_base') and dif < -0.02 order by dif limit 300) x),
     'itens', (select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from (
         select r.item_id, r.ml_user_id, max(r.sku) as sku, max(r.peso_g) as peso_g, count(*) as vendas,
@@ -238,4 +259,4 @@ returns jsonb language sql stable as $$
         from r group by 1, 2) x)
   )
 $$;
-grant execute on function public.frete_conferencia_tab(date, date, text) to authenticated;
+grant execute on function public.frete_conferencia_tab(date, date, text, text) to authenticated;

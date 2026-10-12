@@ -57,6 +57,17 @@ Deno.serve(async (req: Request) => {
       if (!ids.length) return resp({ ok: true, itens: [] })
       const linhas: any[] = []
       const taxas = new Map<string, number>()
+      // último envio de cada anúncio, um do Full e um de agência/coleta: é dele que sai a medida que o ML registrou para o produto
+      const vs: any[] = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&item_id=in.(${ids.join(',')})&status=eq.paid&shipping_id=not.is.null&logistic_type=neq.self_service&select=item_id,shipping_id,logistic_type&order=data_venda.desc&limit=4000`, { headers: dbH }).then(r => r.json()).catch(() => [])
+      const ultimo = new Map<string, string>()
+      for (const v of (Array.isArray(vs) ? vs : [])) { const k = v.item_id + '|' + (v.logistic_type === 'fulfillment' ? 'full' : 'ag'); if (!ultimo.has(k)) ultimo.set(k, String(v.shipping_id)) }
+      const medidaEnvio = async (item: string, tipo: string) => {
+        const sid = ultimo.get(item + '|' + tipo); if (!sid) return null
+        const si: any = await g(`${ML}/shipments/${sid}/items`)
+        const e = (Array.isArray(si) ? si : []).find((x: any) => x?.item_id === item); const d = e?.dimensions
+        if (!d || !(Number(d.height) > 0)) return null
+        return { a: Number(d.height), l: Number(d.width), c: Number(d.length), g: Number(d.weight) || null, envio: sid, origem: e?.dimensions_source?.origin || null }
+      }
       for (let i = 0; i < ids.length; i += 20) {
         const lote = ids.slice(i, i + 20)
         const mg: any = await g(`${ML}/items?ids=${lote.join(',')}&attributes=id,title,thumbnail,price,category_id,listing_type_id,seller_custom_field,attributes,shipping,variations&include_attributes=all`)
@@ -66,6 +77,7 @@ Deno.serve(async (req: Request) => {
           const skuVar = ((it.variations || [])[0]?.attributes || []).find((a: any) => a?.id === 'SELLER_SKU')
           const sku = String(atr?.value_name || it.seller_custom_field || skuVar?.value_name || (it.variations || [])[0]?.seller_custom_field || '').trim()
           const chave = it.category_id + '|' + it.listing_type_id
+          const [mf, ma] = await Promise.all([medidaEnvio(it.id, 'full'), medidaEnvio(it.id, 'ag')])
           const [fr, tx]: any[] = await Promise.all([
             g(`${ML}/users/${conta}/shipping_options/free?item_id=${it.id}`),
             taxas.has(chave) ? Promise.resolve(null) : g(`${ML}/sites/MLB/listing_prices?price=${Number(it.price) || 100}&listing_type_id=${it.listing_type_id}&category_id=${it.category_id}`),
@@ -80,6 +92,8 @@ Deno.serve(async (req: Request) => {
             preco: Number(it.price) || null, categoria: it.category_id || null, tipo_anuncio: it.listing_type_id || null, tarifa_pct: taxas.get(chave) ?? null,
             peso_g: Number(cob.billable_weight) || null, frete_lista: Number(cob.list_cost) || null, logistica: it.shipping?.logistic_type || null, lido_em: new Date().toISOString(),
             decl_a: med('SELLER_PACKAGE_HEIGHT'), decl_l: med('SELLER_PACKAGE_WIDTH'), decl_c: med('SELLER_PACKAGE_LENGTH'), decl_g: med('SELLER_PACKAGE_WEIGHT'),
+            full_a: mf?.a ?? null, full_l: mf?.l ?? null, full_c: mf?.c ?? null, full_g: mf?.g ?? null, full_envio: mf?.envio ?? null,
+            ag_a: ma?.a ?? null, ag_l: ma?.l ?? null, ag_c: ma?.c ?? null, ag_g: ma?.g ?? null, ag_envio: ma?.envio ?? null, ag_origem: ma?.origem ?? null, env_lido: new Date().toISOString(),
             ml_a: med('PACKAGE_HEIGHT'), ml_l: med('PACKAGE_WIDTH'), ml_c: med('PACKAGE_LENGTH'), ml_g: med('PACKAGE_WEIGHT'), ml_origem: fonte?.value_name || null,
           })
         }))
