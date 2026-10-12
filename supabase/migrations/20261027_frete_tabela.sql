@@ -149,7 +149,8 @@ grant execute on function public.frete_itens_sem_base(date, date, text) to authe
 
 -- Conferência: cada venda (envio com um item só, sem Flex) contra a tabela.
 --   frete devido = tabela[linha de peso do anúncio][faixa do PREÇO DE VENDA] x quantidade
---   linha de peso = a do peso tarifável lido no ML; sem ele, a linha em que o anúncio mais foi cobrado no período.
+--   linha de peso = a em que o anúncio foi cobrado naquele dia/semana (o peso tarifável lido no ML é o de HOJE e não
+--   vale para trás quando houve remedição; ele entra só quando não há venda para servir de base).
 -- Classes: certo | preco (cobrado numa faixa de preço acima) | peso (linha de peso acima) | multiplo (2x, 3x ou 4x o devido)
 --          | total (várias unidades cobradas pelo total do pedido) | outro | peso_menos | preco_menos | sem_base
 create or replace function public.frete_conferencia_tab(p_de date, p_ate date, p_conta text default null)
@@ -172,14 +173,21 @@ returns jsonb language sql stable as $$
     select s.*, (select jsonb_agg(jsonb_build_array(t.linha, t.faixa)) from public.frete_tabela t where t.desde = s.versao and t.valor between s.u - 0.021 and s.u + 0.021) as cel
     from s
   ),
-  habc as (select c0.ml_user_id, c0.item_id, c0.versao, (x->>0)::int as linha, count(*) as n from c0, jsonb_array_elements(coalesce(c0.cel, '[]'::jsonb)) x where (x->>1)::int = c0.bv group by 1, 2, 3, 4),
-  hab as materialized (select distinct on (ml_user_id, item_id, versao) ml_user_id, item_id, versao, linha from habc order by ml_user_id, item_id, versao, n desc, linha),
+  -- faixa de peso em vigor: o ML remede os produtos de tempos em tempos e o peso muda de um dia para o outro. Por isso a
+  -- faixa devida é a em que o anúncio mais foi cobrado NAQUELE DIA (3 vendas ou mais), senão naquela semana, senão no período.
+  habc as materialized (select c0.ml_user_id, c0.item_id, c0.versao, c0.dia, (x->>0)::int as linha, count(*) as n from c0, jsonb_array_elements(coalesce(c0.cel, '[]'::jsonb)) x where (x->>1)::int = c0.bv group by 1, 2, 3, 4, 5),
+  habd as materialized (select distinct on (ml_user_id, item_id, versao, dia) ml_user_id, item_id, versao, dia, linha from habc where n >= 3 order by ml_user_id, item_id, versao, dia, n desc, linha),
+  habw as materialized (select distinct on (ml_user_id, item_id, versao, sem) ml_user_id, item_id, versao, sem, linha from (select ml_user_id, item_id, versao, date_trunc('week', dia)::date as sem, linha, sum(n) as n from habc group by 1, 2, 3, 4, 5) y order by ml_user_id, item_id, versao, sem, n desc, linha),
+  hab as materialized (select distinct on (ml_user_id, item_id, versao) ml_user_id, item_id, versao, linha from (select ml_user_id, item_id, versao, linha, sum(n) as n from habc group by 1, 2, 3, 4) y order by ml_user_id, item_id, versao, n desc, linha),
   pes as materialized (select p.ml_user_id, p.item_id, p.peso_g from public.ml_itens_base p where p.usuario_id = auth.uid() and p.peso_g > 0),
   c as materialized (
     select s.*, p.peso_g, h.linha as hab,
-           coalesce((select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g), h.linha) as ld
+           (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g) as lp,
+           coalesce(hd.linha, hw.linha, h.linha, (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g)) as ld
     from c0 s
     left join pes p on p.ml_user_id = s.ml_user_id and p.item_id = s.item_id
+    left join habd hd on hd.ml_user_id = s.ml_user_id and hd.item_id = s.item_id and hd.versao = s.versao and hd.dia = s.dia
+    left join habw hw on hw.ml_user_id = s.ml_user_id and hw.item_id = s.item_id and hw.versao = s.versao and hw.sem = date_trunc('week', s.dia)::date
     left join hab h on h.ml_user_id = s.ml_user_id and h.item_id = s.item_id and h.versao = s.versao
   ),
   k as materialized (
@@ -214,10 +222,10 @@ returns jsonb language sql stable as $$
         select classe, count(*) as n, coalesce(sum(dif) filter (where dif > 0.02), 0) as mais, coalesce(-sum(dif) filter (where dif < -0.02), 0) as menos,
                count(*) filter (where dif > 0.02) as n_mais, count(*) filter (where dif < -0.02) as n_menos from r group by 1) x),
     'lista', (select coalesce(jsonb_agg(to_jsonb(x) order by x.data_venda desc), '[]'::jsonb) from (
-        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, bv, versao, faixa_acima, linha_acima, u
+        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, lp, bv, versao, faixa_acima, linha_acima, u
         from r where classe in ('preco', 'peso', 'multiplo', 'total', 'outro') and dif > 0.02 order by data_venda desc limit 4000) x),
     'menos', (select coalesce(jsonb_agg(to_jsonb(x) order by x.data_venda desc), '[]'::jsonb) from (
-        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, bv, versao, u
+        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, lp, bv, versao, u
         from r where classe not in ('certo', 'sem_base') and dif < -0.02 order by dif limit 300) x),
     'itens', (select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from (
         select r.item_id, r.ml_user_id, max(r.sku) as sku, max(r.peso_g) as peso_g, count(*) as vendas,
@@ -225,7 +233,8 @@ returns jsonb language sql stable as $$
                count(*) filter (where r.classe = 'peso') as n_peso, coalesce(sum(r.dif) filter (where r.classe = 'peso'), 0) as rs_peso,
                count(*) filter (where r.classe = 'preco') as n_preco, coalesce(sum(r.dif) filter (where r.classe = 'preco'), 0) as rs_preco,
                count(*) filter (where r.classe = 'peso_menos') as n_peso_menos, coalesce(-sum(r.dif) filter (where r.classe = 'peso_menos'), 0) as rs_peso_menos,
-               max(r.ld) as ld, max(r.hab) as hab, bool_or(r.peso_g is null) as sem_peso
+               (array_agg(r.ld order by r.data_venda desc))[1] as ld, max(r.lp) as lp, max(r.hab) as hab, bool_or(r.peso_g is null) as sem_peso,
+               count(distinct r.ld) as faixas_no_periodo
         from r group by 1, 2) x)
   )
 $$;

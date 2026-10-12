@@ -132,20 +132,20 @@
     // ---------------------------------------------------------------- CONFERÊNCIA DE FRETE
     // Cada venda (envio com um item só, sem Flex) é comparada com a tabela de custos de envio do Mercado Livre:
     //   frete devido = tabela[faixa de peso do anúncio][faixa do PREÇO DE VENDA] x quantidade
-    // A faixa de peso vem do "peso tarifável" que o próprio ML informa para o anúncio (função ml-promos, ação base);
-    // sem ele, usa a faixa em que o anúncio mais foi cobrado no período. RPC: frete_conferencia_tab.
-    let fr = { dias: 30, dados: null, vistos: null, erro: '', chave: '', aba: 'preco', lendo: '', tab: null, medidas: null, todas: false };
+    // Faixa de peso = a em que o anúncio foi cobrado naquele dia/semana (o ML remede os produtos e o peso muda de um
+    // dia para o outro; o "peso tarifável" lido no ML é o de hoje e serve de referência). RPC: frete_conferencia_tab.
+    let fr = { dias: 30, de: '', ate: '', dados: null, vistos: null, erro: '', chave: '', ver: 'mais', motivo: 'todos', lendo: '', tab: null, medidas: null, todas: false, marc: new Set() };
     const FR_LOG = { fulfillment: 'Full', cross_docking: 'Coleta', xd_drop_off: 'Agência', drop_off: 'Correios' };
     const FR_FAIXA = ['até R$ 18,99', 'R$ 19 a R$ 48,99', 'R$ 49 a R$ 78,99', 'R$ 79 a R$ 99,99', 'R$ 100 a R$ 119,99', 'R$ 120 a R$ 149,99', 'R$ 150 a R$ 199,99', 'a partir de R$ 200'];
-    const FR_ABA = {
-      preco:    { t: 'Faixa de preço errada', d: 'O frete cobrado é o de uma faixa de preço acima da do preço de venda. Pela regra do Mercado Livre, a faixa é definida pelo preço de venda do produto.' },
-      peso:     { t: 'Faixa de peso acima', d: 'A faixa de preço está certa, mas o frete cobrado é o de uma faixa de peso acima do peso tarifável do anúncio. O peso tarifável é o de hoje: se o Mercado Livre remediu o produto no período, vendas antigas podem ter sido cobradas pelo peso da época.' },
-      multiplo: { t: 'Cobrado em dobro ou triplo', d: 'O frete cobrado é exatamente duas, três ou quatro vezes o devido. Costuma acontecer quando o carrinho foi dividido ou cancelado em parte.' },
-      outro:    { t: 'Outros valores', d: 'O valor cobrado não é o devido e não se encaixa nos padrões acima. Vale olhar caso a caso.' },
-      favor:    { t: 'A seu favor', d: 'Vendas em que o Mercado Livre cobrou menos que a tabela. Não entram na contestação; estão aqui para você ter o quadro completo.' },
-      anuncios: { t: 'Por anúncio', d: 'Peso tarifável de cada anúncio e como ele vem sendo cobrado. Aqui você também informa o peso e as medidas conferidos na expedição.' },
+    const FR_MOTIVO = { preco: 'Faixa de preço errada', peso: 'Faixa de peso acima', multiplo: 'Cobrado em dobro ou triplo', outro: 'Outro valor' };
+    const FR_MOTIVO_D = {
+      preco: 'O frete cobrado é o de uma faixa de preço acima da do preço de venda. Pela regra do Mercado Livre, a faixa é definida pelo preço de venda do produto.',
+      peso: 'A faixa de preço está certa, mas o frete cobrado é o de uma faixa de peso acima da que o anúncio vinha pagando naquele dia.',
+      multiplo: 'O frete cobrado é exatamente duas, três ou quatro vezes o devido. Costuma acontecer quando o carrinho foi dividido ou cancelado em parte.',
+      outro: 'O valor cobrado não é o devido e não se encaixa nos outros motivos. Vale olhar caso a caso.',
     };
-    // tabela de frete por vigência: fr.tab[desde] = { rot: [rótulo da faixa de peso], v: [linha][faixa] }
+    const FR_MENOS = { peso_menos: 'Faixa de peso abaixo', preco_menos: 'Faixa de preço abaixo', total: 'Várias unidades cobradas uma vez só', outro: 'Valor fora da tabela' };
+    // tabela de frete por vigência: fr.tab[desde] = { rot: [rótulo da faixa de peso], v: [linha][faixa], ate: [peso máximo em g] }
     async function frTabela(){
       if(fr.tab) return fr.tab;
       const r = await supa.from('frete_tabela').select('desde,linha,rotulo,faixa,valor,peso_ate_g').limit(2000);
@@ -157,17 +157,18 @@
     function frFaixaDoPreco(p){ return [19, 49, 79, 100, 120, 150, 200].filter(x => p >= x).length; }
     // frete de tabela para um anúncio com esse peso tarifável vendido a esse preço (tabela de hoje)
     function frFreteTabela(pesoG, preco){ const t = (fr.tab || {})[frVersaoHoje()], l = frLinhaDoPeso(pesoG); return t && l != null && t.v[l] ? t.v[l][frFaixaDoPreco(preco)] : null; }
+    function frPeriodo(){ if(fr.de && fr.ate) return { de: fr.de, ate: fr.ate }; const ate = getToday(); return { de: addDias(ate, -(fr.dias - 1)), ate }; }
 
     async function frRender(){
       const v = document.getElementById('view-frete'); if(!v) return;
-      const conta = contaParam(), chave = (conta || '') + '|' + fr.dias;
-      if(fr.chave !== chave){ fr.chave = chave; fr.dados = null; fr.erro = ''; fr.lendo = ''; fr.todas = false; }
+      const conta = contaParam(), P = frPeriodo(), chave = (conta || '') + '|' + P.de + '|' + P.ate;
+      if(fr.chave !== chave){ fr.chave = chave; fr.dados = null; fr.erro = ''; fr.lendo = ''; fr.todas = false; fr.marc = new Set(); }
       frDesenhar();
       if(fr.dados || typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
-      const ate = getToday(), de = addDias(ate, -(fr.dias - 1));
+      const de = P.de, ate = P.ate, vazio = { lista: [], menos: [], itens: [], resumo: {}, conferidas: 0, anuncios: 0 };
       try {
         await frTabela();
-        // 1) peso tarifável dos anúncios que ainda não foram lidos (na demonstração não há conta para consultar)
+        // peso tarifável dos anúncios que ainda não foram lidos (na demonstração não há conta para consultar)
         if(!(typeof MODO_DEMO !== 'undefined' && MODO_DEMO)){
           const falta = await supa.rpc('frete_itens_sem_base', { p_de: de, p_ate: ate, p_conta: conta });
           const porConta = {}; (falta.data || []).forEach(x => (porConta[x.ml_user_id] = porConta[x.ml_user_id] || []).push(x.item_id));
@@ -188,74 +189,115 @@
           supa.from('frete_medidas').select('item_id,altura,largura,comprimento,peso_g').eq('usuario_id', usuarioAtual.id).limit(5000)
         ]);
         if(fr.chave !== chave) return;
-        if(a.error){ fr.erro = a.error.message; fr.dados = { lista: [], menos: [], itens: [], resumo: {}, conferidas: 0, anuncios: 0 }; }
-        else fr.dados = a.data || { lista: [], menos: [], itens: [], resumo: {} };
+        if(a.error){ fr.erro = a.error.message; fr.dados = vazio; } else fr.dados = a.data || vazio;
         fr.vistos = new Set((c.data || []).map(x => String(x.order_id)));
         fr.medidas = {}; (m.data || []).forEach(x => { fr.medidas[x.item_id] = x; });
-      } catch(e){ fr.erro = (e && e.message) || String(e); fr.dados = { lista: [], menos: [], itens: [], resumo: {}, conferidas: 0, anuncios: 0 }; fr.vistos = fr.vistos || new Set(); fr.medidas = fr.medidas || {}; }
+      } catch(e){ fr.erro = (e && e.message) || String(e); fr.dados = vazio; fr.vistos = fr.vistos || new Set(); fr.medidas = fr.medidas || {}; }
       fr.lendo = ''; frDesenhar();
     }
-    function frDias(d){ fr.dias = d; frRender(); }
+    function frDias(d){ fr.dias = d; fr.de = ''; fr.ate = ''; frRender(); }
+    function frDatas(){
+      const a = (document.getElementById('fr-de') || {}).value, b = (document.getElementById('fr-ate') || {}).value;
+      if(!a || !b || a > b){ if(typeof toast === 'function') toast('Escolha a data inicial e a final (a inicial não pode ser depois da final).'); return; }
+      if(diasDif(a, b) > 120){ if(typeof toast === 'function') toast('O período máximo é de 120 dias.'); return; }
+      fr.de = a; fr.ate = b; frRender();
+    }
     async function frVisto(order, marcar){
-      if(marcar){ fr.vistos.add(String(order)); await supa.from('frete_conferidos').upsert({ usuario_id: usuarioAtual.id, order_id: order }); }
+      if(marcar){ fr.vistos.add(String(order)); fr.marc.delete(String(order)); await supa.from('frete_conferidos').upsert({ usuario_id: usuarioAtual.id, order_id: order }); }
       else { fr.vistos.delete(String(order)); await supa.from('frete_conferidos').delete().eq('usuario_id', usuarioAtual.id).eq('order_id', order); }
       frDesenhar();
     }
     function frClasse(x){ return x.classe === 'total' ? 'outro' : x.classe; }
-    function frDaAba(aba){ return ((fr.dados && fr.dados.lista) || []).filter(x => frClasse(x) === aba); }
-    function frAbertas(aba){ return frDaAba(aba).filter(x => !fr.vistos.has(String(x.order_id))); }
-    async function frVistoTodos(){
-      const l = frAbertas(fr.aba); if(!l.length) return;
-      l.forEach(x => fr.vistos.add(String(x.order_id))); frDesenhar();
+    // vendas cobradas a mais, pelo motivo escolhido e por "aguardando" ou "todas"
+    function frLista(){ const l = ((fr.dados && fr.dados.lista) || []).filter(x => fr.motivo === 'todos' || frClasse(x) === fr.motivo); return fr.todas ? l : l.filter(x => !fr.vistos.has(String(x.order_id))); }
+    function frEscolhidas(){ const l = frLista(), m = l.filter(x => fr.marc.has(String(x.order_id))); return m.length ? m : l; }
+    function frMarcar(order, on){ if(on) fr.marc.add(String(order)); else fr.marc.delete(String(order)); frDesenhar(); }
+    function frMarcarTodas(on){ frLista().forEach(x => { if(on) fr.marc.add(String(x.order_id)); else fr.marc.delete(String(x.order_id)); }); frDesenhar(); }
+    async function frVistoMarcadas(){
+      const l = frEscolhidas().filter(x => !fr.vistos.has(String(x.order_id))); if(!l.length) return;
+      l.forEach(x => { fr.vistos.add(String(x.order_id)); fr.marc.delete(String(x.order_id)); }); frDesenhar();
       for(let i = 0; i < l.length; i += 500) await supa.from('frete_conferidos').upsert(l.slice(i, i + 500).map(x => ({ usuario_id: usuarioAtual.id, order_id: x.order_id })));
     }
     // rótulos de uma venda: faixa de peso devida/cobrada e faixa de preço devida/cobrada
     function frRot(x){
       const t = (fr.tab || {})[x.versao] || { rot: [] };
-      return { peso: x.ld != null ? t.rot[x.ld] || '' : '', pesoCob: x.linha_acima != null ? t.rot[x.linha_acima] || '' : '', faixa: FR_FAIXA[x.bv] || '', faixaCob: x.faixa_acima != null ? FR_FAIXA[x.faixa_acima] || '' : '' };
+      return { peso: x.ld != null ? t.rot[x.ld] || '' : '', pesoCob: x.linha_acima != null ? t.rot[x.linha_acima] || '' : '', faixa: FR_FAIXA[x.bv] || '', faixaCob: x.faixa_acima != null ? FR_FAIXA[x.faixa_acima] || '' : '',
+        // o peso tarifável de hoje só é citado quando cai na mesma faixa em que o anúncio era cobrado no dia da venda
+        pesoTxt: (x.peso_g && x.lp === x.ld ? pqN(x.peso_g, 0) + ' g · ' : '') + (x.ld != null ? t.rot[x.ld] || '' : '') };
     }
+    function frDia(x){ return ptDate(typeof vmlDataBRT === 'function' ? vmlDataBRT(x.data_venda).dia : String(x.data_venda).substring(0, 10)); }
     // texto de contestação de uma venda: curto e com todos os números
     function frTexto(x){
-      const r = frRot(x), q = Number(x.qtd) || 1, dev = Number(x.devido_un) * q, dia = ptDate((typeof vmlDataBRT === 'function' ? vmlDataBRT(x.data_venda).dia : String(x.data_venda).substring(0, 10)));
+      const r = frRot(x), q = Number(x.qtd) || 1, dev = Number(x.devido_un) * q;
       const un = q > 1 ? ' por unidade (' + q + ' unidades)' : '', devTxt = 'R$ ' + pqN(dev) + (q > 1 ? ' (' + q + ' x R$ ' + pqN(x.devido_un) + ')' : '');
-      const peso = x.peso_g ? 'Peso tarifável do anúncio informado pelo Mercado Livre: ' + pqN(x.peso_g, 0) + ' g (faixa de peso ' + r.peso + ').' : 'Faixa de peso em que este anúncio é cobrado: ' + r.peso + '.';
-      const ini = 'Venda ' + x.order_id + ' (' + dia + '), anúncio ' + x.item_id + '. Preço de venda: R$ ' + pqN(x.preco_unit) + un + '. ' + peso + ' ';
-      const fim = ' Solicito o ressarcimento de R$ ' + pqN(x.dif) + '.';
-      const c = frClasse(x);
-      if(c === 'preco') return ini + 'Pela tabela de custos de envio, na faixa de preço ' + r.faixa + ', o custo é ' + devTxt + '. Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de preço ' + r.faixaCob + '. O preço de venda não está nessa faixa.' + fim;
-      if(c === 'peso') return ini + 'Pela tabela de custos de envio, na faixa de preço ' + r.faixa + ', o custo é ' + devTxt + '. Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de peso ' + r.pesoCob + ', acima do peso tarifável do anúncio.' + fim;
-      if(c === 'multiplo') return ini + 'Pela tabela de custos de envio, na faixa de preço ' + r.faixa + ', o custo é ' + devTxt + '. Foi cobrado R$ ' + pqN(x.frete) + ', ' + Math.round(Number(x.frete) / dev) + ' vezes o valor devido, numa venda de ' + q + ' unidade' + (q > 1 ? 's' : '') + '.' + fim;
-      return ini + 'Pela tabela de custos de envio, na faixa de preço ' + r.faixa + ', o custo é ' + devTxt + '. Foi cobrado R$ ' + pqN(x.frete) + ', valor que não corresponde à tabela.' + fim;
+      const peso = x.peso_g && x.lp === x.ld ? 'Peso tarifável do anúncio: ' + pqN(x.peso_g, 0) + ' g (faixa de peso ' + r.peso + ').' : 'Faixa de peso do anúncio: ' + r.peso + '.';
+      const ini = 'Venda ' + x.order_id + ' (' + frDia(x) + '). Preço de venda: R$ ' + pqN(x.preco_unit) + un + ', faixa de preço ' + r.faixa + '. ' + peso + ' Pela tabela de custos de envio, o custo devido é ' + devTxt + '. ';
+      const fim = ' Solicito o ressarcimento de R$ ' + pqN(x.dif) + '.', c = frClasse(x);
+      if(c === 'preco') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de preço ' + r.faixaCob + '. O preço de venda não está nessa faixa.' + fim;
+      if(c === 'peso') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de peso ' + r.pesoCob + ', acima da faixa do anúncio.' + fim;
+      if(c === 'multiplo') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', ' + Math.round(Number(x.frete) / dev) + ' vezes o valor devido, numa venda de ' + q + ' unidade' + (q > 1 ? 's' : '') + '.' + fim;
+      return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', valor que não corresponde à tabela.' + fim;
     }
     function frCopiar(order, bt){
       const x = ((fr.dados && fr.dados.lista) || []).find(y => String(y.order_id) === String(order)); if(!x) return;
       const t = frTexto(x), ok = () => { if(bt){ const a = bt.textContent; bt.textContent = 'Copiado'; setTimeout(() => { bt.textContent = a; }, 1400); } };
-      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, () => vmlModal('Texto da contestação', '<textarea style="width:100%;height:180px;">' + pqE(t) + '</textarea>'));
-      else vmlModal('Texto da contestação', '<textarea style="width:100%;height:180px;">' + pqE(t) + '</textarea>');
+      const janela = () => vmlModal('Texto da contestação', '<textarea style="width:100%;height:180px;">' + pqE(t) + '</textarea>');
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, janela); else janela();
     }
-    // planilha para mandar ao Mercado Livre: uma aba por tipo de erro, só o que ainda não foi marcado como conferido
-    function frPlanilha(){
+    // linhas do documento de contestação (uma por venda), na ordem: motivo, depois data
+    function frDocLinhas(){
+      const ord = { preco: 0, peso: 1, multiplo: 2, outro: 3 };
+      return frEscolhidas().slice().sort((a, b) => ord[frClasse(a)] - ord[frClasse(b)] || String(a.data_venda).localeCompare(String(b.data_venda))).map(x => { const r = frRot(x), q = Number(x.qtd) || 1;
+        return { x, venda: String(x.order_id), data: frDia(x), q, preco: Number(x.preco_unit), faixa: r.faixa, peso: r.pesoTxt, devido: Math.round(Number(x.devido_un) * q * 100) / 100, cobrado: Number(x.frete), dif: Number(x.dif), motivo: FR_MOTIVO[frClasse(x)], cobradoComo: frClasse(x) === 'preco' ? 'faixa de preço ' + r.faixaCob : frClasse(x) === 'peso' ? 'faixa de peso ' + r.pesoCob : frClasse(x) === 'multiplo' ? Math.round(Number(x.frete) / (Number(x.devido_un) * q)) + ' vezes o devido' : 'valor fora da tabela' }; });
+    }
+    function frDocTitulo(){ const P = frPeriodo(), c = contaParam(); return { loja: c ? ((typeof contaNome === 'function' && contaNome(c)) || c) : (contasML.length === 1 ? (contasML[0].apelido || contasML[0].id) : 'Todas as lojas'), periodo: ptDate(P.de) + ' a ' + ptDate(P.ate) }; }
+    // Excel: uma aba só, uma linha por venda, com título, total e a coluna do texto de contestação
+    function frExcel(){
       if(!fr.dados || typeof XLSX === 'undefined') return;
-      const wb = XLSX.utils.book_new(), nomes = { preco: 'Faixa de preço', peso: 'Faixa de peso', multiplo: 'Dobro ou triplo', outro: 'Outros' }, resumo = [['CONTESTAÇÃO DE CUSTO DE ENVIO'], ['Período: últimos ' + fr.dias + ' dias, até ' + ptDate(getToday())], [], ['Tipo de erro', 'Vendas', 'Valor a ressarcir']];
-      let total = 0, qtd = 0;
-      Object.keys(nomes).forEach(k => {
-        const l = frAbertas(k); if(!l.length) return;
-        const soma = l.reduce((s, x) => s + Number(x.dif), 0); total += soma; qtd += l.length; resumo.push([FR_ABA[k].t, l.length, Math.round(soma * 100) / 100]);
-        const linhas = l.map(x => { const r = frRot(x), q = Number(x.qtd) || 1, d = typeof vmlDataBRT === 'function' ? vmlDataBRT(x.data_venda).dia : String(x.data_venda).substring(0, 10);
-          return { 'Venda': String(x.order_id), 'Data': ptDate(d), 'Loja': (typeof contaNome === 'function' && contaNome(x.ml_user_id)) || x.ml_user_id, 'Anúncio': x.item_id, 'SKU': x.sku || '', 'Envio': FR_LOG[x.logistic_type] || '', 'Qtd.': q, 'Preço de venda': Number(x.preco_unit),
-            'Faixa de preço': r.faixa, 'Peso tarifável (g)': x.peso_g ? Number(x.peso_g) : '', 'Faixa de peso': r.peso, 'Frete devido': Math.round(Number(x.devido_un) * q * 100) / 100, 'Frete cobrado': Number(x.frete), 'Diferença': Number(x.dif), 'Contestação': frTexto(x) }; });
-        const ws = XLSX.utils.json_to_sheet(linhas);
-        ws['!cols'] = [{ wch: 19 }, { wch: 11 }, { wch: 14 }, { wch: 15 }, { wch: 24 }, { wch: 9 }, { wch: 6 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 13 }, { wch: 13 }, { wch: 11 }, { wch: 120 }];
-        Object.keys(ws).forEach(c => { if(/^[HLMN]\d+$/.test(c) && ws[c].t === 'n') ws[c].z = '"R$" #,##0.00'; });
-        ws['!autofilter'] = { ref: 'A1:O' + (linhas.length + 1) };
-        XLSX.utils.book_append_sheet(wb, ws, nomes[k]);
-      });
-      if(!qtd){ if(typeof toast === 'function') toast('Não há nada aguardando contestação neste período.'); return; }
-      resumo.push(['Total', qtd, Math.round(total * 100) / 100], [], ['Frete devido = tabela de custos de envio do Mercado Livre, na faixa do preço de venda e na faixa do peso tarifável do anúncio, vezes a quantidade.']);
-      const wr = XLSX.utils.aoa_to_sheet(resumo); wr['!cols'] = [{ wch: 34 }, { wch: 10 }, { wch: 18 }];
-      Object.keys(wr).forEach(c => { if(/^C\d+$/.test(c) && wr[c].t === 'n') wr[c].z = '"R$" #,##0.00'; });
-      XLSX.utils.book_append_sheet(wb, wr, 'Resumo'); wb.SheetNames.unshift(wb.SheetNames.pop());
+      const L = frDocLinhas(); if(!L.length){ if(typeof toast === 'function') toast('Não há vendas na lista para gerar o arquivo.'); return; }
+      const T = frDocTitulo(), total = L.reduce((s, l) => s + l.dif, 0);
+      const cab = ['Venda', 'Data', 'Qtd.', 'Preço de venda', 'Faixa de preço', 'Peso tarifado / faixa de peso', 'Frete devido', 'Frete cobrado', 'Diferença', 'Motivo', 'Cobrado como', 'Contestação'];
+      const aoa = [['CONTESTAÇÃO DE CUSTO DE ENVIO'], [T.loja + ' · vendas de ' + T.periodo], [L.length + ' venda' + (L.length === 1 ? '' : 's') + ' · total a ressarcir: R$ ' + pqN(total)], [], cab]
+        .concat(L.map(l => [l.venda, l.data, l.q, l.preco, l.faixa, l.peso, l.devido, l.cobrado, l.dif, l.motivo, l.cobradoComo, frTexto(l.x)]))
+        .concat([['Total', '', '', '', '', '', Math.round(L.reduce((s, l) => s + l.devido, 0) * 100) / 100, Math.round(L.reduce((s, l) => s + l.cobrado, 0) * 100) / 100, Math.round(total * 100) / 100]]);
+      const ws = XLSX.utils.aoa_to_sheet(aoa), fim = aoa.length;
+      ws['!cols'] = [{ wch: 19 }, { wch: 11 }, { wch: 6 }, { wch: 15 }, { wch: 20 }, { wch: 27 }, { wch: 13 }, { wch: 14 }, { wch: 11 }, { wch: 26 }, { wch: 30 }, { wch: 110 }];
+      ws['!merges'] = [0, 1, 2].map(r => ({ s: { r, c: 0 }, e: { r, c: 11 } }));
+      ws['!autofilter'] = { ref: 'A5:L' + (fim - 1) };
+      for(let r = 6; r <= fim; r++) ['D', 'G', 'H', 'I'].forEach(c => { const k = c + r; if(ws[k] && ws[k].t === 'n') ws[k].z = '"R$" #,##0.00'; });
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Contestação de frete');
       XLSX.writeFile(wb, 'contestacao_frete_' + getToday() + '.xlsx');
+    }
+    // PDF: uma linha por venda, com cabeçalho, total e a regra aplicada no rodapé
+    async function frPdf(bt){
+      const L = frDocLinhas(); if(!L.length){ if(typeof toast === 'function') toast('Não há vendas na lista para gerar o arquivo.'); return; }
+      const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
+      try {
+        const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+        const T = frDocTitulo(), total = L.reduce((s, l) => s + l.dif, 0), n2 = v => 'R$ ' + pqN(v);
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' }), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20); doc.text('Contestação de custo de envio', 40, 46);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(95); doc.text(T.loja + '  ·  vendas de ' + T.periodo + '  ·  gerado em ' + ptDate(getToday()), 40, 63);
+        const cx = [['Vendas contestadas', String(L.length)], ['Frete devido', n2(L.reduce((s, l) => s + l.devido, 0))], ['Frete cobrado', n2(L.reduce((s, l) => s + l.cobrado, 0))], ['Total a ressarcir', n2(total)]], w = (W - 80 - 30) / 4;
+        cx.forEach((c, i) => { const x = 40 + i * (w + 10); doc.setDrawColor(225); doc.setFillColor(248, 249, 252); doc.roundedRect(x, 76, w, 44, 6, 6, 'FD'); doc.setFillColor(...(i === 3 ? [220, 38, 38] : [79, 70, 229])); doc.rect(x, 76, 4, 44, 'F');
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110); doc.text(c[0].toUpperCase(), x + 14, 92); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(20); doc.text(c[1], x + 14, 110); });
+        doc.autoTable({ startY: 134, margin: { left: 40, right: 40, bottom: 46 },
+          head: [['Venda', 'Data', 'Qtd.', 'Preço de venda', 'Faixa de preço', 'Peso tarifado / faixa de peso', 'Frete devido', 'Frete cobrado', 'Diferença', 'Motivo']],
+          // embaixo de cada venda vai o texto da contestação: o Mercado Livre lê venda a venda
+          body: L.flatMap(l => [[l.venda, l.data, l.q, n2(l.preco), l.faixa, l.peso, n2(l.devido), n2(l.cobrado), n2(l.dif), l.motivo],
+            [{ content: 'Contestação: ' + frTexto(l.x), colSpan: 10, styles: { fontSize: 8, textColor: [70, 72, 85], fillColor: [247, 247, 252], cellPadding: { top: 3, right: 6, bottom: 7, left: 6 } } }]]),
+          foot: [['Total', '', '', '', '', '', n2(L.reduce((s, l) => s + l.devido, 0)), n2(L.reduce((s, l) => s + l.cobrado, 0)), n2(total), '']],
+          styles: { fontSize: 8.5, cellPadding: 5, valign: 'middle', lineColor: [232, 233, 240], lineWidth: 0.5 }, headStyles: { fillColor: [79, 70, 229], textColor: 255, fontSize: 8.5 }, footStyles: { fillColor: [240, 241, 246], textColor: 20, fontStyle: 'bold' },
+          showFoot: 'lastPage', rowPageBreak: 'avoid',
+          columnStyles: { 0: { cellWidth: 92 }, 1: { cellWidth: 54 }, 2: { halign: 'center', cellWidth: 30 }, 3: { halign: 'right', cellWidth: 62 }, 6: { halign: 'right', cellWidth: 58 }, 7: { halign: 'right', cellWidth: 60 }, 8: { halign: 'right', cellWidth: 56, fontStyle: 'bold', textColor: [200, 30, 30] }, 9: { cellWidth: 150 } },
+          didDrawPage: () => { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(125);
+            doc.text('Frete devido = tabela de custos de envio do Mercado Livre, na faixa do preço de venda e na faixa de peso do anúncio, vezes a quantidade vendida.', 40, H - 26);
+            doc.text('Página ' + doc.internal.getNumberOfPages(), W - 40, H - 26, { align: 'right' }); } });
+        doc.save('contestacao_frete_' + getToday() + '.pdf');
+      } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + ((e && e.message) || e)); }
+      if(bt){ bt.disabled = false; bt.textContent = rot; }
     }
     // pacote que o Mercado Livre registrou naquele envio: medidas do produto, do pacote e quanto do pacote é desta venda
     async function frPacote(order){
@@ -269,7 +311,7 @@
       const med = o => o.altura + ' × ' + o.largura + ' × ' + o.comprimento + ' cm · ' + pqN(o.peso, 0) + ' g · peso cúbico ' + pqN(cub(o.altura, o.largura, o.comprimento), 2) + ' kg';
       vmlModal('Pacote da venda #' + order, `${div ? `<div class="alert alert-info">Este pacote foi dividido com outra venda: a sua parte é <b>${pqN(it.parte, 1)}%</b> do valor do pacote. Pela regra do Mercado Livre o custo de envio é por venda, não por pacote, então isso não deveria mudar o que você paga.</div>` : ''}
         <div class="vd-cols">${it ? l('Seu produto neste envio', med(it)) : ''}${l('Pacote que saiu', med(e))}${l('Valor do pacote inteiro', 'R$ ' + pqN(e.valor_declarado))}${l('Envio', '#' + pqE(e.envio))}${l('Tipo', FR_LOG[e.tipo] || pqE(e.tipo))}</div>
-        <div class="text-muted" style="font-size:12.5px;margin-top:12px;line-height:1.5;">São as medidas que o próprio Mercado Livre registrou neste envio (não as do cadastro do anúncio). O frete é cobrado pelo maior entre o peso e o peso cúbico (altura × largura × comprimento ÷ 6.000).</div>`);
+        <div class="text-muted" style="font-size:12.5px;margin-top:12px;line-height:1.5;">São as medidas que o Mercado Livre registrou neste envio. O peso que ele usa para cobrar (peso tarifável) é por anúncio, não por envio, e aparece na lista "Por anúncio".</div>`);
     }
     // janela de peso e medidas conferidos na expedição (opcional)
     function frMedidas(item){
@@ -299,31 +341,32 @@
     }
     function frDesenhar(){
       const v = document.getElementById('view-frete'); if(!v || !v.classList.contains('active')) return;
-      const cab = `<div class="pg-head"><div><div class="pg-title">Conferência de frete</div><div class="pg-sub">Cada venda é comparada com a tabela de custos de envio do Mercado Livre: faixa do preço de venda e peso tarifável do anúncio. O Flex e os envios com mais de um produto ficam de fora.</div></div>
-        <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${fr.dias === d ? 'active' : ''}" onclick="frDias(${d})">${d} dias</button>`).join('')}</div>
-        <button class="btn btn-sm" onclick="frPlanilha()" ${fr.dados ? '' : 'disabled'} title="Planilha com uma linha por venda e o texto de contestação pronto, para enviar ao Mercado Livre">Baixar planilha de contestação</button></div></div>`;
+      const P = frPeriodo(), perso = !!(fr.de && fr.ate);
+      const cab = `<div class="pg-head"><div><div class="pg-title">Conferência de frete</div><div class="pg-sub">Cada venda é comparada com a tabela de custos de envio do Mercado Livre: faixa do preço de venda e faixa de peso do anúncio. O Flex e os envios com mais de um produto ficam de fora.</div></div>
+        <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${!perso && fr.dias === d ? 'active' : ''}" onclick="frDias(${d})">${d} dias</button>`).join('')}</div>
+        <div class="dt-par ${perso ? 'on' : ''}" title="Escolha um período (até 120 dias)"><input type="date" id="fr-de" aria-label="Data inicial" value="${P.de}" max="${getToday()}"><span>a</span><input type="date" id="fr-ate" aria-label="Data final" value="${P.ate}" max="${getToday()}"><button class="btn-out btn btn-sm" onclick="frDatas()">Aplicar</button></div></div></div>`;
       if(!fr.dados){ v.innerHTML = cab + `<div class="card"><div class="carregando-msg"><span class="carregando-roda"></span><b>${pqE(fr.lendo || 'Conferindo o frete das vendas…')}</b></div></div>`; return; }
       const d = fr.dados, R = d.resumo || {}, cl = k => R[k] || { n: 0, mais: 0, menos: 0, n_mais: 0, n_menos: 0 };
       const dh = s => { const x = typeof vmlDataBRT === 'function' ? vmlDataBRT(s) : { dia: String(s).substring(0, 10), hora: '' }; return ptDate(x.dia).substring(0, 5) + ' ' + x.hora; };
       const loja = x => contasML.length > 1 && !contaAtiva ? `<span class="v-tag conta">${pqE(contaNome(x.ml_user_id) || '')}</span> ` : '';
-      const abas = ['preco', 'peso', 'multiplo', 'outro'], ab = k => frAbertas(k), soma = l => l.reduce((s, x) => s + Number(x.dif), 0);
-      const contestar = abas.reduce((s, k) => s + soma(ab(k)), 0), nCont = abas.reduce((s, k) => s + ab(k).length, 0);
-      const favor = (cl('peso_menos').menos || 0) + (cl('preco_menos').menos || 0) + (cl('total').menos || 0) + (cl('outro').menos || 0), nFavor = cl('peso_menos').n_menos + cl('preco_menos').n_menos + cl('total').n_menos + cl('outro').n_menos;
-      const certas = cl('certo').n, pctCerto = d.conferidas ? certas / d.conferidas * 100 : 0;
-      const t0 = (fr.tab || {})[frVersaoHoje()] || { rot: [] };
-      let corpo = '';
-      if(fr.aba === 'favor'){
+      const tudoMais = d.lista || [], abertas = tudoMais.filter(x => !fr.vistos.has(String(x.order_id))), soma = l => l.reduce((s, x) => s + Number(x.dif), 0);
+      const ks = Object.keys(R), favor = ks.reduce((s, k) => s + (Number(R[k].menos) || 0), 0), nFavor = ks.reduce((s, k) => s + (Number(R[k].n_menos) || 0), 0), totMais = ks.reduce((s, k) => s + (Number(R[k].mais) || 0), 0);
+      const pctCerto = d.conferidas ? cl('certo').n / d.conferidas * 100 : 0, t0 = (fr.tab || {})[frVersaoHoje()] || { rot: [] };
+      let corpo = '', sub = '';
+      if(fr.ver === 'menos'){
         const l = d.menos || [];
+        sub = 'Vendas em que o Mercado Livre cobrou menos que a tabela. Não entram na contestação; estão aqui para você ter o quadro completo.';
         corpo = `<div style="overflow-x:auto;max-height:560px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th>Venda</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Preço de venda</th><th class="num">Frete devido</th><th class="num">Cobrado</th><th class="num">A seu favor</th><th>O que houve</th></tr></thead><tbody>
-          ${l.length ? l.map(x => `<tr><td>${loja(x)}<a href="https://www.mercadolivre.com.br/vendas/${x.order_id}/detalhe" target="_blank" rel="noopener">#${x.order_id}</a><br><small class="text-muted">${dh(x.data_venda)} · ${FR_LOG[x.logistic_type] || ''}</small></td><td><b>${pqE(x.sku || x.item_id)}</b></td><td class="num">${x.qtd}</td><td class="num">R$ ${pqN(x.preco_unit)}</td><td class="num">R$ ${pqN(Number(x.devido_un) * x.qtd)}</td><td class="num"><b>R$ ${pqN(x.frete)}</b></td><td class="num"><b class="text-success">R$ ${pqN(-x.dif)}</b></td>
-            <td>${{ peso_menos: 'Cobrado numa faixa de peso abaixo', preco_menos: 'Cobrado numa faixa de preço abaixo', total: 'Várias unidades cobradas uma vez só, pelo total', outro: 'Valor fora da tabela' }[x.classe] || ''}</td></tr>`).join('') : '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:26px;">Nenhuma venda cobrada a menos no período.</td></tr>'}
+          ${l.length ? l.map(x => `<tr><td>${loja(x)}<a href="https://www.mercadolivre.com.br/vendas/${x.order_id}/detalhe" target="_blank" rel="noopener">#${x.order_id}</a><br><small class="text-muted">${dh(x.data_venda)} · ${FR_LOG[x.logistic_type] || ''}</small></td><td><b>${pqE(x.sku || x.item_id)}</b></td><td class="num">${x.qtd}</td><td class="num">R$ ${pqN(x.preco_unit)}</td><td class="num">R$ ${pqN(Number(x.devido_un) * x.qtd)}</td><td class="num"><b>R$ ${pqN(x.frete)}</b></td><td class="num"><b class="text-success">R$ ${pqN(-x.dif)}</b></td><td>${FR_MENOS[x.classe] || ''}</td></tr>`).join('') : '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:26px;">Nenhuma venda cobrada a menos no período.</td></tr>'}
           </tbody></table></div>${l.length >= 300 ? '<div class="text-muted" style="font-size:12px;padding:10px 18px;">Mostrando as 300 maiores diferenças.</div>' : ''}`;
-      } else if(fr.aba === 'anuncios'){
+      } else if(fr.ver === 'anuncios'){
         const l = (d.itens || []).slice().sort((a, b) => (Number(b.rs_peso) + Number(b.rs_preco)) - (Number(a.rs_peso) + Number(a.rs_preco)) || b.vendas - a.vendas);
-        corpo = `<div style="overflow-x:auto;max-height:620px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th class="num" title="O peso que o Mercado Livre usa para cobrar o frete deste anúncio">Peso tarifável (ML)</th><th>Faixa de peso</th><th>Sua medida</th><th class="num">Vendas</th><th class="num">Certas</th><th class="num">Faixa de preço errada</th><th class="num">Peso acima</th><th class="num">Peso abaixo</th><th></th></tr></thead><tbody>
+        sub = 'Peso tarifável de cada anúncio hoje e como ele foi cobrado no período. Aqui você também informa o peso e as medidas conferidos na expedição.';
+        corpo = `<div style="overflow-x:auto;max-height:620px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th class="num" title="O peso que o Mercado Livre usa hoje para cobrar o frete deste anúncio">Peso tarifável hoje</th><th>Faixa de peso hoje</th><th>Sua medida</th><th class="num">Vendas</th><th class="num">Certas</th><th class="num">Preço errado</th><th class="num">Peso acima</th><th class="num">Peso abaixo</th><th></th></tr></thead><tbody>
           ${l.length ? l.map(x => { const m = (fr.medidas || {})[x.item_id], gm = frPesoMeu(m), lm = gm ? frLinhaDoPeso(gm) : null, lml = x.peso_g ? frLinhaDoPeso(Number(x.peso_g)) : x.ld;
             return `<tr><td>${loja(x)}<b>${pqE(x.sku || x.item_id)}</b><br><small class="text-muted"><a href="https://produto.mercadolivre.com.br/${pqE(String(x.item_id).replace(/^MLB/, 'MLB-'))}" target="_blank" rel="noopener">${pqE(x.item_id)}</a></small></td>
-              <td class="num">${x.peso_g ? pqN(x.peso_g, 0) + ' g' : '<small class="text-muted" title="O Mercado Livre não informou o peso deste anúncio: a conferência usa a faixa em que ele mais foi cobrado">não informado</small>'}</td><td>${pqE(t0.rot[lml] || '—')}</td>
+              <td class="num">${x.peso_g ? pqN(x.peso_g, 0) + ' g' : '<small class="text-muted" title="O Mercado Livre não informou o peso deste anúncio">não informado</small>'}</td>
+              <td>${pqE(t0.rot[lml] || '—')}${x.faixas_no_periodo > 1 ? '<br><small class="text-muted" title="O anúncio foi cobrado em mais de uma faixa de peso no período: o Mercado Livre remediu o produto">mudou de faixa no período</small>' : ''}</td>
               <td>${gm ? `${pqN(gm, 0)} g<br><small class="${lm < lml ? 'text-danger' : 'text-muted'}">${pqE(t0.rot[lm] || '')}${lm < lml ? ' · faixa menor' : ''}</small>` : '<small class="text-muted">não informada</small>'}</td>
               <td class="num">${pqN(x.vendas, 0)}</td><td class="num">${x.vendas ? pqN(x.certas / x.vendas * 100, 0) + '%' : '—'}</td>
               <td class="num">${x.n_preco ? `<b class="text-danger">R$ ${pqN(x.rs_preco)}</b><br><small class="text-muted">${x.n_preco} venda${x.n_preco > 1 ? 's' : ''}</small>` : '—'}</td>
@@ -332,30 +375,40 @@
               <td><button class="btn-out btn btn-sm" onclick="frMedidas('${pqE(x.item_id)}')">${gm ? 'Editar medida' : 'Informar medida'}</button></td></tr>`; }).join('') : '<tr><td colspan="10" class="text-muted" style="text-align:center;padding:26px;">Nenhum anúncio com venda no período.</td></tr>'}
           </tbody></table></div>`;
       } else {
-        const todas = frDaAba(fr.aba), abertas = ab(fr.aba), lista = (fr.todas ? todas : abertas), mostra = lista.slice(0, 300);
-        corpo = `<div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;padding:0 18px 12px;"><div class="chips"><button class="chip ${!fr.todas ? 'active' : ''}" onclick="fr.todas=false;frDesenhar()">Aguardando<span class="n">${abertas.length}</span></button><button class="chip ${fr.todas ? 'active' : ''}" onclick="fr.todas=true;frDesenhar()">Todas<span class="n">${todas.length}</span></button></div>
-            ${abertas.length ? '<button class="btn-out btn btn-sm" onclick="frVistoTodos()">Marcar todas como conferidas</button>' : ''}</div>
-          <div style="overflow-x:auto;max-height:580px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th>Venda</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Preço de venda</th><th>Faixa de preço</th><th>Peso tarifável</th><th class="num">Frete devido</th><th class="num">Cobrado</th><th class="num">Diferença</th><th></th></tr></thead><tbody>
+        const lista = frLista(), mostra = lista.slice(0, 300), esc = frEscolhidas(), nMarc = lista.filter(x => fr.marc.has(String(x.order_id))).length, todasMarc = lista.length > 0 && nMarc === lista.length;
+        const base = fr.todas ? tudoMais : abertas, cont = k => base.filter(x => k === 'todos' || frClasse(x) === k);
+        sub = fr.motivo === 'todos' ? 'Vendas em que o frete cobrado ficou acima da tabela. Marque as que quer contestar e gere o PDF ou o Excel; sem nenhuma marcada, o arquivo leva todas as da lista.' : FR_MOTIVO_D[fr.motivo];
+        corpo = `<div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;padding:0 18px 12px;justify-content:space-between;">
+            <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">
+              <select aria-label="Motivo" onchange="fr.motivo=this.value;frDesenhar()" style="width:auto;">${[['todos', 'Todos os motivos']].concat(Object.entries(FR_MOTIVO)).map(([k, t]) => `<option value="${k}" ${fr.motivo === k ? 'selected' : ''}>${t} (${cont(k).length})</option>`).join('')}</select>
+              <div class="chips"><button class="chip ${!fr.todas ? 'active' : ''}" onclick="fr.todas=false;frDesenhar()" title="Vendas que você ainda não marcou como conferidas">Aguardando<span class="n">${abertas.length}</span></button><button class="chip ${fr.todas ? 'active' : ''}" onclick="fr.todas=true;frDesenhar()">Todas<span class="n">${tudoMais.length}</span></button></div></div>
+            <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><span class="text-muted" style="font-size:12.5px;">${nMarc ? nMarc + ' marcada' + (nMarc > 1 ? 's' : '') : 'nenhuma marcada: vale a lista toda'} · <b>R$ ${pqN(soma(esc))}</b></span>
+              <button class="btn btn-sm" onclick="frPdf(this)" ${esc.length ? '' : 'disabled'} title="PDF com uma linha por venda, para enviar ao Mercado Livre">Gerar PDF (${esc.length})</button>
+              <button class="btn-out btn btn-sm" onclick="frExcel()" ${esc.length ? '' : 'disabled'} title="Planilha com uma linha por venda e o texto de contestação">Gerar Excel (${esc.length})</button>
+              <button class="btn-out btn btn-sm" onclick="frVistoMarcadas()" ${esc.some(x => !fr.vistos.has(String(x.order_id))) ? '' : 'disabled'} title="Tira da lista de aguardando as vendas marcadas (ou todas da lista)">Marcar como conferidas</button></div></div>
+          <div style="overflow-x:auto;max-height:580px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" aria-label="Marcar todas" ${todasMarc ? 'checked' : ''} onchange="frMarcarTodas(this.checked)"></th><th>Venda</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Preço de venda</th><th>Faixa de preço</th><th>Faixa de peso</th><th class="num">Frete devido</th><th class="num">Cobrado</th><th class="num">Diferença</th><th>Motivo</th><th></th></tr></thead><tbody>
           ${mostra.length ? mostra.map(x => { const visto = fr.vistos.has(String(x.order_id)), r = frRot(x), q = Number(x.qtd) || 1;
-            return `<tr class="${visto ? 'fr-visto' : ''}"><td>${loja(x)}<a href="https://www.mercadolivre.com.br/vendas/${x.order_id}/detalhe" target="_blank" rel="noopener" title="Abrir a venda no Mercado Livre">#${x.order_id}</a><br><small class="text-muted">${dh(x.data_venda)} · ${FR_LOG[x.logistic_type] || ''}</small></td>
+            return `<tr class="${visto ? 'fr-visto' : ''}"><td><input type="checkbox" style="width:auto;" aria-label="Marcar a venda ${x.order_id}" ${fr.marc.has(String(x.order_id)) ? 'checked' : ''} onchange="frMarcar('${x.order_id}', this.checked)"></td>
+              <td>${loja(x)}<a href="https://www.mercadolivre.com.br/vendas/${x.order_id}/detalhe" target="_blank" rel="noopener" title="Abrir a venda no Mercado Livre">#${x.order_id}</a><br><small class="text-muted">${dh(x.data_venda)} · ${FR_LOG[x.logistic_type] || ''}</small></td>
               <td><b>${pqE(x.sku || x.item_id)}</b></td><td class="num">${q}</td><td class="num">R$ ${pqN(x.preco_unit)}</td>
               <td>${pqE(r.faixa)}${r.faixaCob ? `<br><small class="text-danger">cobrado: ${pqE(r.faixaCob)}</small>` : ''}</td>
-              <td>${x.peso_g ? pqN(x.peso_g, 0) + ' g · ' : ''}${pqE(r.peso)}${r.pesoCob ? `<br><small class="text-danger">cobrado: ${pqE(r.pesoCob)}</small>` : ''}</td>
+              <td>${pqE(r.pesoTxt)}${r.pesoCob ? `<br><small class="text-danger">cobrado: ${pqE(r.pesoCob)}</small>` : ''}</td>
               <td class="num">R$ ${pqN(Number(x.devido_un) * q)}</td><td class="num"><b>R$ ${pqN(x.frete)}</b></td><td class="num"><b class="text-danger">+R$ ${pqN(x.dif)}</b></td>
-              <td style="white-space:nowrap;"><button class="btn-out btn btn-sm" onclick="frCopiar('${x.order_id}', this)" title="Copia o texto de contestação desta venda">Copiar texto</button> <button class="btn-out btn btn-sm" onclick="frPacote('${x.order_id}')" title="Medidas que o Mercado Livre registrou neste envio">Pacote</button> <button class="btn-out btn btn-sm" onclick="frVisto('${x.order_id}', ${!visto})">${visto ? 'Desfazer' : 'Já conferi'}</button></td></tr>`; }).join('')
-            : `<tr><td colspan="10" class="text-muted" style="text-align:center;padding:26px;">${todas.length ? 'Tudo conferido.' : 'Nenhuma venda neste grupo no período.'}</td></tr>`}
-          </tbody></table></div>${lista.length > mostra.length ? `<div class="text-muted" style="font-size:12px;padding:10px 18px;">Mostrando ${mostra.length} de ${lista.length}. A planilha de contestação traz todas.</div>` : ''}`;
+              <td><span class="v-tag">${FR_MOTIVO[frClasse(x)]}</span></td>
+              <td style="white-space:nowrap;"><button class="btn-out btn btn-sm" onclick="frCopiar('${x.order_id}', this)" title="Copia o texto de contestação desta venda, para colar no chat do Mercado Livre">Copiar texto</button> <button class="btn-out btn btn-sm" onclick="frPacote('${x.order_id}')" title="Medidas que o Mercado Livre registrou neste envio">Pacote</button> <button class="btn-out btn btn-sm" onclick="frVisto('${x.order_id}', ${!visto})">${visto ? 'Desfazer' : 'Já conferi'}</button></td></tr>`; }).join('')
+            : `<tr><td colspan="12" class="text-muted" style="text-align:center;padding:26px;">${tudoMais.length ? 'Nada aguardando neste filtro.' : 'Nenhuma venda cobrada acima da tabela no período.'}</td></tr>`}
+          </tbody></table></div>${lista.length > mostra.length ? `<div class="text-muted" style="font-size:12px;padding:10px 18px;">Mostrando ${mostra.length} de ${lista.length}. O PDF e o Excel levam todas.</div>` : ''}`;
       }
-      const chip = (k, n, rs) => `<button class="chip ${fr.aba === k ? 'active' : ''}" onclick="fr.aba='${k}';fr.todas=false;frDesenhar()">${FR_ABA[k].t}${n != null ? `<span class="n">${n}</span>` : ''}${rs ? ' · R$ ' + pqN(rs) : ''}</button>`;
+      const chip = (k, t, n, rs) => `<button class="chip ${fr.ver === k ? 'active' : ''}" onclick="fr.ver='${k}';frDesenhar()">${t}<span class="n">${n}</span>${rs != null ? ' · R$ ' + pqN(rs) : ''}</button>`;
       v.innerHTML = cab + `
         ${fr.erro ? `<div class="alert alert-danger">Não consegui conferir: ${pqE(fr.erro)}</div>` : ''}
         <div class="kpi-grid k4i">
-          <div class="kpi k-venda"><div class="kpi-label">Vendas conferidas</div><div class="kpi-value">${pqN(d.conferidas, 0)}</div><div class="kpi-sub"><span><b>${pqN(pctCerto, 0)}%</b> com o frete certo</span><span>${pqN(d.fora, 0)} em envios com mais de um produto ficaram de fora</span></div></div>
-          <div class="kpi k-atraso"><div class="kpi-label">Para contestar ${typeof dica === 'function' ? dica('Soma do que foi cobrado acima da tabela e ainda não foi marcado como conferido: faixa de preço errada, faixa de peso acima, cobrança em dobro e outros valores.') : ''}</div><div class="kpi-value" style="color:var(--danger);">R$ ${pqN(contestar)}</div><div class="kpi-sub"><span>${pqN(nCont, 0)} vendas em ${fr.dias} dias</span></div></div>
-          <div class="kpi k-mc"><div class="kpi-label">Cobrado a menos</div><div class="kpi-value">R$ ${pqN(favor)}</div><div class="kpi-sub"><span>${pqN(nFavor, 0)} vendas a seu favor</span></div></div>
-          <div class="kpi k-hoje"><div class="kpi-label">Anúncios com peso lido ${typeof dica === 'function' ? dica('O Mercado Livre informa, para cada anúncio, o peso que usa para cobrar o frete (peso tarifável). Quando ele não informa, a conferência usa a faixa em que o anúncio mais foi cobrado.') : ''}</div><div class="kpi-value">${pqN(d.com_peso, 0)}<small style="font-size:14px;font-weight:500;color:var(--text-muted);"> de ${pqN(d.anuncios, 0)}</small></div><div class="kpi-sub"><span>tabela em vigor desde ${ptDate(frVersaoHoje() || getToday())}</span></div></div>
+          <div class="kpi k-venda"><div class="kpi-label">Vendas conferidas</div><div class="kpi-value">${pqN(d.conferidas, 0)}</div><div class="kpi-sub"><span><b>${pqN(pctCerto, 0)}%</b> com o frete certo</span><span>${pqN(d.fora, 0)} com mais de um produto, de fora</span></div></div>
+          <div class="kpi k-atraso"><div class="kpi-label">Cobrado a mais ${typeof dica === 'function' ? dica('Soma do que foi cobrado acima da tabela no período. "Aguardando" é o que você ainda não marcou como conferido.') : ''}</div><div class="kpi-value" style="color:var(--danger);">R$ ${pqN(totMais)}</div><div class="kpi-sub"><span>${pqN(tudoMais.length, 0)} vendas</span><span>aguardando <b>R$ ${pqN(soma(abertas))}</b></span></div></div>
+          <div class="kpi k-mc"><div class="kpi-label">Cobrado a menos ${typeof dica === 'function' ? dica('Soma do que foi cobrado abaixo da tabela no período: faixa de peso ou de preço abaixo, e várias unidades cobradas uma vez só.') : ''}</div><div class="kpi-value">R$ ${pqN(favor)}</div><div class="kpi-sub"><span>${pqN(nFavor, 0)} vendas a seu favor</span></div></div>
+          <div class="kpi k-hoje"><div class="kpi-label">Saldo do período</div><div class="kpi-value" style="color:${totMais - favor > 0 ? 'var(--danger)' : 'var(--success,#16a34a)'}">${totMais - favor > 0 ? '−' : '+'}R$ ${pqN(Math.abs(totMais - favor))}</div><div class="kpi-sub"><span>${totMais - favor > 0 ? 'o Mercado Livre cobrou mais do que a tabela' : 'o Mercado Livre cobrou menos do que a tabela'}</span></div></div>
         </div>
-        <div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">${FR_ABA[fr.aba].t}</div><div class="pg-sub" style="max-width:860px;">${FR_ABA[fr.aba].d}</div></div></div>
-          <div class="card-body" style="padding-bottom:6px;"><div class="chips">${abas.map(k => chip(k, ab(k).length, soma(ab(k)))).join('')}${chip('favor', nFavor, 0)}${chip('anuncios', (d.itens || []).length, 0)}</div></div>
+        <div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div class="chips">${chip('mais', 'Cobrado a mais', tudoMais.length, totMais)}${chip('menos', 'Cobrado a menos', nFavor, favor)}${chip('anuncios', 'Por anúncio', (d.itens || []).length, null)}</div></div>
+          <div class="card-body" style="padding-top:0;padding-bottom:10px;"><div class="pg-sub" style="max-width:900px;">${sub}</div></div>
           ${corpo}</div>`;
     }
