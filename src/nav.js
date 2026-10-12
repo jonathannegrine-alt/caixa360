@@ -46,6 +46,7 @@
       else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); if(typeof olistRenderCard === 'function') olistRenderCard(); if(typeof vrRenderCard === 'function') vrRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof iaRenderCard === 'function') iaRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }
       else if(page === 'resultado'){ setResultadoTab('anual'); }
       else if(page === 'flex'){ if(typeof fxRender === 'function') fxRender(); }
+      else if(page === 'conciliacao'){ if(typeof cnRender === 'function') cnRender(); }
       else if(page === 'frete'){ if(typeof frRender === 'function') frRender(); }
       else if(page === 'promocoes'){ if(typeof pmRender === 'function') pmRender(); }
       else if(page === 'emprestimos'){ if(typeof renderEmprestimos === 'function') renderEmprestimos(); }
