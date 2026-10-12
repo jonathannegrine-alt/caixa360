@@ -126,19 +126,23 @@
       (gs.rupt || []).forEach(it => {
         const dias = it.dias || {}, ks = Object.keys(dias).sort(); if(ks.length < 10) return;
         const un = ks.reduce((s, k) => s + Number(dias[k][0]), 0), bruto = ks.reduce((s, k) => s + Number(dias[k][1]), 0), mc = ks.reduce((s, k) => s + Number(dias[k][2]), 0);
+        // dia parado = vendeu menos de um quarto do ritmo (mediana dos 14 dias normais anteriores); o que faltou é a perda
         let d = ks[0], recentes = [], buracos = [], atual = null;
         while(d < hoje){
-          const x = dias[d];
-          if(x){ if(atual){ buracos.push(atual); atual = null; } recentes.push(Number(x[0])); if(recentes.length > 14) recentes.shift(); }
-          else if(recentes.length >= 7){
-            const ord = recentes.slice().sort((a, b) => a - b), ritmo = ord[Math.floor(ord.length / 2)];
-            if(ritmo >= 3){ if(!atual){ const ant = dias[addDias(d, -1)]; atual = { de: d, n: 0, ritmo, zerou: !!(ant && ant[3] != null && Number(ant[3]) <= ritmo) }; } atual.n++; atual.ate = d; }
+          const x = dias[d], unDia = x ? Number(x[0]) : 0;
+          const ord = recentes.slice().sort((a, b) => a - b), ritmo = ord.length >= 7 ? ord[Math.floor(ord.length / 2)] : 0;
+          if(ritmo >= 3 && unDia < ritmo * 0.25){
+            if(!atual){ const ant = dias[addDias(d, -1)]; atual = { de: d, n: 0, ritmo, falta: 0, zerou: !!(ant && ant[3] != null && Number(ant[3]) <= ritmo) }; }
+            atual.n++; atual.ate = d; atual.falta += ritmo - unDia;
+          } else {
+            if(atual){ buracos.push(atual); atual = null; }
+            if(x){ recentes.push(unDia); if(recentes.length > 14) recentes.shift(); }
           }
           d = addDias(d, 1);
         }
         if(atual){ atual.aberto = true; buracos.push(atual); }
         if(!buracos.length) return;
-        const diasSem = buracos.reduce((s, b) => s + b.n, 0), unPerd = buracos.reduce((s, b) => s + b.n * b.ritmo, 0), ult = buracos[buracos.length - 1];
+        const diasSem = buracos.reduce((s, b) => s + b.n, 0), unPerd = buracos.reduce((s, b) => s + b.falta, 0), ult = buracos[buracos.length - 1];
         out.push({ ...it, diasSem, unPerd, vPerd: un ? unPerd * bruto / un : 0, mcPerd: un ? unPerd * mc / un : 0, vezes: buracos.length, ult, aberto: !!ult.aberto, confirmado: buracos.some(b => b.zerou) });
       });
       return out;
@@ -149,22 +153,22 @@
       const L = gsRupturaLinhas(), T = L.reduce((s, l) => { s.v += l.vPerd; s.mc += l.mcPerd; s.d += l.diasSem; return s; }, { v: 0, mc: 0, d: 0 }), abertos = L.filter(l => l.aberto);
       return `
         <div class="kpi-grid k4i">
-          ${anKpi('k-atraso', 'Venda perdida em 90 dias', fmt(T.v), 'estimativa pelos dias sem nenhuma venda')}
+          ${anKpi('k-atraso', 'Venda perdida em 90 dias', fmt(T.v), 'estimativa pelos dias quase sem venda')}
           ${anKpi('k-mc', 'Margem que deixou de entrar', fmt(T.mc), 'pela margem média de cada anúncio')}
-          ${anKpi('k-venda', 'Dias sem vender', anN(T.d), 'somando ' + L.length + ' anúncio' + (L.length === 1 ? '' : 's'))}
-          ${anKpi('k-hoje', 'Parados agora', String(abertos.length), abertos.length ? 'sem venda desde ontem ou antes' : 'nenhum anúncio forte parado')}
+          ${anKpi('k-venda', 'Dias parados', anN(T.d), 'somando ' + L.length + ' anúncio' + (L.length === 1 ? '' : 's'))}
+          ${anKpi('k-hoje', 'Parados agora', String(abertos.length), abertos.length ? 'quase sem venda até ontem' : 'nenhum anúncio forte parado')}
         </div>
         <div class="card"><div class="card-header"><div class="card-title">Anúncios que vendem todo dia e pararam</div></div>
         ${anTabela(L, [
           { k: 'titulo', t: 'Anúncio', fmt: l => gsAnuncio(l, l.logistica === 'fulfillment' ? ' · Full' : '') },
-          { k: 'diasSem', t: 'Dias sem vender', num: 1, fmt: l => '<b>' + l.diasSem + '</b> <small class="text-muted">em ' + l.vezes + ' vez' + (l.vezes > 1 ? 'es' : '') + '</small>' },
+          { k: 'diasSem', t: 'Dias parados', num: 1, fmt: l => '<b>' + l.diasSem + '</b> <small class="text-muted">em ' + l.vezes + ' vez' + (l.vezes > 1 ? 'es' : '') + '</small>' },
           { k: 'ult', t: 'Última parada', val: l => l.ult.de, fmt: l => ptDate(l.ult.de) + (l.ult.n > 1 ? ' a ' + ptDate(l.ult.ate) : '') + (l.aberto ? ' <span class="text-danger"><b>· ainda parado</b></span>' : '') + (l.ult.zerou ? '<br><small class="text-muted">estoque do anúncio estava no fim</small>' : '') },
           { k: 'ritmo', t: 'Vendia por dia', num: 1, val: l => l.ult.ritmo, fmt: l => anN(l.ult.ritmo) + ' un.' },
           { k: 'unPerd', t: 'Un. perdidas', num: 1, fmt: l => anN(l.unPerd) },
           { k: 'vPerd', t: 'Venda perdida', num: 1, fmt: l => '<b>' + fmt(l.vPerd) + '</b>' },
           { k: 'mcPerd', t: 'Margem perdida', num: 1, fmt: l => `<b style="color:var(--danger)">${fmt(l.mcPerd)}</b>` }
         ], 'mcPerd')}
-        <div class="text-muted" style="font-size:12px;padding:12px 18px;">É uma estimativa. Entra aqui o dia inteiro sem nenhuma venda de um anúncio que vinha vendendo pelo menos 3 unidades por dia (pela mediana dos 14 dias de venda anteriores). O motivo pode ser falta de estoque ou anúncio pausado: o sistema não diferencia. As unidades perdidas são os dias parados vezes o ritmo de antes. A partir de agora o sistema grava o estoque do anúncio depois de cada venda; quando a parada vier logo depois de o estoque chegar ao fim, a linha avisa.</div></div>`;
+        <div class="text-muted" style="font-size:12px;padding:12px 18px;">É uma estimativa. Dia parado é aquele em que o anúncio vendeu menos de um quarto do que vinha vendendo (mediana dos 14 dias normais anteriores, para anúncios de pelo menos 3 unidades por dia). O motivo pode ser falta de estoque, anúncio pausado ou perda de posição: o sistema não diferencia. As unidades perdidas são o que faltou para chegar ao ritmo de antes em cada dia parado. A partir de agora o sistema grava o estoque do anúncio depois de cada venda; quando a parada vier logo depois de o estoque chegar ao fim, a linha avisa.</div></div>`;
     }
 
     // ---------- alerta no Início (lê o último cálculo de lucro guardado neste navegador) ----------
