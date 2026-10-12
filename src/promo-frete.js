@@ -27,7 +27,7 @@
       if(!c || pm.promos) return;
       let d; try { d = await pqFuncao('ml-promos', { acao: 'lista', conta: c }); } catch(e){ d = { error: 'sem conexão com o servidor' }; }
       if(pm._c !== c) return;
-      if(d && d.demo){ pm.promos = []; pm.erro = 'Na demonstração a central de promoções fica desligada: ela lê as promoções direto da conta do Mercado Livre.'; }
+      if(d && d.demo && !d.promos){ pm.promos = []; pm.erro = 'Na demonstração a central de promoções fica desligada: ela lê as promoções direto da conta do Mercado Livre.'; }
       else if(!d || !d.ok){ pm.promos = []; pm.erro = (d && (d.motivo || d.error)) || 'não foi possível ler as promoções'; }
       else pm.promos = d.promos.filter(p => p.situacao !== 'finished');
       pmDesenhar();
