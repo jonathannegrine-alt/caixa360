@@ -268,7 +268,7 @@
     function pcDesenharMinhas(){
       const cab = pcCab('As suas campanhas no Mercado Livre: crie, edite e copie de um mês para o outro.', `<button class="btn-out btn btn-sm" onclick="pc.camps=null;pcDesenhar();pcCarregarCampanhas(true).then(pcDesenhar)" title="Lê de novo as campanhas ativas e os anúncios de cada uma">Sincronizar promoções</button><button class="btn btn-sm" onclick="pcNova()">+ Criar promoção</button>`);
       if(pc.lendo || !pc.camps) return cab + `<div class="card"><div class="carregando-msg"><span class="carregando-roda"></span><b>${pqE(pc.lendo || 'Lendo as suas campanhas…')}</b></div></div>`;
-      const por = s => pc.camps.filter(x => x.situacao === s), l = por(pc.sit);
+      const c = pmConta(), por = s => pc.camps.filter(x => x.situacao === s), l = por(pc.sit);
       const chip = (k, t) => `<button class="chip ${pc.sit === k ? 'active' : ''}" onclick="pcSit('${k}')">${t}<span class="n">${por(k).length}</span></button>`;
       return cab + `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div class="chips">${chip('pending', 'Para começar')}${chip('started', 'Em andamento')}${chip('finished', 'Encerradas')}</div></div>
         ${pc.erroCamps ? `<div class="alert alert-warning" style="margin:0 18px 12px;">${pqE(pc.erroCamps)}</div>` : ''}
