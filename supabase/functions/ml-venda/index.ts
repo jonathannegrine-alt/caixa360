@@ -123,7 +123,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // detalhe
-    const [o, b, s] = await Promise.all([g(`${ML}/orders/${pedido}`), g(`${ML}/orders/${pedido}/billing_info`), sid ? g(`${ML}/shipments/${sid}`) : Promise.resolve(null)])
+    const [o, b, s, si] = await Promise.all([g(`${ML}/orders/${pedido}`), g(`${ML}/orders/${pedido}/billing_info`), sid ? g(`${ML}/shipments/${sid}`) : Promise.resolve(null), sid ? g(`${ML}/shipments/${sid}/items`) : Promise.resolve(null)])
+    const meuItem = (Array.isArray(si) ? si : []).find((x: any) => String(x?.order_id) === String(pedido)) || (Array.isArray(si) ? si[0] : null)
     const end = s?.destination?.shipping_address || {}
     const info = (b?.billing_info?.additional_info || []) as any[]
     const ad = (k: string) => String((info.find(x => x?.type === k) || {}).value || '')
@@ -140,6 +141,8 @@ Deno.serve(async (req: Request) => {
       limite_envio: s.lead_time?.estimated_schedule_limit?.date || '',
       altura: Number(s.dimensions?.height) || 0, largura: Number(s.dimensions?.width) || 0, comprimento: Number(s.dimensions?.length) || 0, peso: Number(s.dimensions?.weight) || 0,
       valor_declarado: Number(s.declared_value) || 0,
+      // medidas do produto registradas pelo ML neste envio e quanto do pacote é desta venda (menos de 100 = pacote dividido com outra venda)
+      item: meuItem ? { altura: Number(meuItem.dimensions?.height) || 0, largura: Number(meuItem.dimensions?.width) || 0, comprimento: Number(meuItem.dimensions?.length) || 0, peso: Number(meuItem.dimensions?.weight) || 0, parte: meuItem.item_ponderation == null ? null : Number(meuItem.item_ponderation), origem: meuItem.dimensions_source?.origin || '' } : null,
       destinatario: s.destination?.receiver_name || '', endereco: end.address_line || [end.street_name, end.street_number].filter(Boolean).join(', '),
       complemento: end.comment || '', bairro: end.neighborhood?.name || '', cidade: end.city?.name || '', uf: ufm ? ufm[1] : '', cep: end.zip_code || '',
     } : null
