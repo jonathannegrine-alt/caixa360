@@ -21,6 +21,8 @@
     function pmConta(){ return contaAtiva || pm.conta || (contasML[0] && contasML[0].id) || ''; }
     async function pmRender(){
       const v = document.getElementById('view-promocoes'); if(!v) return;
+      // abas "Por anúncio" e "Minhas promoções" ficam em promo-campanhas.js
+      if(pm.aba && pm.aba !== 'ml' && typeof pcRender === 'function') return pcRender();
       const c = pmConta();
       if(pm._c !== c){ pm._c = c; pm.promos = null; pm.sel = null; pm.itens = []; pm.erro = ''; }
       pmDesenhar();
@@ -90,6 +92,7 @@
     }
     function pmDesenhar(){
       const v = document.getElementById('view-promocoes'); if(!v || !v.classList.contains('active')) return;
+      if(pm.aba && pm.aba !== 'ml' && typeof pcDesenhar === 'function') return pcDesenhar();
       const c = pmConta(), hoje = getToday();
       const dm = s => s ? String(s).substring(8, 10) + '/' + String(s).substring(5, 7) : '';
       const lojas = contasML.length > 1 && !contaAtiva ? `<div class="seg">${contasML.map(x => `<button class="btn-toggle ${x.id === c ? 'active' : ''}" onclick="pmTrocarConta('${x.id}')">${pqE(x.apelido || x.id)}</button>`).join('')}</div>` : '';
@@ -123,8 +126,9 @@
           ${pm.depois && pm.itens.length < pm.total ? `<div style="padding:14px;text-align:center;"><button class="btn-out btn btn-sm" onclick="pmMais()" ${pm.carregando ? 'disabled' : ''}>${pm.carregando ? 'Carregando…' : 'Carregar mais anúncios'}</button></div>` : ''}</div>`;
       }
       v.innerHTML = `
-        <div class="pg-head"><div><div class="pg-title">Central de promoções</div><div class="pg-sub">Promoções do Mercado Livre para os seus anúncios, com a margem antes de participar. Por enquanto é só consulta: para entrar ou sair de uma promoção, use o Mercado Livre.</div></div>
+        <div class="pg-head"><div><div class="pg-title">Central de promoções</div><div class="pg-sub">Promoções do Mercado Livre para os seus anúncios, com a margem antes de participar. As campanhas do Mercado Livre aqui são só consulta; as suas campanhas você cria e edita em "Minhas promoções".</div></div>
           <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">${lojas}<button class="btn-out btn btn-sm" onclick="pm.promos=null;pm.sel=null;pmRender()">↻ Atualizar</button></div></div>
+        ${typeof pcAbas === 'function' ? pcAbas() : ''}
         <div class="card"><div class="card-header"><div class="card-title">Promoções disponíveis</div><span class="text-muted" style="font-size:12px;">${c ? pqE(contaNome(c) || c) : ''} · clique numa promoção para ver os anúncios</span></div><div class="card-body">${cards}</div></div>
         ${tab}`;
     }

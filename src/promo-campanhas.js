@@ -1,0 +1,310 @@
+// ===== PROMOÇÕES: "Por anúncio" e "Minhas promoções" (campanhas do vendedor) =====
+// Complementa promo-frete.js (aba "Do Mercado Livre"). Edge Function ml-promos:
+//   do_anuncio        promoções de um anúncio
+//   campanha_itens    anúncios de uma campanha (participantes e candidatos); guarda cópia em promo_campanhas
+//   campanha_criar / campanha_editar / campanha_excluir / campanha_gravar   gravam na conta do Mercado Livre
+// As campanhas encerradas vêm da cópia guardada (o Mercado Livre só devolve as ativas): é dela que sai o "Copiar".
+
+    let pc = { conta: '', anuncios: null, busca: '', aberto: {}, camps: null, sit: 'started', ed: null, lendo: '', base: {} };
+    const PC_SIT = { pending: 'Para começar', started: 'Em andamento', finished: 'Encerrada', deleted: 'Excluída' };
+    const PC_SUB = { FLEXIBLE_PERCENTAGE: 'Porcentagem flexível', FIXED_PERCENTAGE: 'Porcentagem fixa' };
+    const pcDia = s => s ? ptDate(String(s).substring(0, 10)) : '';
+    const pcR = v => Math.round(Number(v) * 100) / 100;
+    function pcAbas(){
+      const a = pm.aba || 'ml';
+      return `<div class="seg" style="margin-bottom:14px;">${[['ml', 'Do Mercado Livre'], ['anuncios', 'Por anúncio'], ['minhas', 'Minhas promoções']].map(([k, t]) => `<button class="btn-toggle ${a === k ? 'active' : ''}" onclick="pcAba('${k}')">${t}</button>`).join('')}</div>`;
+    }
+    function pcAba(k){ pm.aba = k; pc.ed = null; pmRender(); }
+    function pcLojas(c){ return contasML.length > 1 && !contaAtiva ? `<div class="seg">${contasML.map(x => `<button class="btn-toggle ${x.id === c ? 'active' : ''}" onclick="pmTrocarConta('${x.id}')">${pqE(x.apelido || x.id)}</button>`).join('')}</div>` : ''; }
+    function pcCab(sub, botoes){ const c = pmConta(); return `<div class="pg-head"><div><div class="pg-title">Central de promoções</div><div class="pg-sub">${sub}</div></div><div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">${pcLojas(c)}${botoes || ''}</div></div>${pcAbas()}`; }
+
+    async function pcRender(){
+      const v = document.getElementById('view-promocoes'); if(!v) return;
+      const c = pmConta();
+      if(pc.conta !== c){ pc.conta = c; pc.anuncios = null; pc.aberto = {}; pc.camps = null; pc.ed = null; }
+      pcDesenhar();
+      if(!c || typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      try { if(typeof frTabela === 'function') await frTabela(); } catch(e){}
+      if(pm.aba === 'anuncios' && !pc.anuncios) await pcCarregarAnuncios();
+      if(pm.aba === 'minhas' && !pc.camps) await pcCarregarCampanhas();
+      pcDesenhar();
+    }
+    // dados de exibição dos anúncios (título, foto, SKU, preço): o que faltar é lido no Mercado Livre
+    async function pcBase(ids){
+      const c = pmConta(), falta = [...new Set(ids)].filter(i => i && !pc.base[i]);
+      if(!falta.length) return;
+      for(let i = 0; i < falta.length; i += 150){
+        const r = await supa.from('ml_itens_base').select('item_id,titulo,thumbnail,sku,preco,tarifa_pct,peso_g').eq('usuario_id', usuarioAtual.id).in('item_id', falta.slice(i, i + 150));
+        (r.data || []).forEach(x => { pc.base[x.item_id] = x; if(typeof pm !== 'undefined') pm.base[x.item_id] = pm.base[x.item_id] || x; });
+      }
+      const ainda = falta.filter(i => !pc.base[i]);
+      for(let i = 0; i < ainda.length; i += 20){
+        let b; try { b = await pqFuncao('ml-promos', { acao: 'base', conta: c, itens: ainda.slice(i, i + 20) }); } catch(e){ b = null; }
+        ((b && b.itens) || []).forEach(x => { pc.base[x.item_id] = x; pm.base[x.item_id] = pm.base[x.item_id] || x; });
+      }
+      ainda.forEach(i => { if(!pc.base[i]) pc.base[i] = { item_id: i }; });
+    }
+
+    // ------------------------------------------------------------- POR ANÚNCIO
+    async function pcCarregarAnuncios(){
+      const c = pmConta();
+      const r = await supa.from('ml_itens_base').select('item_id,titulo,thumbnail,sku,preco,tarifa_pct,peso_g').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', c).order('sku').limit(2000);
+      pc.anuncios = r.data || []; pc.anuncios.forEach(x => { pc.base[x.item_id] = x; });
+    }
+    async function pcAbrirAnuncio(item){
+      if(pc.aberto[item]){ delete pc.aberto[item]; pcDesenhar(); return; }
+      pc.aberto[item] = { lendo: true }; pcDesenhar();
+      let d; try { d = await pqFuncao('ml-promos', { acao: 'do_anuncio', conta: pmConta(), item }); } catch(e){ d = { error: 'sem conexão' }; }
+      pc.aberto[item] = d && d.ok ? { promos: d.promos } : { erro: (d && (d.motivo || d.error)) || 'não foi possível ler' };
+      pcDesenhar();
+    }
+    function pcCartoesAnuncio(item){
+      const a = pc.aberto[item]; if(!a) return '';
+      if(a.lendo) return '<div class="pc-promos"><span class="text-muted">Lendo as promoções deste anúncio no Mercado Livre…</span></div>';
+      if(a.erro) return `<div class="pc-promos"><span class="text-danger">${pqE(a.erro)}</span></div>`;
+      if(!a.promos.length) return '<div class="pc-promos"><span class="text-muted">Nenhuma promoção disponível para este anúncio agora.</span></div>';
+      const ord = { started: 0, pending: 1, candidate: 2 };
+      return `<div class="pc-promos">${a.promos.slice().sort((x, y) => (ord[x.situacao] ?? 3) - (ord[y.situacao] ?? 3)).map(p => {
+        const dentro = p.situacao === 'started' || p.situacao === 'pending', preco = p.preco || p.sugerido || 0, desc = p.original && preco ? (1 - preco / p.original) * 100 : (p.ml_pct + p.vendedor_pct);
+        const m = preco && typeof pmMargem === 'function' ? pmMargem(item, preco, p.original * (p.ml_pct || 0) / 100) : null;
+        return `<div class="pc-promo ${dentro ? 'dentro' : ''}"><div><b>${pqE(p.nome || PM_TIPO[p.tipo] || p.tipo)}</b> <span class="v-tag ${dentro ? 'conta' : ''}">${p.situacao === 'started' ? 'Participando' : p.situacao === 'pending' ? 'Programado' : 'Pode participar'}</span>
+            <small>${pqE(PM_TIPO[p.tipo] || p.tipo)}${p.inicio ? ' · ' + pcDia(p.inicio) + ' a ' + pcDia(p.fim) : ''}</small></div>
+          <div class="pc-num">${desc ? `<b>${pqN(desc, 1)}%</b>` : ''}${p.vendedor_pct || p.ml_pct ? `<small>você ${pqN(p.vendedor_pct, 1)}% · Mercado Livre ${pqN(p.ml_pct, 1)}%</small>` : ''}</div>
+          <div class="pc-num">${preco ? `<b>R$ ${pqN(preco)}</b><small>${dentro ? 'preço na promoção' : 'preço sugerido'}</small>` : '<small>defina o preço ao participar</small>'}</div>
+          <div class="pc-num">${m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)}</b><small>margem ${pqN(m.pct, 1)}%</small>` : '<small>sem custo no cadastro</small>'}</div></div>`; }).join('')}</div>`;
+    }
+
+    // ------------------------------------------------------------- MINHAS PROMOÇÕES
+    async function pcCarregarCampanhas(sincronizar){
+      const c = pmConta();
+      let d; try { d = await pqFuncao('ml-promos', { acao: 'lista', conta: c }); } catch(e){ d = null; }
+      const ativas = ((d && d.promos) || []).filter(p => p.tipo === 'SELLER_CAMPAIGN');
+      let g = await supa.from('promo_campanhas').select('id,nome,sub_tipo,situacao,inicio,fim,pct_fixa,itens,atualizado').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', c);
+      let guard = g.data || [];
+      // campanha ativa ainda sem cópia guardada (ou a pedido): lê os anúncios e guarda
+      const semCopia = ativas.filter(a => sincronizar || !guard.some(x => x.id === a.id));
+      for(let i = 0; i < semCopia.length; i++){
+        pc.lendo = 'Lendo a campanha "' + (semCopia[i].nome || semCopia[i].id) + '"… ' + (i + 1) + ' de ' + semCopia.length; pcDesenhar();
+        try { await pqFuncao('ml-promos', { acao: 'campanha_itens', conta: c, id: semCopia[i].id }); } catch(e){}
+      }
+      if(semCopia.length){ g = await supa.from('promo_campanhas').select('id,nome,sub_tipo,situacao,inicio,fim,pct_fixa,itens,atualizado').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', c); guard = g.data || []; }
+      pc.lendo = '';
+      pc.camps = guard.map(x => { const a = ativas.find(y => y.id === x.id);
+        // sem estar entre as ativas do Mercado Livre e com a data vencida = encerrada
+        const sit = x.situacao === 'deleted' ? 'deleted' : a ? a.situacao : 'finished';
+        return { id: x.id, nome: x.nome || (a && a.nome) || x.id, sub: x.sub_tipo || '', situacao: sit, inicio: x.inicio, fim: x.fim, pct_fixa: x.pct_fixa, itens: x.itens || [] }; })
+        .filter(x => x.situacao !== 'deleted').sort((a, b) => String(b.inicio || '').localeCompare(String(a.inicio || '')));
+      pc.erroCamps = d && d.ok === false ? (d.motivo || '') : '';
+    }
+    function pcSit(s){ pc.sit = s; pcDesenhar(); }
+
+    // ------- editor de campanha (criar, editar e copiar) -------
+    // pc.ed = { id (null = nova), nome, inicio, fim, sub, pct_fixa, situacao, linhas: [{ item, original, preco, pct, minimo, maximo, sel }], antes: { item: preco }, candidatos: [...], busca }
+    function pcLinha(item, original, preco, extra){ const o = Number(original) || 0, p = Number(preco) || 0; return Object.assign({ item, original: o, preco: p, pct: o && p ? pcR((1 - p / o) * 100) : 0, sel: false }, extra || {}); }
+    async function pcNova(){
+      const h = getToday(), ini = h, fim = dateStr(new Date(Number(h.substring(0, 4)), Number(h.substring(5, 7)), 0));
+      pc.ed = { id: null, nome: '', inicio: ini, fim: fim < ini ? ini : fim, sub: 'FLEXIBLE_PERCENTAGE', pct_fixa: '', situacao: '', linhas: [], antes: {}, candidatos: null, busca: '' };
+      pcDesenhar();
+    }
+    async function pcEditar(id){
+      pc.lendo = 'Lendo os anúncios da campanha no Mercado Livre…'; pcDesenhar();
+      let d; try { d = await pqFuncao('ml-promos', { acao: 'campanha_itens', conta: pmConta(), id }); } catch(e){ d = null; }
+      pc.lendo = '';
+      if(!d || !d.ok){ if(typeof toast === 'function') toast('Não consegui abrir a campanha: ' + ((d && (d.motivo || d.error)) || 'sem resposta')); pcDesenhar(); return; }
+      const dentro = d.itens.filter(x => x.situacao === 'started' || x.situacao === 'pending'), cand = d.itens.filter(x => x.situacao === 'candidate');
+      await pcBase(d.itens.map(x => x.item));
+      const antes = {}; dentro.forEach(x => { antes[x.item] = x.preco; });
+      pc.ed = { id, nome: d.campanha.nome, inicio: String(d.campanha.inicio).substring(0, 10), fim: String(d.campanha.fim).substring(0, 10), sub: d.campanha.sub || 'FLEXIBLE_PERCENTAGE', pct_fixa: d.campanha.pct_fixa || '', situacao: d.campanha.situacao,
+        linhas: dentro.map(x => pcLinha(x.item, x.original, x.preco)), antes, candidatos: cand.map(x => ({ item: x.item, original: x.original, minimo: x.minimo, maximo: x.maximo, sugerido: x.sugerido })), busca: '' };
+      pcDesenhar();
+    }
+    // copiar: mesma lista de anúncios e a mesma porcentagem de cada um, aplicada ao preço de hoje; datas no mês seguinte
+    async function pcCopiar(id){
+      const o = (pc.camps || []).find(x => x.id === id); if(!o) return;
+      pc.lendo = 'Preparando a cópia…'; pcDesenhar();
+      await pcBase((o.itens || []).map(x => x.item));
+      const ini0 = new Date(String(o.inicio).substring(0, 10) + 'T12:00:00'), ini = new Date(ini0.getFullYear(), ini0.getMonth() + 1, 1), fim = new Date(ini.getFullYear(), ini.getMonth() + 1, 0), hoje = getToday();
+      const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], nomeMes = meses.findIndex(m => m.toLowerCase() === String(o.nome).trim().toLowerCase());
+      pc.lendo = '';
+      pc.ed = { id: null, copiaDe: o.nome, nome: nomeMes >= 0 ? meses[ini.getMonth()] : (String(o.nome) + ' (cópia)').slice(0, 25), inicio: dateStr(ini) < hoje ? hoje : dateStr(ini), fim: dateStr(fim), sub: o.sub || 'FLEXIBLE_PERCENTAGE', pct_fixa: o.pct_fixa || '', situacao: '', antes: {}, candidatos: null, busca: '',
+        linhas: (o.itens || []).map(x => { const b = pc.base[x.item] || {}, orig = Number(b.preco) || Number(x.original) || 0, pct = x.original ? pcR((1 - x.preco / x.original) * 100) : 0; return pcLinha(x.item, orig, pcR(orig * (1 - pct / 100)), { pct }); }) };
+      pcDesenhar();
+    }
+    function pcEdCampo(k, v){ if(!pc.ed) return; pc.ed[k] = v; if(k === 'sub' || k === 'pct_fixa'){ if(pc.ed.sub === 'FIXED_PERCENTAGE' && Number(pc.ed.pct_fixa) > 0) pc.ed.linhas.forEach(l => { l.pct = Number(pc.ed.pct_fixa); l.preco = pcR(l.original * (1 - l.pct / 100)); }); pcDesenhar(); } else if(k === 'nome'){ const c = document.getElementById('pc-conta-nome'); if(c) c.textContent = String(v).length + '/25'; } }
+    function pcEdPreco(item, v){ const l = pc.ed.linhas.find(x => x.item === item); if(!l) return; const s = String(v).replace(/[^\d,.]/g, ''); l.preco = Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s) || 0; l.pct = l.original && l.preco ? pcR((1 - l.preco / l.original) * 100) : 0; pcDesenhar(); }
+    function pcEdPct(item, v){ const l = pc.ed.linhas.find(x => x.item === item); if(!l) return; l.pct = Number(String(v).replace(',', '.')) || 0; l.preco = pcR(l.original * (1 - l.pct / 100)); pcDesenhar(); }
+    function pcEdSel(item, on){ if(item === '*') pcEdVisiveis().forEach(l => { l.sel = on; }); else { const l = pc.ed.linhas.find(x => x.item === item); if(l) l.sel = on; } pcDesenhar(); }
+    function pcEdVisiveis(){ const b = String(pc.ed.busca || '').trim().toLowerCase(); return pc.ed.linhas.filter(l => { if(!b) return true; const i = pc.base[l.item] || {}; return (String(i.titulo || '') + ' ' + String(i.sku || '') + ' ' + l.item).toLowerCase().includes(b); }); }
+    function pcEdRemover(item){
+      const alvo = item ? pc.ed.linhas.filter(l => l.item === item) : pc.ed.linhas.filter(l => l.sel); if(!alvo.length) return;
+      const ids = new Set(alvo.map(l => l.item)); pc.ed.linhas = pc.ed.linhas.filter(l => !ids.has(l.item));
+      if(pc.ed.candidatos) alvo.forEach(l => { if(!pc.ed.candidatos.some(c => c.item === l.item)) pc.ed.candidatos.push({ item: l.item, original: l.original }); });
+      pcDesenhar();
+    }
+    // editar em massa: preço com desconto ou porcentagem, nos marcados (ou em todos, se nenhum estiver marcado)
+    function pcEdMassa(){
+      const n = pc.ed.linhas.filter(l => l.sel).length;
+      vmlModal('Editar em massa', `<div class="text-muted" style="font-size:13px;margin-bottom:12px;">Vale para ${n ? '<b>' + n + ' anúncio' + (n > 1 ? 's marcados' : ' marcado') + '</b>' : '<b>todos os ' + pc.ed.linhas.length + ' anúncios</b> da promoção (nenhum está marcado)'}.</div>
+        <div class="form-row"><div class="form-group"><label class="form-label" for="pc-m-pct">Desconto (%)</label><input type="text" inputmode="decimal" id="pc-m-pct" placeholder="Ex.: 20"></div>
+        <div class="form-group"><label class="form-label" for="pc-m-preco">ou preço com desconto (R$)</label><input type="text" inputmode="decimal" id="pc-m-preco" placeholder="mesmo preço para todos"></div></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="pcEdMassaAplicar()">Aplicar</button>`);
+    }
+    function pcEdMassaAplicar(){
+      const num = id => { const s = String((document.getElementById(id) || {}).value || '').replace(/[^\d,.]/g, ''); return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s) || 0; };
+      const pct = num('pc-m-pct'), preco = num('pc-m-preco'); if(!pct && !preco){ if(typeof toast === 'function') toast('Informe a porcentagem ou o preço.'); return; }
+      const alvo = pc.ed.linhas.some(l => l.sel) ? pc.ed.linhas.filter(l => l.sel) : pc.ed.linhas;
+      alvo.forEach(l => { if(pct){ l.pct = pct; l.preco = pcR(l.original * (1 - pct / 100)); } else { l.preco = preco; l.pct = l.original ? pcR((1 - preco / l.original) * 100) : 0; } });
+      fecharModal('modal-vml'); pcDesenhar();
+    }
+    // janela "Adicionar anúncios": os que ainda não estão na promoção
+    async function pcEdAdicionar(){
+      let cand = pc.ed.candidatos;
+      if(!cand){ if(!pc.anuncios) await pcCarregarAnuncios(); cand = pc.anuncios.map(x => ({ item: x.item_id, original: Number(x.preco) || 0 })); pc.ed.candidatos = cand; }
+      const dentro = new Set(pc.ed.linhas.map(l => l.item)); pc.ed._add = { busca: '', sel: new Set() };
+      await pcBase(cand.map(x => x.item));
+      pcEdAdicionarDesenhar(dentro);
+    }
+    function pcEdAdicionarDesenhar(){
+      const dentro = new Set(pc.ed.linhas.map(l => l.item)), a = pc.ed._add, b = a.busca.trim().toLowerCase();
+      const l = pc.ed.candidatos.filter(x => !dentro.has(x.item)).filter(x => { if(!b) return true; const i = pc.base[x.item] || {}; return (String(i.titulo || '') + ' ' + String(i.sku || '') + ' ' + x.item).toLowerCase().includes(b); });
+      vmlModal('Adicionar anúncios', `<div class="d-flex gap-1" style="align-items:center;margin-bottom:10px;"><input type="search" id="pc-add-busca" placeholder="Buscar por nome, SKU ou código do anúncio" value="${pqE(a.busca)}" style="flex:1;" oninput="pc.ed._add.busca=this.value;pcEdAdicionarDesenhar();document.getElementById('pc-add-busca').focus();"><span class="text-muted" style="font-size:12.5px;white-space:nowrap;">Selecionado <b>${a.sel.size}</b> · total ${l.length}</span></div>
+        <div style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" aria-label="Marcar todos" ${l.length && l.every(x => a.sel.has(x.item)) ? 'checked' : ''} onchange="pcEdAddSel('*', this.checked)"></th><th>Produto</th><th>SKU / anúncio</th><th class="num">Preço</th></tr></thead><tbody>
+        ${l.length ? l.slice(0, 300).map(x => { const i = pc.base[x.item] || {}; return `<tr><td><input type="checkbox" style="width:auto;" aria-label="Marcar ${pqE(x.item)}" ${a.sel.has(x.item) ? 'checked' : ''} onchange="pcEdAddSel('${x.item}', this.checked)"></td><td><div class="pm-an">${i.thumbnail ? `<img src="${pqE(i.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(i.titulo || x.item)}</b></div></div></td><td>${pqE(i.sku || '—')}<br><small class="text-muted">${pqE(x.item)}</small></td><td class="num">R$ ${pqN(x.original || i.preco)}</td></tr>`; }).join('') : '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:22px;">Nenhum anúncio disponível para adicionar.</td></tr>'}
+        </tbody></table></div>${pc.ed.id ? '' : '<div class="text-muted" style="font-size:12px;margin-top:8px;">A lista traz os anúncios com venda recente. O Mercado Livre confirma, ao salvar, quais podem entrar.</div>'}`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="pcEdAddConfirmar()" ${a.sel.size ? '' : 'disabled'}>Confirmar (${a.sel.size})</button>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
+    }
+    function pcEdAddSel(item, on){ const a = pc.ed._add, dentro = new Set(pc.ed.linhas.map(l => l.item)), b = a.busca.trim().toLowerCase();
+      if(item === '*') pc.ed.candidatos.filter(x => !dentro.has(x.item)).filter(x => { if(!b) return true; const i = pc.base[x.item] || {}; return (String(i.titulo || '') + ' ' + String(i.sku || '') + ' ' + x.item).toLowerCase().includes(b); }).forEach(x => { if(on) a.sel.add(x.item); else a.sel.delete(x.item); });
+      else if(on) a.sel.add(item); else a.sel.delete(item);
+      pcEdAdicionarDesenhar(); }
+    function pcEdAddConfirmar(){
+      const a = pc.ed._add, fixo = pc.ed.sub === 'FIXED_PERCENTAGE' ? Number(pc.ed.pct_fixa) || 0 : 0;
+      pc.ed.candidatos.filter(x => a.sel.has(x.item)).forEach(x => { const orig = Number(x.original) || Number((pc.base[x.item] || {}).preco) || 0, pct = fixo || (x.sugerido && orig ? pcR((1 - x.sugerido / orig) * 100) : 0);
+        pc.ed.linhas.push(pcLinha(x.item, orig, pct ? pcR(orig * (1 - pct / 100)) : 0, { pct, minimo: x.minimo, maximo: x.maximo })); });
+      fecharModal('modal-vml'); pcDesenhar();
+    }
+    // salvar: cria a campanha (se for nova) e grava os anúncios em lotes
+    async function pcEdSalvar(bt){
+      const e = pc.ed, c = pmConta(), avisa = t => { if(typeof toast === 'function') toast(t); };
+      const nome = String(e.nome || '').trim();
+      if(!nome){ avisa('Dê um nome à campanha.'); return; }
+      if(!e.inicio || !e.fim || e.fim < e.inicio){ avisa('Confira as datas de início e de fim.'); return; }
+      if(e.sub === 'FIXED_PERCENTAGE' && !e.id && !(Number(e.pct_fixa) >= 5 && Number(e.pct_fixa) <= 80)){ avisa('Na porcentagem fixa, informe um desconto entre 5% e 80%.'); return; }
+      const semPreco = e.linhas.filter(l => !(l.preco > 0) || !(l.pct >= 5) || l.pct > 80);
+      if(semPreco.length){ avisa(semPreco.length + ' anúncio' + (semPreco.length > 1 ? 's estão' : ' está') + ' sem desconto válido (o Mercado Livre aceita de 5% a 80%). Ajuste ou remova antes de salvar.'); return; }
+      const por = e.linhas.filter(l => e.antes[l.item] == null || Math.abs(e.antes[l.item] - l.preco) > 0.005).map(l => ({ item: l.item, preco: l.preco }));
+      const agora = new Set(e.linhas.map(l => l.item)), tirar = Object.keys(e.antes).filter(i => !agora.has(i));
+      if(tirar.length && !confirm(tirar.length + ' anúncio' + (tirar.length > 1 ? 's serão retirados' : ' será retirado') + ' desta campanha no Mercado Livre. Continuar?')) return;
+      const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; }
+      const prog = t => { if(bt) bt.textContent = t; };
+      let id = e.id;
+      if(!id){
+        prog('Criando a campanha…');
+        const r = await pqFuncao('ml-promos', { acao: 'campanha_criar', conta: c, nome, sub: e.sub, inicio: e.inicio, fim: e.fim, pct_fixa: Number(e.pct_fixa) || null }).catch(() => null);
+        if(!r || !r.ok){ avisa('O Mercado Livre não criou a campanha: ' + ((r && (r.motivo || r.error)) || 'sem resposta')); if(bt){ bt.disabled = false; bt.textContent = rot; } return; }
+        id = r.campanha.id; e.id = id;
+      } else if(nome !== e._nome0 || e.fim !== e._fim0 || e.inicio !== e._ini0){
+        prog('Atualizando os dados…');
+        const r = await pqFuncao('ml-promos', { acao: 'campanha_editar', conta: c, id, nome, fim: e.fim, inicio: e.situacao === 'pending' ? e.inicio : undefined }).catch(() => null);
+        if(!r || !r.ok) avisa('Os anúncios serão gravados, mas o Mercado Livre não aceitou mudar nome ou datas: ' + ((r && (r.motivo || r.error)) || 'sem resposta'));
+      }
+      const res = [];
+      for(let i = 0; i < Math.max(por.length, 1); i += 40){
+        const lote = por.slice(i, i + 40), tl = i === 0 ? tirar.slice(0, 40) : []; if(!lote.length && !tl.length) break;
+        prog('Gravando anúncios… ' + Math.min(i + 40, por.length) + ' de ' + por.length);
+        const r = await pqFuncao('ml-promos', { acao: 'campanha_gravar', conta: c, id, por: lote, tirar: tl }).catch(() => null);
+        if(r && r.ok) res.push(...r.resultados); else lote.forEach(x => res.push({ item: x.item, acao: 'por', ok: false, motivo: (r && (r.motivo || r.error)) || 'sem resposta' }));
+      }
+      for(let i = 40; i < tirar.length; i += 40){ const r = await pqFuncao('ml-promos', { acao: 'campanha_gravar', conta: c, id, por: [], tirar: tirar.slice(i, i + 40) }).catch(() => null); if(r && r.ok) res.push(...r.resultados); }
+      prog('Conferindo…');
+      try { await pqFuncao('ml-promos', { acao: 'campanha_itens', conta: c, id }); } catch(x){}
+      const falhas = res.filter(x => !x.ok), ok = res.filter(x => x.ok).length;
+      pc.camps = null; pm.promos = null; pc.ed = null;
+      await pcCarregarCampanhas(); pcDesenhar();
+      vmlModal(falhas.length ? 'Campanha gravada com pendências' : 'Campanha gravada', `<div style="line-height:1.6;">Campanha <b>${pqE(nome)}</b> (${pqE(id)}): <b>${ok}</b> alteraç${ok === 1 ? 'ão gravada' : 'ões gravadas'} no Mercado Livre${falhas.length ? ', <b class="text-danger">' + falhas.length + ' recusada' + (falhas.length > 1 ? 's' : '') + '</b>' : ''}.</div>
+        ${falhas.length ? `<div style="max-height:300px;overflow-y:auto;margin-top:12px;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th>O que o Mercado Livre respondeu</th></tr></thead><tbody>${falhas.map(x => `<tr><td>${pqE((pc.base[x.item] || {}).sku || x.item)}<br><small class="text-muted">${pqE(x.item)}</small></td><td style="white-space:normal;">${pqE(x.motivo || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}`);
+    }
+    function pcExcluir(id){
+      const o = (pc.camps || []).find(x => x.id === id); if(!o) return;
+      const ativa = o.situacao === 'started' || o.situacao === 'pending';
+      vmlModal('Excluir a campanha "' + pqE(o.nome) + '"', ativa ? `<div style="line-height:1.6;">A campanha está <b>${PC_SIT[o.situacao].toLowerCase()}</b> no Mercado Livre, com <b>${o.itens.length} anúncio${o.itens.length === 1 ? '' : 's'}</b>. Excluir tira o desconto de todos eles na hora e <b>não dá para desfazer</b>.<br><br>Para confirmar, digite o nome da campanha:</div><input type="text" id="pc-exc-nome" style="width:100%;margin-top:8px;" placeholder="${pqE(o.nome)}">`
+        : `<div style="line-height:1.6;">Esta campanha já terminou. Excluir tira ela só desta lista (a cópia guardada no sistema); no Mercado Livre nada muda.</div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" style="background:var(--danger);border-color:var(--danger);" onclick="pcExcluirConfirmar('${pqE(id)}', this)">Excluir</button>`);
+    }
+    async function pcExcluirConfirmar(id, bt){
+      const o = (pc.camps || []).find(x => x.id === id); if(!o) return;
+      const ativa = o.situacao === 'started' || o.situacao === 'pending';
+      if(ativa){
+        if(String((document.getElementById('pc-exc-nome') || {}).value || '').trim() !== String(o.nome).trim()){ if(typeof toast === 'function') toast('O nome digitado não confere.'); return; }
+        if(bt){ bt.disabled = true; bt.textContent = 'Excluindo…'; }
+        const r = await pqFuncao('ml-promos', { acao: 'campanha_excluir', conta: pmConta(), id }).catch(() => null);
+        if(!r || !r.ok){ if(typeof toast === 'function') toast('O Mercado Livre não excluiu: ' + ((r && (r.motivo || r.error)) || 'sem resposta')); if(bt){ bt.disabled = false; bt.textContent = 'Excluir'; } return; }
+      }
+      await supa.rpc('promo_campanha_ocultar', { p_conta: pmConta(), p_id: id });
+      fecharModal('modal-vml'); pc.camps = null; pm.promos = null; await pcCarregarCampanhas(); pcDesenhar();
+    }
+
+    // ------------------------------------------------------------- DESENHO
+    function pcDesenhar(){
+      const v = document.getElementById('view-promocoes'); if(!v || !v.classList.contains('active')) return;
+      const c = pmConta();
+      if(!c){ v.innerHTML = pcCab('Promoções do Mercado Livre para os seus anúncios.') + '<div class="card"><div class="vazio"><b>Conecte uma conta do Mercado Livre</b>As promoções são lidas direto da sua conta.</div></div>'; return; }
+      if(pm.aba === 'anuncios'){ v.innerHTML = pcDesenharAnuncios(); return; }
+      if(pc.ed){ v.innerHTML = pcDesenharEditor(); return; }
+      v.innerHTML = pcDesenharMinhas();
+    }
+    function pcDesenharAnuncios(){
+      const cab = pcCab('Cada anúncio com todas as promoções em que ele está ou pode entrar. Clique num anúncio para ver.', `<button class="btn-out btn btn-sm" onclick="pc.anuncios=null;pc.aberto={};pcRender()">↻ Atualizar</button>`);
+      if(!pc.anuncios) return cab + '<div class="card"><div class="carregando-msg"><span class="carregando-roda"></span><b>Lendo os anúncios…</b></div></div>';
+      const b = pc.busca.trim().toLowerCase(), l = pc.anuncios.filter(x => !b || (String(x.titulo || '') + ' ' + String(x.sku || '') + ' ' + x.item_id).toLowerCase().includes(b));
+      return cab + `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">${l.length} anúncio${l.length === 1 ? '' : 's'}</div><div class="pg-sub">Anúncios com venda recente desta loja.</div></div>
+          <input type="search" id="pc-busca" placeholder="Buscar por nome, SKU ou código do anúncio" value="${pqE(pc.busca)}" style="max-width:340px;" oninput="pc.busca=this.value;pcDesenhar();const i=document.getElementById('pc-busca');i.focus();i.setSelectionRange(i.value.length,i.value.length);"></div>
+        <div>${l.length ? l.slice(0, 200).map(x => `<div class="pc-an ${pc.aberto[x.item_id] ? 'aberto' : ''}"><button class="pc-an-cab" onclick="pcAbrirAnuncio('${x.item_id}')" aria-expanded="${pc.aberto[x.item_id] ? 'true' : 'false'}">
+              ${x.thumbnail ? `<img src="${pqE(x.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<span class="pc-an-t"><b>${pqE(x.titulo || x.item_id)}</b><small>${pqE(x.sku || 'sem SKU')} · ${pqE(x.item_id)}</small></span>
+              <span class="pc-an-p">R$ ${pqN(x.preco)}</span><span class="pc-seta">${pc.aberto[x.item_id] ? '▾' : '▸'}</span></button>${pcCartoesAnuncio(x.item_id)}</div>`).join('') : '<div class="vazio"><b>Nenhum anúncio encontrado</b></div>'}</div>
+        ${l.length > 200 ? '<div class="text-muted" style="font-size:12px;padding:10px 18px;">Mostrando 200. Use a busca para achar os outros.</div>' : ''}</div>`;
+    }
+    function pcDesenharMinhas(){
+      const cab = pcCab('As suas campanhas no Mercado Livre: crie, edite e copie de um mês para o outro.', `<button class="btn-out btn btn-sm" onclick="pc.camps=null;pcDesenhar();pcCarregarCampanhas(true).then(pcDesenhar)" title="Lê de novo as campanhas ativas e os anúncios de cada uma">Sincronizar promoções</button><button class="btn btn-sm" onclick="pcNova()">+ Criar promoção</button>`);
+      if(pc.lendo || !pc.camps) return cab + `<div class="card"><div class="carregando-msg"><span class="carregando-roda"></span><b>${pqE(pc.lendo || 'Lendo as suas campanhas…')}</b></div></div>`;
+      const por = s => pc.camps.filter(x => x.situacao === s), l = por(pc.sit);
+      const chip = (k, t) => `<button class="chip ${pc.sit === k ? 'active' : ''}" onclick="pcSit('${k}')">${t}<span class="n">${por(k).length}</span></button>`;
+      return cab + `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div class="chips">${chip('pending', 'Para começar')}${chip('started', 'Em andamento')}${chip('finished', 'Encerradas')}</div></div>
+        ${pc.erroCamps ? `<div class="alert alert-warning" style="margin:0 18px 12px;">${pqE(pc.erroCamps)}</div>` : ''}
+        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Nome da campanha</th><th>Tipo da porcentagem</th><th>Loja</th><th class="num">Anúncios</th><th>Validade</th><th style="text-align:right;">Ações</th></tr></thead><tbody>
+        ${l.length ? l.map(x => `<tr><td><b>${pqE(x.nome)}</b><br><small class="text-muted">${pqE(x.id)}</small></td><td>${PC_SUB[x.sub] || pqE(x.sub || '—')}${x.pct_fixa ? '<br><small class="text-muted">' + pqN(x.pct_fixa, 0) + '% em todos</small>' : ''}</td><td>${pqE(contaNome(c) || c)}</td><td class="num">${x.itens.length}</td><td>${pcDia(x.inicio)} a ${pcDia(x.fim)}</td>
+            <td style="text-align:right;white-space:nowrap;">${x.situacao !== 'finished' ? `<button class="btn-out btn btn-sm" onclick="pcEditar('${pqE(x.id)}')">Editar</button> ` : ''}<button class="btn-out btn btn-sm" onclick="pcCopiar('${pqE(x.id)}')" title="Cria uma campanha nova com os mesmos anúncios e os mesmos descontos">Copiar</button> <button class="btn-out btn btn-sm" style="color:var(--danger);" onclick="pcExcluir('${pqE(x.id)}')">Excluir</button></td></tr>`).join('')
+          : `<tr><td colspan="6" class="text-muted" style="text-align:center;padding:26px;">Nenhuma campanha ${pc.sit === 'pending' ? 'para começar' : pc.sit === 'started' ? 'em andamento' : 'encerrada guardada'}.${pc.sit === 'finished' ? ' As campanhas passam a aparecer aqui depois que o sistema as vê ativas uma vez.' : ''}</td></tr>`}
+        </tbody></table></div></div>`;
+    }
+    function pcDesenharEditor(){
+      const e = pc.ed, nova = !e.id, comecou = e.situacao === 'started', l = pcEdVisiveis(), nSel = e.linhas.filter(x => x.sel).length, fixa = e.sub === 'FIXED_PERCENTAGE';
+      if(e._nome0 === undefined){ e._nome0 = e.nome; e._fim0 = e.fim; e._ini0 = e.inicio; }
+      const rd = (k, val, t, travado) => `<label class="pc-radio ${travado ? 'travado' : ''}"><input type="radio" name="pc-${k}" value="${val}" ${e[k] === val ? 'checked' : ''} ${travado ? 'disabled' : ''} onchange="pcEdCampo('${k}', this.value)"> ${t}</label>`;
+      return `<div class="pg-head"><div><div class="pg-title">${nova ? (e.copiaDe ? 'Copiar promoção' : 'Criar promoção') : 'Editar promoção'}</div><div class="pg-sub">${nova ? (e.copiaDe ? 'Cópia de "' + pqE(e.copiaDe) + '": mesmos anúncios e mesmas porcentagens, aplicadas ao preço de hoje. Confira e salve.' : 'A campanha é criada no Mercado Livre ao salvar.') : 'As mudanças vão para o Mercado Livre ao clicar em Atualizar.'}</div></div>
+          <div class="d-flex gap-1"><button class="btn-out btn" onclick="pc.ed=null;pcDesenhar()">Fechar</button><button class="btn" onclick="pcEdSalvar(this)">${nova ? 'Salvar' : 'Atualizar'}</button></div></div>
+        <div class="card"><div class="card-header"><div class="card-title">Informação básica</div></div><div class="card-body pc-form">
+          <div class="pc-campo"><label>Loja</label><input type="text" value="${pqE(contaNome(pmConta()) || pmConta())}" disabled></div>
+          <div class="pc-campo"><label for="pc-nome">Nome da campanha</label><div style="display:flex;gap:10px;align-items:center;"><input type="text" id="pc-nome" maxlength="25" value="${pqE(e.nome)}" placeholder="Ex.: Novembro" oninput="pcEdCampo('nome', this.value)"><small class="text-muted" id="pc-conta-nome">${String(e.nome).length}/25</small></div></div>
+          <div class="pc-campo"><label for="pc-ini">Validade</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="date" id="pc-ini" aria-label="Data de início" value="${e.inicio}" ${comecou ? 'disabled title="A campanha já começou: a data de início não muda"' : ''} onchange="pcEdCampo('inicio', this.value)"><span>a</span><input type="date" aria-label="Data de término" value="${e.fim}" onchange="pcEdCampo('fim', this.value)"></div></div>
+          <div class="pc-campo"><label>Tipo de promoção</label><div class="pc-radios"><label class="pc-radio travado"><input type="radio" checked disabled> Promoções do vendedor</label><label class="pc-radio travado" title="Ainda não disponível no sistema"><input type="radio" disabled> Campanha de cupons do vendedor</label></div></div>
+          <div class="pc-campo"><label>Aplicar desconto</label><div class="pc-radios" style="flex-direction:column;">${rd('sub', 'FIXED_PERCENTAGE', 'Porcentagem fixa: a mesma porcentagem de desconto para todos os anúncios' + (fixa ? ` <input type="text" inputmode="decimal" aria-label="Porcentagem fixa" style="width:70px;margin-left:8px;" value="${pqE(e.pct_fixa)}" ${nova ? '' : 'disabled'} onchange="pcEdCampo('pct_fixa', this.value.replace(',', '.'))"> %` : ''), !nova)}${rd('sub', 'FLEXIBLE_PERCENTAGE', 'Porcentagem flexível: porcentagem de desconto diferente por anúncio', !nova)}</div></div>
+        </div></div>
+        <div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div class="card-title">Anúncios da promoção <span class="v-tag conta">${e.linhas.length}</span></div>
+            <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><input type="search" id="pc-ed-busca" placeholder="Buscar por nome, SKU ou código" value="${pqE(e.busca)}" style="width:260px;" oninput="pc.ed.busca=this.value;pcDesenhar();const i=document.getElementById('pc-ed-busca');i.focus();i.setSelectionRange(i.value.length,i.value.length);"><button class="btn btn-sm" onclick="pcEdAdicionar()">Adicionar anúncios</button></div></div>
+          <div class="d-flex gap-1" style="align-items:center;padding:0 18px 12px;flex-wrap:wrap;"><span class="text-muted" style="font-size:12.5px;">Selecionado <b>${nSel}</b></span><button class="btn-out btn btn-sm" onclick="pcEdRemover()" ${nSel ? '' : 'disabled'}>Remover</button><button class="btn-out btn btn-sm" onclick="pcEdMassa()" ${e.linhas.length && !fixa ? '' : 'disabled'} title="Aplica a mesma porcentagem ou o mesmo preço a vários anúncios">Editar em massa</button></div>
+          <div style="overflow-x:auto;max-height:640px;overflow-y:auto;"><table class="cp-tab pm-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" aria-label="Marcar todos" ${l.length && l.every(x => x.sel) ? 'checked' : ''} onchange="pcEdSel('*', this.checked)"></th><th>Produto</th><th>SKU / anúncio</th><th class="num">Preço</th><th class="num">Preço com desconto</th><th class="num">Desconto</th><th class="num" title="Margem de contribuição no preço com desconto">Margem</th><th></th></tr></thead><tbody>
+          ${l.length ? l.map(x => { const i = pc.base[x.item] || {}, m = x.preco > 0 && typeof pmMargem === 'function' ? pmMargem(x.item, x.preco, 0) : null, ruim = !(x.pct >= 5) || x.pct > 80;
+            return `<tr><td><input type="checkbox" style="width:auto;" aria-label="Marcar ${pqE(x.item)}" ${x.sel ? 'checked' : ''} onchange="pcEdSel('${x.item}', this.checked)"></td>
+              <td><div class="pm-an">${i.thumbnail ? `<img src="${pqE(i.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(i.titulo || x.item)}</b></div></div></td>
+              <td>${pqE(i.sku || '—')}<br><small class="text-muted"><a href="https://produto.mercadolivre.com.br/${pqE(String(x.item).replace(/^MLB/, 'MLB-'))}" target="_blank" rel="noopener">${pqE(x.item)}</a></small></td>
+              <td class="num">R$ ${pqN(x.original)}</td>
+              <td class="num"><input type="text" inputmode="decimal" aria-label="Preço com desconto de ${pqE(x.item)}" class="pc-in ${ruim ? 'ruim' : ''}" value="${x.preco ? pqN(x.preco) : ''}" ${fixa ? 'disabled' : ''} onchange="pcEdPreco('${x.item}', this.value)"></td>
+              <td class="num"><input type="text" inputmode="decimal" aria-label="Desconto em % de ${pqE(x.item)}" class="pc-in pc-in-p ${ruim ? 'ruim' : ''}" value="${x.pct ? String(x.pct).replace('.', ',') : ''}" ${fixa ? 'disabled' : ''} onchange="pcEdPct('${x.item}', this.value)"> %</td>
+              <td class="num pm-mc">${m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)}</b><small>${pqN(m.pct, 1)}%</small>` : '<small class="text-muted">—</small>'}</td>
+              <td><button class="btn-out btn btn-sm" onclick="pcEdRemover('${x.item}')">Remover</button></td></tr>`; }).join('')
+            : `<tr><td colspan="8" class="text-muted" style="text-align:center;padding:26px;">${e.linhas.length ? 'Nenhum anúncio com essa busca.' : 'Nenhum anúncio ainda. Clique em "Adicionar anúncios".'}</td></tr>`}
+          </tbody></table></div>
+          <div class="text-muted" style="font-size:12px;padding:12px 18px;line-height:1.5;">O Mercado Livre aceita descontos de 5% a 80%. A margem usa o custo, o imposto, a tarifa e o frete de cada anúncio; "—" quer dizer produto sem custo no cadastro.</div></div>`;
+    }

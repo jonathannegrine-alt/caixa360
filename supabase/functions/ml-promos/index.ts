@@ -50,6 +50,93 @@ Deno.serve(async (req: Request) => {
     if (!tk) return resp({ error: 'A conta do Mercado Livre está desconectada. Reconecte em Configurações.' }, 400)
     const g = async (url: string) => { const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tk } }).catch(() => null); if (!r) return { erro: 'sem resposta' }; const j = await r.json().catch(() => null); return r.ok ? j : { erro: (j && (j.message || j.error)) || ('http ' + r.status) } }
 
+    // ---------- CAMPANHAS DO VENDEDOR (gravam na conta do Mercado Livre) ----------
+    // chamada genérica com método e corpo
+    const chama = async (metodo: string, url: string, corpo?: unknown) => {
+      const r = await fetch(url, { method: metodo, headers: { Authorization: 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: corpo === undefined ? undefined : JSON.stringify(corpo) }).catch(() => null)
+      if (!r) return { ok: false, status: 0, erro: 'sem resposta do Mercado Livre' }
+      const j: any = await r.json().catch(() => null)
+      return r.ok ? { ok: true, status: r.status, dados: j } : { ok: false, status: r.status, erro: (j && (j.message || j.error || (j.cause && JSON.stringify(j.cause)))) || ('http ' + r.status) }
+    }
+    const idCamp = (x: unknown) => /^C-MLB\d{3,14}$/.test(String(x)) ? String(x) : ''
+    const idItem = (x: unknown) => /^MLB\d{6,14}$/.test(String(x)) ? String(x) : ''
+
+    // promoções de UM anúncio (todas as campanhas em que ele está ou pode entrar)
+    if (body?.acao === 'do_anuncio') {
+      const item = idItem(body?.item); if (!item) return resp({ error: 'Anúncio inválido.' }, 400)
+      const j: any = await g(`${ML}/seller-promotions/items/${item}?app_version=v2`)
+      if (!j || j.erro) return resp({ ok: false, motivo: (j && j.erro) || 'sem resposta' })
+      return resp({ ok: true, promos: (Array.isArray(j) ? j : []).map((x: any) => ({ id: x.id, tipo: x.type, sub: x.sub_type || '', situacao: x.status || '', nome: x.name || '', preco: Number(x.price) || 0, original: Number(x.original_price) || 0,
+        ml_pct: Number(x.meli_percentage) || 0, vendedor_pct: Number(x.seller_percentage) || 0, inicio: x.start_date || '', fim: x.finish_date || '', sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0 })) })
+    }
+    // anúncios de uma campanha do vendedor: participantes (com preço) e candidatos (com mínimo, máximo e sugerido). Guarda a foto da campanha no banco.
+    if (body?.acao === 'campanha_itens') {
+      const id = idCamp(body?.id); if (!id) return resp({ error: 'Campanha inválida.' }, 400)
+      const cab: any = await g(`${ML}/seller-promotions/promotions/${id}?promotion_type=SELLER_CAMPAIGN&app_version=v2`)
+      if (!cab || cab.erro) return resp({ ok: false, motivo: (cab && cab.erro) || 'sem resposta' })
+      const todos: any[] = []; let depois = ''
+      for (let k = 0; k < 40; k++) {
+        const p = new URLSearchParams({ promotion_type: 'SELLER_CAMPAIGN', app_version: 'v2', limit: '50' }); if (depois) p.set('search_after', depois)
+        const j: any = await g(`${ML}/seller-promotions/promotions/${id}/items?${p}`)
+        if (!j || j.erro) break
+        todos.push(...(j.results || [])); depois = j.paging?.searchAfter || ''
+        if (!depois || !(j.results || []).length) break
+      }
+      const itens = todos.map((x: any) => ({ item: x.id, situacao: x.status || '', original: Number(x.original_price) || 0, preco: Number(x.price) || 0, sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0 }))
+      const dentro = itens.filter(x => x.situacao === 'started' || x.situacao === 'pending')
+      const camp = { id: cab.id, nome: cab.name || '', sub: cab.sub_type || '', situacao: cab.status || '', inicio: cab.start_date || '', fim: cab.finish_date || '', pct_fixa: Number(cab.fixed_percentage) || null }
+      await fetch(`${supaUrl}/rest/v1/promo_campanhas?on_conflict=usuario_id,ml_user_id,id`, { method: 'POST', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify([{ usuario_id: userId, ml_user_id: conta, id: camp.id, nome: camp.nome, sub_tipo: camp.sub, situacao: camp.situacao, inicio: camp.inicio || null, fim: camp.fim || null, pct_fixa: camp.pct_fixa, itens: dentro.map(x => ({ item: x.item, preco: x.preco, original: x.original })), atualizado: new Date().toISOString() }]) })
+      return resp({ ok: true, campanha: camp, itens })
+    }
+    // cria uma campanha do vendedor
+    if (body?.acao === 'campanha_criar') {
+      const nome = String(body?.nome || '').trim().slice(0, 25), sub = body?.sub === 'FIXED_PERCENTAGE' ? 'FIXED_PERCENTAGE' : 'FLEXIBLE_PERCENTAGE'
+      const dia = (s: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(String(s)) ? String(s) : ''
+      const ini = dia(body?.inicio), fim = dia(body?.fim)
+      if (!nome || !ini || !fim || fim < ini) return resp({ error: 'Informe o nome e as datas de início e de fim da campanha.' }, 400)
+      const corpo: Record<string, unknown> = { promotion_type: 'SELLER_CAMPAIGN', name: nome, sub_type: sub, start_date: ini + 'T00:00:00', finish_date: fim + 'T23:59:59' }
+      if (sub === 'FIXED_PERCENTAGE') { const p = Number(body?.pct_fixa); if (!(p >= 5 && p <= 80)) return resp({ error: 'Na porcentagem fixa, informe um desconto entre 5% e 80%.' }, 400); corpo.fixed_percentage = p }
+      const r = await chama('POST', `${ML}/seller-promotions/promotions?app_version=v2`, corpo)
+      if (!r.ok) return resp({ ok: false, motivo: r.erro })
+      return resp({ ok: true, campanha: { id: r.dados?.id, nome: r.dados?.name, sub: r.dados?.sub_type, situacao: r.dados?.status, inicio: r.dados?.start_date, fim: r.dados?.finish_date } })
+    }
+    // altera nome e/ou datas de uma campanha
+    if (body?.acao === 'campanha_editar') {
+      const id = idCamp(body?.id); if (!id) return resp({ error: 'Campanha inválida.' }, 400)
+      const corpo: Record<string, unknown> = { promotion_type: 'SELLER_CAMPAIGN' }
+      if (body?.nome) corpo.name = String(body.nome).trim().slice(0, 25)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(body?.inicio))) corpo.start_date = body.inicio + 'T00:00:00'
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(body?.fim))) corpo.finish_date = body.fim + 'T23:59:59'
+      const r = await chama('PUT', `${ML}/seller-promotions/promotions/${id}?app_version=v2`, corpo)
+      return resp(r.ok ? { ok: true } : { ok: false, motivo: r.erro })
+    }
+    // apaga uma campanha inteira (o front pede confirmação digitada)
+    if (body?.acao === 'campanha_excluir') {
+      const id = idCamp(body?.id); if (!id) return resp({ error: 'Campanha inválida.' }, 400)
+      const r = await chama('DELETE', `${ML}/seller-promotions/promotions/${id}?promotion_type=SELLER_CAMPAIGN&app_version=v2`)
+      return resp(r.ok ? { ok: true } : { ok: false, motivo: r.erro })
+    }
+    // põe (ou atualiza o preço de) anúncios numa campanha e tira os pedidos: { id, por: [{ item, preco }], tirar: [item] } — até 40 por chamada
+    if (body?.acao === 'campanha_gravar') {
+      const id = idCamp(body?.id); if (!id) return resp({ error: 'Campanha inválida.' }, 400)
+      const por = (Array.isArray(body?.por) ? body.por : []).filter((x: any) => idItem(x?.item) && Number(x?.preco) > 0).slice(0, 40)
+      const tirar = (Array.isArray(body?.tirar) ? body.tirar : []).map(idItem).filter(Boolean).slice(0, 40)
+      const res: any[] = []
+      for (let i = 0; i < por.length; i += 5) {
+        await Promise.all(por.slice(i, i + 5).map(async (x: any) => {
+          const r = await chama('POST', `${ML}/seller-promotions/items/${x.item}?app_version=v2`, { promotion_id: id, promotion_type: 'SELLER_CAMPAIGN', deal_price: Math.round(Number(x.preco) * 100) / 100 })
+          res.push({ item: x.item, acao: 'por', ok: r.ok, motivo: r.ok ? '' : r.erro, preco: r.ok ? Number(r.dados?.price) || Number(x.preco) : null })
+        }))
+      }
+      for (const it of tirar) {
+        // sempre com o id da campanha: tira o anúncio SÓ desta campanha
+        const r = await chama('DELETE', `${ML}/seller-promotions/items/${it}?promotion_type=SELLER_CAMPAIGN&promotion_id=${id}&app_version=v2`)
+        res.push({ item: it, acao: 'tirar', ok: r.ok, motivo: r.ok ? '' : r.erro })
+      }
+      return resp({ ok: true, resultados: res })
+    }
+
     // medida que o ML registrou em cada envio (agência/coleta): { acao: 'medidas_envio', conta, envios: [{ pedido, envio }] } — até 60 por chamada
     if (body?.acao === 'medidas_envio') {
       const lista = (Array.isArray(body?.envios) ? body.envios : []).filter((x: any) => /^\d{6,20}$/.test(String(x?.pedido)) && /^\d{6,20}$/.test(String(x?.envio))).slice(0, 60)
