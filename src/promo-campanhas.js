@@ -67,8 +67,8 @@
     // custo, imposto, tarifa e frete das vendas recentes de cada anúncio (é de onde vem o custo dos kits, que no cadastro ficam zerados)
     async function pcCustoVendas(ids){
       const falta = [...new Set(ids)].filter(i => i && !pm.info[i]);
-      for(let i = 0; i < falta.length; i += 200){ const r = await supa.rpc('ml_itens_margem', { p_itens: falta.slice(i, i + 200), p_conta: pmConta() }); (r.data || []).forEach(x => { pm.info[x.item_id] = x; }); }
-      falta.forEach(i => { if(!pm.info[i]) pm.info[i] = { vazio: true }; });
+      // em lotes pequenos (a consulta de muitos anúncios de uma vez passa do tempo limite); lote que falhar é tentado de novo depois
+      for(let i = 0; i < falta.length; i += 25){ const lote = falta.slice(i, i + 25), r = await supa.rpc('ml_itens_margem', { p_itens: lote, p_conta: pmConta() }); if(r.error) continue; (r.data || []).forEach(x => { pm.info[x.item_id] = x; }); lote.forEach(k => { if(!pm.info[k]) pm.info[k] = { vazio: true }; }); }
     }
     // busca: digitou o código do anúncio (com ou sem MLB) e deu Enter → abre direto as promoções dele
     async function pcBuscaEnter(){
