@@ -124,7 +124,7 @@ Deno.serve(async (req: Request) => {
             p.tipos = [...new Set(vistos)].filter(x => tipos.get(x) !== 'venda')
             p.prox = 0
             if (!p.tipos.length) { p.completo = true }
-            await db(`ml_fatura_periodos?${pk}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ tipos: p.tipos, prox: 0, completo: !!p.completo }) })
+            await db(`ml_fatura_periodos?${pk}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ tipos: p.tipos, prox: 0, completo: !!p.completo, ...(p.completo ? { lido_ok: true } : {}) }) })
             if (p.completo) continue
           }
           while (!p.completo && !limite && usadas < POR_CHAMADA) {
@@ -141,7 +141,7 @@ Deno.serve(async (req: Request) => {
             }
             p.prox += R.length
             if (!R.length || p.prox >= (Number(d.total) || 0)) p.completo = true
-            await db(`ml_fatura_periodos?${pk}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ prox: p.prox, completo: p.completo, lido_em: new Date().toISOString() }) })
+            await db(`ml_fatura_periodos?${pk}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ prox: p.prox, completo: p.completo, lido_em: new Date().toISOString(), ...(p.completo ? { lido_ok: true } : {}) }) })
             info.linhas = (info.linhas || 0) + linhas.length
           }
           if (info.erro) break

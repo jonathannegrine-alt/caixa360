@@ -23,9 +23,11 @@
     }
     function ftJuntar(porMes, f){ Object.keys(f || {}).forEach(m => { (porMes[m] = porMes[m] || {}).ft = f[m]; }); return porMes; }
     // o mês tem cobrança de fatura lida e o usuário escolheu usar a fatura?
-    function ftVale(ml, m){ return ftAuto() && !!(ml && ml[m] && ml[m].ft); }
+    // a primeira leitura de todas as faturas já terminou? (antes disso os meses estão pela metade)
+    function ftPronta(){ const S = ft.sit || []; return S.length > 0 && S.every(x => !Number(x.faltam)); }
+    function ftVale(ml, m){ return ftAuto() && ftPronta() && !!(ml && ml[m] && ml[m].ft); }
     function ftLinhas(ml){
-      if(!ftAuto()) return [];
+      if(!ftAuto() || !ftPronta()) return [];
       return FT_CLASSES.map(([k, nome]) => { const v = {}; for(let m = 1; m <= 12; m++) v[m] = (ml[m] && ml[m].ft && ml[m].ft[k]) || 0; return { nome, v, fatura: k }; }).filter(l => Object.values(l.v).some(x => x));
     }
     // categorias de Contas a pagar que parecem ser o pagamento da fatura do ML
@@ -54,8 +56,9 @@
       const S = ft.sit || [], conta = typeof contaParam === 'function' ? contaParam() : null, L = S.filter(x => !conta || String(x.ml_user_id) === String(conta));
       const e = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
       if(!L.length) return ftAuto() ? ' Fatura do Mercado Livre: ainda não foi lida (a primeira leitura leva cerca de uma hora depois de conectar a conta).' : '';
-      const ate = L.map(x => x.lido_ate).filter(Boolean).sort()[0], pend = L.reduce((s, x) => s + Number(x.pendentes || 0), 0);
-      const txt = ' Fatura do Mercado Livre lida até ' + e(ftData(ate) || '–') + (pend ? ' (' + pend + ' fatura' + (pend > 1 ? 's' : '') + ' ainda sendo lida' + (pend > 1 ? 's' : '') + ')' : '') + '.';
+      const ate = L.map(x => x.lido_ate).filter(Boolean).sort()[0], falta = L.reduce((s, x) => s + Number(x.faltam || 0), 0), tot = L.reduce((s, x) => s + Number(x.faturas || 0), 0);
+      if(falta) return ' Fatura do Mercado Livre: primeira leitura em andamento (' + (tot - falta) + ' de ' + tot + ' faturas lidas; o Mercado Livre só aceita 5 consultas por minuto).' + (ftAuto() ? ' Até terminar, o DRE continua usando o que está em Contas a pagar.' : '');
+      const txt = ' Fatura do Mercado Livre lida até ' + e(ftData(ate) || '–') + '.';
       return txt + (ftAuto() ? ' As cobranças entram no mês em que aconteceram, não no mês do pagamento.' : ' Ela não está entrando no DRE: para usar, abra “Configurar categorias”.');
     }
     function ftAviso(){
