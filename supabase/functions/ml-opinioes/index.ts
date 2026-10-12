@@ -1,5 +1,5 @@
 // ml-opinioes — opiniões dos compradores sobre os anúncios (nota e texto), só leitura.
-// Body: { conta, itens: ['MLB…', …], paginas? } (até 30 anúncios por chamada) com o JWT do usuário. A conta precisa
+// Body: { conta, itens: ['MLB…', …], detalhe? } (até 30 anúncios por chamada) com o JWT do usuário. A conta precisa
 // ser a dona dos anúncios: com o acesso de outra conta o Mercado Livre responde 403.
 //   GET /reviews/item/{id}?limit=50   → média, quantidade por nota e os textos mais recentes
 // Devolve só nota, título, texto e data: nada que identifique o comprador.
@@ -40,19 +40,26 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    // um anúncio só + paginas: lê mais páginas (as opiniões vêm por relevância, as notas baixas ficam para trás)
-    const paginas = itens.length === 1 ? Math.max(1, Math.min(8, Number(body?.paginas) || 1)) : 1
+    // um anúncio só + detalhe: além das mais relevantes (quase todas de nota 5), lê as de nota 1, 2 e 3 (?rating=N),
+    // que são as que mostram o que melhorar
+    const detalhe = itens.length === 1 && !!body?.detalhe
+    const pagina = async (id: string, extra: string) => {
+      const r = await fetch(`https://api.mercadolibre.com/reviews/item/${id}?limit=50${extra}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) }).catch(() => null)
+      return r && r.ok ? await r.json().catch(() => null) : { _erro: r ? r.status : 0 }
+    }
     const um = async (id: string) => {
-      const r = await fetch(`https://api.mercadolibre.com/reviews/item/${id}?limit=50&offset=0`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) }).catch(() => null)
-      if (!r || !r.ok) return { item_id: id, erro: r ? r.status : 0, msg: r ? (await r.text().catch(() => '')).slice(0, 300) : '' }
-      const j: any = await r.json().catch(() => null)
-      if (!j) return { item_id: id, erro: -1 }
+      const j: any = await pagina(id, '&offset=0')
+      if (!j || j._erro !== undefined) return { item_id: id, erro: j ? j._erro : -1 }
       const niveis = j.rating_levels || {}
-      const todas: any[] = [...(j.reviews || [])], total = Number(j.paging?.total) || 0
-      for (let p = 1; p < paginas && p * 50 < total; p++) {
-        const m: any = await fetch(`https://api.mercadolibre.com/reviews/item/${id}?limit=50&offset=${p * 50}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) }).then(x => x.ok ? x.json() : null).catch(() => null)
-        if (!m || !(m.reviews || []).length) break
-        todas.push(...m.reviews)
+      const todas: any[] = [...(j.reviews || [])]
+      if (detalhe) {
+        const baixas = await Promise.all([1, 2, 3].map(async n => {
+          const L: any[] = []
+          for (let p = 0; p < 4; p++) { const m: any = await pagina(id, `&rating=${n}&offset=${p * 50}`); if (!m || !(m.reviews || []).length) break; L.push(...m.reviews); if (m.reviews.length < 50) break }
+          return L
+        }))
+        const vistos = new Set(todas.map(v => v.id))
+        baixas.flat().forEach(v => { if (!vistos.has(v.id)) { vistos.add(v.id); todas.push(v) } })
       }
       return {
         item_id: id, media: Number(j.rating_average) || 0, total: Number(j.paging?.total) || 0,
