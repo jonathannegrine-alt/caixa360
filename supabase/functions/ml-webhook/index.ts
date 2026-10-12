@@ -11,6 +11,9 @@
 // Perguntas e mensagens: cada notificação grava uma linha em ml_avisos (src/avisos.js mostra o selo no menu).
 // Reclamações e devoluções (tópicos claims / claims_actions): também viram aviso (selo no Pós-venda).
 // Envios (tópico shipments): a situação do envio é lida na hora e gravada na venda (vendas_ml.envio_status).
+// Anúncios (tópico items): preço, situação e estoque do anúncio são lidos e gravados em ml_itens_base.
+// Estoque do Full (fbm_stock_operations / stock_locations): vira aviso "full"; a tela relê o estoque do Full sozinha.
+// Avaliação do comprador (orders_feedback): só as negativas e neutras viram aviso "avaliacao" (aparecem no sininho).
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void }
 
@@ -66,6 +69,36 @@ async function envioMudou(conta: string, recurso: string) {
   }
 }
 
+async function tokens(conta: string) {
+  const supaUrl = Deno.env.get('SUPABASE_URL')!, supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const dbH = { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json' }
+  const toks = await fetch(`${supaUrl}/rest/v1/ml_tokens?ml_user_id=eq.${conta}&select=usuario_id,access_token,expires_at`, { headers: dbH }).then(r => r.json()).catch(() => [])
+  return { supaUrl, dbH, toks: (Array.isArray(toks) ? toks : []).filter((t: any) => t.access_token && new Date(t.expires_at).getTime() > Date.now() + 30000) }
+}
+
+// anúncio mudou (preço, pausa, estoque): atualiza a linha dele em ml_itens_base, se o anúncio já estiver lá
+async function itemMudou(conta: string, recurso: string) {
+  const m = recurso.match(/\/items\/(MLB\d{6,14})/); if (!m) return
+  const { supaUrl, dbH, toks } = await tokens(conta); if (!toks.length) return
+  const r = await fetch(`https://api.mercadolibre.com/items/${m[1]}?attributes=id,price,status,available_quantity,listing_type_id,title`, { headers: { Authorization: `Bearer ${toks[0].access_token}` } }).catch(() => null)
+  if (!r || !r.ok) return
+  const it: any = await r.json().catch(() => null); if (!it || !it.id) return
+  const campos: Record<string, unknown> = { situacao: String(it.status || ''), estoque: Number(it.available_quantity) || 0, aviso_em: new Date().toISOString() }
+  if (Number(it.price) > 0) campos.preco = Number(it.price)
+  if (it.listing_type_id) campos.tipo_anuncio = String(it.listing_type_id)
+  for (const t of toks) await fetch(`${supaUrl}/rest/v1/ml_itens_base?usuario_id=eq.${t.usuario_id}&ml_user_id=eq.${conta}&item_id=eq.${m[1]}`, { method: 'PATCH', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify(campos) }).catch(() => null)
+}
+
+// avaliação do comprador: lê a nota e só avisa quando é negativa ou neutra
+async function avaliacao(conta: string, recurso: string) {
+  const m = recurso.match(/\/orders\/(\d{10,20})/); if (!m) return
+  const { toks } = await tokens(conta); if (!toks.length) return
+  const r = await fetch(`https://api.mercadolibre.com/orders/${m[1]}/feedback`, { headers: { Authorization: `Bearer ${toks[0].access_token}` } }).catch(() => null)
+  if (!r || !r.ok) return
+  const f: any = await r.json().catch(() => null), nota = String((f && f.purchase && f.purchase.rating) || '')
+  if (nota === 'negative' || nota === 'neutral') await avisar(conta, 'avaliacao', m[1] + '|' + nota)
+}
+
 Deno.serve(async (req) => {
   // o ML exige resposta 200 rápida; o trabalho segue em segundo plano
   if (req.method === 'POST') {
@@ -97,6 +130,19 @@ Deno.serve(async (req) => {
     }
     else if (topico === 'shipments' && /^\d{4,20}$/.test(conta)) {
       EdgeRuntime.waitUntil(envioMudou(conta, String(b?.resource || '')))
+    }
+    // anúncio mudou: no máximo uma leitura a cada 5 minutos por anúncio (o ML avisa a cada venda)
+    else if (topico === 'items' && /^\d{4,20}$/.test(conta)) {
+      const rec = String(b?.resource || ''), agora = Date.now(), k = 'item:' + rec
+      if (agora - (ultimo.get(k) || 0) > 300000) { if (ultimo.size > 5000) ultimo.clear(); ultimo.set(k, agora); EdgeRuntime.waitUntil(itemMudou(conta, rec)) }
+    }
+    // estoque do Full mexeu (entrada, retirada, ajuste): um aviso a cada 5 minutos por conta
+    else if (/^(fbm_stock_operations|fbm stock operations|stock_locations|stock-locations|stock locations)$/.test(topico) && /^\d{4,20}$/.test(conta)) {
+      const agora = Date.now(), k = 'full:' + conta
+      if (agora - (ultimo.get(k) || 0) > 300000) { ultimo.set(k, agora); EdgeRuntime.waitUntil(avisar(conta, 'full', String(b?.resource || ''))) }
+    }
+    else if (/^(orders_feedback|orders feedback)$/.test(topico) && /^\d{4,20}$/.test(conta)) {
+      EdgeRuntime.waitUntil(avaliacao(conta, String(b?.resource || '')))
     }
   }
   return new Response('ok', { status: 200 })

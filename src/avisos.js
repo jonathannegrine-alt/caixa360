@@ -35,6 +35,7 @@
           if(n > avisos[p]) avSino.em = 0;
           avisos[p] = n;
         }
+        await avExtras();
         avSinoCarregar();
         if(avisos.admin === null){ const a = await supa.rpc('eh_admin'); avisos.admin = !!a.data; }
         if(avisos.admin){
@@ -46,10 +47,24 @@
         avDesenhar();
       } catch(e){}
     }
+    // avaliações ruins e disputa de catálogo (aparecem no sininho) + estoque do Full que mexeu (a tela relê sozinha)
+    let avExt = { aval: [], cat: 0, fullEm: 0 };
+    async function avExtras(){
+      const r = await supa.from('ml_avisos').select('topico,recurso,em,ml_user_id').eq('usuario_id', usuarioAtual.id).in('topico', ['avaliacao', 'catalogo']).gt('em', avVisto('extras')).order('em', { ascending: false }).limit(60);
+      const L = r.data || [], vistos = new Set();
+      avExt.aval = L.filter(x => x.topico === 'avaliacao').filter(x => { const k = String(x.recurso).split('|')[0]; if(vistos.has(k)) return false; vistos.add(k); return true; });
+      avExt.cat = new Set(L.filter(x => x.topico === 'catalogo').map(x => x.recurso)).size;
+      // estoque do Full: se chegou aviso depois da última leitura, relê (no máximo a cada 5 minutos)
+      if(typeof comprasFullAPI === 'function' && typeof estoqueFullML !== 'undefined' && Date.now() - avExt.fullEm > 300000){
+        const desde = (estoqueFullML && estoqueFullML._syncAt) || new Date(Date.now() - 3600000).toISOString();
+        const f = await supa.from('ml_avisos').select('id', { count: 'exact', head: true }).eq('usuario_id', usuarioAtual.id).eq('topico', 'full').gt('em', desde);
+        if(f.count){ avExt.fullEm = Date.now(); const ok = await comprasFullAPI(); const v = document.getElementById('view-estoque'); if(ok && v && v.classList.contains('active') && typeof estRender === 'function') try { estRender(); } catch(e){} }
+      }
+    }
     // ----- sininho do Início: o que está esperando resposta, com o texto do cliente -----
     let avSino = { perg: [], totalPerg: 0, conv: [], em: 0, lendo: false, erro: '' };
     const avE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    function avSinoN(){ return (avSino.totalPerg || 0) + avSino.conv.length + (avisos.posvenda || 0); }
+    function avSinoN(){ return (avSino.totalPerg || 0) + avSino.conv.length + (avisos.posvenda || 0) + avExt.aval.length + (avExt.cat ? 1 : 0); }
     function avSinoHtml(){
       const n = avSinoN();
       return `<button class="ini-sino ${n ? 'tem' : ''}" id="ini-sino" onclick="avSinoAbrir()" title="${n ? n + ' pendência(s) de atendimento: clique para ver' : 'Nenhuma pergunta ou mensagem esperando resposta'}" aria-label="Notificações de atendimento"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>${n ? '<span class="n">' + (n > 99 ? '99+' : n) + '</span>' : ''}<span>${n ? (n === 1 ? 'esperando resposta' : 'esperando resposta') : 'Tudo respondido'}</span></button>`;
@@ -86,6 +101,9 @@
         `<div class="sino-sec">Perguntas sem resposta (${avSino.totalPerg || 0})</div>${perg}<div class="sino-sec">Mensagens de compradores sem ler (${C.length})</div>${conv}
         ${avisos.promocoes ? `<div class="sino-sec">Promoções</div><button class="sino-it" onclick="fecharModal('modal-vml');avMarcar('promocoes');nav('promocoes')"><small>Central de promoções</small><b>O Mercado Livre tem promoção nova ou alterada para os seus anúncios. Clique para ver.</b></button>` : ''}
         <div class="sino-sec">Reclamações e devoluções (${avisos.posvenda || 0})</div>${avisos.posvenda ? `<button class="sino-it" onclick="fecharModal('modal-vml');avMarcar('posvenda');nav('posvenda')"><small>Pós-venda</small><b>${avisos.posvenda} novidade${avisos.posvenda > 1 ? 's' : ''} em reclamações ou devoluções. Clique para abrir.</b></button>` : '<div class="text-muted" style="font-size:13px;">Nenhuma novidade.</div>'}
+        ${avExt.aval.length ? `<div class="sino-sec">Avaliações ruins (${avExt.aval.length})</div>` + avExt.aval.map(x => { const [venda, nota] = String(x.recurso).split('|'); return `<a class="sino-it" style="display:block;text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${avE(venda)}/detalhe" target="_blank" rel="noopener"><small>Venda #${avE(venda)} · ${avE(typeof atdQuando === 'function' ? atdQuando(x.em) : '')}</small><b>O comprador deixou avaliação ${nota === 'negative' ? 'negativa' : 'neutra'}. Clique para abrir a venda no Mercado Livre.</b></a>`; }).join('') : ''}
+        ${avExt.cat ? `<div class="sino-sec">Catálogo</div><a class="sino-it" style="display:block;text-decoration:none;" href="https://www.mercadolivre.com.br/anuncios/lista?filters=CATALOG_BOOST_LOSING" target="_blank" rel="noopener"><small>Disputa de catálogo</small><b>A disputa mudou em ${avExt.cat} anúncio${avExt.cat > 1 ? 's' : ''} de catálogo (passou a ganhar ou a perder). Clique para ver no Mercado Livre.</b></a>` : ''}
+        ${avExt.aval.length || avExt.cat ? `<div style="margin-top:6px;"><button class="btn-out btn-sm" onclick="avMarcar('extras');avExt.aval=[];avExt.cat=0;avSinoPintar();avSinoAbrir()">Marcar avaliações e catálogo como vistos</button></div>` : ''}
         <div class="text-muted" style="font-size:12px;margin-top:14px;">Clique numa pergunta para responder; clique numa mensagem para abrir a conversa. O que foi respondido pelo celular some daqui em até dois minutos.</div>`,
         `<button class="btn-out btn" onclick="avSinoCarregar(true).then(avSinoAbrir)">Atualizar</button><button class="btn" onclick="fecharModal('modal-vml')">Fechar</button>`);
     }
