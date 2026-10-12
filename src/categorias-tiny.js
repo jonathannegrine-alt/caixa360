@@ -1,36 +1,88 @@
 // ===== CATEGORIAS =====
+// Categorias de despesa organizadas em grupos. Os grupos são do próprio sistema: dá para criar, renomear e excluir
+// sem depender do Olist. Quando o grupo é mexido aqui, a categoria fica marcada (grupoManual) e a importação do
+// Olist não troca mais o grupo dela.
+    const CAT_CORES = ['#4f46e5', '#0891b2', '#16a34a', '#d97706', '#dc2626', '#9333ea', '#0d9488', '#be185d', '#65a30d', '#475569'];
+    const catEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    function catGrupos(){ return [...new Set(categorias.map(c => c.grupo).filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
+    function catDepois(){ salvar(); renderCategorias(); atualizarSelectCategorias(); if(typeof dreDesenhar === 'function'){ try { dreDesenhar(); } catch(e){} } }
     function renderCategorias(){
       const tbody = document.getElementById('tbody-categorias'); if(!tbody) return;
-      const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       const DRE = { variavel: 'Custo variável (operacional)', fixo: 'Custo fixo', fora: 'Não entra' };
       const COMP = { vencimento: 'Mês do vencimento', anterior: 'Mês anterior ao vencimento', emissao: 'Mês da emissão' };
-      const ord = categorias.map((c, i) => ({ c, i })).sort((x, y) => (x.c.grupo || 'zzz').localeCompare(y.c.grupo || 'zzz') || x.c.nome.localeCompare(y.c.nome));
-      let ult = null;
-      tbody.innerHTML = ord.map(({ c, i }) => {
-        const g = c.grupo || 'Sem grupo', cab = g !== ult ? `<tr class="dre-grupo"><td colspan="4">${esc(g)}</td></tr>` : ''; ult = g;
-        const onde = typeof dreGrupoDe === 'function' ? dreGrupoDe(c.nome) : (c.impactaDRE ? 'fixo' : 'fora');
-        return cab + `<tr>
-          <td style="font-size:13px;">${esc(c.nome)}</td>
-          <td><span class="v-tag ${onde === 'fora' ? '' : 'conta'}">${DRE[onde] || onde}</span></td>
-          <td class="text-muted" style="font-size:12.5px;">${COMP[c.competencia || 'vencimento'] || ''}</td>
-          <td style="text-align:center;"><button class="btn-del btn-sm" title="Apagar a categoria" onclick="removerCategoria(${i})">✕</button></td>
-        </tr>`;
-      }).join('') || '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:22px;">Nenhuma categoria cadastrada.</td></tr>';
+      const grupos = catGrupos(), nomes = grupos.concat(categorias.some(c => !c.grupo) ? [''] : []);
+      const js = s => catEsc(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+      tbody.innerHTML = nomes.map((g, gi) => {
+        const cor = g ? CAT_CORES[gi % CAT_CORES.length] : '#94a3b8', lista = categorias.map((c, i) => ({ c, i })).filter(x => (x.c.grupo || '') === g).sort((x, y) => x.c.nome.localeCompare(y.c.nome));
+        return `<tr class="cat-grupo" style="--cor:${cor};"><td colspan="3"><span class="cat-bola"></span><b>${catEsc(g || 'Sem grupo')}</b><small>${lista.length} categoria${lista.length === 1 ? '' : 's'}</small></td>
+            <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="adicionarCategoria('${js(g)}')" title="Nova categoria neste grupo">+ Categoria</button>${g ? ` <button class="btn-out btn-sm" onclick="catRenomearGrupo('${js(g)}')">Renomear</button> <button class="btn-out btn-sm" onclick="catExcluirGrupo('${js(g)}')" title="Exclui o grupo; as categorias dele não são apagadas">Excluir grupo</button>` : ''}</td></tr>` +
+          lista.map(({ c, i }) => { const onde = typeof dreGrupoDe === 'function' ? dreGrupoDe(c.nome) : (c.impactaDRE ? 'fixo' : 'fora');
+            return `<tr class="cat-linha" style="--cor:${cor};">
+              <td style="font-size:13px;">${catEsc(c.nome)}</td>
+              <td><span class="v-tag ${onde === 'fora' ? '' : 'conta'}">${DRE[onde] || onde}</span></td>
+              <td class="text-muted" style="font-size:12.5px;">${COMP[c.competencia || 'vencimento'] || ''}</td>
+              <td style="text-align:right;white-space:nowrap;"><select aria-label="Grupo da categoria ${catEsc(c.nome)}" title="Mover para outro grupo" style="width:auto;max-width:190px;font-size:12px;padding:4px 6px;" onchange="catMover(${i}, this.value)">${[''].concat(grupos).map(o => `<option value="${catEsc(o)}" ${o === g ? 'selected' : ''}>${catEsc(o || 'Sem grupo')}</option>`).join('')}</select>
+                <button class="btn-del btn-sm" title="Apagar a categoria" onclick="removerCategoria(${i})">✕</button></td>
+            </tr>`; }).join('');
+      }).join('') || '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:22px;">Nenhuma categoria cadastrada. Crie um grupo para começar.</td></tr>';
     }
+    function catJanela(titulo, corpo, acao, rotulo){
+      if(typeof vmlModal !== 'function') return;
+      vmlModal(titulo, corpo + '<div id="cat-msg" class="alert alert-danger" style="display:none;margin-top:12px;"></div>', `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="${acao}">${rotulo}</button>`);
+      setTimeout(() => { const i = document.querySelector('#modal-vml input, #modal-vml select'); if(i) i.focus(); }, 60);
+    }
+    function catErro(t){ const m = document.getElementById('cat-msg'); if(m){ m.textContent = t; m.style.display = 'block'; } }
+    function catCampo(id, rot, valor, ph){ return `<div class="form-group" style="margin:0 0 12px;"><label for="${id}">${rot}</label><input type="text" id="${id}" value="${catEsc(valor || '')}" placeholder="${catEsc(ph || '')}" maxlength="60" style="width:100%;"></div>`; }
 
-    function adicionarCategoria(){
-      const nome = prompt('Nome da nova categoria:');
-      if(!nome || !nome.trim()) return;
-      if(categorias.find(c => c.nome === nome.trim())){
-        alert('Categoria já existe');
-        return;
-      }
-      categorias.push({nome: nome.trim(), impactaDRE: true, tipoPassivo: 'divida'});
-      salvar();
-      renderCategorias();
-      // Atualizar select de filtro e modal
-      atualizarSelectCategorias();
+    // nova categoria (opcionalmente já dentro de um grupo)
+    function adicionarCategoria(grupo){
+      const gs = catGrupos(), g0 = typeof grupo === 'string' ? grupo : '';
+      catJanela('Nova categoria', catCampo('cat-nome', 'Nome da categoria', '', 'Ex.: Aluguel') +
+        `<div class="form-group" style="margin:0;"><label for="cat-grp">Grupo</label><select id="cat-grp" style="width:100%;">${[''].concat(gs).map(o => `<option value="${catEsc(o)}" ${o === g0 ? 'selected' : ''}>${catEsc(o || 'Sem grupo')}</option>`).join('')}</select></div>`, 'catSalvarNova()', 'Criar categoria');
     }
+    function catSalvarNova(){
+      const nome = (document.getElementById('cat-nome').value || '').trim(), g = document.getElementById('cat-grp').value;
+      if(!nome){ catErro('Dê um nome para a categoria.'); return; }
+      if(categorias.find(c => c.nome.toLowerCase() === nome.toLowerCase())){ catErro('Já existe uma categoria com esse nome.'); return; }
+      categorias.push({ nome, impactaDRE: true, tipoPassivo: 'divida', grupo: g || null, grupoManual: true });
+      fecharModal('modal-vml'); catDepois();
+    }
+    // novo grupo: nasce com a primeira categoria (um grupo só existe enquanto tem categoria dentro)
+    function catNovoGrupo(){
+      const soltas = categorias.filter(c => !c.grupo).map(c => c.nome).sort((a, b) => a.localeCompare(b));
+      catJanela('Novo grupo de categorias', catCampo('cat-gnome', 'Nome do grupo', '', 'Ex.: Despesas administrativas') + catCampo('cat-gprim', 'Primeira categoria do grupo', '', 'Ex.: Contador') +
+        (soltas.length ? `<div class="text-muted" style="font-size:12.5px;line-height:1.5;">Ou deixe o campo acima vazio e escolha uma categoria que está sem grupo:<br><select id="cat-gsolta" style="width:100%;margin-top:6px;"><option value="">— nenhuma —</option>${soltas.map(n => `<option value="${catEsc(n)}">${catEsc(n)}</option>`).join('')}</select></div>` : ''), 'catSalvarGrupo()', 'Criar grupo');
+    }
+    function catSalvarGrupo(){
+      const g = (document.getElementById('cat-gnome').value || '').trim(), prim = (document.getElementById('cat-gprim').value || '').trim(), solta = (document.getElementById('cat-gsolta') || {}).value || '';
+      if(!g){ catErro('Dê um nome para o grupo.'); return; }
+      if(catGrupos().some(x => x.toLowerCase() === g.toLowerCase())){ catErro('Já existe um grupo com esse nome.'); return; }
+      if(!prim && !solta){ catErro('Informe a primeira categoria do grupo (ou escolha uma que está sem grupo).'); return; }
+      if(prim){ if(categorias.find(c => c.nome.toLowerCase() === prim.toLowerCase())){ catErro('Já existe uma categoria chamada "' + prim + '". Escolha outro nome ou mova a existente.'); return; } categorias.push({ nome: prim, impactaDRE: true, tipoPassivo: 'divida', grupo: g, grupoManual: true }); }
+      else { const c = categorias.find(x => x.nome === solta); if(c){ c.grupo = g; c.grupoManual = true; } }
+      fecharModal('modal-vml'); catDepois();
+    }
+    function catRenomearGrupo(g){ catJanela('Renomear grupo', catCampo('cat-gnome', 'Nome do grupo', g, ''), `catSalvarRenome('${catEsc(String(g).replace(/\\/g, '\\\\').replace(/'/g, "\\'"))}')`, 'Guardar'); }
+    function catSalvarRenome(antigo){
+      const novo = (document.getElementById('cat-gnome').value || '').trim();
+      if(!novo){ catErro('Dê um nome para o grupo.'); return; }
+      if(novo !== antigo && catGrupos().some(x => x.toLowerCase() === novo.toLowerCase())){ catErro('Já existe um grupo com esse nome. Para juntar os dois, mova as categorias.'); return; }
+      categorias.forEach(c => { if(c.grupo === antigo){ c.grupo = novo; c.grupoManual = true; } });
+      fecharModal('modal-vml'); catDepois();
+    }
+    // excluir grupo: as categorias não são apagadas, só mudam de grupo
+    function catExcluirGrupo(g){
+      const n = categorias.filter(c => c.grupo === g).length, outros = catGrupos().filter(x => x !== g);
+      catJanela('Excluir o grupo "' + catEsc(g) + '"', `<div style="font-size:13.5px;line-height:1.55;margin-bottom:12px;">O grupo tem <b>${n} categoria${n === 1 ? '' : 's'}</b>. Elas não são apagadas: escolha para onde vão.</div>
+        <div class="form-group" style="margin:0;"><label for="cat-gdest">Mover as categorias para</label><select id="cat-gdest" style="width:100%;"><option value="">Sem grupo</option>${outros.map(o => `<option value="${catEsc(o)}">${catEsc(o)}</option>`).join('')}</select></div>`,
+        `catSalvarExclusao('${catEsc(String(g).replace(/\\/g, '\\\\').replace(/'/g, "\\'"))}')`, 'Excluir grupo');
+    }
+    function catSalvarExclusao(g){
+      const dest = document.getElementById('cat-gdest').value || null;
+      categorias.forEach(c => { if(c.grupo === g){ c.grupo = dest; c.grupoManual = true; } });
+      fecharModal('modal-vml'); catDepois();
+    }
+    function catMover(idx, grupo){ const c = categorias[idx]; if(!c) return; c.grupo = grupo || null; c.grupoManual = true; catDepois(); }
 
     function removerCategoria(idx){
       if(!confirm('Remover categoria "' + categorias[idx].nome + '"?')) return;

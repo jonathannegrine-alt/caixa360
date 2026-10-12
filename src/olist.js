@@ -117,7 +117,7 @@
         if(!x.nome) return;
         let c = categorias.find(k => String(k.nome).trim().toLowerCase() === x.nome.toLowerCase());
         if(!c){ c = { nome: x.nome, impactaDRE: true, tipoPassivo: 'operacional' }; categorias.push(c); r.novas++; }
-        if((c.grupo || '') !== (x.grupo || '')){ c.grupo = x.grupo || null; r.mudaram++; }
+        if(!c.grupoManual && (c.grupo || '') !== (x.grupo || '')){ c.grupo = x.grupo || null; r.mudaram++; }
       });
       if(r.novas || r.mudaram) salvar();
       try { localStorage.setItem('mk_olist_cat_em', String(Date.now())); } catch(e){}

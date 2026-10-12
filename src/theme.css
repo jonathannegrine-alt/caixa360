@@ -1344,3 +1344,11 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .fr-datas{display:inline-flex;align-items:center;gap:6px;flex-wrap:nowrap;font-size:12.5px;color:var(--text-muted);}
 .fr-datas input[type=date]{width:auto;padding:5px 8px;font-size:12.5px;}
 .fr-datas.on input[type=date]{border-color:var(--primary);}
+
+/* categorias de despesa: cada grupo com a sua cor */
+tr.cat-grupo td{background:color-mix(in srgb,var(--cor) 12%,var(--surface));border-top:2px solid color-mix(in srgb,var(--cor) 45%,transparent);padding-top:11px;padding-bottom:11px;}
+tr.cat-grupo td:first-child{border-left:5px solid var(--cor);}
+tr.cat-grupo b{font-size:13.5px;color:var(--text);}
+tr.cat-grupo small{margin-left:10px;color:var(--text-muted);font-size:12px;}
+.cat-bola{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--cor);margin-right:9px;vertical-align:middle;}
+tr.cat-linha td:first-child{border-left:5px solid color-mix(in srgb,var(--cor) 35%,transparent);padding-left:26px;}

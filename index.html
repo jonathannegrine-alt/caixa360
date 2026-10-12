@@ -995,13 +995,13 @@
         <!-- Categorias -->
         <div class="card">
           <div class="card-header">
-            <div><div class="card-title">Categorias de Despesa</div><div class="pg-sub">Organizadas em grupos. No DRE as despesas aparecem somadas por grupo; a competência padrão diz em que mês cada uma entra.</div></div>
-            <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="if(typeof dreConfigurar==='function')dreConfigurar()">Editar grupos, DRE e competência</button><button class="btn btn-sm" onclick="adicionarCategoria()">+ Nova</button></div>
+            <div><div class="card-title">Categorias de Despesa</div><div class="pg-sub">Organizadas em grupos, que você cria, renomeia e exclui aqui mesmo. No DRE as despesas aparecem somadas por grupo; a competência padrão diz em que mês cada uma entra.</div></div>
+            <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="if(typeof dreConfigurar==='function')dreConfigurar()" title="Define onde cada categoria entra no DRE e a competência padrão">DRE e competência</button><button class="btn-out btn-sm" onclick="catNovoGrupo()">+ Novo grupo</button><button class="btn btn-sm" onclick="adicionarCategoria()">+ Nova</button></div>
           </div>
           <div class="card-body" style="padding:0;">
             <table>
               <thead>
-                <tr><th>Categoria</th><th>No DRE</th><th>Competência padrão</th><th style="text-align:center;width:60px;"></th></tr>
+                <tr><th>Categoria</th><th>No DRE</th><th>Competência padrão</th><th style="text-align:right;">Grupo</th></tr>
               </thead>
               <tbody id="tbody-categorias"></tbody>
             </table>

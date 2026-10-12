@@ -232,7 +232,7 @@
     function dreSalvarConfig(){
       // grupo e competência primeiro: o "No DRE" abaixo compara com o padrão do grupo já atualizado
       const garante = nome => { let c = categorias.find(x => x.nome === nome); if(!c){ c = { nome, impactaDRE:false, tipoPassivo:'operacional' }; categorias.push(c); } return c; };
-      document.querySelectorAll('.dre-cfg-grp').forEach(inp => { const c = garante(inp.getAttribute('data-cat')), g = inp.value.trim(); if((c.grupo || '') !== g) c.grupo = g || null; });
+      document.querySelectorAll('.dre-cfg-grp').forEach(inp => { const c = garante(inp.getAttribute('data-cat')), g = inp.value.trim(); if((c.grupo || '') !== g){ c.grupo = g || null; c.grupoManual = true; } });
       document.querySelectorAll('.dre-cfg-comp').forEach(sel => { garante(sel.getAttribute('data-cat')).competencia = sel.value; });
       document.querySelectorAll('.dre-cfg-sel').forEach(sel => {
         const nome = sel.getAttribute('data-cat'), g = sel.value;
