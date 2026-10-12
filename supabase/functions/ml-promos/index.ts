@@ -97,6 +97,7 @@ Deno.serve(async (req: Request) => {
       const comPreco = ['SELLER_CAMPAIGN', 'DEAL', 'DOD', 'LIGHTNING', 'PRICE_DISCOUNT'].includes(tipo)
       if (comPreco) { const p = Math.round(Number(body?.preco) * 100) / 100; if (!(p > 0)) return resp({ error: 'Informe o preço com desconto.' }, 400); corpo.deal_price = p }
       else { if (!ref) return resp({ error: 'Esta promoção não trouxe a referência da oferta. Atualize a lista e tente de novo.' }, 400); corpo.offer_id = ref }
+      if (comPreco && Number(body?.preco_meli) > 0) { const pm = Math.round(Number(body.preco_meli) * 100) / 100; if (pm >= Number(corpo.deal_price)) return resp({ error: 'O preço exclusivo Meli+ precisa ser menor que o preço da promoção.' }, 400); corpo.top_deal_price = pm }
       if (tipo === 'LIGHTNING') { const e = Math.round(Number(body?.estoque)); if (!(e > 0)) return resp({ error: 'Informe o estoque reservado para a oferta relâmpago.' }, 400); corpo.stock = e }
       const r = await chama('POST', `${ML}/seller-promotions/items/${item}?app_version=v2`, corpo)
       return resp(r.ok ? { ok: true, preco: Number(r.dados?.price) || null, original: Number(r.dados?.original_price) || null } : { ok: false, motivo: r.erro })

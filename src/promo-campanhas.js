@@ -66,6 +66,9 @@
     }
     // custo, imposto, tarifa e frete das vendas recentes de cada anúncio (é de onde vem o custo dos kits, que no cadastro ficam zerados)
     async function pcCustoVendas(ids){
+      await pmLotesCarregar(); if(typeof vrCarregar === 'function' && typeof vr !== 'undefined' && !vr.carregado) try { await vrCarregar(); } catch(e){}
+      return;   // a margem usa o custo do sistema (cadastro ou lote de compra), não o das vendas
+
       const falta = [...new Set(ids)].filter(i => i && !pm.info[i]);
       // em lotes pequenos (a consulta de muitos anúncios de uma vez passa do tempo limite); lote que falhar é tentado de novo depois
       for(let i = 0; i < falta.length; i += 25){ const lote = falta.slice(i, i + 25), r = await supa.rpc('ml_itens_margem', { p_itens: lote, p_conta: pmConta() }); if(r.error) continue; (r.data || []).forEach(x => { pm.info[x.item_id] = x; }); lote.forEach(k => { if(!pm.info[k]) pm.info[k] = { vazio: true }; }); }
@@ -108,27 +111,42 @@
       const i = pc.base[item] || {}, livre = PC_PRECO_LIVRE.includes(tipo), preco0 = p.sugerido || p.preco || 0;
       pc._part = { item, id, tipo };
       vmlModal('Participar: ' + pqE(p.nome || PM_TIPO[tipo] || tipo), `<div class="pm-an" style="margin-bottom:14px;">${i.thumbnail ? `<img src="${pqE(i.thumbnail)}" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(i.titulo || item)}</b><small>${pqE(i.sku || '')} · ${pqE(item)} · preço de hoje R$ ${pqN(p.original || i.preco)}</small></div></div>
-        ${livre ? `<div class="form-row"><div class="form-group"><label class="form-label" for="pc-p-preco">Preço na promoção (R$)</label><input type="text" inputmode="decimal" id="pc-p-preco" value="${preco0 ? pqN(preco0) : ''}" oninput="pcParticiparConta()">${p.minimo || p.maximo ? `<div class="text-muted" style="font-size:12px;margin-top:5px;">O Mercado Livre aceita de R$ ${pqN(p.minimo)} a R$ ${pqN(p.maximo)}${p.sugerido ? ' · sugerido R$ ' + pqN(p.sugerido) : ''}.</div>` : ''}</div>
+        ${livre ? `<div class="form-row"><div class="form-group"><label class="form-label" for="pc-p-preco">Preço na promoção (R$)</label><div style="display:flex;gap:8px;align-items:center;"><input type="text" inputmode="decimal" id="pc-p-preco" value="${preco0 ? pqN(preco0) : ''}" oninput="pcParticiparConta('preco')" style="flex:1;"><span>ou</span><input type="text" inputmode="decimal" id="pc-p-pct" aria-label="Desconto em %" style="width:74px;" oninput="pcParticiparConta('pct')"><span>%</span></div>${p.minimo || p.maximo ? `<div class="text-muted" style="font-size:12px;margin-top:5px;">O Mercado Livre aceita de R$ ${pqN(p.minimo)} a R$ ${pqN(p.maximo)}${p.sugerido ? ' · sugerido R$ ' + pqN(p.sugerido) : ''}.</div>` : ''}</div>
             ${tipo === 'LIGHTNING' ? `<div class="form-group"><label class="form-label" for="pc-p-est">Estoque reservado</label><input type="number" id="pc-p-est" min="${p.estoque_min || 1}" max="${p.estoque_max || ''}" value="${p.estoque_min || ''}"><div class="text-muted" style="font-size:12px;margin-top:5px;">de ${p.estoque_min} a ${p.estoque_max} unidades</div></div>` : ''}</div>`
-          : `<div class="alert alert-info">Nesta promoção o preço é definido pelo Mercado Livre: <b>R$ ${pqN(p.preco)}</b>${p.vendedor_pct || p.ml_pct ? ' (você paga ' + pqN(p.vendedor_pct, 1) + '% do desconto e o Mercado Livre ' + pqN(p.ml_pct, 1) + '%)' : ''}.</div>`}
-        <div id="pc-p-margem" style="font-size:13.5px;line-height:1.6;margin-top:6px;"></div><div id="pc-p-msg" class="alert alert-danger" style="display:none;margin-top:12px;"></div>`,
+          : `<div class="alert alert-info">Nesta promoção o preço é definido pelo Mercado Livre e não dá para alterar: <b>R$ ${pqN(p.preco)}</b>${p.vendedor_pct || p.ml_pct ? ' (você paga ' + pqN(p.vendedor_pct, 1) + '% do desconto e o Mercado Livre ' + pqN(p.ml_pct, 1) + '%)' : ''}.</div>`}
+        <div id="pc-p-margem" style="font-size:13.5px;line-height:1.6;margin-top:6px;"></div>
+        ${['SELLER_CAMPAIGN', 'DEAL'].includes(tipo) ? `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13.5px;margin:0;"><input type="checkbox" id="pc-p-meli-on" style="width:auto;" onchange="pcParticiparConta()"> Preço exclusivo para clientes Meli+ (opcional)</label>
+            <div id="pc-p-meli-box" style="display:none;margin-top:10px;"><div style="display:flex;gap:8px;align-items:center;"><input type="text" inputmode="decimal" id="pc-p-meli" aria-label="Preço exclusivo Meli+" placeholder="menor que o preço da promoção" oninput="pcParticiparConta('meli')" style="flex:1;"><span>ou</span><input type="text" inputmode="decimal" id="pc-p-meli-pct" aria-label="Desconto Meli+ em %" style="width:74px;" oninput="pcParticiparConta('melipct')"><span>%</span></div><div id="pc-p-meli-m" style="font-size:13px;margin-top:6px;"></div></div></div>` : ''}
+        <div id="pc-p-msg" class="alert alert-danger" style="display:none;margin-top:12px;"></div>`,
         `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="pc-p-ok" onclick="pcParticiparOk(this)">Participar</button>`);
       pcParticiparConta();
     }
-    function pcParticiparPreco(p){ const el = document.getElementById('pc-p-preco'); if(!el) return p.preco || 0; const s = String(el.value).replace(/[^\d,.]/g, ''); return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s) || 0; }
-    function pcParticiparConta(){
+    function pcNumCampo(id){ const el = document.getElementById(id); if(!el) return 0; const s = String(el.value).replace(/[^\d,.]/g, ''); return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s) || 0; }
+    function pcParticiparPreco(p){ return document.getElementById('pc-p-preco') ? pcNumCampo('pc-p-preco') : (p.preco || 0); }
+    // mantém preço e porcentagem em sincronia e mostra a margem (normal e Meli+)
+    function pcParticiparConta(origem){
       const a = pc._part, el = document.getElementById('pc-p-margem'); if(!a || !el) return;
-      const p = pcPromoDe(a.item, a.id, a.tipo), preco = pcParticiparPreco(p), orig = p.original || Number((pc.base[a.item] || {}).preco) || 0;
-      if(!(preco > 0)){ el.innerHTML = '<span class="text-muted">Informe o preço para ver a margem.</span>'; return; }
-      const reb = orig * (p.ml_pct || 0) / 100, m0 = pmMargem(a.item, orig, 0), m1 = pmMargem(a.item, preco, reb), desc = orig ? (1 - preco / orig) * 100 : 0;
+      const p = pcPromoDe(a.item, a.id, a.tipo), orig = p.original || Number((pc.base[a.item] || {}).preco) || 0, set = (id, v) => { const e = document.getElementById(id); if(e) e.value = v; };
+      if(origem === 'pct' && orig) set('pc-p-preco', pqN(pcR(orig * (1 - pcNumCampo('pc-p-pct') / 100))));
+      const preco = pcParticiparPreco(p);
+      if(origem !== 'pct' && orig && preco) set('pc-p-pct', String(pcR((1 - preco / orig) * 100)).replace('.', ','));
+      const on = document.getElementById('pc-p-meli-on'), box = document.getElementById('pc-p-meli-box'); if(box) box.style.display = on && on.checked ? 'block' : 'none';
       const tx = m => m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)} (${pqN(m.pct, 1)}%)</b>` : '<span class="text-muted">sem custo no cadastro</span>';
-      el.innerHTML = `Desconto de <b>${pqN(desc, 1)}%</b>. Margem hoje: ${tx(m0)} → na promoção: ${tx(m1)}${m1 ? ' <small class="text-muted">(frete considerado R$ ' + pqN(m1.frete) + ')</small>' : ''}`;
+      if(!(preco > 0)){ el.innerHTML = '<span class="text-muted">Informe o preço ou a porcentagem para ver a margem.</span>'; return; }
+      const reb = orig * (p.ml_pct || 0) / 100, m0 = pmMargem(a.item, orig, 0), m1 = pmMargem(a.item, preco, reb), desc = orig ? (1 - preco / orig) * 100 : 0;
+      el.innerHTML = `Desconto de <b>${pqN(desc, 1)}%</b>. Margem hoje: ${tx(m0)} → na promoção: ${tx(m1)}${m1 ? ' <small class="text-muted">(custo R$ ' + pqN(m1.custo) + ' · frete R$ ' + pqN(m1.frete) + ')</small>' : ''}`;
+      if(on && on.checked){
+        if(origem === 'melipct' && orig) set('pc-p-meli', pqN(pcR(orig * (1 - pcNumCampo('pc-p-meli-pct') / 100))));
+        const pmeli = pcNumCampo('pc-p-meli'); if(origem !== 'melipct' && orig && pmeli) set('pc-p-meli-pct', String(pcR((1 - pmeli / orig) * 100)).replace('.', ','));
+        const mm = document.getElementById('pc-p-meli-m'); if(mm) mm.innerHTML = pmeli > 0 ? 'Margem no preço Meli+: ' + tx(pmMargem(a.item, pmeli, reb)) : '<span class="text-muted">Informe o preço exclusivo.</span>';
+      }
     }
     async function pcParticiparOk(bt){
       const a = pc._part, p = pcPromoDe(a.item, a.id, a.tipo), msg = document.getElementById('pc-p-msg'), erro = t => { msg.textContent = t; msg.style.display = 'block'; if(bt){ bt.disabled = false; bt.textContent = 'Participar'; } };
       const corpo = { acao: 'participar', conta: pmConta(), item: a.item, id: a.id, tipo: a.tipo, ref: p.ref || '' };
       if(PC_PRECO_LIVRE.includes(a.tipo)){ corpo.preco = pcParticiparPreco(p); if(!(corpo.preco > 0)) return erro('Informe o preço na promoção.'); if(p.maximo && corpo.preco > p.maximo + 0.005) return erro('O preço máximo aceito é R$ ' + pqN(p.maximo) + '.'); if(p.minimo && corpo.preco < p.minimo - 0.005) return erro('O preço mínimo aceito é R$ ' + pqN(p.minimo) + '.'); }
       if(a.tipo === 'LIGHTNING') corpo.estoque = Number((document.getElementById('pc-p-est') || {}).value) || 0;
+      { const on = document.getElementById('pc-p-meli-on'); if(on && on.checked){ corpo.preco_meli = pcNumCampo('pc-p-meli'); if(!(corpo.preco_meli > 0) || corpo.preco_meli >= corpo.preco) return erro('O preço exclusivo Meli+ precisa ser menor que o preço da promoção.'); } }
       if(bt){ bt.disabled = true; bt.textContent = 'Enviando…'; }
       const r = await pqFuncao('ml-promos', corpo).catch(() => null);
       if(!r || !r.ok) return erro('O Mercado Livre não aceitou: ' + ((r && (r.motivo || r.error)) || 'sem resposta'));

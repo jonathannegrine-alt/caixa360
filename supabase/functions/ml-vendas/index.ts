@@ -202,6 +202,34 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
     })
     if (!up.ok) return { ok: false, vendas: 0, pendentes: 0, semPermissao: false, erro: 'gravação: ' + (await up.text()).slice(0, 200) }
   }
+
+  // 6. "disponível após esta venda": para vendas que acabaram de entrar (feitas há menos de 40 min), guarda o estoque do
+  //    anúncio no Mercado Livre (no Full, é o estoque do Full) e o do galpão. Nunca derruba a sincronização se falhar.
+  try {
+    const novas = [...pedidos.values()].filter(o => !jaTem.has(o.id) && o.order_items?.[0]?.item?.id && Date.now() - new Date(o.date_created).getTime() < 40 * 60000)
+    if (novas.length) {
+      const idsItens = [...new Set(novas.map(o => String(o.order_items[0].item.id)))], disp = new Map<string, number>()
+      const lts: string[][] = []; for (let i = 0; i < idsItens.length; i += 20) lts.push(idsItens.slice(i, i + 20))
+      await emParalelo(lts, 4, async (lote) => {
+        const r = await mlGet(`https://api.mercadolibre.com/items?ids=${lote.join(',')}&attributes=id,available_quantity`, accessToken, prazoMs)
+        if (!r.ok || !Array.isArray(r.data)) return
+        for (const x of r.data) if (x.code === 200 && x.body?.id && x.body.available_quantity != null) disp.set(String(x.body.id), Number(x.body.available_quantity))
+      })
+      const galpao = new Map<string, number>()
+      const deps = await fetch(`${ctx.supaUrl}/rest/v1/estoque_depositos?usuario_id=eq.${userId}&tipo=eq.proprio&select=id`, { headers: ctx.dbH }).then(r => r.json()).catch(() => [])
+      const idsDep = (Array.isArray(deps) ? deps : []).map((d: any) => d.id)
+      if (idsDep.length) {
+        const sal = await fetch(`${ctx.supaUrl}/rest/v1/estoque_saldo?usuario_id=eq.${userId}&deposito_id=in.(${idsDep.join(',')})&select=sku_norm,fisico&limit=5000`, { headers: ctx.dbH }).then(r => r.json()).catch(() => [])
+        for (const s of (Array.isArray(sal) ? sal : [])) galpao.set(String(s.sku_norm), (galpao.get(String(s.sku_norm)) || 0) + (Number(s.fisico) || 0))
+      }
+      await emParalelo(novas, 6, async (o) => {
+        const it = o.order_items[0].item, sku = String(it.seller_sku || it.seller_custom_field || '').trim().toLowerCase()
+        const corpo: Record<string, number | null> = { est_anuncio_apos: disp.has(String(it.id)) ? disp.get(String(it.id))! : null, est_galpao_apos: sku && galpao.has(sku) ? galpao.get(sku)! : null }
+        if (corpo.est_anuncio_apos == null && corpo.est_galpao_apos == null) return
+        await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&order_id=eq.${o.id}`, { method: 'PATCH', headers: { ...ctx.dbH, Prefer: 'return=minimal' }, body: JSON.stringify(corpo) })
+      })
+    }
+  } catch (_e) { /* o estoque é informativo: segue a sincronização */ }
   await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?on_conflict=usuario_id,ml_user_id,dia`, {
     method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ usuario_id: userId, ml_user_id: String(mlUserId), dia, vendas: rows.length, completo: pendentes === 0, sincronizado_em: new Date().toISOString() })

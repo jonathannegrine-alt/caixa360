@@ -57,6 +57,7 @@
         faltam.forEach(i => { if(!pm.info[i]) pm.info[i] = { vazio: true }; });
       }
       pmDesenhar();
+      await pmLotesCarregar(); if(typeof vrCarregar === 'function' && typeof vr !== 'undefined' && !vr.carregado) try { await vrCarregar(); } catch(e){}
       // dados do próprio anúncio (peso tarifável, tarifa, SKU, título): dão a margem mesmo sem venda recente
       const semBase = d.itens.map(x => x.item).filter(i => !pm.base[i]);
       if(semBase.length){
@@ -76,19 +77,39 @@
       return skus.find(s => String(s.sku || '').trim().toUpperCase() === k) || null;
     }
     // margem de contribuição de um anúncio num preço (reb = parte do desconto paga pelo Mercado Livre)
-    // Custo, imposto e tarifa: das vendas recentes; sem elas, do cadastro do produto e do anúncio.
-    // Frete: o da tabela para ESTE preço (muda de faixa quando o preço cruza R$ 19, 49, 79...); sem peso lido, o das vendas.
+    // Custo do SISTEMA para um SKU: o do cadastro de produtos; se estiver zerado, o do lote de compra em uso (ordens de
+    // compra / custo por lote). Para kit, soma os componentes. Nunca usa o custo gravado nas vendas.
+    let pmLotes = null;
+    async function pmLotesCarregar(){
+      if(pmLotes || typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      pmLotes = {};
+      try { const r = await supa.rpc('custo_peps_lotes'); (r.data || []).forEach(l => { (pmLotes[l.sku_norm] = pmLotes[l.sku_norm] || []).push(l); }); } catch(e){}
+    }
+    function pmCustoSku(sku, nivel){
+      const k = String(sku || '').trim().toLowerCase(); if(!k) return 0;
+      const cad = pmCadastro(sku); if(cad && Number(cad.custo) > 0) return Number(cad.custo);
+      const ls = (pmLotes || {})[k];
+      if(ls && ls.length){ const emUso = ls.find(l => Number(l.restante) > 0) || ls[ls.length - 1]; if(Number(emUso.custo) > 0) return Number(emUso.custo); }
+      if(!nivel && typeof composicaoKit !== 'undefined'){   // kit: soma dos componentes
+        const comps = composicaoKit.filter(c => String(c.sku_comercial || '').trim().toLowerCase() === k);
+        if(comps.length){ let tot = 0; for(const c of comps){ const cu = pmCustoSku(c.sku_componente, 1); if(!(cu > 0)) return 0; tot += cu * (Number(c.qty) || 1); } return tot; }
+      }
+      return 0;
+    }
+    // Margem de um anúncio num preço. Custo: do sistema. Imposto: o da loja (Configurações), senão o do cadastro.
+    // Tarifa: a do anúncio. Frete: o da tabela para ESTE preço (muda de faixa quando o preço cruza R$ 19, 49, 79...).
     function pmMargem(item, preco, reb){
-      const inf = pm.info[item] || {}, b = pm.base[item] || {}, cad = pmCadastro(inf.sku || b.sku);
-      const custo = Number(inf.custo) > 0 ? Number(inf.custo) : (cad && Number(cad.custo) > 0 ? Number(cad.custo) : 0);
+      const inf = pm.info[item] || {}, b = pm.base[item] || {}, sku = b.sku || inf.sku, cad = pmCadastro(sku);
+      const custo = pmCustoSku(sku);
       if(!(custo > 0) || !(preco > 0)) return null;
-      const t = inf.tarifa_pct != null ? Number(inf.tarifa_pct) : (b.tarifa_pct != null ? Number(b.tarifa_pct) : null);
+      const t = b.tarifa_pct != null ? Number(b.tarifa_pct) : (inf.tarifa_pct != null ? Number(inf.tarifa_pct) : null);
       if(t == null) return null;
-      const i = (inf.imposto_pct != null ? Number(inf.imposto_pct) : (cad ? Number(cad.imposto) || 0 : 0)) / 100;
+      const loja = typeof vr !== 'undefined' && vr.cfg ? vr.cfg[String(pmConta())] : null;
+      const i = (loja && loja.imposto_pct != null ? Number(loja.imposto_pct) : (cad && Number(cad.imposto) > 0 ? Number(cad.imposto) : (inf.imposto_pct != null ? Number(inf.imposto_pct) : 0))) / 100;
       const ft = b.peso_g && typeof frFreteTabela === 'function' ? frFreteTabela(Number(b.peso_g), preco) : null;
       const f = ft != null ? ft : (inf.frete_un != null ? Number(inf.frete_un) : Number(b.frete_lista) || 0);
       const mc = preco - preco * t - preco * i - f - custo + (reb || 0);
-      return { mc, pct: mc / preco * 100, frete: f, estimada: !(Number(inf.custo) > 0) };
+      return { mc, pct: mc / preco * 100, frete: f, custo };
     }
     function pmDesenhar(){
       const v = document.getElementById('view-promocoes'); if(!v || !v.classList.contains('active')) return;
@@ -108,7 +129,7 @@
           const orig = x.original || Number(inf.preco_medio) || Number(b0.preco) || 0, promo = x.preco || 0;
           const reb = orig * (x.ml_pct || 0) / 100, m0 = pmMargem(x.item, orig, 0), m1 = promo ? pmMargem(x.item, promo, reb) : null;
           const desc = orig && promo ? (1 - promo / orig) * 100 : (x.ml_pct + x.vendedor_pct);
-          const mcTxt = m => m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)}</b><small title="Frete considerado: R$ ${pqN(m.frete)}${m.estimada ? '. Sem venda recente: custo e imposto vêm do cadastro do produto; tarifa e peso, do anúncio.' : ''}">${pqN(m.pct, 1)}%${m.estimada ? ' · pelo cadastro' : ''}</small>` : (!pm.base[x.item] ? '<small class="text-muted">lendo o anúncio…</small>' : '<small class="text-muted" title="Este produto está sem custo no cadastro (página Produtos). Com o custo preenchido, a margem aparece aqui.">sem custo no cadastro</small>');
+          const mcTxt = m => m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)}</b><small title="Custo R$ ${pqN(m.custo)} · frete R$ ${pqN(m.frete)}">${pqN(m.pct, 1)}%</small>` : (!pm.base[x.item] ? '<small class="text-muted">lendo o anúncio…</small>' : '<small class="text-muted" title="Este produto está sem custo no cadastro (página Produtos). Com o custo preenchido, a margem aparece aqui.">sem custo no cadastro</small>');
           return `<tr>
             <td><div class="pm-an">${inf.thumbnail ? `<img src="${pqE(inf.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(inf.titulo || x.item)}</b><small><a href="https://produto.mercadolivre.com.br/${pqE(String(x.item).replace(/^MLB/, 'MLB-'))}" target="_blank" rel="noopener">${pqE(x.item)}</a>${inf.sku ? ' · ' + pqE(inf.sku) : ''}${inf.vendas ? ' · ' + inf.vendas + ' vendas em 60 dias' : ''}</small></div></div></td>
             <td><span class="v-tag">${PM_SIT[x.situacao] || pqE(x.situacao)}</span></td>
@@ -118,7 +139,7 @@
             <td class="num">${orig ? 'R$ ' + pqN(orig) : '–'}</td><td class="num pm-mc">${mcTxt(m0)}</td>
             <td class="num pm-promo">${promo ? 'R$ ' + pqN(promo) : '–'}</td><td class="num pm-mc pm-promo">${m1 ? mcTxt(m1) : (promo ? mcTxt(null) : '–')}</td>
           </tr>`; }).join('');
-        tab = `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">${pqE(pm.sel.nome || PM_TIPO[pm.sel.tipo] || pm.sel.tipo)}</div><div class="pg-sub">${pm.itens.length} de ${pm.total} anúncio${pm.total === 1 ? '' : 's'} · custo, imposto e tarifa das suas vendas dos últimos 60 dias; sem venda recente, do cadastro do produto e do anúncio ${typeof dica === 'function' ? dica('Margem = preço − tarifa − imposto − frete − custo do produto, mais a parte do desconto que o Mercado Livre paga. O frete é o da tabela do Mercado Livre para o preço de cada coluna: quando a promoção leva o preço para outra faixa (R$ 49, R$ 79, R$ 100...), o frete muda junto.', true) : ''}</div></div>
+        tab = `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">${pqE(pm.sel.nome || PM_TIPO[pm.sel.tipo] || pm.sel.tipo)}</div><div class="pg-sub">${pm.itens.length} de ${pm.total} anúncio${pm.total === 1 ? '' : 's'} · custo do cadastro de produtos (ou do lote de compra em uso), imposto da loja, tarifa do anúncio ${typeof dica === 'function' ? dica('Margem = preço − tarifa − imposto − frete − custo do produto, mais a parte do desconto que o Mercado Livre paga. O frete é o da tabela do Mercado Livre para o preço de cada coluna: quando a promoção leva o preço para outra faixa (R$ 49, R$ 79, R$ 100...), o frete muda junto.', true) : ''}</div></div>
             <div class="chips">${[['candidate', 'Candidatos'], ['pending', 'Programados'], ['started', 'Participando'], ['todos', 'Todos']].map(([k, t]) => `<button class="chip ${pm.sit === k ? 'active' : ''}" onclick="pmSit('${k}')">${t}</button>`).join('')}</div></div>
           ${pm.erroItens ? `<div class="alert alert-warning" style="margin:14px;">${pqE(pm.erroItens)}</div>` : ''}
           <div style="overflow-x:auto;"><table class="cp-tab pm-tab"><thead><tr><th>Anúncio</th><th>Situação</th><th class="num" title="Parte do desconto paga pelo Mercado Livre">ML paga</th><th class="num" title="Parte do desconto paga por você">Você paga</th><th class="num">Desconto</th><th class="num">Preço hoje</th><th class="num">Margem hoje</th><th class="num pm-promo">Preço na promoção</th><th class="num pm-promo">Margem na promoção</th></tr></thead>

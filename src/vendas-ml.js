@@ -204,7 +204,7 @@
       }
       const extra = {};
       if(linhas.length){
-        const ex = await supa.from('vendas_ml').select('order_id,cidade,uf,cep,envio_status,rastreio,etiqueta_em,shipping_id,logistic_type').eq('usuario_id', usuarioAtual.id).in('order_id', linhas.map(v => v.order_id));
+        const ex = await supa.from('vendas_ml').select('order_id,cidade,uf,cep,envio_status,rastreio,etiqueta_em,shipping_id,logistic_type,est_anuncio_apos,est_galpao_apos').eq('usuario_id', usuarioAtual.id).in('order_id', linhas.map(v => v.order_id));
         if(seq !== vmlSeq) return;
         (ex.data || []).forEach(r => { extra[r.order_id] = r; });
       }
@@ -360,6 +360,7 @@
 
           <div class="v-acoes">
             <div class="v-status ${st === 'aprovada' ? 'ok' : (st === 'cancelada' ? 'canc' : 'pend')}">${st === 'aprovada' ? 'Aprovada' : (st === 'cancelada' ? 'Cancelada' : 'Pagamento pendente')}</div>
+            ${ex.est_anuncio_apos != null || ex.est_galpao_apos != null ? `<div class="v-estq" title="Estoque disponível logo depois desta venda (lido quando a venda entrou no sistema)">Disponível após esta venda: ${ex.est_anuncio_apos != null ? '<b>' + Math.round(ex.est_anuncio_apos).toLocaleString('pt-BR') + '</b> ' + (ex.logistic_type === 'fulfillment' ? 'no Full' : 'no anúncio') : ''}${ex.est_anuncio_apos != null && ex.est_galpao_apos != null ? ' · ' : ''}${ex.est_galpao_apos != null ? '<b>' + Math.round(ex.est_galpao_apos).toLocaleString('pt-BR') + '</b> no galpão' : ''}</div>` : ''}
             ${st !== 'cancelada' && ex.envio_status && VD_ENVIO[ex.envio_status] ? `<div class="v-envio" title="${ex.rastreio ? 'Rastreio: ' + vmlEsc(ex.rastreio) : 'Situação do envio'}" onclick="vdPagamento('${v.order_id}','entrega')">${VD_ENVIO[ex.envio_status]}</div>` : ''}
             <button class="btn-out btn btn-sm v-bt-msg" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}','${v.ml_user_id || ''}')">Mensagens</button>
             <button class="btn-out btn btn-sm" onclick="vdPagamento('${v.order_id}')">Detalhes</button>
