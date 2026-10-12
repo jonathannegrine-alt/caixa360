@@ -964,7 +964,7 @@
           <div class="form-group"><label class="form-label">Data fim</label><input type="date" id="aj-ate" value="${rfFiltro.ate}" onchange="rfAjLimpa()"></div>
           <div class="form-group"><label class="form-label" for="aj-envio">Tipo de envio</label><select id="aj-envio" onchange="rfAjLimpa()"><option value="">Todos</option><option value="full">Só Full</option><option value="ag">Só coleta e agência</option><option value="flex">Só Flex</option></select></div>
         </div>
-        <div class="text-muted" style="font-size:12px;margin-top:-4px;">O período e o tipo de envio já vêm do filtro da tela; mude aqui se quiser aplicar a outro recorte.</div>
+        <div class="text-muted" style="font-size:12px;margin-top:-4px;">O período já vem do filtro da tela. Escolha o tipo de envio para aplicar só a uma parte das vendas.</div>
         ${varias ? `<label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13px;margin-top:10px;"><input type="checkbox" id="aj-contas" style="width:auto;" ${contaAtiva ? '' : 'checked disabled'} onchange="rfAjLimpa()"> Realizar em todas as lojas${contaAtiva ? ' (desmarcado: só ' + vmlEsc(contaNome(contaAtiva)) + ')' : ''}</label>` : ''}`;
     }
     function rfAjOque(){
