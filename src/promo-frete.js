@@ -251,57 +251,79 @@
       const janela = () => vmlModal('Texto da contestação', '<textarea style="width:100%;height:180px;">' + pqE(t) + '</textarea>');
       if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, janela); else janela();
     }
-    // linhas do documento de contestação (uma por venda), na ordem: motivo, depois data
+    // ----- documento de contestação (PDF e Excel): uma linha por venda, colunas na ordem que o atendente lê -----
+    //   Data | Venda | Qtd. | Preço de venda | Faixa de preço | Peso considerado | Medida registrada | Frete devido (tabela) | Frete cobrado | Diferença | Motivo
+    function frMotivoCurto(x, r, q){
+      const c = frClasse(x), pede = ' Solicito o ressarcimento de R$ ' + pqN(x.dif) + '.';
+      if(c === 'preco') return 'Faixa de preço errada: foi cobrada a faixa ' + r.faixaCob + '.' + pede;
+      if(c === 'peso') return 'Faixa de peso errada: foi cobrada a faixa ' + r.pesoCob + '.' + pede;
+      if(c === 'multiplo') return 'Cobrado ' + Math.round(Number(x.frete) / (Number(x.devido_un) * q)) + ' vezes o valor devido.' + pede;
+      return 'Valor cobrado fora da tabela.' + pede;
+    }
     function frDocLinhas(){
       const ord = { preco: 0, peso: 1, multiplo: 2, outro: 3 };
       return frEscolhidas().slice().sort((a, b) => ord[frClasse(a)] - ord[frClasse(b)] || String(a.data_venda).localeCompare(String(b.data_venda))).map(x => { const r = frRot(x), q = Number(x.qtd) || 1;
-        return { x, venda: String(x.order_id), data: frDia(x), q, preco: Number(x.preco_unit), faixa: r.faixa, peso: r.pesoTxt, devido: Math.round(Number(x.devido_un) * q * 100) / 100, cobrado: Number(x.frete), dif: Number(x.dif), motivo: FR_MOTIVO[frClasse(x)], cobradoComo: frClasse(x) === 'preco' ? 'faixa de preço ' + r.faixaCob : frClasse(x) === 'peso' ? 'faixa de peso ' + r.pesoCob : frClasse(x) === 'multiplo' ? Math.round(Number(x.frete) / (Number(x.devido_un) * q)) + ' vezes o devido' : 'valor fora da tabela' }; });
+        return { x, data: frDia(x), venda: String(x.order_id), q, preco: Number(x.preco_unit), faixa: r.faixa, peso: (r.conta ? r.conta + ' (faixa ' + r.peso + ')' : 'faixa ' + r.peso), medida: r.medida || 'sem medida registrada', base: x.base,
+          devido: Math.round(Number(x.devido_un) * q * 100) / 100, cobrado: Number(x.frete), dif: Number(x.dif), motivo: frMotivoCurto(x, r, q) }; });
     }
     function frDocTitulo(){ const P = frPeriodo(), c = contaParam(); return { loja: c ? ((typeof contaNome === 'function' && contaNome(c)) || c) : (contasML.length === 1 ? (contasML[0].apelido || contasML[0].id) : 'Todas as lojas'), periodo: ptDate(P.de) + ' a ' + ptDate(P.ate) }; }
-    // Excel: uma aba só, uma linha por venda, com título, total e a coluna do texto de contestação
-    function frExcel(){
-      if(!fr.dados || typeof XLSX === 'undefined') return;
+    // título da coluna de medida conforme a origem das linhas
+    function frDocColMedida(L){ const f = L.some(l => l.base === 'full'), a = L.some(l => l.base === 'anuncio'); return f && !a ? 'Medida registrada no Full' : a && !f ? 'Embalagem de envio do anúncio' : 'Medida registrada'; }
+    const FR_DOC_REGRA = 'Frete devido: tabela de custos de envio do Mercado Livre, na faixa do preço de venda e na faixa de peso da medida registrada (o maior entre o peso e o peso cúbico = altura x largura x comprimento / 6.000), vezes a quantidade.';
+    function frCarrega(src){ return new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); }); }
+    // Excel formatado (ExcelJS, carregado na hora): título, cabeçalho colorido, bordas, moeda e total
+    async function frExcel(bt){
       const L = frDocLinhas(); if(!L.length){ if(typeof toast === 'function') toast('Não há vendas na lista para gerar o arquivo.'); return; }
-      const T = frDocTitulo(), total = L.reduce((s, l) => s + l.dif, 0);
-      const cab = ['Venda', 'Data', 'Qtd.', 'Preço de venda', 'Faixa de preço', 'Peso considerado / faixa de peso', 'Frete devido', 'Frete cobrado', 'Diferença', 'Motivo', 'Cobrado como', 'Contestação'];
-      const aoa = [['CONTESTAÇÃO DE CUSTO DE ENVIO'], [T.loja + ' · vendas de ' + T.periodo], [L.length + ' venda' + (L.length === 1 ? '' : 's') + ' · total a ressarcir: R$ ' + pqN(total)], [], cab]
-        .concat(L.map(l => [l.venda, l.data, l.q, l.preco, l.faixa, l.peso, l.devido, l.cobrado, l.dif, l.motivo, l.cobradoComo, frTexto(l.x)]))
-        .concat([['Total', '', '', '', '', '', Math.round(L.reduce((s, l) => s + l.devido, 0) * 100) / 100, Math.round(L.reduce((s, l) => s + l.cobrado, 0) * 100) / 100, Math.round(total * 100) / 100]]);
-      const ws = XLSX.utils.aoa_to_sheet(aoa), fim = aoa.length;
-      ws['!cols'] = [{ wch: 19 }, { wch: 11 }, { wch: 6 }, { wch: 15 }, { wch: 20 }, { wch: 27 }, { wch: 13 }, { wch: 14 }, { wch: 11 }, { wch: 26 }, { wch: 30 }, { wch: 110 }];
-      ws['!merges'] = [0, 1, 2].map(r => ({ s: { r, c: 0 }, e: { r, c: 11 } }));
-      ws['!autofilter'] = { ref: 'A5:L' + (fim - 1) };
-      for(let r = 6; r <= fim; r++) ['D', 'G', 'H', 'I'].forEach(c => { const k = c + r; if(ws[k] && ws[k].t === 'n') ws[k].z = '"R$" #,##0.00'; });
-      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Contestação de frete');
-      XLSX.writeFile(wb, 'contestacao_frete_' + getToday() + '.xlsx');
+      const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
+      try {
+        await frCarrega('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js');
+        const T = frDocTitulo(), total = L.reduce((s, l) => s + l.dif, 0), wb = new window.ExcelJS.Workbook(), ws = wb.addWorksheet('Contestação de frete', { views: [{ state: 'frozen', ySplit: 6 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+        const cols = ['Data', 'Venda', 'Qtd.', 'Preço de venda', 'Faixa de preço', 'Peso considerado', frDocColMedida(L), 'Frete devido (tabela do Mercado Livre)', 'Frete cobrado', 'Diferença', 'Motivo'];
+        ws.columns = [12, 20, 6, 15, 20, 27, 34, 20, 14, 12, 70].map(w => ({ width: w }));
+        const linha = (txt, estilo) => { const r = ws.addRow([txt]); ws.mergeCells(r.number, 1, r.number, cols.length); Object.assign(r.getCell(1), estilo); return r; };
+        linha('Contestação de custo de envio', { font: { bold: true, size: 16 } }).height = 26;
+        linha(T.loja + '  ·  vendas de ' + T.periodo + '  ·  gerado em ' + ptDate(getToday()), { font: { color: { argb: 'FF606477' } } });
+        linha(L.length + ' venda' + (L.length === 1 ? '' : 's') + '  ·  total a ressarcir: R$ ' + pqN(total), { font: { bold: true, size: 12, color: { argb: 'FFC81E1E' } } });
+        const rg = linha(FR_DOC_REGRA, { font: { size: 9, color: { argb: 'FF606477' } }, alignment: { wrapText: true, vertical: 'top' } }); rg.height = 28;
+        ws.addRow([]);
+        const cab = ws.addRow(cols); cab.height = 32;
+        cab.eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } }; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
+        const borda = { style: 'thin', color: { argb: 'FFE0E2EC' } }, moeda = '"R$" #,##0.00';
+        L.forEach((l, i) => { const r = ws.addRow([l.data, l.venda, l.q, l.preco, l.faixa, l.peso, l.medida, l.devido, l.cobrado, l.dif, l.motivo]);
+          r.eachCell((c, n) => { c.border = { top: borda, bottom: borda, left: borda, right: borda }; c.alignment = { vertical: 'middle', wrapText: n === 11, horizontal: n === 3 ? 'center' : (n === 4 || n >= 8 && n <= 10) ? 'right' : 'left' }; if(i % 2) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F7FC' } }; });
+          [4, 8, 9, 10].forEach(n => { r.getCell(n).numFmt = moeda; }); r.getCell(10).font = { bold: true, color: { argb: 'FFC81E1E' } }; r.height = l.motivo.length > 80 ? 30 : 20; });
+        const tot = ws.addRow(['Total', '', '', '', '', '', '', L.reduce((s, l) => s + l.devido, 0), L.reduce((s, l) => s + l.cobrado, 0), total, '']);
+        tot.eachCell(c => { c.font = { bold: true }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECEDF4' } }; }); [8, 9, 10].forEach(n => { tot.getCell(n).numFmt = moeda; tot.getCell(n).alignment = { horizontal: 'right' }; });
+        ws.autoFilter = { from: { row: 6, column: 1 }, to: { row: 6 + L.length, column: cols.length } };
+        const buf = await wb.xlsx.writeBuffer(), a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = 'contestacao_frete_' + getToday() + '.xlsx';
+        document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+      } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o Excel: ' + ((e && e.message) || e)); }
+      if(bt){ bt.disabled = false; bt.textContent = rot; }
     }
-    // PDF: uma linha por venda, com cabeçalho, total e a regra aplicada no rodapé
+    // PDF: mesma tabela, com o resumo no topo
     async function frPdf(bt){
       const L = frDocLinhas(); if(!L.length){ if(typeof toast === 'function') toast('Não há vendas na lista para gerar o arquivo.'); return; }
       const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
       try {
-        const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
-        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+        await frCarrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await frCarrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
         const T = frDocTitulo(), total = L.reduce((s, l) => s + l.dif, 0), n2 = v => 'R$ ' + pqN(v);
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' }), W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20); doc.text('Contestação de custo de envio', 40, 46);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(95); doc.text(T.loja + '  ·  vendas de ' + T.periodo + '  ·  gerado em ' + ptDate(getToday()), 40, 63);
-        const cx = [['Vendas contestadas', String(L.length)], ['Frete devido', n2(L.reduce((s, l) => s + l.devido, 0))], ['Frete cobrado', n2(L.reduce((s, l) => s + l.cobrado, 0))], ['Total a ressarcir', n2(total)]], w = (W - 80 - 30) / 4;
-        cx.forEach((c, i) => { const x = 40 + i * (w + 10); doc.setDrawColor(225); doc.setFillColor(248, 249, 252); doc.roundedRect(x, 76, w, 44, 6, 6, 'FD'); doc.setFillColor(...(i === 3 ? [220, 38, 38] : [79, 70, 229])); doc.rect(x, 76, 4, 44, 'F');
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110); doc.text(c[0].toUpperCase(), x + 14, 92); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(20); doc.text(c[1], x + 14, 110); });
-        doc.autoTable({ startY: 134, margin: { left: 40, right: 40, bottom: 46 },
-          head: [['Venda', 'Data', 'Qtd.', 'Preço de venda', 'Faixa de preço', 'Peso considerado / faixa de peso', 'Frete devido', 'Frete cobrado', 'Diferença', 'Motivo']],
-          // embaixo de cada venda vai o texto da contestação: o Mercado Livre lê venda a venda
-          body: L.flatMap(l => [[l.venda, l.data, l.q, n2(l.preco), l.faixa, l.peso, n2(l.devido), n2(l.cobrado), n2(l.dif), l.motivo],
-            [{ content: 'Contestação: ' + frTexto(l.x), colSpan: 10, styles: { fontSize: 8, textColor: [70, 72, 85], fillColor: [247, 247, 252], cellPadding: { top: 3, right: 6, bottom: 7, left: 6 } } }]]),
-          foot: [['Total', '', '', '', '', '', n2(L.reduce((s, l) => s + l.devido, 0)), n2(L.reduce((s, l) => s + l.cobrado, 0)), n2(total), '']],
-          styles: { fontSize: 8.5, cellPadding: 5, valign: 'middle', lineColor: [232, 233, 240], lineWidth: 0.5 }, headStyles: { fillColor: [79, 70, 229], textColor: 255, fontSize: 8.5 }, footStyles: { fillColor: [240, 241, 246], textColor: 20, fontStyle: 'bold' },
-          showFoot: 'lastPage', rowPageBreak: 'avoid',
-          columnStyles: { 0: { cellWidth: 92 }, 1: { cellWidth: 54 }, 2: { halign: 'center', cellWidth: 30 }, 3: { halign: 'right', cellWidth: 62 }, 6: { halign: 'right', cellWidth: 58 }, 7: { halign: 'right', cellWidth: 60 }, 8: { halign: 'right', cellWidth: 56, fontStyle: 'bold', textColor: [200, 30, 30] }, 9: { cellWidth: 150 } },
-          didDrawPage: () => { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(125);
-            doc.text('Frete devido = tabela de custos de envio do Mercado Livre, na faixa do preço de venda e na faixa de peso indicada em cada venda, vezes a quantidade vendida.', 40, H - 26);
-            doc.text('Página ' + doc.internal.getNumberOfPages(), W - 40, H - 26, { align: 'right' }); } });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20); doc.text('Contestação de custo de envio', 32, 44);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(95); doc.text(T.loja + '  ·  vendas de ' + T.periodo + '  ·  gerado em ' + ptDate(getToday()), 32, 60);
+        const cx = [['Vendas contestadas', String(L.length)], ['Frete devido (tabela)', n2(L.reduce((s, l) => s + l.devido, 0))], ['Frete cobrado', n2(L.reduce((s, l) => s + l.cobrado, 0))], ['Total a ressarcir', n2(total)]], w = (W - 64 - 30) / 4;
+        cx.forEach((c, i) => { const x = 32 + i * (w + 10); doc.setDrawColor(225); doc.setFillColor(248, 249, 252); doc.roundedRect(x, 72, w, 42, 6, 6, 'FD'); doc.setFillColor(...(i === 3 ? [220, 38, 38] : [79, 70, 229])); doc.rect(x, 72, 4, 42, 'F');
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110); doc.text(c[0].toUpperCase(), x + 14, 88); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(20); doc.text(c[1], x + 14, 105); });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(95); doc.text(doc.splitTextToSize(FR_DOC_REGRA, W - 64), 32, 128);
+        doc.autoTable({ startY: 144, margin: { left: 32, right: 32, bottom: 40 },
+          head: [['Data', 'Venda', 'Qtd.', 'Preço de venda', 'Faixa de preço', 'Peso considerado', frDocColMedida(L), 'Frete devido\n(tabela do Mercado Livre)', 'Frete cobrado', 'Diferença', 'Motivo']],
+          body: L.map(l => [l.data, l.venda, l.q, n2(l.preco), l.faixa, l.peso, l.medida, n2(l.devido), n2(l.cobrado), n2(l.dif), l.motivo]),
+          foot: [['Total', '', '', '', '', '', '', n2(L.reduce((s, l) => s + l.devido, 0)), n2(L.reduce((s, l) => s + l.cobrado, 0)), n2(total), '']],
+          styles: { fontSize: 7.8, cellPadding: 4, valign: 'middle', lineColor: [226, 228, 238], lineWidth: 0.5, overflow: 'linebreak' }, headStyles: { fillColor: [79, 70, 229], textColor: 255, fontSize: 7.8, halign: 'center' }, footStyles: { fillColor: [236, 237, 244], textColor: 20, fontStyle: 'bold', halign: 'right' },
+          alternateRowStyles: { fillColor: [247, 247, 252] }, showFoot: 'lastPage', rowPageBreak: 'avoid',
+          columnStyles: { 0: { cellWidth: 46 }, 1: { cellWidth: 80 }, 2: { halign: 'center', cellWidth: 24 }, 3: { halign: 'right', cellWidth: 50 }, 4: { cellWidth: 68 }, 5: { cellWidth: 84 }, 6: { cellWidth: 108 }, 7: { halign: 'right', cellWidth: 66 }, 8: { halign: 'right', cellWidth: 50 }, 9: { halign: 'right', cellWidth: 48, fontStyle: 'bold', textColor: [200, 30, 30] } },
+          didDrawPage: () => { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(125); doc.text('Página ' + doc.internal.getNumberOfPages(), W - 32, H - 22, { align: 'right' }); } });
         doc.save('contestacao_frete_' + getToday() + '.pdf');
       } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + ((e && e.message) || e)); }
       if(bt){ bt.disabled = false; bt.textContent = rot; }
@@ -397,7 +419,7 @@
               <div class="chips"><button class="chip ${!fr.todas ? 'active' : ''}" onclick="fr.todas=false;frDesenhar()" title="Vendas que você ainda não marcou como conferidas">Aguardando<span class="n">${abertas.length}</span></button><button class="chip ${fr.todas ? 'active' : ''}" onclick="fr.todas=true;frDesenhar()">Todas<span class="n">${tudoMais.length}</span></button></div></div>
             <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><span class="text-muted" style="font-size:12.5px;">${nMarc ? nMarc + ' marcada' + (nMarc > 1 ? 's' : '') : 'nenhuma marcada: vale a lista toda'} · <b>R$ ${pqN(soma(esc))}</b></span>
               <button class="btn btn-sm" onclick="frPdf(this)" ${esc.length ? '' : 'disabled'} title="PDF com uma linha por venda, para enviar ao Mercado Livre">Gerar PDF (${esc.length})</button>
-              <button class="btn-out btn btn-sm" onclick="frExcel()" ${esc.length ? '' : 'disabled'} title="Planilha com uma linha por venda e o texto de contestação">Gerar Excel (${esc.length})</button>
+              <button class="btn-out btn btn-sm" onclick="frExcel(this)" ${esc.length ? '' : 'disabled'} title="Planilha com uma linha por venda e o texto de contestação">Gerar Excel (${esc.length})</button>
               <button class="btn-out btn btn-sm" onclick="frVistoMarcadas()" ${esc.some(x => !fr.vistos.has(String(x.order_id))) ? '' : 'disabled'} title="Tira da lista de aguardando as vendas marcadas (ou todas da lista)">Marcar como conferidas</button></div></div>
           <div style="overflow-x:auto;max-height:580px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" aria-label="Marcar todas" ${todasMarc ? 'checked' : ''} onchange="frMarcarTodas(this.checked)"></th><th>Venda</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Preço de venda</th><th>Faixa de preço</th><th>Faixa de peso</th><th class="num">Frete devido</th><th class="num">Cobrado</th><th class="num">Diferença</th><th>Motivo</th><th></th></tr></thead><tbody>
           ${mostra.length ? mostra.map(x => { const visto = fr.vistos.has(String(x.order_id)), r = frRot(x), q = Number(x.qtd) || 1;
