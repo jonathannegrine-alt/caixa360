@@ -344,6 +344,7 @@
                 ${v.item_id ? `<a href="https://produto.mercadolivre.com.br/${String(v.item_id).replace(/^MLB/, 'MLB-')}" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:none;" title="Ver o anúncio no ML">${vmlEsc(v.item_id)}</a>${cp(v.item_id)}` : ''}
               </div>
               <div class="v-meta"><span class="v-preco">R$ ${vmlNum(v.preco_unit)}</span><button class="ico-btn" title="Informações do pagamento" onclick="vdPagamento('${v.order_id}','pagamento')">$</button>${v.variacao ? `<span>${vmlEsc(v.variacao)}</span>` : ''}</div>
+                ${ex.est_anuncio_apos != null || ex.est_galpao_apos != null ? `<div class="v-estq" title="Estoque disponível logo depois desta venda (lido quando a venda entrou no sistema)">Disponível após esta venda: ${ex.est_anuncio_apos != null ? '<b>' + Math.round(ex.est_anuncio_apos).toLocaleString('pt-BR') + '</b> ' + (ex.logistic_type === 'fulfillment' ? 'no Full' : 'no anúncio') : ''}${ex.est_anuncio_apos != null && ex.est_galpao_apos != null ? ' · ' : ''}${ex.est_galpao_apos != null ? '<b>' + Math.round(ex.est_galpao_apos).toLocaleString('pt-BR') + '</b> no galpão' : ''}</div>` : ''}
             </div>
           </div>
 
@@ -360,7 +361,6 @@
 
           <div class="v-acoes">
             <div class="v-status ${st === 'aprovada' ? 'ok' : (st === 'cancelada' ? 'canc' : 'pend')}">${st === 'aprovada' ? 'Aprovada' : (st === 'cancelada' ? 'Cancelada' : 'Pagamento pendente')}</div>
-            ${ex.est_anuncio_apos != null || ex.est_galpao_apos != null ? `<div class="v-estq" title="Estoque disponível logo depois desta venda (lido quando a venda entrou no sistema)">Disponível após esta venda: ${ex.est_anuncio_apos != null ? '<b>' + Math.round(ex.est_anuncio_apos).toLocaleString('pt-BR') + '</b> ' + (ex.logistic_type === 'fulfillment' ? 'no Full' : 'no anúncio') : ''}${ex.est_anuncio_apos != null && ex.est_galpao_apos != null ? ' · ' : ''}${ex.est_galpao_apos != null ? '<b>' + Math.round(ex.est_galpao_apos).toLocaleString('pt-BR') + '</b> no galpão' : ''}</div>` : ''}
             ${st !== 'cancelada' && ex.envio_status && VD_ENVIO[ex.envio_status] ? `<div class="v-envio" title="${ex.rastreio ? 'Rastreio: ' + vmlEsc(ex.rastreio) : 'Situação do envio'}" onclick="vdPagamento('${v.order_id}','entrega')">${VD_ENVIO[ex.envio_status]}</div>` : ''}
             <button class="btn-out btn btn-sm v-bt-msg" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}','${v.ml_user_id || ''}')">Mensagens</button>
             <button class="btn-out btn btn-sm" onclick="vdPagamento('${v.order_id}')">Detalhes</button>
