@@ -59,9 +59,16 @@
       }
       pc.lendo = 'Lendo os dados de ' + lista.length + ' anúncios (na primeira vez demora um pouco)…'; pcDesenhar();
       await pcBase(lista.map(x => x.item));
+      await pcCustoVendas(lista.map(x => x.item));
       pc.lendo = '';
       pc.anuncios = lista.map(x => Object.assign({ item_id: x.item }, pc.base[x.item] || {}, { pausado: !!x.pausado }))
         .sort((a, b) => (a.pausado - b.pausado) || String(a.sku || 'zzz').localeCompare(String(b.sku || 'zzz')));
+    }
+    // custo, imposto, tarifa e frete das vendas recentes de cada anúncio (é de onde vem o custo dos kits, que no cadastro ficam zerados)
+    async function pcCustoVendas(ids){
+      const falta = [...new Set(ids)].filter(i => i && !pm.info[i]);
+      for(let i = 0; i < falta.length; i += 200){ const r = await supa.rpc('ml_itens_margem', { p_itens: falta.slice(i, i + 200), p_conta: pmConta() }); (r.data || []).forEach(x => { pm.info[x.item_id] = x; }); }
+      falta.forEach(i => { if(!pm.info[i]) pm.info[i] = { vazio: true }; });
     }
     // busca: digitou o código do anúncio (com ou sem MLB) e deu Enter → abre direto as promoções dele
     async function pcBuscaEnter(){
@@ -181,6 +188,7 @@
       if(!d || !d.ok){ if(typeof toast === 'function') toast('Não consegui abrir a campanha: ' + ((d && (d.motivo || d.error)) || 'sem resposta')); pcDesenhar(); return; }
       const dentro = d.itens.filter(x => x.situacao === 'started' || x.situacao === 'pending'), cand = d.itens.filter(x => x.situacao === 'candidate');
       await pcBase(d.itens.map(x => x.item));
+      await pcCustoVendas(d.itens.map(x => x.item));
       const antes = {}; dentro.forEach(x => { antes[x.item] = x.preco; });
       pc.ed = { id, nome: d.campanha.nome, inicio: pcISO(d.campanha.inicio), fim: pcISO(d.campanha.fim), sub: d.campanha.sub || 'FLEXIBLE_PERCENTAGE', pct_fixa: d.campanha.pct_fixa || '', situacao: d.campanha.situacao,
         linhas: dentro.map(x => pcLinha(x.item, x.original, x.preco, { pausado: !!x.pausado })), antes, candidatos: cand.map(x => ({ item: x.item, original: x.original, minimo: x.minimo, maximo: x.maximo, sugerido: x.sugerido })), busca: '' };
@@ -191,6 +199,7 @@
       const o = (pc.camps || []).find(x => x.id === id); if(!o) return;
       pc.lendo = 'Preparando a cópia…'; pcDesenhar();
       await pcBase((o.itens || []).map(x => x.item));
+      await pcCustoVendas((o.itens || []).map(x => x.item));
       const ini0 = new Date(pcISO(o.inicio) + 'T12:00:00'), ini = new Date(ini0.getFullYear(), ini0.getMonth() + 1, 1), fim = new Date(ini.getFullYear(), ini.getMonth() + 1, 0), hoje = getToday();
       const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], nomeMes = meses.findIndex(m => m.toLowerCase() === String(o.nome).trim().toLowerCase());
       pc.lendo = '';
