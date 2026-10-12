@@ -97,7 +97,7 @@
     // ----- formulário -----
     function empModoPadrao(){ return typeof olist !== 'undefined' && olist.conectado ? 'vincular' : 'gerar'; }
     function empNovo(dados){
-      emp.form = Object.assign({ id: null, nome: '', credor: '', numero_contrato: '', valor: '', taxa_mes: '', parcelas: '', primeira: '', sistema: 'price', dono: 'empresa', modo: empModoPadrao(), vinculo: '', obs: '', loja: typeof lojaNova === 'function' ? lojaNova() : null, arquivo: null }, dados || {});
+      emp.form = Object.assign({ id: null, nome: '', credor: '', numero_contrato: '', valor: '', taxa_mes: '', parcelas: '', primeira: '', sistema: 'price', dono: 'empresa', modo: empModoPadrao(), vinculo: '', obs: '', valor_parcela: '', loja: typeof lojaNova === 'function' ? lojaNova() : null, arquivo: null }, dados || {});
       emp.pdf = null;
       empForm();
     }
@@ -105,13 +105,14 @@
     function empDeSugestao(i, comIA){ const o = empSugestoes()[i]; if(!o) return; empNovo({ nome: o.desc, credor: o.forn, vinculo: o.desc, modo: 'vincular', parcelas: o.n, primeira: o.primeira }); if(comIA) empLerPdf(true); }
     function empFormLer(){
       const f = emp.form; if(!f) return;
-      ['nome', 'credor', 'numero_contrato', 'valor', 'taxa_mes', 'parcelas', 'primeira', 'sistema', 'dono', 'modo', 'vinculo', 'obs', 'loja'].forEach(k => { const el = document.getElementById('emp-' + k); if(el) f[k] = el.value; });
+      ['nome', 'credor', 'numero_contrato', 'valor', 'taxa_mes', 'parcelas', 'primeira', 'sistema', 'dono', 'modo', 'vinculo', 'obs', 'loja', 'valor_parcela'].forEach(k => { const el = document.getElementById('emp-' + k); if(el) f[k] = el.value; });
     }
     function empForm(aviso){
       const f = emp.form, opt = (v, t, sel) => `<option value="${v}" ${String(sel) === v ? 'selected' : ''}>${t}</option>`;
       const achadas = f.modo === 'vincular' && f.vinculo ? pagamentos.filter(p => emN((p.desc || '') + ' ' + (p.forn || '')).includes(emN(f.vinculo))).length : 0;
       vmlModal(f.id ? 'Editar contrato' : 'Novo contrato de empréstimo', `
         ${aviso ? `<div class="alert alert-info">${aviso}</div>` : ''}
+        <div id="emp-erro" class="alert alert-danger" style="display:none;"></div>
         <div class="emp-pdf">
           <div><b>Contrato em PDF</b><span>${emp.pdf ? emEsc(emp.pdf.name) + ' — será guardado ao salvar' : f.arquivo ? 'Guardado na nuvem' : 'Nenhum arquivo guardado'}</span></div>
           ${f.arquivo && !emp.pdf && f.id ? `<button class="btn-out btn-sm" onclick="empBaixar(${f.id})">Baixar</button>` : ''}
@@ -125,13 +126,14 @@
           <div class="form-group"><label class="form-label">Nº do contrato</label><input type="text" id="emp-numero_contrato" value="${emEsc(f.numero_contrato || '')}"></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Valor emprestado (R$)</label><input type="text" id="emp-valor" value="${emEsc(f.valor)}" placeholder="0,00"></div>
-          <div class="form-group"><label class="form-label">Juros ao mês (%)</label><input type="text" id="emp-taxa_mes" value="${emEsc(f.taxa_mes)}" placeholder="Ex.: 1,75"></div>
-          <div class="form-group"><label class="form-label">Número de parcelas</label><input type="number" id="emp-parcelas" value="${emEsc(f.parcelas)}" min="1"></div>
+          <div class="form-group"><label class="form-label" title="O valor da dívida: o total financiado, com IOF, tarifas e seguro quando entram no financiamento. Costuma ser maior que o valor que caiu na conta.">Valor financiado (R$)</label><input type="text" id="emp-valor" value="${emEsc(f.valor)}" placeholder="0,00" onchange="empFormLer();empForm();"></div>
+          <div class="form-group"><label class="form-label">Juros ao mês (%)</label><input type="text" id="emp-taxa_mes" value="${emEsc(f.taxa_mes)}" placeholder="Ex.: 1,75" onchange="empFormLer();empForm();"></div>
+          <div class="form-group"><label class="form-label">Número de parcelas</label><input type="number" id="emp-parcelas" value="${emEsc(f.parcelas)}" min="1" onchange="empFormLer();empForm();"></div>
           <div class="form-group"><label class="form-label">Primeira parcela</label><input type="date" id="emp-primeira" value="${emEsc(f.primeira || '')}"></div>
         </div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Como as parcelas são calculadas</label><select id="emp-sistema">${opt('price', 'Parcelas iguais (Price)', f.sistema)}${opt('sac', 'Amortização igual, parcela diminui (SAC)', f.sistema)}${opt('outro', 'Outro', f.sistema)}</select></div>
+          <div class="form-group"><label class="form-label" title="Opcional. Se o contrato informa o valor da parcela, as parcelas são geradas exatamente nesse valor.">Valor da parcela no contrato (R$)</label><input type="text" id="emp-valor_parcela" value="${emEsc(f.valor_parcela == null ? '' : f.valor_parcela)}" placeholder="opcional" onchange="empFormLer();empForm();">${empConfParcela(f)}</div>
           <div class="form-group"><label class="form-label">De quem é a dívida</label><select id="emp-dono">${Object.entries(EM_DONO).map(([k, t]) => opt(k, t, f.dono)).join('')}</select></div>
         </div>
         <div class="form-group"><label class="form-label">De onde vêm as parcelas</label>
@@ -145,9 +147,26 @@
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
     }
 
+    // taxa ao mês que faz a parcela Price (pv, n) dar exatamente o valor informado no contrato
+    function empTaxaDaParcela(pv, n, parcela){
+      if(!(pv > 0) || !(n > 0) || !(parcela > pv / n)) return null;
+      let a = 0, b = 1; const pmt = i => i > 0 ? pv * i / (1 - Math.pow(1 + i, -n)) : pv / n;
+      for(let k = 0; k < 80; k++){ const m = (a + b) / 2; if(pmt(m) > parcela) b = m; else a = m; }
+      return (a + b) / 2;
+    }
+    // explica, no formulário, a diferença entre a parcela calculada pelos juros e a parcela do contrato
+    function empConfParcela(f){
+      const pv = emNum(f.valor), n = Math.round(emNum(f.parcelas)), i = emNum(f.taxa_mes) / 100, par = emNum(f.valor_parcela);
+      if(f.sistema !== 'price' || !(pv > 0) || !(n > 0) || !(par > 0)) return '';
+      const calc = i > 0 ? pv * i / (1 - Math.pow(1 + i, -n)) : pv / n, ie = empTaxaDaParcela(pv, n, par);
+      if(!ie) return '<div class="emp-conf text-danger">A parcela informada é menor que o valor financiado dividido pelas parcelas. Confira os valores.</div>';
+      if(Math.abs(calc - par) < 0.02) return '<div class="emp-conf text-muted">Bate com os juros informados.</div>';
+      return `<div class="emp-conf text-muted">Com juros de ${String(Math.round(i * 10000) / 100).replace('.', ',')}% a parcela daria ${fmt(calc)}. O contrato diz ${fmt(par)}: as parcelas serão geradas pelo valor do contrato (equivale a ${String(Math.round(ie * 100000) / 1000).replace('.', ',')}% ao mês, por causa de carência ou de dias a mais até a primeira parcela).</div>`;
+    }
     // tabela de parcelas pelo contrato (Price ou SAC)
     function empTabela(c){
-      const pv = emNum(c.valor), i = emNum(c.taxa_mes) / 100, n = Math.max(1, Math.round(emNum(c.parcelas)));
+      const pv = emNum(c.valor), n = Math.max(1, Math.round(emNum(c.parcelas)));
+      const ie = c.sistema === 'price' ? empTaxaDaParcela(pv, n, emNum(c.valor_parcela)) : null, i = ie != null ? ie : emNum(c.taxa_mes) / 100;
       if(!(pv > 0) || !c.primeira) return [];
       const linhas = []; let saldo = pv;
       const pmt = i > 0 ? pv * i / (1 - Math.pow(1 + i, -n)) : pv / n, amSac = pv / n;
@@ -163,20 +182,21 @@
 
     async function empSalvar(btn){
       empFormLer(); const f = emp.form;
-      if(!String(f.nome).trim()){ toast('Dê um nome ao contrato.'); return; }
-      if(f.modo === 'vincular' && !String(f.vinculo || '').trim()){ toast('Informe o trecho que identifica as parcelas no Contas a pagar.'); return; }
+      const erro = (t, campo) => { const el = document.getElementById('emp-erro'); if(el){ el.textContent = t; el.style.display = 'block'; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } toast(t); const c = campo && document.getElementById(campo); if(c){ c.style.borderColor = 'var(--danger)'; c.focus(); } };
+      if(!String(f.nome).trim()){ erro('Falta o nome do contrato.', 'emp-nome'); return; }
+      if(f.modo === 'vincular' && !String(f.vinculo || '').trim()){ erro('Falta o "trecho que identifica as parcelas". Em "De onde vêm as parcelas" está escolhido que elas já estão no Contas a pagar: escreva um trecho da descrição dessas contas ou troque para "Gerar as parcelas aqui".', 'emp-vinculo'); return; }
       const reg = { usuario_id: usuarioAtual.id, nome: String(f.nome).trim(), credor: String(f.credor || '').trim() || null, numero_contrato: String(f.numero_contrato || '').trim() || null,
         valor: emNum(f.valor), taxa_mes: emNum(f.taxa_mes), parcelas: Math.max(1, Math.round(emNum(f.parcelas)) || 1), primeira: f.primeira || null, sistema: f.sistema, dono: f.dono, modo: f.modo,
-        vinculo: f.modo === 'vincular' ? String(f.vinculo).trim() : null, obs: String(f.obs || '').trim() || null, loja: f.loja || null };
+        vinculo: f.modo === 'vincular' ? String(f.vinculo).trim() : null, obs: String(f.obs || '').trim() || null, loja: f.loja || null, valor_parcela: emNum(f.valor_parcela) || null };
       if(f.modo === 'gerar'){
         const tab = empTabela(reg);
-        if(!tab.length){ toast('Para gerar as parcelas, informe o valor emprestado e a data da primeira parcela.'); return; }
+        if(!tab.length){ erro('Para gerar as parcelas, informe o valor financiado e a data da primeira parcela.', emNum(f.valor) > 0 ? 'emp-primeira' : 'emp-valor'); return; }
         const tot = tab.reduce((s, l) => s + l.amort + l.juros, 0);
         if(!confirm('Serão lançadas ' + tab.length + ' parcelas no Contas a pagar, de ' + ptDate(tab[0].data) + ' a ' + ptDate(tab[tab.length - 1].data) + ', somando ' + fmt(tot) + ' (' + fmt(reg.valor) + ' de amortização e ' + fmt(tot - reg.valor) + ' de juros).\n\nParcelas deste contrato que já estavam lançadas e em aberto serão refeitas. Continuar?')) return;
       }
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
       const g = f.id ? await supa.from('emprestimos').update(reg).eq('id', f.id).select().single() : await supa.from('emprestimos').insert(reg).select().single();
-      if(g.error){ toast('Não consegui salvar: ' + g.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar contrato'; } return; }
+      if(g.error){ erro('Não consegui salvar: ' + g.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar contrato'; } return; }
       if(emp.pdf){
         const cam = usuarioAtual.id + '/' + g.data.id + '-' + Date.now() + '.pdf';
         const up = await supa.storage.from('contratos').upload(cam, emp.pdf, { contentType: 'application/pdf', upsert: true });
@@ -262,13 +282,16 @@
       const falhou = !j || j.error || !j.dados;
       const d = falhou ? {} : j.dados;
       const lido = falhou ? {} : { nome: d.nome || d.credor || '', credor: d.credor || '', numero_contrato: d.numero_contrato || '', valor: d.valor != null ? String(d.valor).replace('.', ',') : '', taxa_mes: d.taxa_mes != null ? String(Math.round(d.taxa_mes * 10000) / 10000).replace('.', ',') : '',
-        parcelas: d.parcelas || '', primeira: d.primeira_parcela || '', sistema: ['price', 'sac', 'outro'].includes(d.sistema) ? d.sistema : 'price', obs: d.observacao || '' };
+        parcelas: d.parcelas || '', primeira: d.primeira_parcela || '', sistema: ['price', 'sac', 'outro'].includes(d.sistema) ? d.sistema : 'price',
+        valor_parcela: d.valor_parcela ? String(d.valor_parcela).replace('.', ',') : '',
+        obs: [d.observacao || '', d.valor_liberado ? 'Liberado ' + fmt(Number(d.valor_liberado)) : '', d.cet_mes ? 'CET ' + String(d.cet_mes).replace('.', ',') + '% a.m.' : ''].filter(Boolean).join(' · ') };
       if(formAberto){
         // completa o que o robô leu sem apagar o que já estava preenchido de propósito (nome, trecho, loja)
         emp.form = formAberto;
         Object.keys(lido).forEach(k => { if(lido[k] !== '' && lido[k] != null && (k !== 'nome' || !String(formAberto.nome || '').trim())) emp.form[k] = lido[k]; });
       } else empNovo(lido);
       emp.pdf = arquivo || null;
+      { const mm = document.getElementById('modal-vml'); if(mm) mm._sujo = true; }   // já tem conteúdo: clicar fora pergunta antes de fechar
       if(falhou){ empForm('Não consegui ler o contrato' + (j && j.error ? ': ' + emEsc(j.error) : '') + '. Preencha à mão; o PDF fica anexado.'); return; }
       empForm('O robô preencheu com o que leu no contrato. <b>&nbsp;Confira cada campo&nbsp;</b> antes de salvar' + (d.valor_parcela ? ': a parcela informada no contrato é ' + fmt(Number(d.valor_parcela) || 0) + '.' : '.'));
     }

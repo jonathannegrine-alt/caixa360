@@ -1352,3 +1352,7 @@ tr.cat-grupo b{font-size:13.5px;color:var(--text);}
 tr.cat-grupo small{margin-left:10px;color:var(--text-muted);font-size:12px;}
 .cat-bola{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--cor);margin-right:9px;vertical-align:middle;}
 tr.cat-linha td:first-child{border-left:5px solid color-mix(in srgb,var(--cor) 35%,transparent);padding-left:26px;}
+
+/* o aviso (toast) fica por cima das janelas: antes ele aparecia atrás e a pessoa não via por que não salvou */
+.toast-geral{z-index:20050 !important;}
+.emp-conf{font-size:12.5px;line-height:1.5;margin-top:6px;}

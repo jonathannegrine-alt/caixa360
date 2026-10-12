@@ -126,9 +126,15 @@
       let m = document.getElementById('modal-vml');
       if(!m){
         m = document.createElement('div'); m.id = 'modal-vml'; m.className = 'modal';
-        m.addEventListener('click', e => { if(e.target === m) m.classList.remove('open'); });
+        // clicar fora fecha; mas se a pessoa já preencheu algo, pergunta antes para não perder
+        m.addEventListener('click', e => { if(e.target !== m) return; if(m._sujo && m.querySelector('.modal-body input, .modal-body textarea, .modal-body select') && !confirm('Sair sem salvar? O que você preencheu nesta janela será perdido.')) return; m.classList.remove('open'); });
+        m.addEventListener('input', () => { m._sujo = true; });
+        m.addEventListener('change', () => { m._sujo = true; });
         document.body.appendChild(m);
       }
+      // "sujo" continua valendo quando a mesma janela é redesenhada (ex.: depois de o robô preencher o contrato)
+      if(m._titulo !== titulo || !m.classList.contains('open')) m._sujo = false;
+      m._titulo = titulo;
       m.innerHTML = `<div class="modal-content" style="max-width:720px;">
         <div class="modal-header"><div class="modal-title">${titulo}</div><button class="ico-btn" onclick="fecharModal('modal-vml')">✕</button></div>
         <div class="modal-body">${corpo}</div>
