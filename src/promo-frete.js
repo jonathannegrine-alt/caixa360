@@ -183,6 +183,20 @@
             }
           }
         }
+        // medida registrada em cada envio de agência e coleta (lida uma vez e guardada)
+        if(!(typeof MODO_DEMO !== 'undefined' && MODO_DEMO) && fr.envio !== 'full'){
+          const fe = await supa.rpc('frete_envios_sem_medida', { p_de: de, p_ate: ate, p_conta: conta });
+          const pc = {}; (fe.data || []).forEach(x => (pc[x.ml_user_id] = pc[x.ml_user_id] || []).push({ pedido: String(x.order_id), envio: String(x.shipping_id) }));
+          const tot = (fe.data || []).length; let ok = 0;
+          for(const c of Object.keys(pc)){
+            for(let i = 0; i < pc[c].length; i += 60){
+              if(fr.chave !== chave) return;
+              fr.lendo = 'Lendo a medida registrada em ' + tot + ' envio' + (tot === 1 ? '' : 's') + ' de agência e coleta… ' + ok + ' de ' + tot; frDesenhar();
+              try { await pqFuncao('ml-promos', { acao: 'medidas_envio', conta: c, envios: pc[c].slice(i, i + 60) }); } catch(e){}
+              ok += Math.min(60, pc[c].length - i);
+            }
+          }
+        }
         fr.lendo = 'Conferindo cada venda contra a tabela de frete…'; frDesenhar();
         const [a, c, m, bs] = await Promise.all([
           supa.rpc('frete_conferencia_tab', { p_de: de, p_ate: ate, p_conta: conta, p_envio: fr.envio === 'todos' ? null : fr.envio }),
@@ -229,7 +243,7 @@
         // com a medida do ML: mostra a medida e o peso que conta; sem ela, só a faixa em que o anúncio vinha sendo cobrado
         // base da faixa de peso: 'full' = medida exata do Full | 'anuncio' = embalagem de envio do anúncio | 'habitual' = sem medida
         medida: x.base !== 'habitual' && x.ma ? pqN(x.ma, 1) + ' × ' + pqN(x.ml, 1) + ' × ' + pqN(x.mc, 1) + ' cm, ' + pqN(x.mg, 0) + ' g' : '', conta: x.base !== 'habitual' && x.mconta ? pqN(Number(x.mconta) / 1000, 2) + ' kg' : '',
-        origem: x.base === 'full' ? 'Full' : x.base === 'anuncio' ? 'anúncio' : '',
+        origem: x.base === 'full' ? 'Full' : x.base === 'anuncio' ? 'envio' : '',
         pesoTxt: (x.base !== 'habitual' && x.mconta ? pqN(Number(x.mconta) / 1000, 2) + ' kg · ' : '') + (x.ld != null ? t.rot[x.ld] || '' : '') };
     }
     function frDia(x){ return ptDate(typeof vmlDataBRT === 'function' ? vmlDataBRT(x.data_venda).dia : String(x.data_venda).substring(0, 10)); }
@@ -237,11 +251,11 @@
     function frTexto(x){
       const r = frRot(x), q = Number(x.qtd) || 1, dev = Number(x.devido_un) * q;
       const un = q > 1 ? ' por unidade (' + q + ' unidades)' : '', devTxt = 'R$ ' + pqN(dev) + (q > 1 ? ' (' + q + ' x R$ ' + pqN(x.devido_un) + ')' : '');
-      const peso = r.medida ? (x.base === 'full' ? 'Medida do produto registrada pelo Mercado Livre no Full: ' : 'Embalagem de envio cadastrada no anúncio: ') + r.medida + '. Peso considerado (o maior entre o peso e o peso cúbico): ' + r.conta + ', faixa de peso ' + r.peso + '.' : 'Faixa de peso do anúncio: ' + r.peso + '.';
+      const peso = r.medida ? (x.base === 'full' ? 'Medida do produto registrada pelo Mercado Livre no Full: ' : 'Medida registrada pelo Mercado Livre neste envio (embalagem de envio do anúncio): ') + r.medida + '. Peso considerado (o maior entre o peso e o peso cúbico): ' + r.conta + ', faixa de peso ' + r.peso + '.' : 'Faixa de peso do anúncio: ' + r.peso + '.';
       const ini = 'Venda ' + x.order_id + ' (' + frDia(x) + '). Preço de venda: R$ ' + pqN(x.preco_unit) + un + ', faixa de preço ' + r.faixa + '. ' + peso + ' Pela tabela de custos de envio, o custo devido é ' + devTxt + '. ';
       const fim = ' Solicito o ressarcimento de R$ ' + pqN(x.dif) + '.', c = frClasse(x);
       if(c === 'preco') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de preço ' + r.faixaCob + '. O preço de venda não está nessa faixa.' + fim;
-      if(c === 'peso') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de peso ' + r.pesoCob + ', acima ' + (x.base === 'full' ? 'da medida registrada no Full.' : x.base === 'anuncio' ? 'da embalagem de envio do anúncio.' : 'da faixa do anúncio.') + fim;
+      if(c === 'peso') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de peso ' + r.pesoCob + ', acima ' + (x.base === 'full' ? 'da medida registrada no Full.' : x.base === 'anuncio' ? 'da medida registrada no envio.' : 'da faixa do anúncio.') + fim;
       if(c === 'multiplo') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', ' + Math.round(Number(x.frete) / dev) + ' vezes o valor devido, numa venda de ' + q + ' unidade' + (q > 1 ? 's' : '') + '.' + fim;
       return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', valor que não corresponde à tabela.' + fim;
     }

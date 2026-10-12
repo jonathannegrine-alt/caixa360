@@ -50,6 +50,22 @@ Deno.serve(async (req: Request) => {
     if (!tk) return resp({ error: 'A conta do Mercado Livre está desconectada. Reconecte em Configurações.' }, 400)
     const g = async (url: string) => { const r = await fetch(url, { headers: { Authorization: 'Bearer ' + tk } }).catch(() => null); if (!r) return { erro: 'sem resposta' }; const j = await r.json().catch(() => null); return r.ok ? j : { erro: (j && (j.message || j.error)) || ('http ' + r.status) } }
 
+    // medida que o ML registrou em cada envio (agência/coleta): { acao: 'medidas_envio', conta, envios: [{ pedido, envio }] } — até 60 por chamada
+    if (body?.acao === 'medidas_envio') {
+      const lista = (Array.isArray(body?.envios) ? body.envios : []).filter((x: any) => /^\d{6,20}$/.test(String(x?.pedido)) && /^\d{6,20}$/.test(String(x?.envio))).slice(0, 60)
+      const linhas: any[] = []
+      for (let i = 0; i < lista.length; i += 12) {
+        await Promise.all(lista.slice(i, i + 12).map(async (x: any) => {
+          const r = await fetch(`${ML}/shipments/${x.envio}`, { headers: { Authorization: 'Bearer ' + tk, 'x-format-new': 'true' } }).catch(() => null)
+          const j: any = r && r.ok ? await r.json().catch(() => null) : null; const d = j?.dimensions
+          // sem medida no envio também é gravado (com nulos), para não consultar de novo toda vez
+          linhas.push({ usuario_id: userId, order_id: Number(x.pedido), a: Number(d?.height) || null, l: Number(d?.width) || null, c: Number(d?.length) || null, g: Number(d?.weight) || null, lido_em: new Date().toISOString() })
+        }))
+      }
+      if (linhas.length) await fetch(`${supaUrl}/rest/v1/frete_envio_medida?on_conflict=usuario_id,order_id`, { method: 'POST', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(linhas) })
+      return resp({ ok: true, lidos: linhas.length, com_medida: linhas.filter(l => l.a).length })
+    }
+
     // dados de cada anúncio para calcular frete e margem sem depender de venda recente: peso tarifável (o peso que o
     // ML usa para cobrar o frete), tarifa de venda, SKU, preço. Guarda em ml_itens_base. Até 40 anúncios por chamada.
     if (body?.acao === 'base') {

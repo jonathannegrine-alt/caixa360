@@ -115,6 +115,39 @@ alter table public.ml_itens_base
   add column if not exists ag_a numeric, add column if not exists ag_l numeric, add column if not exists ag_c numeric, add column if not exists ag_g numeric, add column if not exists ag_envio text, add column if not exists ag_origem text,
   add column if not exists env_lido timestamptz;
 
+-- Medida que o ML registrou em cada envio de agência/coleta (é a embalagem de envio que o anúncio tinha naquele dia).
+create table if not exists public.frete_envio_medida (
+  usuario_id uuid not null references auth.users(id) on delete cascade,
+  order_id bigint not null,
+  a numeric, l numeric, c numeric, g numeric,
+  lido_em timestamptz not null default now(),
+  primary key (usuario_id, order_id)
+);
+alter table public.frete_envio_medida enable row level security;
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename = 'frete_envio_medida' and policyname = 'frete_envio_medida_dono') then
+    create policy frete_envio_medida_dono on public.frete_envio_medida for select using (usuario_id = auth.uid());
+  end if;
+end $$;
+grant select on public.frete_envio_medida to authenticated;
+grant all on public.frete_envio_medida to service_role;
+drop trigger if exists demo_so_leitura on public.frete_envio_medida;
+create trigger demo_so_leitura before insert or update or delete on public.frete_envio_medida for each row execute function demo.bloqueia();
+
+-- Vendas de agência/coleta do período cuja medida do envio ainda não foi lida
+create or replace function public.frete_envios_sem_medida(p_de date, p_ate date, p_conta text default null)
+returns table (ml_user_id text, order_id bigint, shipping_id bigint) language sql stable as $$
+  select v.ml_user_id, v.order_id, v.shipping_id
+  from public.vendas_ml v
+  left join public.frete_envio_medida e on e.usuario_id = v.usuario_id and e.order_id = v.order_id
+  where v.usuario_id = auth.uid() and v.status = 'paid' and v.shipping_id is not null and v.item_id is not null and coalesce(v.frete_vendedor, 0) > 0
+    and coalesce(v.logistic_type, '') not in ('self_service', 'fulfillment')
+    and (v.data_venda at time zone 'America/Sao_Paulo')::date between p_de and p_ate
+    and (coalesce(p_conta, '') = '' or v.ml_user_id = p_conta) and e.order_id is null
+  order by v.data_venda desc limit 1500
+$$;
+grant execute on function public.frete_envios_sem_medida(date, date, text) to authenticated;
+
 -- Peso e medidas conferidos pelo próprio usuário na expedição (opcional). Quem não preenche fica com o peso tarifável do ML.
 create table if not exists public.frete_medidas (
   usuario_id uuid not null references auth.users(id) on delete cascade,
@@ -200,16 +233,24 @@ returns jsonb language sql stable as $$
   ),
   c as materialized (
     select s.*, p.peso_g, h.linha as hab,
-           -- medida de referência: Full = medição exata do Full; agência/coleta = embalagem de envio declarada no anúncio
-           case when s.logistic_type = 'fulfillment' then p.ml_a else p.decl_a end as ma, case when s.logistic_type = 'fulfillment' then p.ml_l else p.decl_l end as ml,
-           case when s.logistic_type = 'fulfillment' then p.ml_c else p.decl_c end as mc, case when s.logistic_type = 'fulfillment' then p.ml_g else p.decl_g end as mg,
-           case when s.logistic_type = 'fulfillment' then p.ml_conta else p.decl_conta end as mconta,
+           -- medida de referência: Full = medição exata do Full; agência/coleta = a do próprio envio (venda de 1 unidade) ou a embalagem de envio do anúncio
+           x.ma, x.ml, x.mc, x.mg, x.mconta,
            (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g) as lp,
-           (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and (case when s.logistic_type = 'fulfillment' then p.ml_conta else p.decl_conta end) <= t.peso_ate_g) as lm,
-           coalesce((select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and (case when s.logistic_type = 'fulfillment' then p.ml_conta else p.decl_conta end) <= t.peso_ate_g),
+           (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and x.mconta <= t.peso_ate_g) as lm,
+           coalesce((select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and x.mconta <= t.peso_ate_g),
                     hd.linha, hw.linha, h.linha, (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g)) as ld
     from c0 s
     left join pes p on p.ml_user_id = s.ml_user_id and p.item_id = s.item_id
+    left join public.frete_envio_medida em on em.usuario_id = auth.uid() and em.order_id = s.order_id and s.qtd = 1 and s.logistic_type <> 'fulfillment'
+    left join lateral (
+      select case when s.logistic_type = 'fulfillment' then p.ml_a else coalesce(em.a, p.decl_a) end as ma,
+             case when s.logistic_type = 'fulfillment' then p.ml_l else coalesce(em.l, p.decl_l) end as ml,
+             case when s.logistic_type = 'fulfillment' then p.ml_c else coalesce(em.c, p.decl_c) end as mc,
+             case when s.logistic_type = 'fulfillment' then p.ml_g else (case when em.a is not null then em.g else p.decl_g end) end as mg,
+             case when s.logistic_type = 'fulfillment' then p.ml_conta
+                  when em.a is not null then nullif(greatest(em.a * em.l * em.c / 6.0, coalesce(em.g, 0)), 0)
+                  else p.decl_conta end as mconta
+    ) x on true
     left join habd hd on hd.ml_user_id = s.ml_user_id and hd.item_id = s.item_id and hd.versao = s.versao and hd.dia = s.dia
     left join habw hw on hw.ml_user_id = s.ml_user_id and hw.item_id = s.item_id and hw.versao = s.versao and hw.sem = date_trunc('week', s.dia)::date
     left join hab h on h.ml_user_id = s.ml_user_id and h.item_id = s.item_id and h.versao = s.versao
@@ -219,7 +260,8 @@ returns jsonb language sql stable as $$
            (select t.valor from public.frete_tabela t where t.desde = c.versao and t.linha = c.ld and t.faixa = c.bv) as devido_un,
            (select t.valor from public.frete_tabela t where t.desde = c.versao and t.linha = c.lm and t.faixa = c.bv) as devido_full,
            exists (select 1 from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>0)::int = c.ld and (x->>1)::int = c.bv) as certo,
-           (select min((x->>1)::int) from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>0)::int = c.ld and (x->>1)::int > c.bv) as faixa_acima,
+           coalesce((select min((x->>1)::int) from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>0)::int = c.ld and (x->>1)::int > c.bv),
+                    (select min((x->>1)::int) from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>0)::int = c.lp and (x->>1)::int > c.bv)) as faixa_acima,
            (select min((x->>0)::int) from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>1)::int = c.bv and (x->>0)::int > c.ld) as linha_acima,
            (select max((x->>0)::int) from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>1)::int = c.bv and (x->>0)::int < c.ld) as linha_abaixo,
            (select max((x->>1)::int) from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>0)::int = c.ld and (x->>1)::int < c.bv) as faixa_abaixo
