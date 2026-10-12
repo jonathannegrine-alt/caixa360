@@ -85,6 +85,16 @@ Deno.serve(async (req) => {
     else if (/^(claims|claims_actions|post_purchase)$/.test(topico) && /^\d{4,20}$/.test(conta)) {
       EdgeRuntime.waitUntil(avisar(conta, 'claims', String(b?.resource || '')))
     }
+    // promoção nova para um anúncio (candidato) ou oferta que mudou: aviso para a Central de promoções.
+    // No máximo um aviso a cada 10 minutos por conta: o ML manda um por anúncio e uma campanha nova gera dezenas.
+    else if (/^(public_candidates|public_offers|public candidates|public offers)$/.test(topico) && /^\d{4,20}$/.test(conta)) {
+      const agora = Date.now(), k = 'promo:' + conta
+      if (agora - (ultimo.get(k) || 0) > 600000) { ultimo.set(k, agora); EdgeRuntime.waitUntil(avisar(conta, 'promos', String(b?.resource || ''))) }
+    }
+    // disputa de catálogo: passou a ganhar ou a perder num anúncio
+    else if (/^(item_competition|item competition)$/.test(topico) && /^\d{4,20}$/.test(conta)) {
+      EdgeRuntime.waitUntil(avisar(conta, 'catalogo', String(b?.resource || '')))
+    }
     else if (topico === 'shipments' && /^\d{4,20}$/.test(conta)) {
       EdgeRuntime.waitUntil(envioMudou(conta, String(b?.resource || '')))
     }
