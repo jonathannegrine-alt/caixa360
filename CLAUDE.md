@@ -51,6 +51,9 @@ gestaomk/
     conciliacao.js    ← Conciliação do ML (página 'conciliacao'): lê no navegador os relatórios "por vendas" e "por liberação"
                         (Excel), grava em concil_linhas e compara com vendas_ml (RPCs concil_resumo / concil_divergencias)
     gestao.js         ← abas da Análise de vendas: Lucro real (margem − ADS), Degrau do frete, Venda perdida
+    fatura-ml.js      ← fatura do ML no DRE: soma por mês (RPC ml_fatura_mes), modo comprasCfg.faturaDre ('auto' | 'pagar'),
+                        categoria com dreGrupo 'fatura' = "só caixa" (sai do DRE nos meses em que a fatura entrou)
+    opinioes.js       ← aba Opiniões da Análise de vendas (função ml-opinioes) + texto pronto para colar numa IA
     gestao-fin.js     ← ponto de equilíbrio por dia e custo da dívida (Início e Empréstimos) + fechamento do mês em PDF
     contas-ml.js      ← GRUPOS DE CONTAS ML: contasML, contaAtiva ("" = todas), liberacoesTodas/extratoTodos,
                         aplicarContaAtiva() recorta liberacoes e extratoHistorico; seletor na barra lateral
@@ -172,6 +175,13 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - CONCILIAÇÃO: no relatório "por vendas" cada linha é um evento do dia (a venda num dia, o frete quando o pacote sai);
   a tarifa de envio vem cheia e o frete pago pelo comprador entra no valor bruto; "Cancelamento ..." abate a tarifa.
   A comparação é por envio (carrinho = um envio). Reimportar não duplica (chave por linha).
+- FATURA DO ML (ml-fatura, cron a cada minuto): a API /billing/integration aceita 5 consultas por minuto para o
+  APLICATIVO INTEIRO (medido em 12/10/2026), por isso a função faz 4 consultas por chamada e guarda onde parou
+  (ml_fatura_periodos.prox). Lista de faturas: limit máximo 12. Linhas: limit 1000, filtro detail_sub_types=A,B,C.
+  Só grava cobranças fora das vendas (ml_fatura_tipos.classe <> 'venda'); bonificação entra negativa. O DRE só usa a
+  fatura depois da primeira leitura completa (lido_ok). DIFAL não traz a venda nem o estado.
+- ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N
+  filtra por nota (sem isso vêm as mais relevantes, quase todas nota 5).
 - ml-webhook também trata: items (ml_itens_base.situacao/estoque/preco), fbm_stock_operations (aviso 'full'),
   orders_feedback (aviso 'avaliacao' só para nota negativa ou neutra).
 - Outras funções novas: ml-ads (anúncios pagos), ml-envios também grava vendas_ml.uf (estado do comprador).
