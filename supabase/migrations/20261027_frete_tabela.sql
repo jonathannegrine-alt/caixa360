@@ -234,7 +234,7 @@ returns jsonb language sql stable as $$
                count(*) filter (where r.classe = 'preco') as n_preco, coalesce(sum(r.dif) filter (where r.classe = 'preco'), 0) as rs_preco,
                count(*) filter (where r.classe = 'peso_menos') as n_peso_menos, coalesce(-sum(r.dif) filter (where r.classe = 'peso_menos'), 0) as rs_peso_menos,
                (array_agg(r.ld order by r.data_venda desc))[1] as ld, max(r.lp) as lp, max(r.hab) as hab, bool_or(r.peso_g is null) as sem_peso,
-               count(distinct r.ld) as faixas_no_periodo
+               count(distinct r.ld) as faixas_no_periodo, mode() within group (order by r.bv) as bv
         from r group by 1, 2) x)
   )
 $$;
