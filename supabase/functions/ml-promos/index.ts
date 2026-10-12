@@ -67,7 +67,39 @@ Deno.serve(async (req: Request) => {
       const j: any = await g(`${ML}/seller-promotions/items/${item}?app_version=v2`)
       if (!j || j.erro) return resp({ ok: false, motivo: (j && j.erro) || 'sem resposta' })
       return resp({ ok: true, promos: (Array.isArray(j) ? j : []).map((x: any) => ({ id: x.id, tipo: x.type, sub: x.sub_type || '', situacao: x.status || '', nome: x.name || '', preco: Number(x.price) || 0, original: Number(x.original_price) || 0,
-        ml_pct: Number(x.meli_percentage) || 0, vendedor_pct: Number(x.seller_percentage) || 0, inicio: x.start_date || '', fim: x.finish_date || '', sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0 })) })
+        ml_pct: Number(x.meli_percentage) || 0, vendedor_pct: Number(x.seller_percentage) || 0, inicio: x.start_date || '', fim: x.finish_date || '', sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0, ref: x.ref_id || x.offer_id || '', estoque_min: Number(x.stock?.min) || 0, estoque_max: Number(x.stock?.max) || 0 })) })
+    }
+    // todos os anúncios da conta (ativos e pausados), só os códigos
+    if (body?.acao === 'anuncios') {
+      const ids: { item: string, pausado: boolean }[] = []
+      for (const st of ['active', 'paused']) {
+        let scroll = ''
+        for (let k = 0; k < 30; k++) {
+          const j: any = await g(`${ML}/users/${conta}/items/search?search_type=scan&limit=100&status=${st}${scroll ? '&scroll_id=' + encodeURIComponent(scroll) : ''}`)
+          if (!j || j.erro || !(j.results || []).length) break
+          for (const i of j.results) ids.push({ item: String(i), pausado: st === 'paused' })
+          scroll = j.scroll_id || ''; if (!scroll) break
+        }
+      }
+      return resp({ ok: true, anuncios: ids })
+    }
+    // participar de uma promoção com UM anúncio. Campanhas com preço livre pedem "preco"; as do Mercado Livre com preço pronto usam a referência da oferta.
+    if (body?.acao === 'participar' || body?.acao === 'sair') {
+      const item = idItem(body?.item), pid = String(body?.id || ''), tipo = String(body?.tipo || '')
+      if (!item || !/^[A-Za-z0-9_-]{1,40}$/.test(pid) || !/^[A-Z_]{1,40}$/.test(tipo)) return resp({ error: 'Dados da promoção inválidos.' }, 400)
+      const ref = /^[A-Za-z0-9_-]{1,80}$/.test(String(body?.ref || '')) ? String(body.ref) : ''
+      if (body.acao === 'sair') {
+        const p = new URLSearchParams({ promotion_type: tipo, promotion_id: pid, app_version: 'v2' }); if (ref && tipo !== 'SELLER_CAMPAIGN' && tipo !== 'DEAL') p.set('offer_id', ref)
+        const r = await chama('DELETE', `${ML}/seller-promotions/items/${item}?${p}`)
+        return resp(r.ok ? { ok: true } : { ok: false, motivo: r.erro })
+      }
+      const corpo: Record<string, unknown> = { promotion_id: pid, promotion_type: tipo }
+      const comPreco = ['SELLER_CAMPAIGN', 'DEAL', 'DOD', 'LIGHTNING', 'PRICE_DISCOUNT'].includes(tipo)
+      if (comPreco) { const p = Math.round(Number(body?.preco) * 100) / 100; if (!(p > 0)) return resp({ error: 'Informe o preço com desconto.' }, 400); corpo.deal_price = p }
+      else { if (!ref) return resp({ error: 'Esta promoção não trouxe a referência da oferta. Atualize a lista e tente de novo.' }, 400); corpo.offer_id = ref }
+      if (tipo === 'LIGHTNING') { const e = Math.round(Number(body?.estoque)); if (!(e > 0)) return resp({ error: 'Informe o estoque reservado para a oferta relâmpago.' }, 400); corpo.stock = e }
+      const r = await chama('POST', `${ML}/seller-promotions/items/${item}?app_version=v2`, corpo)
+      return resp(r.ok ? { ok: true, preco: Number(r.dados?.price) || null, original: Number(r.dados?.original_price) || null } : { ok: false, motivo: r.erro })
     }
     // anúncios de uma campanha do vendedor: participantes (com preço) e candidatos (com mínimo, máximo e sugerido). Guarda a foto da campanha no banco.
     if (body?.acao === 'campanha_itens') {
@@ -82,11 +114,27 @@ Deno.serve(async (req: Request) => {
         todos.push(...(j.results || [])); depois = j.paging?.searchAfter || ''
         if (!depois || !(j.results || []).length) break
       }
-      const itens = todos.map((x: any) => ({ item: x.id, situacao: x.status || '', original: Number(x.original_price) || 0, preco: Number(x.price) || 0, sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0 }))
+      const itens = todos.map((x: any) => ({ item: x.id, situacao: x.status || '', original: Number(x.original_price) || 0, preco: Number(x.price) || 0, sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0, pausado: false }))
+      {
+        const ja = new Set(itens.map(x => x.item)), pausados: string[] = []; let scroll = ''
+        for (let k = 0; k < 20; k++) {
+          const j: any = await g(`${ML}/users/${conta}/items/search?search_type=scan&limit=100&status=paused${scroll ? '&scroll_id=' + encodeURIComponent(scroll) : ''}`)
+          if (!j || j.erro || !(j.results || []).length) break
+          for (const i of j.results) if (!ja.has(String(i))) pausados.push(String(i))
+          scroll = j.scroll_id || ''; if (!scroll) break
+        }
+        for (let i = 0; i < pausados.length && i < 300; i += 10) {
+          await Promise.all(pausados.slice(i, i + 10).map(async it => {
+            const pj: any = await g(`${ML}/seller-promotions/items/${it}?app_version=v2`)
+            const c = (Array.isArray(pj) ? pj : []).find((x: any) => x?.id === id)
+            if (c && (c.status === 'started' || c.status === 'pending')) itens.push({ item: it, situacao: c.status, original: Number(c.original_price) || 0, preco: Number(c.price) || 0, sugerido: 0, minimo: 0, maximo: 0, pausado: true })
+          }))
+        }
+      }
       const dentro = itens.filter(x => x.situacao === 'started' || x.situacao === 'pending')
       const camp = { id: cab.id, nome: cab.name || '', sub: cab.sub_type || '', situacao: cab.status || '', inicio: cab.start_date || '', fim: cab.finish_date || '', pct_fixa: Number(cab.fixed_percentage) || null }
       await fetch(`${supaUrl}/rest/v1/promo_campanhas?on_conflict=usuario_id,ml_user_id,id`, { method: 'POST', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify([{ usuario_id: userId, ml_user_id: conta, id: camp.id, nome: camp.nome, sub_tipo: camp.sub, situacao: camp.situacao, inicio: camp.inicio || null, fim: camp.fim || null, pct_fixa: camp.pct_fixa, itens: dentro.map(x => ({ item: x.item, preco: x.preco, original: x.original })), atualizado: new Date().toISOString() }]) })
+        body: JSON.stringify([{ usuario_id: userId, ml_user_id: conta, id: camp.id, nome: camp.nome, sub_tipo: camp.sub, situacao: camp.situacao, inicio: camp.inicio || null, fim: camp.fim || null, pct_fixa: camp.pct_fixa, itens: dentro.map(x => ({ item: x.item, preco: x.preco, original: x.original, pausado: !!x.pausado })), atualizado: new Date().toISOString() }]) })
       return resp({ ok: true, campanha: camp, itens })
     }
     // cria uma campanha do vendedor

@@ -37,12 +37,12 @@
       if(!falta.length) return;
       for(let i = 0; i < falta.length; i += 150){
         const r = await supa.from('ml_itens_base').select('item_id,titulo,thumbnail,sku,preco,tarifa_pct,peso_g').eq('usuario_id', usuarioAtual.id).in('item_id', falta.slice(i, i + 150));
-        (r.data || []).forEach(x => { pc.base[x.item_id] = x; if(typeof pm !== 'undefined') pm.base[x.item_id] = pm.base[x.item_id] || x; });
+        (r.data || []).forEach(x => { pc.base[x.item_id] = x; if(typeof pm !== 'undefined' && (!pm.base[x.item_id] || pm.base[x.item_id].vazio)) pm.base[x.item_id] = x; });
       }
       const ainda = falta.filter(i => !pc.base[i]);
       for(let i = 0; i < ainda.length; i += 20){
         let b; try { b = await pqFuncao('ml-promos', { acao: 'base', conta: c, itens: ainda.slice(i, i + 20) }); } catch(e){ b = null; }
-        ((b && b.itens) || []).forEach(x => { pc.base[x.item_id] = x; pm.base[x.item_id] = pm.base[x.item_id] || x; });
+        ((b && b.itens) || []).forEach(x => { pc.base[x.item_id] = x; if(!pm.base[x.item_id] || pm.base[x.item_id].vazio) pm.base[x.item_id] = x; });
       }
       ainda.forEach(i => { if(!pc.base[i]) pc.base[i] = { item_id: i }; });
     }
@@ -50,8 +50,25 @@
     // ------------------------------------------------------------- POR ANÚNCIO
     async function pcCarregarAnuncios(){
       const c = pmConta();
-      const r = await supa.from('ml_itens_base').select('item_id,titulo,thumbnail,sku,preco,tarifa_pct,peso_g').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', c).order('sku').limit(2000);
-      pc.anuncios = r.data || []; pc.anuncios.forEach(x => { pc.base[x.item_id] = x; });
+      pc.lendo = 'Lendo a lista de anúncios da conta…'; pcDesenhar();
+      let d; try { d = await pqFuncao('ml-promos', { acao: 'anuncios', conta: c }); } catch(e){ d = null; }
+      let lista = (d && d.anuncios) || [];
+      if(!lista.length){   // sem resposta do Mercado Livre: fica com os anúncios que o sistema já conhece
+        const r = await supa.from('ml_itens_base').select('item_id').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', c).limit(2000);
+        lista = (r.data || []).map(x => ({ item: x.item_id, pausado: false }));
+      }
+      pc.lendo = 'Lendo os dados de ' + lista.length + ' anúncios (na primeira vez demora um pouco)…'; pcDesenhar();
+      await pcBase(lista.map(x => x.item));
+      pc.lendo = '';
+      pc.anuncios = lista.map(x => Object.assign({ item_id: x.item }, pc.base[x.item] || {}, { pausado: !!x.pausado }))
+        .sort((a, b) => (a.pausado - b.pausado) || String(a.sku || 'zzz').localeCompare(String(b.sku || 'zzz')));
+    }
+    // busca: digitou o código do anúncio (com ou sem MLB) e deu Enter → abre direto as promoções dele
+    async function pcBuscaEnter(){
+      const m = pc.busca.trim().toUpperCase().match(/^(?:MLB)?-?(\d{8,14})$/); if(!m) return;
+      const item = 'MLB' + m[1];
+      if(!(pc.anuncios || []).some(x => x.item_id === item)){ await pcBase([item]); const b = pc.base[item]; if(b && (b.titulo || b.sku)) pc.anuncios.unshift(Object.assign({ item_id: item }, b)); else { if(typeof toast === 'function') toast('Não achei o anúncio ' + item + ' nesta loja.'); return; } }
+      pc.busca = item; if(!pc.aberto[item]) pcAbrirAnuncio(item); else pcDesenhar();
     }
     async function pcAbrirAnuncio(item){
       if(pc.aberto[item]){ delete pc.aberto[item]; pcDesenhar(); return; }
@@ -73,7 +90,56 @@
             <small>${pqE(PM_TIPO[p.tipo] || p.tipo)}${p.inicio ? ' · ' + pcDia(p.inicio) + ' a ' + pcDia(p.fim) : ''}</small></div>
           <div class="pc-num">${desc ? `<b>${pqN(desc, 1)}%</b>` : ''}${p.vendedor_pct || p.ml_pct ? `<small>você ${pqN(p.vendedor_pct, 1)}% · Mercado Livre ${pqN(p.ml_pct, 1)}%</small>` : ''}</div>
           <div class="pc-num">${preco ? `<b>R$ ${pqN(preco)}</b><small>${dentro ? 'preço na promoção' : 'preço sugerido'}</small>` : '<small>defina o preço ao participar</small>'}</div>
-          <div class="pc-num">${m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)}</b><small>margem ${pqN(m.pct, 1)}%</small>` : '<small>sem custo no cadastro</small>'}</div></div>`; }).join('')}</div>`;
+          <div class="pc-num">${m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)}</b><small>margem ${pqN(m.pct, 1)}%</small>` : '<small>sem custo no cadastro</small>'}</div>
+          <div class="pc-acao">${dentro ? `<button class="btn-out btn btn-sm" style="color:var(--danger);" onclick="pcSair('${item}','${pqE(p.id)}','${pqE(p.tipo)}')">Sair</button>` : (PC_PARTICIPA.includes(p.tipo) ? `<button class="btn btn-sm" onclick="pcParticipar('${item}','${pqE(p.id)}','${pqE(p.tipo)}')">Participar</button>` : '<small class="text-muted" title="Este tipo de promoção ainda só entra pelo Mercado Livre">pelo Mercado Livre</small>')}</div></div>`; }).join('')}</div>`;
+    }
+    // tipos em que dá para entrar por aqui. Com preço livre: você escolhe o preço; os demais usam o preço que o Mercado Livre oferece.
+    const PC_PRECO_LIVRE = ['SELLER_CAMPAIGN', 'DEAL', 'DOD', 'LIGHTNING'], PC_PARTICIPA = PC_PRECO_LIVRE.concat(['SMART', 'MARKETPLACE_CAMPAIGN', 'PRICE_MATCHING', 'PRICE_MATCHING_MELI_ALL', 'UNHEALTHY_STOCK', 'PRE_NEGOTIATED']);
+    function pcPromoDe(item, id, tipo){ return (((pc.aberto[item] || {}).promos) || []).find(p => p.id === id && p.tipo === tipo); }
+    function pcParticipar(item, id, tipo){
+      const p = pcPromoDe(item, id, tipo); if(!p) return;
+      const i = pc.base[item] || {}, livre = PC_PRECO_LIVRE.includes(tipo), preco0 = p.sugerido || p.preco || 0;
+      pc._part = { item, id, tipo };
+      vmlModal('Participar: ' + pqE(p.nome || PM_TIPO[tipo] || tipo), `<div class="pm-an" style="margin-bottom:14px;">${i.thumbnail ? `<img src="${pqE(i.thumbnail)}" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(i.titulo || item)}</b><small>${pqE(i.sku || '')} · ${pqE(item)} · preço de hoje R$ ${pqN(p.original || i.preco)}</small></div></div>
+        ${livre ? `<div class="form-row"><div class="form-group"><label class="form-label" for="pc-p-preco">Preço na promoção (R$)</label><input type="text" inputmode="decimal" id="pc-p-preco" value="${preco0 ? pqN(preco0) : ''}" oninput="pcParticiparConta()">${p.minimo || p.maximo ? `<div class="text-muted" style="font-size:12px;margin-top:5px;">O Mercado Livre aceita de R$ ${pqN(p.minimo)} a R$ ${pqN(p.maximo)}${p.sugerido ? ' · sugerido R$ ' + pqN(p.sugerido) : ''}.</div>` : ''}</div>
+            ${tipo === 'LIGHTNING' ? `<div class="form-group"><label class="form-label" for="pc-p-est">Estoque reservado</label><input type="number" id="pc-p-est" min="${p.estoque_min || 1}" max="${p.estoque_max || ''}" value="${p.estoque_min || ''}"><div class="text-muted" style="font-size:12px;margin-top:5px;">de ${p.estoque_min} a ${p.estoque_max} unidades</div></div>` : ''}</div>`
+          : `<div class="alert alert-info">Nesta promoção o preço é definido pelo Mercado Livre: <b>R$ ${pqN(p.preco)}</b>${p.vendedor_pct || p.ml_pct ? ' (você paga ' + pqN(p.vendedor_pct, 1) + '% do desconto e o Mercado Livre ' + pqN(p.ml_pct, 1) + '%)' : ''}.</div>`}
+        <div id="pc-p-margem" style="font-size:13.5px;line-height:1.6;margin-top:6px;"></div><div id="pc-p-msg" class="alert alert-danger" style="display:none;margin-top:12px;"></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="pc-p-ok" onclick="pcParticiparOk(this)">Participar</button>`);
+      pcParticiparConta();
+    }
+    function pcParticiparPreco(p){ const el = document.getElementById('pc-p-preco'); if(!el) return p.preco || 0; const s = String(el.value).replace(/[^\d,.]/g, ''); return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s) || 0; }
+    function pcParticiparConta(){
+      const a = pc._part, el = document.getElementById('pc-p-margem'); if(!a || !el) return;
+      const p = pcPromoDe(a.item, a.id, a.tipo), preco = pcParticiparPreco(p), orig = p.original || Number((pc.base[a.item] || {}).preco) || 0;
+      if(!(preco > 0)){ el.innerHTML = '<span class="text-muted">Informe o preço para ver a margem.</span>'; return; }
+      const reb = orig * (p.ml_pct || 0) / 100, m0 = pmMargem(a.item, orig, 0), m1 = pmMargem(a.item, preco, reb), desc = orig ? (1 - preco / orig) * 100 : 0;
+      const tx = m => m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)} (${pqN(m.pct, 1)}%)</b>` : '<span class="text-muted">sem custo no cadastro</span>';
+      el.innerHTML = `Desconto de <b>${pqN(desc, 1)}%</b>. Margem hoje: ${tx(m0)} → na promoção: ${tx(m1)}${m1 ? ' <small class="text-muted">(frete considerado R$ ' + pqN(m1.frete) + ')</small>' : ''}`;
+    }
+    async function pcParticiparOk(bt){
+      const a = pc._part, p = pcPromoDe(a.item, a.id, a.tipo), msg = document.getElementById('pc-p-msg'), erro = t => { msg.textContent = t; msg.style.display = 'block'; if(bt){ bt.disabled = false; bt.textContent = 'Participar'; } };
+      const corpo = { acao: 'participar', conta: pmConta(), item: a.item, id: a.id, tipo: a.tipo, ref: p.ref || '' };
+      if(PC_PRECO_LIVRE.includes(a.tipo)){ corpo.preco = pcParticiparPreco(p); if(!(corpo.preco > 0)) return erro('Informe o preço na promoção.'); if(p.maximo && corpo.preco > p.maximo + 0.005) return erro('O preço máximo aceito é R$ ' + pqN(p.maximo) + '.'); if(p.minimo && corpo.preco < p.minimo - 0.005) return erro('O preço mínimo aceito é R$ ' + pqN(p.minimo) + '.'); }
+      if(a.tipo === 'LIGHTNING') corpo.estoque = Number((document.getElementById('pc-p-est') || {}).value) || 0;
+      if(bt){ bt.disabled = true; bt.textContent = 'Enviando…'; }
+      const r = await pqFuncao('ml-promos', corpo).catch(() => null);
+      if(!r || !r.ok) return erro('O Mercado Livre não aceitou: ' + ((r && (r.motivo || r.error)) || 'sem resposta'));
+      fecharModal('modal-vml'); if(typeof toast === 'function') toast('Anúncio incluído na promoção.');
+      delete pc.aberto[a.item]; pcAbrirAnuncio(a.item);
+    }
+    function pcSair(item, id, tipo){
+      const p = pcPromoDe(item, id, tipo); if(!p) return; pc._part = { item, id, tipo };
+      vmlModal('Sair da promoção', `<div style="line-height:1.6;">Tirar <b>${pqE((pc.base[item] || {}).sku || item)}</b> da promoção <b>${pqE(p.nome || PM_TIPO[tipo] || tipo)}</b>? O anúncio volta ao preço sem este desconto.</div><div id="pc-p-msg" class="alert alert-danger" style="display:none;margin-top:12px;"></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" style="background:var(--danger);border-color:var(--danger);" onclick="pcSairOk(this)">Sair da promoção</button>`);
+    }
+    async function pcSairOk(bt){
+      const a = pc._part, p = pcPromoDe(a.item, a.id, a.tipo), msg = document.getElementById('pc-p-msg');
+      if(bt){ bt.disabled = true; bt.textContent = 'Enviando…'; }
+      const r = await pqFuncao('ml-promos', { acao: 'sair', conta: pmConta(), item: a.item, id: a.id, tipo: a.tipo, ref: (p && p.ref) || '' }).catch(() => null);
+      if(!r || !r.ok){ msg.textContent = 'O Mercado Livre não aceitou: ' + ((r && (r.motivo || r.error)) || 'sem resposta'); msg.style.display = 'block'; if(bt){ bt.disabled = false; bt.textContent = 'Sair da promoção'; } return; }
+      fecharModal('modal-vml'); if(typeof toast === 'function') toast('Anúncio retirado da promoção.');
+      delete pc.aberto[a.item]; pcAbrirAnuncio(a.item);
     }
 
     // ------------------------------------------------------------- MINHAS PROMOÇÕES
@@ -117,7 +183,7 @@
       await pcBase(d.itens.map(x => x.item));
       const antes = {}; dentro.forEach(x => { antes[x.item] = x.preco; });
       pc.ed = { id, nome: d.campanha.nome, inicio: pcISO(d.campanha.inicio), fim: pcISO(d.campanha.fim), sub: d.campanha.sub || 'FLEXIBLE_PERCENTAGE', pct_fixa: d.campanha.pct_fixa || '', situacao: d.campanha.situacao,
-        linhas: dentro.map(x => pcLinha(x.item, x.original, x.preco)), antes, candidatos: cand.map(x => ({ item: x.item, original: x.original, minimo: x.minimo, maximo: x.maximo, sugerido: x.sugerido })), busca: '' };
+        linhas: dentro.map(x => pcLinha(x.item, x.original, x.preco, { pausado: !!x.pausado })), antes, candidatos: cand.map(x => ({ item: x.item, original: x.original, minimo: x.minimo, maximo: x.maximo, sugerido: x.sugerido })), busca: '' };
       pcDesenhar();
     }
     // copiar: mesma lista de anúncios e a mesma porcentagem de cada um, aplicada ao preço de hoje; datas no mês seguinte
@@ -129,7 +195,7 @@
       const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], nomeMes = meses.findIndex(m => m.toLowerCase() === String(o.nome).trim().toLowerCase());
       pc.lendo = '';
       pc.ed = { id: null, copiaDe: o.nome, nome: nomeMes >= 0 ? meses[ini.getMonth()] : (String(o.nome) + ' (cópia)').slice(0, 25), inicio: dateStr(ini) < hoje ? hoje : dateStr(ini), fim: dateStr(fim), sub: o.sub || 'FLEXIBLE_PERCENTAGE', pct_fixa: o.pct_fixa || '', situacao: '', antes: {}, candidatos: null, busca: '',
-        linhas: (o.itens || []).map(x => { const b = pc.base[x.item] || {}, orig = Number(b.preco) || Number(x.original) || 0, pct = x.original ? pcR((1 - x.preco / x.original) * 100) : 0; return pcLinha(x.item, orig, pcR(orig * (1 - pct / 100)), { pct }); }) };
+        linhas: (o.itens || []).map(x => { const b = pc.base[x.item] || {}, orig = Number(b.preco) || Number(x.original) || 0, pct = x.original ? pcR((1 - x.preco / x.original) * 100) : 0; return pcLinha(x.item, orig, pcR(orig * (1 - pct / 100)), { pct, pausado: !!x.pausado }); }) };
       pcDesenhar();
     }
     function pcEdCampo(k, v){ if(!pc.ed) return; pc.ed[k] = v; if(k === 'sub' || k === 'pct_fixa'){ if(pc.ed.sub === 'FIXED_PERCENTAGE' && Number(pc.ed.pct_fixa) > 0) pc.ed.linhas.forEach(l => { l.pct = Number(pc.ed.pct_fixa); l.preco = pcR(l.original * (1 - l.pct / 100)); }); pcDesenhar(); } else if(k === 'nome'){ const c = document.getElementById('pc-conta-nome'); if(c) c.textContent = String(v).length + '/25'; } }
@@ -258,12 +324,12 @@
     }
     function pcDesenharAnuncios(){
       const cab = pcCab('Cada anúncio com todas as promoções em que ele está ou pode entrar. Clique num anúncio para ver.', `<button class="btn-out btn btn-sm" onclick="pc.anuncios=null;pc.aberto={};pcRender()">↻ Atualizar</button>`);
-      if(!pc.anuncios) return cab + '<div class="card"><div class="carregando-msg"><span class="carregando-roda"></span><b>Lendo os anúncios…</b></div></div>';
-      const b = pc.busca.trim().toLowerCase(), l = pc.anuncios.filter(x => !b || (String(x.titulo || '') + ' ' + String(x.sku || '') + ' ' + x.item_id).toLowerCase().includes(b));
-      return cab + `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">${l.length} anúncio${l.length === 1 ? '' : 's'}</div><div class="pg-sub">Anúncios com venda recente desta loja.</div></div>
-          <input type="search" id="pc-busca" placeholder="Buscar por nome, SKU ou código do anúncio" value="${pqE(pc.busca)}" style="max-width:340px;" oninput="pc.busca=this.value;pcDesenhar();const i=document.getElementById('pc-busca');i.focus();i.setSelectionRange(i.value.length,i.value.length);"></div>
+      if(!pc.anuncios) return cab + `<div class="card"><div class="carregando-msg"><span class="carregando-roda"></span><b>${pqE(pc.lendo || 'Lendo os anúncios…')}</b></div></div>`;
+      const b = pc.busca.trim().toLowerCase().replace(/^mlb-/, 'mlb'), l = pc.anuncios.filter(x => !b || (String(x.titulo || '') + ' ' + String(x.sku || '') + ' ' + x.item_id).toLowerCase().includes(b));
+      return cab + `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">${l.length} anúncio${l.length === 1 ? '' : 's'}</div><div class="pg-sub">Todos os anúncios da loja, ativos e pausados. Busque por nome, SKU ou código; com o código do anúncio, Enter abre direto.</div></div>
+          <input type="search" id="pc-busca" placeholder="Buscar por nome, SKU ou código do anúncio" value="${pqE(pc.busca)}" style="max-width:340px;" oninput="pc.busca=this.value;pcDesenhar();const i=document.getElementById('pc-busca');i.focus();i.setSelectionRange(i.value.length,i.value.length);" onkeydown="if(event.key==='Enter')pcBuscaEnter()"></div>
         <div>${l.length ? l.slice(0, 200).map(x => `<div class="pc-an ${pc.aberto[x.item_id] ? 'aberto' : ''}"><button class="pc-an-cab" onclick="pcAbrirAnuncio('${x.item_id}')" aria-expanded="${pc.aberto[x.item_id] ? 'true' : 'false'}">
-              ${x.thumbnail ? `<img src="${pqE(x.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<span class="pc-an-t"><b>${pqE(x.titulo || x.item_id)}</b><small>${pqE(x.sku || 'sem SKU')} · ${pqE(x.item_id)}</small></span>
+              ${x.thumbnail ? `<img src="${pqE(x.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<span class="pc-an-t"><b>${pqE(x.titulo || x.item_id)}</b><small>${pqE(x.sku || 'sem SKU')} · ${pqE(x.item_id)}${x.pausado ? ' · <i style="font-style:normal;color:var(--warning,#d97706);">pausado</i>' : ''}</small></span>
               <span class="pc-an-p">R$ ${pqN(x.preco)}</span><span class="pc-seta">${pc.aberto[x.item_id] ? '▾' : '▸'}</span></button>${pcCartoesAnuncio(x.item_id)}</div>`).join('') : '<div class="vazio"><b>Nenhum anúncio encontrado</b></div>'}</div>
         ${l.length > 200 ? '<div class="text-muted" style="font-size:12px;padding:10px 18px;">Mostrando 200. Use a busca para achar os outros.</div>' : ''}</div>`;
     }
@@ -300,7 +366,7 @@
           ${l.length ? l.map(x => { const i = pc.base[x.item] || {}, m = x.preco > 0 && typeof pmMargem === 'function' ? pmMargem(x.item, x.preco, 0) : null, ruim = !(x.pct >= 5) || x.pct > 80;
             return `<tr><td><input type="checkbox" style="width:auto;" aria-label="Marcar ${pqE(x.item)}" ${x.sel ? 'checked' : ''} onchange="pcEdSel('${x.item}', this.checked)"></td>
               <td><div class="pm-an">${i.thumbnail ? `<img src="${pqE(i.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(i.titulo || x.item)}</b></div></div></td>
-              <td>${pqE(i.sku || '—')}<br><small class="text-muted"><a href="https://produto.mercadolivre.com.br/${pqE(String(x.item).replace(/^MLB/, 'MLB-'))}" target="_blank" rel="noopener">${pqE(x.item)}</a></small></td>
+              <td>${pqE(i.sku || '—')}<br><small class="text-muted"><a href="https://produto.mercadolivre.com.br/${pqE(String(x.item).replace(/^MLB/, 'MLB-'))}" target="_blank" rel="noopener">${pqE(x.item)}</a>${x.pausado ? ' · <i style="font-style:normal;color:var(--warning,#d97706);">anúncio pausado</i>' : ''}</small></td>
               <td class="num">R$ ${pqN(x.original)}</td>
               <td class="num"><input type="text" inputmode="decimal" aria-label="Preço com desconto de ${pqE(x.item)}" class="pc-in ${ruim ? 'ruim' : ''}" value="${x.preco ? pqN(x.preco) : ''}" ${fixa ? 'disabled' : ''} onchange="pcEdPreco('${x.item}', this.value)"></td>
               <td class="num"><input type="text" inputmode="decimal" aria-label="Desconto em % de ${pqE(x.item)}" class="pc-in pc-in-p ${ruim ? 'ruim' : ''}" value="${x.pct ? String(x.pct).replace('.', ',') : ''}" ${fixa ? 'disabled' : ''} onchange="pcEdPct('${x.item}', this.value)"> %</td>
