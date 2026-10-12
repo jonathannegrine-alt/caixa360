@@ -155,9 +155,9 @@ grant execute on function public.frete_itens_sem_base(date, date, text) to authe
 
 -- Conferência: cada venda (envio com um item só, sem Flex) contra a tabela.
 --   frete devido = tabela[linha de peso do anúncio][faixa do PREÇO DE VENDA] x quantidade
---   linha de peso = a da medida que o próprio ML registrou para o produto nos envios (Full: medição do centro de
---   distribuição; agência/coleta: a do envio), pelo maior entre o peso e o peso cúbico (A x L x C / 6000).
---   Sem medida lida, usa a faixa em que o anúncio foi cobrado naquele dia/semana.
+--   linha de peso = a em que o anúncio foi cobrado naquele dia/semana. O ML cobra pela embalagem de envio declarada no
+--   anúncio (validado com 9 produtos em 12/10/2026) e ela pode ser alterada a qualquer momento; o padrão do dia acompanha.
+--   Classe 'medida': cobrança certa por essa regra, mas numa faixa de peso ACIMA da medida exata do Full (PACKAGE_*).
 -- Classes: certo | preco (cobrado numa faixa de preço acima) | peso (linha de peso acima) | multiplo (2x, 3x ou 4x o devido)
 --          | total (várias unidades cobradas pelo total do pedido) | outro | peso_menos | preco_menos | sem_base
 drop function if exists public.frete_conferencia_tab(date, date, text);
@@ -192,18 +192,19 @@ returns jsonb language sql stable as $$
     select p.ml_user_id, p.item_id, nullif(p.peso_g, 0) as peso_g,
            p.full_a, p.full_l, p.full_c, p.full_g, p.ag_a, p.ag_l, p.ag_c, p.ag_g,
            nullif(greatest(coalesce(p.full_a * p.full_l * p.full_c / 6.0, 0), coalesce(p.full_g, 0)), 0) as full_conta,
-           nullif(greatest(coalesce(p.ag_a * p.ag_l * p.ag_c / 6.0, 0), coalesce(p.ag_g, 0)), 0) as ag_conta
+           nullif(greatest(coalesce(p.ag_a * p.ag_l * p.ag_c / 6.0, 0), coalesce(p.ag_g, 0)), 0) as ag_conta,
+           p.ml_a, p.ml_l, p.ml_c, p.ml_g, nullif(greatest(coalesce(p.ml_a * p.ml_l * p.ml_c / 6.0, 0), coalesce(p.ml_g, 0)), 0) as ml_conta
     from public.ml_itens_base p where p.usuario_id = auth.uid()
   ),
   c as materialized (
     select s.*, p.peso_g, h.linha as hab,
-           case when s.logistic_type = 'fulfillment' then p.full_a else p.ag_a end as ma, case when s.logistic_type = 'fulfillment' then p.full_l else p.ag_l end as ml,
-           case when s.logistic_type = 'fulfillment' then p.full_c else p.ag_c end as mc, case when s.logistic_type = 'fulfillment' then p.full_g else p.ag_g end as mg,
-           case when s.logistic_type = 'fulfillment' then p.full_conta else p.ag_conta end as mconta,
+           -- medida exata do Full (a mesma da Gestão de estoque Full), só para vendas do Full
+           case when s.logistic_type = 'fulfillment' then p.ml_a end as ma, case when s.logistic_type = 'fulfillment' then p.ml_l end as ml,
+           case when s.logistic_type = 'fulfillment' then p.ml_c end as mc, case when s.logistic_type = 'fulfillment' then p.ml_g end as mg,
+           case when s.logistic_type = 'fulfillment' then p.ml_conta end as mconta,
            (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g) as lp,
-           (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and (case when s.logistic_type = 'fulfillment' then p.full_conta else p.ag_conta end) <= t.peso_ate_g) as lm,
-           coalesce((select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and (case when s.logistic_type = 'fulfillment' then p.full_conta else p.ag_conta end) <= t.peso_ate_g),
-                    hd.linha, hw.linha, h.linha, (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g)) as ld
+           case when s.logistic_type = 'fulfillment' then (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.ml_conta <= t.peso_ate_g) end as lm,
+           coalesce(hd.linha, hw.linha, h.linha, (select min(t.linha) from public.frete_tabela t where t.desde = s.versao and t.faixa = 0 and p.peso_g <= t.peso_ate_g)) as ld
     from c0 s
     left join pes p on p.ml_user_id = s.ml_user_id and p.item_id = s.item_id
     left join habd hd on hd.ml_user_id = s.ml_user_id and hd.item_id = s.item_id and hd.versao = s.versao and hd.dia = s.dia
@@ -213,6 +214,7 @@ returns jsonb language sql stable as $$
   k as materialized (
     select c.*,
            (select t.valor from public.frete_tabela t where t.desde = c.versao and t.linha = c.ld and t.faixa = c.bv) as devido_un,
+           (select t.valor from public.frete_tabela t where t.desde = c.versao and t.linha = c.lm and t.faixa = c.bv) as devido_full,
            exists (select 1 from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>0)::int = c.ld and (x->>1)::int = c.bv) as certo,
            (select min((x->>1)::int) from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>0)::int = c.ld and (x->>1)::int > c.bv) as faixa_acima,
            (select min((x->>0)::int) from jsonb_array_elements(coalesce(c.cel, '[]'::jsonb)) x where (x->>1)::int = c.bv and (x->>0)::int > c.ld) as linha_acima,
@@ -221,8 +223,9 @@ returns jsonb language sql stable as $$
     from c
   ),
   r as materialized (
-    select k.*, case when k.certo or k.devido_un is null then 0 else round(k.f - coalesce(k.devido_un, 0) * k.qtd, 2) end as dif,
+    select k.*, case when k.certo and k.lm < k.ld and k.devido_full is not null then round(k.f - k.devido_full * k.qtd, 2) when k.certo or k.devido_un is null then 0 else round(k.f - coalesce(k.devido_un, 0) * k.qtd, 2) end as dif,
       case when k.ld is null or k.devido_un is null then 'sem_base'
+           when k.certo and k.lm < k.ld and k.devido_full is not null and k.f - k.devido_full * k.qtd > 0.02 then 'medida'
            when k.certo then 'certo'
            when k.faixa_acima is not null then 'preco'
            when k.linha_acima is not null then 'peso'
@@ -243,14 +246,16 @@ returns jsonb language sql stable as $$
         select classe, count(*) as n, coalesce(sum(dif) filter (where dif > 0.02), 0) as mais, coalesce(-sum(dif) filter (where dif < -0.02), 0) as menos,
                count(*) filter (where dif > 0.02) as n_mais, count(*) filter (where dif < -0.02) as n_menos from r group by 1) x),
     'lista', (select coalesce(jsonb_agg(to_jsonb(x) order by x.data_venda desc), '[]'::jsonb) from (
-        select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, lp, lm, ma, ml, mc, mg, mconta, bv, versao, faixa_acima, linha_acima, u
-        from r where classe in ('preco', 'peso', 'multiplo', 'total', 'outro') and dif > 0.02 order by data_venda desc limit 4000) x),
+        select order_id, item_id, sku, qtd, preco_unit, f as frete, case when classe = 'medida' then devido_full else devido_un end as devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g,
+               case when classe = 'medida' then lm else ld end as ld, lp, lm, ma, ml, mc, mg, mconta, bv, versao, faixa_acima, case when classe = 'medida' then ld else linha_acima end as linha_acima, u
+        from r where classe in ('preco', 'peso', 'multiplo', 'total', 'outro', 'medida') and dif > 0.02 order by data_venda desc limit 4000) x),
     'menos', (select coalesce(jsonb_agg(to_jsonb(x) order by x.data_venda desc), '[]'::jsonb) from (
         select order_id, item_id, sku, qtd, preco_unit, f as frete, devido_un, dif, classe, data_venda, ml_user_id, logistic_type, peso_g, ld, lp, lm, ma, ml, mc, mg, mconta, bv, versao, u
         from r where classe not in ('certo', 'sem_base') and dif < -0.02 order by dif limit 300) x),
     'itens', (select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from (
         select r.item_id, r.ml_user_id, max(r.sku) as sku, max(r.peso_g) as peso_g, count(*) as vendas,
-               count(*) filter (where r.classe = 'certo') as certas,
+               count(*) filter (where r.classe in ('certo', 'medida')) as certas,
+               count(*) filter (where r.classe = 'medida') as n_medida, coalesce(sum(r.dif) filter (where r.classe = 'medida'), 0) as rs_medida,
                count(*) filter (where r.classe = 'peso') as n_peso, coalesce(sum(r.dif) filter (where r.classe = 'peso'), 0) as rs_peso,
                count(*) filter (where r.classe = 'preco') as n_preco, coalesce(sum(r.dif) filter (where r.classe = 'preco'), 0) as rs_preco,
                count(*) filter (where r.classe = 'peso_menos') as n_peso_menos, coalesce(-sum(r.dif) filter (where r.classe = 'peso_menos'), 0) as rs_peso_menos,
