@@ -26,8 +26,12 @@ Use somente o que está nas opiniões e responda em português, de forma direta:
         catch(e){ op.erro = 'sem conexão com o Mercado Livre'; }
       }));
       if(op.chave !== chave) return;
-      op.itens = top.map(x => { const o = lidos.get(x.item_id) || {}, n = o.niveis || [0, 0, 0, 0, 0], tot = n.reduce((s, v) => s + v, 0);
-        return { ...x, un: Number(x.un), media: o.media || 0, total: o.total || tot, niveis: n, ruins: n[0] + n[1], neutras: n[2], pctRuim: tot ? (n[0] + n[1]) / tot * 100 : 0, opinioes: o.opinioes || [], semLeitura: !!o.erro || !lidos.has(x.item_id) }; });
+      // anúncios do mesmo produto dividem as mesmas opiniões no Mercado Livre: viram uma linha só
+      const juntos = new Map();
+      top.map(x => { const o = lidos.get(x.item_id) || {}, n = o.niveis || [0, 0, 0, 0, 0], tot = n.reduce((s, v) => s + v, 0);
+        return { ...x, un: Number(x.un), media: o.media || 0, total: o.total || tot, niveis: n, ruins: n[0] + n[1], neutras: n[2], pctRuim: tot ? (n[0] + n[1]) / tot * 100 : 0, opinioes: o.opinioes || [], semLeitura: !!o.erro || !lidos.has(x.item_id), anuncios: 1 }; })
+        .forEach(i => { const k = i.total ? i.total + '|' + i.niveis.join(',') : i.item_id, j = juntos.get(k); if(j){ j.un += i.un; j.anuncios++; } else juntos.set(k, i); });
+      op.itens = [...juntos.values()];
     }
 
     const opEstrelas = n => '★'.repeat(n) + '☆'.repeat(5 - n);
@@ -76,7 +80,7 @@ Use somente o que está nas opiniões e responda em português, de forma direta:
       const corM = m => m >= 4.6 ? 'var(--success,#16a34a)' : m >= 4.3 ? 'var(--warning,#d97706)' : 'var(--danger)';
       return `
         <div class="kpi-grid k4i">
-          ${anKpi('k-venda', 'Nota média', T.t ? anN(T.soma / T.t, 2) : '–', 'nos ' + L.length + ' anúncios que mais vendem')}
+          ${anKpi('k-venda', 'Nota média', T.t ? anN(T.soma / T.t, 2) : '–', 'em ' + L.length + ' produtos que mais vendem')}
           ${anKpi('k-hoje', 'Opiniões', anN(T.t), 'somando todos')}
           ${anKpi('k-atraso', 'Notas 1 e 2', anN(T.r), anP(T.r, T.t, 1) + ' das opiniões · ' + anN(T.n) + ' com nota 3')}
           ${anKpi('k-mc', 'Anúncios para olhar', anN(olhar.length), 'média abaixo de 4,5 ou 5% de notas ruins')}
@@ -85,7 +89,7 @@ Use somente o que está nas opiniões e responda em português, de forma direta:
         <div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div class="card-title">O que os compradores dizem</div>
           <button class="btn-out btn btn-sm" onclick="opCopiarTodos(this)" title="Copia as opiniões de todos os anúncios da lista (todas as de nota até 3 e uma amostra das boas) com um pedido pronto para colar numa IA">Copiar tudo + pedido para a IA</button></div>
         ${anTabela(L, [
-          { k: 'titulo', t: 'Anúncio', fmt: l => gsAnuncio(l, l.semLeitura ? ' · <span class="text-muted">sem leitura</span>' : '') },
+          { k: 'titulo', t: 'Anúncio', fmt: l => gsAnuncio(l, (l.anuncios > 1 ? ' e mais ' + (l.anuncios - 1) + ' anúncio' + (l.anuncios > 2 ? 's' : '') : '') + (l.semLeitura ? ' · <span class="text-muted">sem leitura</span>' : '')) },
           { k: 'un', t: 'Un. em 90 dias', num: 1, fmt: l => anN(l.un) },
           { k: 'media', t: 'Nota', num: 1, fmt: l => l.total ? `<b style="color:${corM(l.media)}">${anN(l.media, 1)}</b>` : '–' },
           { k: 'total', t: 'Opiniões', num: 1, fmt: l => anN(l.total) },
@@ -93,5 +97,5 @@ Use somente o que está nas opiniões e responda em português, de forma direta:
           { k: 'neutras', t: 'Nota 3', num: 1, fmt: l => l.neutras ? anN(l.neutras) : '–' },
           { k: 'item_id', t: '', fmt: l => l.total ? `<button class="btn-out btn-sm" onclick="opAbrir('${anE(l.item_id)}')" ${op.lendo === l.item_id ? 'disabled' : ''}>${op.lendo === l.item_id ? 'Lendo…' : 'Ver e copiar'}</button>` : '' }
         ], 'ruins')}
-        <div class="text-muted gs-nota" style="padding:12px 18px;font-size:12px;line-height:1.6;">Os 30 anúncios com mais unidades vendidas em 90 dias. As opiniões são do anúncio inteiro, desde que ele existe, não só do período. Em “Ver e copiar” o sistema lê até 400 opiniões do anúncio e separa as de nota baixa, que são as que mostram o que melhorar em foto, descrição, produto e embalagem.</div></div>`;
+        <div class="text-muted gs-nota" style="padding:12px 18px;font-size:12px;line-height:1.6;">Os 30 anúncios com mais unidades vendidas em 90 dias; anúncios do mesmo produto, que dividem as mesmas opiniões, aparecem numa linha só. As opiniões são do anúncio inteiro, desde que ele existe, não só do período. Em “Ver e copiar” o sistema lê até 400 opiniões do anúncio e separa as de nota baixa, que são as que mostram o que melhorar em foto, descrição, produto e embalagem.</div></div>`;
     }
