@@ -46,10 +46,11 @@
       const conta = typeof contaParam === 'function' ? contaParam() : null;
       let qDias = supa.from('vendas_ml_dias').select('dia').eq('usuario_id', usuarioAtual.id).gte('dia', dreAno + '-01-01').lte('dia', dreAno + '-12-31').eq('completo', true).limit(2000);
       if(conta) qDias = qDias.eq('ml_user_id', conta);
-      const [ml, dias] = await Promise.all([ supa.rpc('vendas_ml_por_mes', { p_ano: dreAno, p_conta: conta }), qDias ]);
+      const [ml, dias, fat] = await Promise.all([ supa.rpc('vendas_ml_por_mes', { p_ano: dreAno, p_conta: conta }), qDias, typeof ftMes === 'function' ? ftMes(dreAno, conta).catch(() => ({})) : null ]);
       if(dreDados.chave !== chave) return;
       const porMes = {};
       (ml.data || []).forEach(r => { porMes[r.mes] = { fat:Number(r.faturamento), canc:Number(r.canceladas), imp:Number(r.imposto), frete:Number(r.frete_vendedor), custo:Number(r.custo), tarifa:Number(r.tarifa), vendas:Number(r.vendas), flex:-(Number(r.flex_repasse) || 0) }; });
+      if(fat && typeof ftJuntar === 'function') ftJuntar(porMes, fat);     // cobranças da fatura do ML, por mês em que aconteceram
       // dias do mês já importados do ML (para avisar mês incompleto); com várias contas, conta os dias distintos
       const cob = {}; const vistos = new Set();
       (dias.data || []).forEach(d => { const k = String(d.dia).substring(0,10); if(vistos.has(k)) return; vistos.add(k); const m = parseInt(k.substring(5,7)); cob[m] = (cob[m] || 0) + 1; });
@@ -78,9 +79,12 @@
         const ref = /^\d{4}-\d{2}/.test(p.competencia || '') ? p.competencia : dreCompetencia(p);
         if(!ref || ref.substring(0,4) !== String(dreAno)) return;
         if(dreSoPagas && !p.pago) return;
-        const g = dreGrupoDe(p.cat);
+        let g = dreGrupoDe(p.cat);
+        const m = parseInt(ref.substring(5,7));
+        // pagamento da fatura do ML: sai do DRE nos meses em que a própria fatura já entrou; nos outros vale o lançamento
+        if(g === 'fatura'){ if(typeof ftVale === 'function' && ftVale(dreDados.ml, m)) return; g = 'variavel'; }
         if(g !== 'variavel' && g !== 'fixo') return;
-        const nome = p.cat || 'Sem categoria', m = parseInt(ref.substring(5,7));
+        const nome = p.cat || 'Sem categoria';
         if(!out[g][nome]) out[g][nome] = {};
         out[g][nome][m] = (out[g][nome][m] || 0) + (Number(p.pago && p.valorPago ? p.valorPago : p.val) || 0);
       });
@@ -97,6 +101,7 @@
       // Flex: o Mercado Livre repassa ao vendedor o frete dos envios Flex (entra como valor negativo = reduz o custo).
       // O que se paga ao transportador NÃO entra aqui: vem das contas a pagar, pelo valor realmente pago.
       if(DRE_MESES.some((_, i) => val(i + 1, 'flex'))) linhasML.push({ nome: 'Repasse do Flex (ML)', v: Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, val(i + 1, 'flex')])) });
+      if(typeof ftLinhas === 'function') linhasML.push(...ftLinhas(ml));
       const linhasDe = g => Object.keys(desp[g]).map(nome => ({ nome, v: desp[g][nome], grupo: dreGrupoOlist(nome) })).sort((a,b) => a.grupo.localeCompare(b.grupo) || a.nome.localeCompare(b.nome));
       const variaveis = linhasDe('variavel'), fixas = linhasDe('fixo');
       const soma = (linhas, m) => linhas.reduce((s,l) => s + (l.v[m] || 0), 0);
@@ -157,6 +162,7 @@
             </div>
           </div>
           ${dreDados.erro ? `<div class="alert alert-danger" style="margin:14px 16px 0;">${dreEsc(dreDados.erro)}</div>` : ''}
+          ${typeof ftAviso === 'function' ? ftAviso() : ''}
           ${semCat ? `<div class="alert alert-info" style="margin:14px 16px 0;">Nenhuma categoria de despesa entra no DRE ainda. Clique em <b>&nbsp;Configurar categorias&nbsp;</b> e diga quais são custo variável e quais são custo fixo.</div>` : ''}
           <div style="overflow-x:auto;">
             <table class="dre-tab">
@@ -179,6 +185,7 @@
           <div class="text-muted" style="font-size:11.5px;padding:12px 18px;line-height:1.6;">
             Faturamento ML = valor dos produtos das vendas aprovadas e canceladas (as canceladas saem em seguida). Custo e imposto são os gravados em cada venda.
             Despesas aparecem somadas por grupo: clique num grupo para ver as categorias. Entram pelo mês de competência da conta; sem ela, pela competência padrão da categoria (em geral o mês do vencimento). ● = mês com vendas ainda sendo importadas do Mercado Livre.
+            ${typeof ftRodape === 'function' ? ftRodape() : ''}
             ${!dreDados.carregado ? ' Carregando vendas…' : ''}
           </div>
         </div>`;
@@ -205,6 +212,11 @@
         ${aviso ? `<div class="alert alert-info">${aviso}</div>` : ''}
         <div class="text-muted" style="margin-bottom:12px;line-height:1.55;">Para cada categoria de Contas a pagar, diga onde ela entra no <b style="color:var(--text)">DRE</b> e no <b style="color:var(--text)">balanço</b>. Quem ainda não foi escolhido segue o grupo do plano de contas do Olist.
           <b style="color:var(--text)">Compra de mercadoria, imposto e amortização não entram no DRE</b>: o custo e o imposto já vêm de cada venda, e amortização não é despesa.</div>
+        ${typeof ftAuto === 'function' ? `<div class="ft-modo"><label for="dre-cfg-fatura"><b>Cobranças da fatura do Mercado Livre</b> (publicidade, armazenagem do Full, DIFAL, mensalidade da loja)</label>
+          <select id="dre-cfg-fatura" style="width:auto;" onchange="document.getElementById('dre-cfg-fatura-nota').style.display=this.value==='auto'?'':'none'">
+            <option value="pagar" ${ftAuto() ? '' : 'selected'}>Entram pelo que eu lanço em Contas a pagar</option>
+            <option value="auto" ${ftAuto() ? 'selected' : ''}>Entram sozinhas, direto da fatura do Mercado Livre</option></select>
+          <div id="dre-cfg-fatura-nota" class="text-muted" style="font-size:12px;line-height:1.5;margin-top:6px;${ftAuto() ? '' : 'display:none;'}">Cada cobrança entra no mês em que aconteceu, já sem as bonificações. A conta da fatura que você lança em Contas a pagar continua valendo para o caixa: marque a categoria dela como <b>Fatura do ML (só caixa)</b>, senão o gasto conta duas vezes. Ao salvar, as categorias com nome de publicidade, Full ou fatura do Mercado Livre são marcadas assim.</div></div>` : ''}
         <div style="max-height:52vh;overflow:auto;">
           <datalist id="dre-grupos">${[...new Set(categorias.map(c => c.grupo).filter(Boolean))].sort().map(g => `<option value="${dreEsc(g)}">`).join('')}</datalist>
           <table><thead><tr><th>Categoria</th><th style="width:190px;">Grupo ${typeof dica === 'function' ? dica('A família da categoria. No DRE as despesas aparecem somadas por grupo. Com o Olist ligado, o grupo vem de lá; aqui você pode trocar ou criar um.', true) : ''}</th><th style="width:200px;">No DRE</th><th style="width:190px;">Competência padrão ${typeof dica === 'function' ? dica('Em que mês a despesa entra no DRE quando a conta não tem competência própria. Ex.: aluguel pago no dia 5 referente ao mês anterior = "Mês anterior ao vencimento".', true) : ''}</th>${trat ? '<th style="width:240px;">No balanço (o que eu devo hoje)</th>' : ''}</tr></thead><tbody>
@@ -214,7 +226,8 @@
             return cab + `<tr><td>${dreEsc(n)}</td><td><input type="text" list="dre-grupos" data-cat="${dreEsc(n)}" class="dre-cfg-grp" value="${dreEsc(go)}" placeholder="Sem grupo" style="width:100%;"></td><td><select data-cat="${dreEsc(n)}" class="dre-cfg-sel">
               <option value="fora" ${g === 'fora' ? 'selected' : ''}>Não entra</option>
               <option value="variavel" ${g === 'variavel' ? 'selected' : ''}>Custo variável (operacional)</option>
-              <option value="fixo" ${g === 'fixo' ? 'selected' : ''}>Custo fixo</option></select></td>
+              <option value="fixo" ${g === 'fixo' ? 'selected' : ''}>Custo fixo</option>
+              <option value="fatura" ${g === 'fatura' ? 'selected' : ''}>Fatura do ML (só caixa)</option></select></td>
               <td><select data-cat="${dreEsc(n)}" class="dre-cfg-comp">${DRE_COMP.map(o => `<option value="${o[0]}" ${cc === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></td>
               ${trat ? `<td><select data-cat="${dreEsc(n)}" class="dre-cfg-bal">${trat.map(o => `<option value="${o[0]}" ${tb === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></td>` : ''}</tr>`; }).join('') || '<tr><td colspan="5" class="text-muted">Nenhuma categoria cadastrada.</td></tr>'}
           </tbody></table>
@@ -247,9 +260,12 @@
         comprasCfg.balanco = comprasCfg.balanco || {}; comprasCfg.balanco.tipos = comprasCfg.balanco.tipos || {};
         selBal.forEach(sel => { comprasCfg.balanco.tipos[String(sel.getAttribute('data-cat')).trim().toLowerCase()] = sel.value; });
       }
+      const modo = document.getElementById('dre-cfg-fatura');
+      if(modo && typeof ftModoMudar === 'function'){ const ligou = modo.value === 'auto' && !ftAuto(); ftModoMudar(modo.value); if(ligou) ftMarcarSugeridas(); }
       salvar();
       fecharModal('modal-vml');
       dreDesenhar();
+      if(typeof gf !== 'undefined') gf.html = null;
       if(typeof renderCategorias === 'function') renderCategorias();
       if(typeof balDesenhar === 'function' && document.getElementById('bal-host')) try { balDesenhar(); } catch(e){}
     }

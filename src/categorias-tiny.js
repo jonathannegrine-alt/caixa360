@@ -11,7 +11,7 @@
     function catDepois(){ salvar(); renderCategorias(); atualizarSelectCategorias(); if(typeof dreDesenhar === 'function'){ try { dreDesenhar(); } catch(e){} } }
     function renderCategorias(){
       const tbody = document.getElementById('tbody-categorias'); if(!tbody) return;
-      const DRE = { variavel: 'Custo variável (operacional)', fixo: 'Custo fixo', fora: 'Não entra' };
+      const DRE = { variavel: 'Custo variável (operacional)', fixo: 'Custo fixo', fora: 'Não entra', fatura: 'Fatura do ML (só caixa)' };
       const COMP = { vencimento: 'Mês do vencimento', anterior: 'Mês anterior ao vencimento', emissao: 'Mês da emissão' };
       const grupos = catGrupos(), nomes = grupos.concat(categorias.some(c => !c.grupo) ? [''] : []);
       const js = s => catEsc(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));

@@ -11,8 +11,9 @@
 
     async function gfAno(ano, conta){
       if(gf.anos[ano]) return gf.anos[ano];
-      const r = await supa.rpc('vendas_ml_por_mes', { p_ano: ano, p_conta: conta }), porMes = {};
+      const [r, fat] = await Promise.all([supa.rpc('vendas_ml_por_mes', { p_ano: ano, p_conta: conta }), typeof ftMes === 'function' ? ftMes(ano, conta).catch(() => ({})) : null]), porMes = {};
       (r.data || []).forEach(x => { porMes[x.mes] = { fat: Number(x.faturamento), canc: Number(x.canceladas), imp: Number(x.imposto), frete: Number(x.frete_vendedor), custo: Number(x.custo), tarifa: Number(x.tarifa), vendas: Number(x.vendas), flex: -(Number(x.flex_repasse) || 0) }; });
+      if(fat && typeof ftJuntar === 'function') ftJuntar(porMes, fat);
       return gf.anos[ano] = porMes;
     }
     async function gfCarregar(){

@@ -1473,3 +1473,7 @@ body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-sele
 .gf-fech-l a,.gf-fech a{color:var(--primary);cursor:pointer;font-weight:650;}
 .gf-fech{margin:16px 0 0;}
 @media (max-width:640px){.gf-eq b{font-size:16px;}}
+
+/* DRE: escolha de como a fatura do Mercado Livre entra */
+.ft-modo{background:var(--surface-2,var(--surface));border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+.ft-modo label{display:block;font-size:13px;margin-bottom:6px;color:var(--text);font-weight:400;}
