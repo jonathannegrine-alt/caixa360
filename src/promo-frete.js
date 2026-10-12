@@ -137,14 +137,13 @@
     let fr = { dias: 30, de: '', ate: '', dados: null, vistos: null, erro: '', chave: '', ver: 'mais', motivo: 'todos', envio: 'todos', lendo: '', tab: null, medidas: null, todas: false, marc: new Set() };
     const FR_LOG = { fulfillment: 'Full', cross_docking: 'Coleta', xd_drop_off: 'Agência', drop_off: 'Correios' };
     const FR_FAIXA = ['até R$ 18,99', 'R$ 19 a R$ 48,99', 'R$ 49 a R$ 78,99', 'R$ 79 a R$ 99,99', 'R$ 100 a R$ 119,99', 'R$ 120 a R$ 149,99', 'R$ 150 a R$ 199,99', 'a partir de R$ 200'];
-    const FR_MOTIVO = { preco: 'Faixa de preço errada', peso: 'Faixa de peso acima', multiplo: 'Cobrado em dobro ou triplo', outro: 'Outro valor', medida: 'Acima da medida do Full' };
+    const FR_MOTIVO = { preco: 'Faixa de preço errada', peso: 'Faixa de peso acima', multiplo: 'Cobrado em dobro ou triplo', outro: 'Outro valor' };
     const FR_MOTIVO_D = {
       // (peso: a referência é a medida do ML quando existe)
       preco: 'O frete cobrado é o de uma faixa de preço acima da do preço de venda. Pela regra do Mercado Livre, a faixa é definida pelo preço de venda do produto.',
-      peso: 'A faixa de preço está certa, mas o frete cobrado é o de uma faixa de peso acima da que o anúncio vinha pagando naquele dia.',
+      peso: 'A faixa de preço está certa, mas o frete cobrado é o de uma faixa de peso acima da medida do produto. No Full a medida é a que o próprio Full registrou; em agência e coleta, a embalagem de envio que está no anúncio.',
       multiplo: 'O frete cobrado é exatamente duas, três ou quatro vezes o devido. Costuma acontecer quando o carrinho foi dividido ou cancelado em parte.',
       outro: 'O valor cobrado não é o devido e não se encaixa nos outros motivos. Vale olhar caso a caso.',
-      medida: 'O Mercado Livre cobra o frete pela embalagem de envio que está no anúncio. Nestas vendas ela cai numa faixa de peso acima da medida que o próprio Full registrou para o produto. Dá para contestar com a medida do Full e, para as próximas vendas, corrigir a embalagem de envio no anúncio.',
     };
     const FR_MENOS = { peso_menos: 'Faixa de peso abaixo', preco_menos: 'Faixa de preço abaixo', total: 'Várias unidades cobradas uma vez só', outro: 'Valor fora da tabela' };
     // tabela de frete por vigência: fr.tab[desde] = { rot: [rótulo da faixa de peso], v: [linha][faixa], ate: [peso máximo em g] }
@@ -228,20 +227,21 @@
       const t = (fr.tab || {})[x.versao] || { rot: [] };
       return { peso: x.ld != null ? t.rot[x.ld] || '' : '', pesoCob: x.linha_acima != null ? t.rot[x.linha_acima] || '' : '', faixa: FR_FAIXA[x.bv] || '', faixaCob: x.faixa_acima != null ? FR_FAIXA[x.faixa_acima] || '' : '',
         // com a medida do ML: mostra a medida e o peso que conta; sem ela, só a faixa em que o anúncio vinha sendo cobrado
-        medida: x.classe === 'medida' ? pqN(x.ma, 1) + ' × ' + pqN(x.ml, 1) + ' × ' + pqN(x.mc, 1) + ' cm, ' + pqN(x.mg, 0) + ' g' : '', conta: x.classe === 'medida' ? pqN(Number(x.mconta) / 1000, 2) + ' kg' : '',
-        pesoTxt: (x.classe === 'medida' ? pqN(Number(x.mconta) / 1000, 2) + ' kg · ' : '') + (x.ld != null ? t.rot[x.ld] || '' : '') };
+        // base da faixa de peso: 'full' = medida exata do Full | 'anuncio' = embalagem de envio do anúncio | 'habitual' = sem medida
+        medida: x.base !== 'habitual' && x.ma ? pqN(x.ma, 1) + ' × ' + pqN(x.ml, 1) + ' × ' + pqN(x.mc, 1) + ' cm, ' + pqN(x.mg, 0) + ' g' : '', conta: x.base !== 'habitual' && x.mconta ? pqN(Number(x.mconta) / 1000, 2) + ' kg' : '',
+        origem: x.base === 'full' ? 'Full' : x.base === 'anuncio' ? 'anúncio' : '',
+        pesoTxt: (x.base !== 'habitual' && x.mconta ? pqN(Number(x.mconta) / 1000, 2) + ' kg · ' : '') + (x.ld != null ? t.rot[x.ld] || '' : '') };
     }
     function frDia(x){ return ptDate(typeof vmlDataBRT === 'function' ? vmlDataBRT(x.data_venda).dia : String(x.data_venda).substring(0, 10)); }
     // texto de contestação de uma venda: curto e com todos os números
     function frTexto(x){
       const r = frRot(x), q = Number(x.qtd) || 1, dev = Number(x.devido_un) * q;
       const un = q > 1 ? ' por unidade (' + q + ' unidades)' : '', devTxt = 'R$ ' + pqN(dev) + (q > 1 ? ' (' + q + ' x R$ ' + pqN(x.devido_un) + ')' : '');
-      const peso = x.classe === 'medida' ? 'Medida do produto registrada pelo Mercado Livre no Full: ' + r.medida + '. Peso considerado (o maior entre o peso e o peso cúbico): ' + r.conta + ', faixa de peso ' + r.peso + '.' : 'Faixa de peso do anúncio: ' + r.peso + '.';
+      const peso = r.medida ? (x.base === 'full' ? 'Medida do produto registrada pelo Mercado Livre no Full: ' : 'Embalagem de envio cadastrada no anúncio: ') + r.medida + '. Peso considerado (o maior entre o peso e o peso cúbico): ' + r.conta + ', faixa de peso ' + r.peso + '.' : 'Faixa de peso do anúncio: ' + r.peso + '.';
       const ini = 'Venda ' + x.order_id + ' (' + frDia(x) + '). Preço de venda: R$ ' + pqN(x.preco_unit) + un + ', faixa de preço ' + r.faixa + '. ' + peso + ' Pela tabela de custos de envio, o custo devido é ' + devTxt + '. ';
       const fim = ' Solicito o ressarcimento de R$ ' + pqN(x.dif) + '.', c = frClasse(x);
       if(c === 'preco') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de preço ' + r.faixaCob + '. O preço de venda não está nessa faixa.' + fim;
-      if(c === 'peso') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de peso ' + r.pesoCob + ', acima da faixa do anúncio.' + fim;
-      if(c === 'medida') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de peso ' + r.pesoCob + ', acima da medida registrada no Full.' + fim;
+      if(c === 'peso') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', que é o valor da faixa de peso ' + r.pesoCob + ', acima ' + (x.base === 'full' ? 'da medida registrada no Full.' : x.base === 'anuncio' ? 'da embalagem de envio do anúncio.' : 'da faixa do anúncio.') + fim;
       if(c === 'multiplo') return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', ' + Math.round(Number(x.frete) / dev) + ' vezes o valor devido, numa venda de ' + q + ' unidade' + (q > 1 ? 's' : '') + '.' + fim;
       return ini + 'Foi cobrado R$ ' + pqN(x.frete) + ', valor que não corresponde à tabela.' + fim;
     }
@@ -253,9 +253,9 @@
     }
     // linhas do documento de contestação (uma por venda), na ordem: motivo, depois data
     function frDocLinhas(){
-      const ord = { preco: 0, peso: 1, multiplo: 2, outro: 3, medida: 4 };
+      const ord = { preco: 0, peso: 1, multiplo: 2, outro: 3 };
       return frEscolhidas().slice().sort((a, b) => ord[frClasse(a)] - ord[frClasse(b)] || String(a.data_venda).localeCompare(String(b.data_venda))).map(x => { const r = frRot(x), q = Number(x.qtd) || 1;
-        return { x, venda: String(x.order_id), data: frDia(x), q, preco: Number(x.preco_unit), faixa: r.faixa, peso: r.pesoTxt, devido: Math.round(Number(x.devido_un) * q * 100) / 100, cobrado: Number(x.frete), dif: Number(x.dif), motivo: FR_MOTIVO[frClasse(x)], cobradoComo: frClasse(x) === 'preco' ? 'faixa de preço ' + r.faixaCob : (frClasse(x) === 'peso' || frClasse(x) === 'medida') ? 'faixa de peso ' + r.pesoCob : frClasse(x) === 'multiplo' ? Math.round(Number(x.frete) / (Number(x.devido_un) * q)) + ' vezes o devido' : 'valor fora da tabela' }; });
+        return { x, venda: String(x.order_id), data: frDia(x), q, preco: Number(x.preco_unit), faixa: r.faixa, peso: r.pesoTxt, devido: Math.round(Number(x.devido_un) * q * 100) / 100, cobrado: Number(x.frete), dif: Number(x.dif), motivo: FR_MOTIVO[frClasse(x)], cobradoComo: frClasse(x) === 'preco' ? 'faixa de preço ' + r.faixaCob : frClasse(x) === 'peso' ? 'faixa de peso ' + r.pesoCob : frClasse(x) === 'multiplo' ? Math.round(Number(x.frete) / (Number(x.devido_un) * q)) + ' vezes o devido' : 'valor fora da tabela' }; });
     }
     function frDocTitulo(){ const P = frPeriodo(), c = contaParam(); return { loja: c ? ((typeof contaNome === 'function' && contaNome(c)) || c) : (contasML.length === 1 ? (contasML[0].apelido || contasML[0].id) : 'Todas as lojas'), periodo: ptDate(P.de) + ' a ' + ptDate(P.ate) }; }
     // Excel: uma aba só, uma linha por venda, com título, total e a coluna do texto de contestação
@@ -349,7 +349,7 @@
     function frDesenhar(){
       const v = document.getElementById('view-frete'); if(!v || !v.classList.contains('active')) return;
       const P = frPeriodo(), perso = !!(fr.de && fr.ate);
-      const cab = `<div class="pg-head"><div><div class="pg-title">Conferência de frete</div><div class="pg-sub">Cada venda é comparada com a tabela de custos de envio do Mercado Livre: faixa do preço de venda e faixa de peso que o anúncio vinha pagando no dia. O Flex e os envios com mais de um produto ficam de fora.</div></div>
+      const cab = `<div class="pg-head"><div><div class="pg-title">Conferência de frete</div><div class="pg-sub">Cada venda é comparada com a tabela de custos de envio do Mercado Livre: faixa do preço de venda e medida do produto. No Full vale a medida que o próprio Full registrou; em agência e coleta, a embalagem de envio do anúncio. O Flex e os envios com mais de um produto ficam de fora.</div></div>
         <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><div class="seg" title="Filtra as vendas pelo tipo de envio">${[['todos', 'Todos'], ['full', 'Full'], ['ag', 'Agência e coleta']].map(([k, t]) => `<button class="btn-toggle ${fr.envio === k ? 'active' : ''}" onclick="frEnvio('${k}')">${t}</button>`).join('')}</div><div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${!perso && fr.dias === d ? 'active' : ''}" onclick="frDias(${d})">${d} dias</button>`).join('')}</div>
         <div class="fr-datas ${perso ? 'on' : ''}" title="Escolha um período (até 120 dias)"><input type="date" id="fr-de" aria-label="Data inicial" value="${P.de}" max="${getToday()}"><span>a</span><input type="date" id="fr-ate" aria-label="Data final" value="${P.ate}" max="${getToday()}"><button class="btn-out btn btn-sm" onclick="frDatas()">Aplicar</button></div></div></div>`;
       if(!fr.dados){ v.innerHTML = cab + `<div class="card"><div class="carregando-msg"><span class="carregando-roda"></span><b>${pqE(fr.lendo || 'Conferindo o frete das vendas…')}</b></div></div>`; return; }
@@ -377,13 +377,13 @@
           return { x, b, env, fu, eu, dif }; }).sort((a, b) => (b.dif > 0 ? b.dif * b.x.vendas : 0) - (a.dif > 0 ? a.dif * a.x.vendas : 0) || b.x.vendas - a.x.vendas);
         const acima = l.filter(y => y.dif > 0.001);
         sub = 'O Mercado Livre cobra o frete pela embalagem de envio que está no anúncio (as medidas preenchidas ao criar o anúncio), pelo maior entre o peso e o peso cúbico (altura × largura × comprimento ÷ 6.000). Aqui ela aparece ao lado da medida que o Full registrou para o produto. Onde a embalagem de envio cai numa faixa acima da medida do Full, você paga mais do que precisaria.';
-        corpo = (acima.length ? `<div class="alert alert-warning" style="margin:0 18px 14px;"><b>${acima.length} anúncio${acima.length > 1 ? 's' : ''} com a embalagem de envio numa faixa acima da medida do Full.</b> Corrigir a embalagem de envio no anúncio baixa o frete das próximas vendas. As vendas já cobradas assim estão em "Cobrado a mais", no motivo "Acima da medida do Full".</div>` : '') +
-          `<div style="overflow-x:auto;max-height:620px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th title="Medidas preenchidas no anúncio. É por elas que o frete é cobrado.">Embalagem de envio do anúncio</th><th title="Medida que o Full registrou para o produto (a mesma da Gestão de estoque Full)">Medida do Full</th><th class="num" title="Diferença de frete por venda entre a faixa da embalagem de envio e a da medida do Full, na faixa de preço em que o anúncio mais vendeu">Diferença por venda</th><th class="num">Vendas no período</th><th class="num" title="Vendas do período cobradas numa faixa acima da medida do Full">Cobrado acima da medida</th><th>Sua conferência</th><th></th></tr></thead><tbody>
+        corpo = (acima.length ? `<div class="alert alert-warning" style="margin:0 18px 14px;"><b>${acima.length} anúncio${acima.length > 1 ? 's' : ''} com a embalagem de envio numa faixa acima da medida do Full.</b> Corrigir a embalagem de envio no anúncio baixa o frete das próximas vendas. As vendas do Full já cobradas assim estão em "Cobrado a mais", no motivo "Faixa de peso acima".</div>` : '') +
+          `<div style="overflow-x:auto;max-height:620px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th title="Medidas preenchidas no anúncio. É por elas que o frete é cobrado.">Embalagem de envio do anúncio</th><th title="Medida que o Full registrou para o produto (a mesma da Gestão de estoque Full)">Medida do Full</th><th class="num" title="Diferença de frete por venda entre a faixa da embalagem de envio e a da medida do Full, na faixa de preço em que o anúncio mais vendeu">Diferença por venda</th><th class="num">Vendas no período</th><th class="num" title="Vendas do período cobradas numa faixa de peso acima da medida de referência">Cobrado acima da medida</th><th>Sua conferência</th><th></th></tr></thead><tbody>
           ${l.length ? l.map(({ x, b, env, fu, eu, dif }) => `<tr><td>${loja(x)}<b>${pqE(x.sku || x.item_id)}</b><br><small class="text-muted"><a href="https://produto.mercadolivre.com.br/${pqE(String(x.item_id).replace(/^MLB/, 'MLB-'))}" target="_blank" rel="noopener">${pqE(x.item_id)}</a></small></td>
               <td>${cel(b.decl_a, b.decl_l, b.decl_c, b.decl_g, env, 0)}</td><td>${cel(b.ml_a, b.ml_l, b.ml_c, b.ml_g, fu, 1)}</td>
               <td class="num">${dif > 0.001 ? `<b class="text-danger">+R$ ${pqN(dif)}</b><br><small class="text-muted">paga a mais</small>` : dif < -0.001 ? `<b class="text-success">−R$ ${pqN(-dif)}</b><br><small class="text-muted">paga a menos</small>` : (env && fu ? '<small class="text-muted">mesma faixa</small>' : '—')}</td>
               <td class="num">${pqN(x.vendas, 0)}</td>
-              <td class="num">${x.n_medida ? `<b class="text-danger">R$ ${pqN(x.rs_medida)}</b><br><small class="text-muted">${x.n_medida} venda${x.n_medida > 1 ? 's' : ''}</small>` : '—'}</td>
+              <td class="num">${x.n_peso ? `<b class="text-danger">R$ ${pqN(x.rs_peso)}</b><br><small class="text-muted">${x.n_peso} venda${x.n_peso > 1 ? 's' : ''}</small>` : '—'}</td>
               <td>${eu ? `${pqN(eu.g / 1000, 2)} kg<br><small class="text-muted">faixa ${pqE(t0.rot[eu.linha] || '')}</small>` : '<small class="text-muted">não informada</small>'}</td>
               <td><button class="btn-out btn btn-sm" onclick="frMedidas('${pqE(x.item_id)}')" title="Informe o peso e as medidas da embalagem conferidos na sua expedição">${eu ? 'Editar' : 'Informar'}</button></td></tr>`).join('') : '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:26px;">Nenhum anúncio com venda no período.</td></tr>'}
           </tbody></table></div>`;
@@ -405,7 +405,7 @@
               <td>${loja(x)}<a href="https://www.mercadolivre.com.br/vendas/${x.order_id}/detalhe" target="_blank" rel="noopener" title="Abrir a venda no Mercado Livre">#${x.order_id}</a><br><small class="text-muted">${dh(x.data_venda)} · ${FR_LOG[x.logistic_type] || ''}</small></td>
               <td><b>${pqE(x.sku || x.item_id)}</b></td><td class="num">${q}</td><td class="num">R$ ${pqN(x.preco_unit)}</td>
               <td>${pqE(r.faixa)}${r.faixaCob ? `<br><small class="text-danger">cobrado: ${pqE(r.faixaCob)}</small>` : ''}</td>
-              <td>${pqE(r.pesoTxt)}${r.medida ? `<br><small class="text-muted">Full: ${pqE(r.medida)}</small>` : ''}${r.pesoCob ? `<br><small class="text-danger">cobrado: ${pqE(r.pesoCob)}</small>` : ''}</td>
+              <td>${pqE(r.pesoTxt)}${r.medida ? `<br><small class="text-muted">${r.origem}: ${pqE(r.medida)}</small>` : '<br><small class="text-muted" title="Sem medida registrada: vale a faixa que o anúncio vinha pagando no dia">sem medida</small>'}${r.pesoCob ? `<br><small class="text-danger">cobrado: ${pqE(r.pesoCob)}</small>` : ''}</td>
               <td class="num">R$ ${pqN(Number(x.devido_un) * q)}</td><td class="num"><b>R$ ${pqN(x.frete)}</b></td><td class="num"><b class="text-danger">+R$ ${pqN(x.dif)}</b></td>
               <td><span class="v-tag">${FR_MOTIVO[frClasse(x)]}</span></td>
               <td style="white-space:nowrap;"><button class="btn-out btn btn-sm" onclick="frCopiar('${x.order_id}', this)" title="Copia o texto de contestação desta venda, para colar no chat do Mercado Livre">Copiar texto</button> <button class="btn-out btn btn-sm" onclick="frPacote('${x.order_id}')" title="Medidas que o Mercado Livre registrou neste envio">Pacote</button> <button class="btn-out btn btn-sm" onclick="frVisto('${x.order_id}', ${!visto})">${visto ? 'Desfazer' : 'Já conferi'}</button></td></tr>`; }).join('')
@@ -417,7 +417,7 @@
         ${fr.erro ? `<div class="alert alert-danger">Não consegui conferir: ${pqE(fr.erro)}</div>` : ''}
         <div class="kpi-grid k4i">
           <div class="kpi k-venda"><div class="kpi-label">Vendas conferidas</div><div class="kpi-value">${pqN(d.conferidas, 0)}</div><div class="kpi-sub"><span><b>${pqN(pctCerto, 0)}%</b> com o frete certo</span><span>${pqN(d.fora, 0)} com mais de um produto, de fora</span></div></div>
-          <div class="kpi k-atraso"><div class="kpi-label">Cobrado a mais ${typeof dica === 'function' ? dica('Soma do que foi cobrado acima da tabela no período. "Aguardando" é o que você ainda não marcou como conferido.') : ''}</div><div class="kpi-value" style="color:var(--danger);">R$ ${pqN(totMais)}</div><div class="kpi-sub"><span>erros de cobrança <b>R$ ${pqN(totMais - (Number(cl('medida').mais) || 0))}</b></span><span>acima da medida do Full <b>R$ ${pqN(cl('medida').mais)}</b></span><span>aguardando <b>R$ ${pqN(soma(abertas))}</b></span></div></div>
+          <div class="kpi k-atraso"><div class="kpi-label">Cobrado a mais ${typeof dica === 'function' ? dica('Soma do que foi cobrado acima da tabela no período. "Aguardando" é o que você ainda não marcou como conferido.') : ''}</div><div class="kpi-value" style="color:var(--danger);">R$ ${pqN(totMais)}</div><div class="kpi-sub"><span>${pqN(tudoMais.length, 0)} vendas</span><span>aguardando <b>R$ ${pqN(soma(abertas))}</b></span></div></div>
           <div class="kpi k-mc"><div class="kpi-label">Cobrado a menos ${typeof dica === 'function' ? dica('Soma do que foi cobrado abaixo da tabela no período: faixa de peso ou de preço abaixo, e várias unidades cobradas uma vez só.') : ''}</div><div class="kpi-value">R$ ${pqN(favor)}</div><div class="kpi-sub"><span>${pqN(nFavor, 0)} vendas a seu favor</span></div></div>
           <div class="kpi k-hoje"><div class="kpi-label">Saldo do período</div><div class="kpi-value" style="color:${totMais - favor > 0 ? 'var(--danger)' : 'var(--success,#16a34a)'}">${totMais - favor > 0 ? '−' : '+'}R$ ${pqN(Math.abs(totMais - favor))}</div><div class="kpi-sub"><span>${totMais - favor > 0 ? 'o Mercado Livre cobrou mais do que a tabela' : 'o Mercado Livre cobrou menos do que a tabela'}</span></div></div>
         </div>
