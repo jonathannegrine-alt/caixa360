@@ -55,10 +55,11 @@
     function ftRodape(){
       const S = ft.sit || [], conta = typeof contaParam === 'function' ? contaParam() : null, L = S.filter(x => !conta || String(x.ml_user_id) === String(conta));
       const e = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-      if(!L.length) return ftAuto() ? ' Fatura do Mercado Livre: ainda não foi lida (a primeira leitura leva cerca de uma hora depois de conectar a conta).' : '';
+      const ler = rot => ' <a onclick="ftLerAgora(this)" style="cursor:pointer;text-decoration:underline;">' + rot + '</a>.';
+      if(!L.length) return ftAuto() ? ' Fatura do Mercado Livre: ainda não foi lida (a leitura acontece de madrugada).' + ler('Ler agora') : '';
       const ate = L.map(x => x.lido_ate).filter(Boolean).sort()[0], falta = L.reduce((s, x) => s + Number(x.faltam || 0), 0), tot = L.reduce((s, x) => s + Number(x.faturas || 0), 0);
-      if(falta) return ' Fatura do Mercado Livre: primeira leitura em andamento (' + (tot - falta) + ' de ' + tot + ' faturas lidas; o Mercado Livre só aceita 5 consultas por minuto).' + (ftAuto() ? ' Até terminar, o DRE continua usando o que está em Contas a pagar.' : '');
-      const txt = ' Fatura do Mercado Livre lida até ' + e(ftData(ate) || '–') + '.';
+      if(falta) return ' Fatura do Mercado Livre: primeira leitura em andamento (' + (tot - falta) + ' de ' + tot + ' faturas lidas; o Mercado Livre só aceita 5 consultas por minuto).' + (ftAuto() ? ' Até terminar, o DRE continua usando o que está em Contas a pagar.' : '') + ' A leitura continua de madrugada.' + ler('Continuar agora');
+      const txt = ' Fatura do Mercado Livre lida até ' + e(ftData(ate) || '–') + ' (atualiza sozinha toda madrugada).' + ler('Atualizar agora');
       return txt + (ftAuto() ? ' As cobranças entram no mês em que aconteceram, não no mês do pagamento.' : ' Ela não está entrando no DRE: para usar, abra “Configurar categorias”.');
     }
     function ftAviso(){
@@ -68,11 +69,20 @@
     }
     // pede uma rodada de leitura agora (a tela chama de novo enquanto houver fatura pendente; o ML aceita 5 consultas por minuto)
     async function ftLerAgora(bt){
-      if(bt){ bt.disabled = true; bt.textContent = 'Lendo…'; }
+      if(ft.lendo) return;
+      ft.lendo = true;
+      if(bt){ bt.style.pointerEvents = 'none'; bt.textContent = 'Lendo a fatura…'; }
       let r = null;
-      try { r = await supa.functions.invoke('ml-fatura', { body: { acao: 'sync' } }); } catch(e){}
-      ft.sitEm = 0;
+      // o ML aceita 5 consultas por minuto: a primeira chamada pede a releitura e as seguintes continuam de onde parou
+      for(let i = 0; i < 12; i++){
+        try { r = await supa.functions.invoke('ml-fatura', { body: { acao: 'sync', forcar: i === 0 } }); } catch(e){ r = null; }
+        const C = (r && r.data && r.data.contas) || [], falta = C.some(c => Number(c.pendentes) > 0 || c.limite);
+        if(!r || !r.data || !falta) break;
+        if(bt && bt.isConnected) bt.textContent = 'Lendo a fatura… (leva alguns minutos, pode continuar usando)';
+        await new Promise(ok => setTimeout(ok, 62000));
+      }
+      ft.lendo = false; ft.sitEm = 0;
       if(typeof dreDados !== 'undefined'){ dreDados.chave = null; if(typeof renderDREAnual === 'function') await renderDREAnual(); }
-      if(bt){ bt.disabled = false; bt.textContent = 'Ler a fatura agora'; }
+      if(bt && bt.isConnected){ bt.style.pointerEvents = ''; bt.textContent = 'Atualizar agora'; }
       return r && r.data;
     }

@@ -60,7 +60,9 @@ Deno.serve(async (req: Request) => {
         let periodos: any[] = await db(`ml_fatura_periodos?${chave}&select=*&order=periodo.desc`).then(r => r.json()).catch(() => [])
         if (!Array.isArray(periodos)) periodos = []
         const ultimaLista = periodos.reduce((m, p) => Math.max(m, p.lido_em ? Date.parse(p.lido_em) : 0), 0)
-        const precisaLista = !periodos.length || Date.now() - ultimaLista > 20 * 3600000
+        // botão "Atualizar agora" da tela: relê a fatura aberta sem esperar a madrugada (no máximo uma vez a cada 10 minutos)
+        const forcar = body?.forcar === true && body?.cron !== true && Date.now() - ultimaLista > 600000
+        const precisaLista = !periodos.length || forcar || Date.now() - ultimaLista > 20 * 3600000
         const pendente = periodos.some(p => !p.completo)
         if (!precisaLista && !pendente) { info.pendentes = 0; continue }
 
