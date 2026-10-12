@@ -114,8 +114,17 @@ Deno.serve(async (req: Request) => {
     // apaga uma campanha inteira (o front pede confirmação digitada)
     if (body?.acao === 'campanha_excluir') {
       const id = idCamp(body?.id); if (!id) return resp({ error: 'Campanha inválida.' }, 400)
-      const r = await chama('DELETE', `${ML}/seller-promotions/promotions/${id}?promotion_type=SELLER_CAMPAIGN&app_version=v2`)
-      return resp(r.ok ? { ok: true } : { ok: false, motivo: r.erro })
+      const urlCamp = ML + '/seller-promotions/promotions/' + id + '?promotion_type=SELLER_CAMPAIGN&app_version=v2'
+      // o Mercado Livre só apaga a campanha vazia: a primeira chamada tira os anúncios dela, a segunda apaga. Confere no fim.
+      let ultimo = ''
+      for (let k = 0; k < 4; k++) {
+        const r = await chama('DELETE', urlCamp)
+        if (!r.ok) ultimo = String(r.erro || '')
+        await new Promise(res => setTimeout(res, 1500))
+        const c: any = await g(urlCamp)
+        if (c && c.status === 'deleted') return resp({ ok: true })
+      }
+      return resp({ ok: false, motivo: ultimo || 'o Mercado Livre não confirmou a exclusão; tente de novo em um minuto' })
     }
     // põe (ou atualiza o preço de) anúncios numa campanha e tira os pedidos: { id, por: [{ item, preco }], tirar: [item] } — até 40 por chamada
     if (body?.acao === 'campanha_gravar') {

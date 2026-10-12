@@ -8,7 +8,9 @@
     let pc = { conta: '', anuncios: null, busca: '', aberto: {}, camps: null, sit: 'started', ed: null, lendo: '', base: {} };
     const PC_SIT = { pending: 'Para começar', started: 'Em andamento', finished: 'Encerrada', deleted: 'Excluída' };
     const PC_SUB = { FLEXIBLE_PERCENTAGE: 'Porcentagem flexível', FIXED_PERCENTAGE: 'Porcentagem fixa' };
-    const pcDia = s => s ? ptDate(String(s).substring(0, 10)) : '';
+    // datas do Mercado Livre vêm em horário universal (…Z): 23:59 de Brasília aparece como 02:59 do dia seguinte
+    const pcISO = s => { if(!s) return ''; const t = String(s); if(!/Z$|[+-]\d{2}:?\d{2}$/.test(t)) return t.substring(0, 10); const d = new Date(new Date(t).getTime() - 3 * 3600000); return isNaN(d) ? t.substring(0, 10) : d.toISOString().substring(0, 10); };
+    const pcDia = s => s ? ptDate(pcISO(s)) : '';
     const pcR = v => Math.round(Number(v) * 100) / 100;
     function pcAbas(){
       const a = pm.aba || 'ml';
@@ -114,7 +116,7 @@
       const dentro = d.itens.filter(x => x.situacao === 'started' || x.situacao === 'pending'), cand = d.itens.filter(x => x.situacao === 'candidate');
       await pcBase(d.itens.map(x => x.item));
       const antes = {}; dentro.forEach(x => { antes[x.item] = x.preco; });
-      pc.ed = { id, nome: d.campanha.nome, inicio: String(d.campanha.inicio).substring(0, 10), fim: String(d.campanha.fim).substring(0, 10), sub: d.campanha.sub || 'FLEXIBLE_PERCENTAGE', pct_fixa: d.campanha.pct_fixa || '', situacao: d.campanha.situacao,
+      pc.ed = { id, nome: d.campanha.nome, inicio: pcISO(d.campanha.inicio), fim: pcISO(d.campanha.fim), sub: d.campanha.sub || 'FLEXIBLE_PERCENTAGE', pct_fixa: d.campanha.pct_fixa || '', situacao: d.campanha.situacao,
         linhas: dentro.map(x => pcLinha(x.item, x.original, x.preco)), antes, candidatos: cand.map(x => ({ item: x.item, original: x.original, minimo: x.minimo, maximo: x.maximo, sugerido: x.sugerido })), busca: '' };
       pcDesenhar();
     }
@@ -123,7 +125,7 @@
       const o = (pc.camps || []).find(x => x.id === id); if(!o) return;
       pc.lendo = 'Preparando a cópia…'; pcDesenhar();
       await pcBase((o.itens || []).map(x => x.item));
-      const ini0 = new Date(String(o.inicio).substring(0, 10) + 'T12:00:00'), ini = new Date(ini0.getFullYear(), ini0.getMonth() + 1, 1), fim = new Date(ini.getFullYear(), ini.getMonth() + 1, 0), hoje = getToday();
+      const ini0 = new Date(pcISO(o.inicio) + 'T12:00:00'), ini = new Date(ini0.getFullYear(), ini0.getMonth() + 1, 1), fim = new Date(ini.getFullYear(), ini.getMonth() + 1, 0), hoje = getToday();
       const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], nomeMes = meses.findIndex(m => m.toLowerCase() === String(o.nome).trim().toLowerCase());
       pc.lendo = '';
       pc.ed = { id: null, copiaDe: o.nome, nome: nomeMes >= 0 ? meses[ini.getMonth()] : (String(o.nome) + ' (cópia)').slice(0, 25), inicio: dateStr(ini) < hoje ? hoje : dateStr(ini), fim: dateStr(fim), sub: o.sub || 'FLEXIBLE_PERCENTAGE', pct_fixa: o.pct_fixa || '', situacao: '', antes: {}, candidatos: null, busca: '',
