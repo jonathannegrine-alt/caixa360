@@ -53,15 +53,28 @@
       emp.todos.forEach(c => empContas(c).forEach(p => { if(vistos.has(p) || String(p.data || '').slice(0, 7) !== ym) return; vistos.add(p); if(dreGrupoDe(p.cat) === 'fora') t += Number(p.val) || 0; }));
       return t;
     }
+    const gfEhPrincipal = p => !/juros/i.test(p.cat || '') && /amortiza|empr[eé]stimo|capital de giro|financiamento/i.test(p.cat || '');
+    // contas do mês que saem do caixa e não estão no DRE: devolução de empréstimo lançada só em Contas a pagar e retirada dos sócios
+    function gfForaDoDre(ym){
+      const P = (typeof pagTodos === 'function' ? pagTodos() : (typeof pagamentos !== 'undefined' ? pagamentos : [])).filter(p => String(p.data || '').slice(0, 7) === ym && dreGrupoDe(p.cat) === 'fora');
+      const soma = f => P.filter(f).reduce((s, p) => s + (Number(p.val) || 0), 0), semContrato = typeof emp === 'undefined' || !emp.todos || !emp.todos.length;
+      return { parcelas: semContrato ? soma(gfEhPrincipal) : 0, retirada: soma(p => /retirada|pr[oó][- ]?labore|distribui[cç][aã]o de lucro/i.test(p.cat || '')) };
+    }
+    // cobranças da fatura do ML no mês (publicidade, Full, DIFAL, mensalidade): acompanham a venda, então saem da margem
+    function gfFaturaMes(ym){
+      const ano = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)), ml = gf.anos[ano] || {};
+      if(typeof ftVale !== 'function' || !ftVale(ml, m)) return 0;
+      return Object.values(ml[m].ft || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    }
 
     // ---------- ponto de equilíbrio por dia ----------
     function gfEquilibrio(){
-      const hoje = getToday(), ym = hoje.slice(0, 7), M = gfMes(ym), diasMes = gfUltDia(ym), parcelas = gfParcelas(ym);
-      const precisa = M.fixo + M.variavel + parcelas;
+      const hoje = getToday(), ym = hoje.slice(0, 7), M = gfMes(ym), diasMes = gfUltDia(ym), F = gfForaDoDre(ym), parcelas = gfParcelas(ym) + F.parcelas, retirada = F.retirada, fatura = gfFaturaMes(ym);
+      const precisa = M.fixo + M.variavel + parcelas + retirada;
       // margem das vendas (já sem tarifa, frete, imposto e custo) nos dias fechados do mês
-      const fechados = (gf.dias || []).filter(d => String(d.dia).slice(0, 10) < hoje), mcAcum = fechados.reduce((s, d) => s + Number(d.mc || 0), 0), n = Number(hoje.slice(8, 10)) - 1;
+      const fechados = (gf.dias || []).filter(d => String(d.dia).slice(0, 10) < hoje), n = Number(hoje.slice(8, 10)) - 1, mcAcum = fechados.reduce((s, d) => s + Number(d.mc || 0), 0) - (n > 0 ? fatura : 0);
       const porDia = n > 0 ? mcAcum / n : 0, meta = precisa / diasMes;
-      return { ym, precisa, fixo: M.fixo, variavel: M.variavel, parcelas, diasMes, n, mcAcum, porDia, meta, projecao: porDia * diasMes - precisa };
+      return { ym, precisa, fixo: M.fixo, variavel: M.variavel, parcelas, retirada, fatura, diasMes, n, mcAcum, porDia, meta, projecao: porDia * diasMes - precisa };
     }
 
     // ---------- custo da dívida ----------
@@ -90,7 +103,7 @@
       if(!lista.length){
         const P = typeof pagTodos === 'function' ? pagTodos() : (typeof pagamentos !== 'undefined' ? pagamentos : []);
         const txt = p => (p.cat || '') + ' ' + (p.desc || ''), ehJuros = p => /juros/i.test(txt(p)) && !/juros de mora|multa/i.test(p.cat || '');
-        const ehPrincipal = p => !/juros/i.test(p.cat || '') && /amortiza|empr[eé]stimo|capital de giro|financiamento/i.test(p.cat || '');
+        const ehPrincipal = gfEhPrincipal;
         const nomes = new Set();
         P.forEach(p => {
           if(ehJuros(p) && String(p.data || '').slice(0, 7) === ym) juros += Number(p.val) || 0;
@@ -108,7 +121,7 @@
       const eq = `<div class="card gf-card"><div class="card-header"><div class="card-title">Ponto de equilíbrio de ${gfMesNome(E.ym).split(' de ')[0]}</div><span class="text-muted" style="font-size:12px;">margem das vendas por dia</span></div>
         <div class="gf-eq"><div><small>Precisa por dia</small><b>${fmt(E.meta)}</b></div><div><small>Está fazendo</small><b style="color:${cor(E.porDia - E.meta)}">${E.n > 0 ? fmt(E.porDia) : '—'}</b></div><div><small>Projeção do mês</small><b style="color:${cor(E.projecao)}">${E.n > 0 ? fmt(E.projecao) : '—'}</b></div></div>
         <div class="gf-barra"><i style="width:${pct}%;background:${cor(E.porDia - E.meta)}"></i></div>
-        <div class="text-muted gf-nota">Para pagar ${fmt(E.precisa)} no mês: despesas fixas ${fmt(E.fixo)}${E.variavel ? ', outras despesas ' + fmt(E.variavel) : ''}${E.parcelas ? ' e parcelas de empréstimo ' + fmt(E.parcelas) : ''}. ${E.n > 0 ? 'Até ontem a margem somou ' + fmt(E.mcAcum) + ' em ' + E.n + ' dia' + (E.n > 1 ? 's' : '') + '.' : 'O mês começa hoje.'}</div></div>`;
+        <div class="text-muted gf-nota">Para pagar ${fmt(E.precisa)} no mês: despesas fixas ${fmt(E.fixo)}${E.variavel ? ', outras despesas ' + fmt(E.variavel) : ''}${E.parcelas ? ', parcelas de empréstimo ' + fmt(E.parcelas) : ''}${E.retirada ? ', retirada dos sócios ' + fmt(E.retirada) : ''}. ${E.n > 0 ? 'Até ontem a margem somou ' + fmt(E.mcAcum) + ' em ' + E.n + ' dia' + (E.n > 1 ? 's' : '') + (E.fatura ? ', já sem ' + fmt(E.fatura) + ' de publicidade, Full e outras cobranças da fatura do Mercado Livre' : '') + '.' : 'O mês começa hoje.'}</div></div>`;
       const cobre = V.juros > 0 ? V.lucroAnt / V.juros : null;
       const dv = V.contratos || V.juros > 0 || (V.parado && V.parado.valor > 0) ? `<div class="card gf-card"><div class="card-header"><div class="card-title">Custo da dívida</div><span class="text-muted" style="font-size:12px;" ${V.doPagar ? 'title="Lido de Contas a pagar: categorias de juros e de amortização de empréstimo. Cadastrando os contratos em Financeiro → Empréstimos, passa a valer o cadastro."' : ''}>${V.contratos} ${V.doPagar ? 'empréstimo' : 'contrato'}${V.contratos === 1 ? '' : 's'} · ${V.doPagar ? 'a pagar' : 'saldo'} ${fmt(V.saldo)}${V.doPagar ? ' · de Contas a pagar' : ''}</span></div>
         <div class="gf-eq"><div><small>Juros neste mês</small><b style="color:var(--danger)">${fmt(V.juros)}</b></div><div><small title="Só o que passa de 90 dias de venda de cada produto, a preço de custo. Não é o estoque inteiro.">Estoque além de 90 dias</small><b>${V.parado ? fmt(V.parado.valor) : '—'}</b></div><div><small>Lucro de ${gfMesNome(V.mesAnt).split(' de ')[0]}</small><b style="color:${cor(V.lucroAnt)}">${fmt(V.lucroAnt)}</b></div></div>
