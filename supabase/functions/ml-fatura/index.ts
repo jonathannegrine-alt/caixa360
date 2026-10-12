@@ -3,7 +3,7 @@
 // O DRE soma por mês do dia da cobrança: a competência sai exata mesmo com a fatura indo do dia 23 ao dia 22.
 //
 // A API de faturamento aceita só 5 consultas por minuto por conta. Por isso a função trabalha aos poucos:
-// cada chamada faz no máximo 4 consultas ao todo e guarda onde parou (ml_fatura_periodos.prox).
+// cada chamada faz no máximo 4 consultas por conta e guarda onde parou (ml_fatura_periodos.prox).
 //   cron (a cada minuto)   body { cron: true, secret }   → todas as contas com algo a ler
 //   tela                 body { acao: 'sync' } + JWT    → as contas do usuário (a tela repete até acabar)
 // Passos por conta:  1) lista de faturas (1 vez por dia)   GET /billing/integration/monthly/periods
@@ -44,16 +44,16 @@ Deno.serve(async (req: Request) => {
     const tiposRows = await db('ml_fatura_tipos?select=sub_type,classe').then(r => r.json()).catch(() => [])
     const tipos = new Map<string, string>((Array.isArray(tiposRows) ? tiposRows : []).map((t: any) => [String(t.sub_type), String(t.classe)]))
     const inicio = Date.now(), saida: any[] = []
-    // o limite de 5 consultas por minuto parece valer para o aplicativo inteiro: o orçamento é da chamada toda,
-    // e a cada minuto a fila começa por uma conta diferente
-    let usadas = 0, limite = false
+    // o limite é de 5 consultas por minuto por conta (na prática algumas contas travam antes): cada conta tem o seu
+    // orçamento, quem bate no limite só espera a próxima rodada, e a cada minuto a fila começa por uma conta diferente
     const gira = Math.floor(Date.now() / 60000) % contas.length
     const fila = [...contas.slice(gira), ...contas.slice(0, gira)]
 
     for (const t of fila) {
-      if (Date.now() - inicio > 100000 || limite || usadas >= POR_CHAMADA) break
+      if (Date.now() - inicio > 100000) break
       const conta = String(t.ml_user_id), uid = String(t.usuario_id), chave = `usuario_id=eq.${uid}&ml_user_id=eq.${conta}`
       const info: any = { conta, consultas: 0 }
+      let usadas = 0, limite = false
       saida.push(info)
       try {
         let periodos: any[] = await db(`ml_fatura_periodos?${chave}&select=*&order=periodo.desc`).then(r => r.json()).catch(() => [])
@@ -115,7 +115,7 @@ Deno.serve(async (req: Request) => {
               const d = await ml(`/periods/key/${p.periodo}/group/ML/details?document_type=BILL&limit=1&offset=0&detail_sub_types=${encodeURIComponent(n)}`)
               if (!d) { faltou = true; break }
               const l = (d.results || [])[0]
-              const classe = l && (l.sales_info || l.shipping_info || l.items_info) ? 'venda' : 'outros'
+              const classe = l && (l.sales_info || l.shipping_info) ? 'venda' : 'outros'
               const rot = [...(b.charges || []), ...(b.bonuses || [])].find((c: any) => c.type === n)?.label
               tipos.set(n, classe)
               await db('ml_fatura_tipos?on_conflict=sub_type', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify([{ sub_type: n, rotulo: (l?.charge_info?.transaction_detail || (rot && rot !== n ? rot : null) || n), classe }]) })
