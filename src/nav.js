@@ -37,7 +37,7 @@
       if(page === 'inicio') renderInicio();
       else if(page === 'dashboard') renderDashboard();
       else if(page === 'planilha'){ if(planilhaViewMode==='cal') renderPlanilhaCal(); else renderPlanilha(); }
-      else if(page === 'pagar') renderPagar();
+      else if(page === 'pagar'){ if(typeof pagarMesSel !== 'undefined') pagarMesSel = ''; if(typeof pagarFiltro === 'function') pagarFiltro('mescal', ''); else renderPagar(); }
       else if(page === 'simulador') renderFormSimulador();
       else if(page === 'skus') setSkuTab(skuCurrentTab || 'lista');
       else if(page === 'estoque'){ if(typeof estRender === 'function') estRender(); else renderEstoque(); }

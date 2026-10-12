@@ -1009,7 +1009,7 @@ input[type="checkbox"]{accent-color:var(--primary);}
 .cp-sel-barra{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;background:color-mix(in srgb,var(--primary) 10%,var(--surface));border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:13px;position:sticky;top:0;z-index:5;}
 
 /* contraste sutil entre linhas e colunas das tabelas */
-.rf-table tbody tr:nth-child(even) td,.fx-table tbody tr:nth-child(even) td,.cp-tab tbody tr:nth-child(even) td,.dre-tab tbody tr:nth-child(even):not(.dre-res):not(.dre-entrada):not(.dre-saida):not(.dre-grupo) td{background:color-mix(in srgb,var(--text) 6.5%,transparent);}
+.rf-table tbody tr:nth-child(even) td,.fx-table tbody tr:nth-child(even) td,.cp-tab tbody tr:nth-child(even) td,.dre-tab tbody tr:nth-child(even):not(.dre-res):not(.dre-entrada):not(.dre-saida):not(.dre-grupo) td{background:color-mix(in srgb,var(--text) 9.5%,transparent);}
 .rf-table td+td,.rf-table th+th,.fx-table td+td,.fx-table th+th,.dre-tab td+td,.dre-tab th+th{border-left:1px solid color-mix(in srgb,var(--text) 11%,transparent);}
 .rf-table tbody tr:hover td,.fx-table tbody tr:hover td,.cp-tab tbody tr:hover td{background:color-mix(in srgb,var(--primary) 7%,transparent);}
 .venda:nth-of-type(even){background:color-mix(in srgb,var(--text) 6%,var(--surface));}
@@ -1030,7 +1030,7 @@ a.pv-venda{font-weight:700;color:var(--primary);text-decoration:none;border-bott
 a.pv-venda:hover{border-bottom-style:solid;}
 
 /* linhas alternadas também nas tabelas comuns e nas listas de contas */
-.card table:not(.dre-tab):not(.rf-table):not(.fx-table):not(.cp-tab) tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--text) 5%,transparent);}
+.card table:not(.dre-tab):not(.rf-table):not(.fx-table):not(.cp-tab) tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--text) 8%,transparent);}
 .ap-row:nth-of-type(even){background:color-mix(in srgb,var(--text) 4.5%,var(--surface));}
 .card table tbody td{border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent);}
 /* carregando */
@@ -1386,3 +1386,27 @@ tr.cat-linha td:first-child{border-left:5px solid color-mix(in srgb,var(--cor) 3
 .pc-in{width:96px;text-align:right;padding:5px 8px;}
 .pc-in-p{width:62px;}
 .pc-in.ruim{border-color:var(--danger);}
+
+/* ---------- rodada de 12/10: tabelas, calendários e cor do projetado ---------- */
+/* colunas ajustáveis: a borda direita do título vira alça */
+thead th{position:relative;}
+thead th::after{content:"";position:absolute;top:22%;bottom:22%;right:0;width:1px;background:color-mix(in srgb,currentColor 22%,transparent);pointer-events:none;}
+body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-select:none !important;}
+/* tarja do saldo (Fluxo de caixa e A receber): mesmo tamanho em todas as linhas */
+.fx-acum .fx-bar{width:150px !important;left:auto;right:8px;border-radius:6px;}
+.rc-val .rc-bar{width:130px !important;}
+/* Resumo financeiro: linha de títulos destacada */
+.rf-table thead th{background:#1f2547 !important;color:#fff !important;border-color:rgba(255,255,255,.14) !important;}
+.rf-table thead th *{color:inherit;}
+:root[data-theme="dark"] .rf-table thead th{background:#2a3160 !important;}
+/* calendários: linhas de divisão visíveis em todos os dias e nome do feriado sempre à mostra */
+.cal-grid{gap:1px !important;background:color-mix(in srgb,var(--text) 24%,var(--surface)) !important;border:1px solid color-mix(in srgb,var(--text) 24%,var(--surface));}
+.cal-day,.cal-header{background-clip:padding-box;}
+.cal-header{background:var(--surface-2);}
+.cal-day .cal-day-num{display:flex;align-items:center;gap:5px;min-width:0;overflow:visible;white-space:nowrap;}
+.cal-day .cal-day-num .cal-feriado{flex:0 1 auto;min-width:0;margin-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* projetado: âmbar em todo lugar (verde = confirmado, vermelho = saída, azul = saldo) */
+:root{--proj:#d97706;} :root[data-theme="dark"]{--proj:#fbbf24;}
+.cal-valor-proj{color:var(--proj) !important;}
+.fx-proj{color:var(--proj) !important;}
+.pc-proj{fill:var(--proj) !important;opacity:.6 !important;}

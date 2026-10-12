@@ -69,7 +69,7 @@
         html += `<tr style="${corLinha}">
           <td style="${td}">${ptDate(d.data)}</td>
           <td style="${td};color:var(--success);">${d.conf>0?fmt(d.conf):'—'}</td>
-          <td style="${td};color:${simModoProj==='conf'?'#ccc':'#0891b2'};">${d.proj>0?(simModoProj==='conf'?'—':fmt(d.proj)):'—'}</td>
+          <td style="${td};color:${simModoProj==='conf'?'#ccc':'var(--proj)'};">${d.proj>0?(simModoProj==='conf'?'—':fmt(d.proj)):'—'}</td>
           <td style="${td};color:var(--danger);">${d.pag>0?fmt(d.pag):'—'}</td>
           <td style="${td};padding:2px 4px;">
             <input type="text" value="${d.compra>0?fmtMoney(d.compra):''}"

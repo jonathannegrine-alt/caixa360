@@ -126,7 +126,7 @@
             <div class="pc-legenda">
               <span><i style="background:#6366f1"></i>Saldo projetado</span>
               <span><i style="background:#10b981"></i>Entrada confirmada ML</span>
-              ${planilhaMode !== 'confirmado' ? '<span><i style="background:#10b981;opacity:.4"></i>Entrada projetada</span>' : ''}
+              ${planilhaMode !== 'confirmado' ? '<span><i style="background:var(--proj)"></i>Entrada projetada</span>' : ''}
               <span><i style="background:#ef4444"></i>Contas a pagar</span>
               ${reserva > 0 ? '<span><i style="background:#f59e0b"></i>Reserva mínima</span>' : ''}
               <span class="text-muted" style="margin-left:auto;">Passe o mouse no gráfico para ver cada dia</span>
@@ -156,7 +156,7 @@
         <div class="tot" style="border-top:0;margin-top:2px;padding-top:0;"><span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#6366f1;margin-right:6px;"></i>Saldo projetado</span><span style="color:${d.saldo < 0 ? 'var(--danger)' : '#6366f1'}">${fmt(d.saldo)}</span></div>
         ${var1 == null ? '' : `<div><span>Variação no dia</span><span style="color:${var1 < 0 ? 'var(--danger)' : 'var(--success)'}">${var1 < 0 ? '− ' : '+ '}${fmt(Math.abs(var1))}</span></div>`}
         <div><span>Entrada confirmada</span><span style="color:var(--success)">${fmt(d.conf)}</span></div>
-        ${d.proj > 0 ? `<div><span>Entrada projetada</span><span style="color:var(--success)">${fmt(d.proj)}</span></div>` : ''}
+        ${d.proj > 0 ? `<div><span>Entrada projetada</span><span style="color:var(--proj)">${fmt(d.proj)}</span></div>` : ''}
         <div><span>Contas a pagar</span><span style="color:var(--danger)">${fmt(d.saida)}</span></div>`;
       tip.style.display = 'block';
       const px = xc / g.W * r.width;
