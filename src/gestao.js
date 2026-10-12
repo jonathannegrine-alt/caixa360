@@ -123,7 +123,15 @@
     // ---------- venda perdida ----------
     function gsRupturaLinhas(){
       const hoje = getToday(), out = [];
+      // junta os anúncios do mesmo produto: venda que só mudou de um anúncio para outro não é venda perdida
+      const porSku = new Map();
       (gs.rupt || []).forEach(it => {
+        const k = (it.conta || '') + '|' + String(it.sku || it.item_id).trim().toLowerCase(), o = porSku.get(k);
+        if(!o){ porSku.set(k, { ...it, dias: { ...(it.dias || {}) }, anuncios: 1, un: Number(it.un) || 0 }); return; }
+        o.anuncios++; if((Number(it.un) || 0) > o.un){ o.un = Number(it.un); o.titulo = it.titulo; o.thumbnail = it.thumbnail; o.item_id = it.item_id; o.logistica = it.logistica; }
+        Object.keys(it.dias || {}).forEach(d => { const a = o.dias[d], b = it.dias[d]; o.dias[d] = a ? [Number(a[0]) + Number(b[0]), Number(a[1]) + Number(b[1]), Number(a[2]) + Number(b[2]), a[3] == null ? b[3] : (b[3] == null ? a[3] : Math.min(Number(a[3]), Number(b[3])))] : b; });
+      });
+      [...porSku.values()].forEach(it => {
         const dias = it.dias || {}, ks = Object.keys(dias).sort(); if(ks.length < 10) return;
         const un = ks.reduce((s, k) => s + Number(dias[k][0]), 0), bruto = ks.reduce((s, k) => s + Number(dias[k][1]), 0), mc = ks.reduce((s, k) => s + Number(dias[k][2]), 0);
         // dia parado = vendeu menos de um quarto do ritmo (mediana dos 14 dias normais anteriores); o que faltou é a perda
@@ -133,14 +141,14 @@
           const ord = recentes.slice().sort((a, b) => a - b), ritmo = ord.length >= 7 ? ord[Math.floor(ord.length / 2)] : 0;
           if(ritmo >= 3 && unDia < ritmo * 0.25){
             if(!atual){ const ant = dias[addDias(d, -1)]; atual = { de: d, n: 0, ritmo, falta: 0, zerou: !!(ant && ant[3] != null && Number(ant[3]) <= ritmo) }; }
-            atual.n++; atual.ate = d; atual.falta += ritmo - unDia;
+            if(atual.n < 14){ atual.n++; atual.ate = d; atual.falta += ritmo - unDia; } else { atual.longa = true; }
           } else {
-            if(atual){ buracos.push(atual); atual = null; }
+            if(atual){ buracos.push(atual); atual = null; if(buracos[buracos.length - 1].longa) recentes = []; }
             if(x){ recentes.push(unDia); if(recentes.length > 14) recentes.shift(); }
           }
           d = addDias(d, 1);
         }
-        if(atual){ atual.aberto = true; buracos.push(atual); }
+        if(atual){ atual.aberto = !atual.longa; buracos.push(atual); }
         if(!buracos.length) return;
         const diasSem = buracos.reduce((s, b) => s + b.n, 0), unPerd = buracos.reduce((s, b) => s + b.falta, 0), ult = buracos[buracos.length - 1];
         out.push({ ...it, diasSem, unPerd, vPerd: un ? unPerd * bruto / un : 0, mcPerd: un ? unPerd * mc / un : 0, vezes: buracos.length, ult, aberto: !!ult.aberto, confirmado: buracos.some(b => b.zerou) });
@@ -155,12 +163,12 @@
         <div class="kpi-grid k4i">
           ${anKpi('k-atraso', 'Venda perdida em 90 dias', fmt(T.v), 'estimativa pelos dias quase sem venda')}
           ${anKpi('k-mc', 'Margem que deixou de entrar', fmt(T.mc), 'pela margem média de cada anúncio')}
-          ${anKpi('k-venda', 'Dias parados', anN(T.d), 'somando ' + L.length + ' anúncio' + (L.length === 1 ? '' : 's'))}
-          ${anKpi('k-hoje', 'Parados agora', String(abertos.length), abertos.length ? 'quase sem venda até ontem' : 'nenhum anúncio forte parado')}
+          ${anKpi('k-venda', 'Dias parados', anN(T.d), 'somando ' + L.length + ' produto' + (L.length === 1 ? '' : 's'))}
+          ${anKpi('k-hoje', 'Parados agora', String(abertos.length), abertos.length ? 'quase sem venda até ontem' : 'nenhum produto forte parado')}
         </div>
-        <div class="card"><div class="card-header"><div class="card-title">Anúncios que vendem todo dia e pararam</div></div>
+        <div class="card"><div class="card-header"><div class="card-title">Produtos que vendem todo dia e pararam</div></div>
         ${anTabela(L, [
-          { k: 'titulo', t: 'Anúncio', fmt: l => gsAnuncio(l, l.logistica === 'fulfillment' ? ' · Full' : '') },
+          { k: 'titulo', t: 'Produto', fmt: l => gsAnuncio(l, (l.anuncios > 1 ? ' e mais ' + (l.anuncios - 1) + ' anúncio' + (l.anuncios > 2 ? 's' : '') : '') + (l.logistica === 'fulfillment' ? ' · Full' : '')) },
           { k: 'diasSem', t: 'Dias parados', num: 1, fmt: l => '<b>' + l.diasSem + '</b> <small class="text-muted">em ' + l.vezes + ' vez' + (l.vezes > 1 ? 'es' : '') + '</small>' },
           { k: 'ult', t: 'Última parada', val: l => l.ult.de, fmt: l => ptDate(l.ult.de) + (l.ult.n > 1 ? ' a ' + ptDate(l.ult.ate) : '') + (l.aberto ? ' <span class="text-danger"><b>· ainda parado</b></span>' : '') + (l.ult.zerou ? '<br><small class="text-muted">estoque do anúncio estava no fim</small>' : '') },
           { k: 'ritmo', t: 'Vendia por dia', num: 1, val: l => l.ult.ritmo, fmt: l => anN(l.ult.ritmo) + ' un.' },
@@ -168,7 +176,7 @@
           { k: 'vPerd', t: 'Venda perdida', num: 1, fmt: l => '<b>' + fmt(l.vPerd) + '</b>' },
           { k: 'mcPerd', t: 'Margem perdida', num: 1, fmt: l => `<b style="color:var(--danger)">${fmt(l.mcPerd)}</b>` }
         ], 'mcPerd')}
-        <div class="text-muted" style="font-size:12px;padding:12px 18px;">É uma estimativa. Dia parado é aquele em que o anúncio vendeu menos de um quarto do que vinha vendendo (mediana dos 14 dias normais anteriores, para anúncios de pelo menos 3 unidades por dia). O motivo pode ser falta de estoque, anúncio pausado ou perda de posição: o sistema não diferencia. As unidades perdidas são o que faltou para chegar ao ritmo de antes em cada dia parado. A partir de agora o sistema grava o estoque do anúncio depois de cada venda; quando a parada vier logo depois de o estoque chegar ao fim, a linha avisa.</div></div>`;
+        <div class="text-muted" style="font-size:12px;padding:12px 18px;">É uma estimativa. Os anúncios do mesmo SKU são somados. Dia parado é aquele em que o produto vendeu menos de um quarto do que vinha vendendo (mediana dos 14 dias normais anteriores, para produtos de pelo menos 3 unidades por dia). Uma parada conta no máximo 14 dias: depois disso o sistema entende que o produto saiu de linha. O motivo pode ser falta de estoque, anúncio pausado ou perda de posição: o sistema não diferencia. As unidades perdidas são o que faltou para chegar ao ritmo de antes em cada dia parado. A partir de agora o sistema grava o estoque do anúncio depois de cada venda; quando a parada vier logo depois de o estoque chegar ao fim, a linha avisa.</div></div>`;
     }
 
     // ---------- alerta no Início (lê o último cálculo de lucro guardado neste navegador) ----------
