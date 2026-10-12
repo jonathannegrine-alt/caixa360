@@ -80,6 +80,7 @@
       const el = document.getElementById('view-inicio');
       if(!el) return;
       inicioCarregarVendas();
+      if(typeof gfInicio === 'function') setTimeout(gfInicio, 0);
 
       const hoje = getToday(), agora = new Date();
       const h = agora.getHours();
@@ -191,6 +192,8 @@
             <div class="kpi-label">Saldo em caixa</div><div class="kpi-value">${fmt(saldoAtual)}</div>
             <div class="kpi-sub"><span>Em 30 dias <b>${fmt(fim30)}</b></span>${seta(saldoAtual ? (fim30 - saldoAtual) / Math.abs(saldoAtual) * 100 : null)}</div></div>
         </div></div>
+
+        <div id="ini-gestao">${typeof gf !== 'undefined' && gf.html ? gf.html : ''}</div>
 
         ${bloco('caixa', 'caixa projetado e avisos')}
         <div class="ini-grid">
