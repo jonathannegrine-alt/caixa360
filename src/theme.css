@@ -1436,3 +1436,12 @@ body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-sele
 .est-foto{overflow:visible !important;}
 /* centro de decisão: marcador colorido no lugar do emoji */
 .cd-marca{flex:none;width:10px;height:10px;border-radius:50%;margin-top:6px;}
+
+/* mapa do Brasil (Análise de vendas → Estados) */
+.an-mapa-br{max-width:520px;margin:0 auto;}
+.an-mapa-br svg{width:100%;height:auto;display:block;}
+.an-mapa-br path{fill:color-mix(in srgb,var(--primary) var(--f),var(--surface-2));stroke:var(--surface);stroke-width:1.2;cursor:pointer;transition:fill .12s;}
+.an-mapa-br path.vazio{fill:var(--surface-2);stroke:color-mix(in srgb,var(--text) 18%,transparent);}
+.an-mapa-br path:hover{stroke:var(--text);stroke-width:1.6;}
+.an-mapa-leg{display:flex;align-items:center;gap:8px;justify-content:center;font-size:11.5px;color:var(--text-muted);margin-top:8px;}
+.an-mapa-leg i{width:140px;height:9px;border-radius:5px;background:linear-gradient(90deg,color-mix(in srgb,var(--primary) 8%,var(--surface-2)),var(--primary));}

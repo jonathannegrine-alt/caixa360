@@ -272,6 +272,21 @@
       }
     }
 
+    // Troca do e-mail de acesso: o sistema manda um link de confirmação para o endereço novo e a troca só vale depois do clique.
+    async function trocarEmail(){
+      const inp = document.getElementById('novo-email'), msg = document.getElementById('msg-trocar-email'), novo = String(inp.value || '').trim().toLowerCase();
+      msg.style.color = '';
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(novo)){ msg.style.color = 'var(--danger)'; msg.textContent = 'Digite um e-mail válido.'; return; }
+      if(usuarioAtual && novo === String(usuarioAtual.email || '').toLowerCase()){ msg.style.color = 'var(--danger)'; msg.textContent = 'Este já é o seu e-mail de acesso.'; return; }
+      msg.textContent = 'Enviando…';
+      const { error } = await supa.auth.updateUser({ email: novo });
+      if(error){ msg.style.color = 'var(--danger)'; msg.textContent = 'Não consegui trocar: ' + error.message; return; }
+      msg.style.color = 'var(--success)';
+      msg.textContent = 'Enviamos um link de confirmação para ' + novo + '. A troca só vale depois que você clicar nele; até lá o acesso continua pelo e-mail atual.';
+      inp.value = '';
+    }
+    function mostrarEmailAtual(){ const e = document.getElementById('email-atual'); if(e && typeof usuarioAtual !== 'undefined' && usuarioAtual) e.textContent = usuarioAtual.email || '—'; }
+    document.addEventListener('click', ev => { const li = ev.target.closest && ev.target.closest('.nav-item'); if(li && /nav\('config'\)/.test(li.getAttribute('onclick') || '')) setTimeout(mostrarEmailAtual, 300); });
     async function trocarSenha(){
       const nova = document.getElementById('nova-senha').value;
       const confirmar = document.getElementById('confirmar-senha').value;

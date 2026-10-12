@@ -264,6 +264,15 @@
     // ----- estados -----
     // mapa em blocos: cada estado é um quadrado na posição aproximada dele no país (coluna, linha)
     const AN_MAPA = { RR:[1,0], AP:[2,0], AM:[0,1], PA:[1,1], MA:[2,1], CE:[3,1], RN:[4,1], AC:[0,2], RO:[1,2], TO:[2,2], PI:[3,2], PB:[4,2], MT:[1,3], GO:[2,3], BA:[3,3], PE:[4,3], MS:[1,4], DF:[2,4], MG:[3,4], AL:[4,4], SP:[2,5], ES:[3,5], SE:[4,5], PR:[2,6], RJ:[3,6], SC:[2,7], RS:[2,8] };
+    // mapa do Brasil desenhado (contornos em src/mapa-br.js); a cor mais forte é o estado que mais fatura
+    function anMapaSvg(por, max, tot){
+      if(typeof MAPA_BR === 'undefined') return '';
+      const ufs = Object.keys(MAPA_BR.uf);
+      return `<div class="an-mapa-br"><svg viewBox="${MAPA_BR.viewBox}" role="img" aria-label="Mapa do Brasil com o faturamento por estado">${ufs.map(uf => { const x = por[uf], f = x ? Math.sqrt(x.bruto / max) : 0;   // raiz: os estados menores não somem ao lado de SP
+          return `<path d="${MAPA_BR.uf[uf].d}" class="${x ? '' : 'vazio'}" style="--f:${(8 + f * 92).toFixed(0)}%;" onclick="anCidades('${uf}')"><title>${AN_UF[uf] || uf}${x ? ': ' + fmt(x.bruto) + ' · ' + anN(x.vendas) + ' vendas · ' + anP(x.bruto, tot) : ': sem vendas no período'}</title></path>`; }).join('')}</svg>
+        <div class="an-mapa-leg"><span>menos</span><i></i><span>mais faturamento</span></div>
+        <div class="text-muted" style="font-size:10.5px;margin-top:6px;">Passe o mouse num estado para ver o valor; clique para ver as cidades. Contornos: svg-maps (CC BY 4.0).</div></div>`;
+    }
     function anEstados(){
       if(!an.dados) return anVazio('Carregando os estados…');
       const todos = (an.dados.estados || []).map(x => ({ uf: x.uf, vendas: Number(x.vendas), un: Number(x.un), bruto: Number(x.bruto) }));
@@ -294,7 +303,7 @@
               ${com.map((x, i) => `<div class="an-uf an-est" onclick="anCidades('${x.uf}')"><b class="an-pos p${i < 3 ? i + 1 : 0}">${i + 1}</b><span class="an-uf-n"><b style="color:var(--text);">${AN_UF[x.uf]}</b><br>${anN(x.vendas)} vendas · ticket ${fmt(x.vendas ? x.bruto / x.vendas : 0)}</span><div class="an-uf-t"><i style="width:${Math.max(1, x.bruto / max * 100)}%"></i></div><span class="an-uf-v">${fmt(x.bruto)}</span><span class="an-uf-p">${anP(x.bruto, tot)}</span></div>`).join('')}
             </div></div></div>
           <div class="card"><div class="card-header"><div class="card-title">Mapa de vendas</div><span class="text-muted" style="font-size:12px;">quanto mais forte a cor, maior o faturamento</span></div>
-            <div class="card-body"><div class="an-mapa">${mapa}</div></div></div>
+            <div class="card-body">${anMapaSvg(por, max, tot) || '<div class="an-mapa">' + mapa + '</div>'}</div></div>
         </div>`;
     }
     // cidades de um estado (janela)

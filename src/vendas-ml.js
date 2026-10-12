@@ -962,7 +962,9 @@
         <div class="form-row">
           <div class="form-group"><label class="form-label">Data início</label><input type="date" id="aj-de" value="${rfFiltro.de}" onchange="rfAjLimpa()"></div>
           <div class="form-group"><label class="form-label">Data fim</label><input type="date" id="aj-ate" value="${rfFiltro.ate}" onchange="rfAjLimpa()"></div>
+          <div class="form-group"><label class="form-label" for="aj-envio">Tipo de envio</label><select id="aj-envio" onchange="rfAjLimpa()"><option value="">Todos</option><option value="full">Só Full</option><option value="ag">Só coleta e agência</option><option value="flex">Só Flex</option></select></div>
         </div>
+        <div class="text-muted" style="font-size:12px;margin-top:-4px;">O período e o tipo de envio já vêm do filtro da tela; mude aqui se quiser aplicar a outro recorte.</div>
         ${varias ? `<label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13px;margin-top:10px;"><input type="checkbox" id="aj-contas" style="width:auto;" ${contaAtiva ? '' : 'checked disabled'} onchange="rfAjLimpa()"> Realizar em todas as lojas${contaAtiva ? ' (desmarcado: só ' + vmlEsc(contaNome(contaAtiva)) + ')' : ''}</label>` : ''}`;
     }
     function rfAjOque(){
@@ -1019,7 +1021,7 @@
       const conta = g('aj-contas') && g('aj-contas').checked ? null : contaParam();
       const bo = g('aj-ok'), bc = g('aj-conf'); bo.disabled = bc.disabled = true;
       msg.innerHTML = '<div class="text-muted">' + (simular ? 'Conferindo…' : 'Aplicando…') + '</div>';
-      const { data, error } = await supa.rpc('vendas_ml_ajustar', { p_de: de, p_ate: ate, p_sku: sku || null, p_conta: conta,
+      const { data, error } = await supa.rpc('vendas_ml_ajustar', { p_envio: (g('aj-envio') && g('aj-envio').value) || null, p_de: de, p_ate: ate, p_sku: sku || null, p_conta: conta,
         p_custo_modo: cm, p_custo: c, p_imp_modo: im, p_imposto: i, p_so_vazias: vazias, p_simular: !!simular });
       if(!document.getElementById('aj-msg')) return;
       bo.disabled = bc.disabled = false;
