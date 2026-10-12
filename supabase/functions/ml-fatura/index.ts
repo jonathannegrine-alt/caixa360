@@ -3,7 +3,7 @@
 // O DRE soma por mês do dia da cobrança: a competência sai exata mesmo com a fatura indo do dia 23 ao dia 22.
 //
 // A API de faturamento aceita só 5 consultas por minuto por conta. Por isso a função trabalha aos poucos:
-// cada chamada faz no máximo 4 consultas por conta e guarda onde parou (ml_fatura_periodos.prox).
+// cada chamada faz no máximo 4 consultas ao todo e guarda onde parou (ml_fatura_periodos.prox).
 //   cron (a cada minuto)   body { cron: true, secret }   → todas as contas com algo a ler
 //   tela                 body { acao: 'sync' } + JWT    → as contas do usuário (a tela repete até acabar)
 // Passos por conta:  1) lista de faturas (1 vez por dia)   GET /billing/integration/monthly/periods
@@ -44,16 +44,17 @@ Deno.serve(async (req: Request) => {
     const tiposRows = await db('ml_fatura_tipos?select=sub_type,classe').then(r => r.json()).catch(() => [])
     const tipos = new Map<string, string>((Array.isArray(tiposRows) ? tiposRows : []).map((t: any) => [String(t.sub_type), String(t.classe)]))
     const inicio = Date.now(), saida: any[] = []
-    // o limite é de 5 consultas por minuto por conta (na prática algumas contas travam antes): cada conta tem o seu
-    // orçamento, quem bate no limite só espera a próxima rodada, e a cada minuto a fila começa por uma conta diferente
+    // medido em 12/10/2026: o limite de 5 consultas por minuto vale para o APLICATIVO inteiro, não por conta
+    // (a primeira conta da rodada usa 4 e as seguintes recebem 429). Por isso o orçamento é da chamada toda,
+    // e a cada minuto a fila começa por uma conta diferente.
+    let usadas = 0, limite = false
     const gira = Math.floor(Date.now() / 60000) % contas.length
     const fila = [...contas.slice(gira), ...contas.slice(0, gira)]
 
     for (const t of fila) {
-      if (Date.now() - inicio > 100000) break
+      if (Date.now() - inicio > 100000 || limite || usadas >= POR_CHAMADA) break
       const conta = String(t.ml_user_id), uid = String(t.usuario_id), chave = `usuario_id=eq.${uid}&ml_user_id=eq.${conta}`
       const info: any = { conta, consultas: 0 }
-      let usadas = 0, limite = false
       saida.push(info)
       try {
         let periodos: any[] = await db(`ml_fatura_periodos?${chave}&select=*&order=periodo.desc`).then(r => r.json()).catch(() => [])
