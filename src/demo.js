@@ -50,6 +50,7 @@
             const x = Object.assign({ order_id: 2000019000000000 + seq * 7919, item_id: it.item_id, sku: it.sku, qtd: q, preco_unit: it.preco, frete: Math.round(cobradoUn * q * 100) / 100, devido_un: devidoUn, dif, classe, base: full ? 'full' : 'anuncio',
               data_venda: d.toISOString(), ml_user_id: conta, logistic_type: tipo, peso_g: it.peso_g, ld: full ? it.lFull : it.lDecl, lp: it.lDecl, lm: full ? it.lFull : it.lDecl,
               ma: full ? it.ml_a : it.decl_a, ml: full ? it.ml_l : it.decl_l, mc: full ? it.ml_c : it.decl_c, mg: full ? it.ml_g : it.decl_g, mconta: full ? it.fullG : it.peso_g, bv: it.bv, versao: '2026-08-24', faixa_acima: null, linha_acima: null, u: cobradoUn }, extra || {});
+            x.base = full ? 'full' : 'anuncio';
             soma(classe, dif); const p = por[it.item_id] || (por[it.item_id] = { n_peso: 0, rs_peso: 0, n_preco: 0, rs_preco: 0, n_peso_menos: 0, rs_peso_menos: 0 });
             if(classe === 'peso'){ p.n_peso++; p.rs_peso += dif; } if(classe === 'preco'){ p.n_preco++; p.rs_preco += dif; } if(classe === 'peso_menos'){ p.n_peso_menos++; p.rs_peso_menos -= dif; }
             (dif > 0 ? lista : menos).push(x);
@@ -58,12 +59,12 @@
           // faixa de peso acima da medida do Full (anúncio com embalagem de envio maior que a medida)
           I.filter(it => it.lDecl > it.lFull).forEach((it, i) => { for(let n = 0; n < Math.round([150, 110, 90, 70][i % 4] * k); n++) venda(it, 'peso', n % 9 === 0 ? 2 : 1, T[it.bv][it.lDecl], T[it.bv][it.lFull], { ld: it.lFull, lm: it.lFull, linha_acima: it.lDecl, base: 'full', logistic_type: 'fulfillment', ma: it.ml_a, ml: it.ml_l, mc: it.ml_c, mg: it.ml_g, mconta: it.fullG }); });
           // faixa de preço errada: vendido na promoção, cobrado na faixa de cima
-          I.filter(it => it.bv === 1).forEach((it, i) => { for(let n = 0; n < Math.round([22, 18, 14, 12, 10][i % 5] * k); n++){ const l = it.lFull; venda(it, 'preco', 1, T[2][l], T[1][l], { faixa_acima: 2, ld: l, lm: l }); } });
+          I.filter(it => it.bv === 1).forEach((it, i) => { for(let n = 0; n < Math.round([22, 18, 14, 12, 10][i % 5] * k); n++){ const ag = n % 5 === 4, l = ag ? it.lDecl : it.lFull; venda(it, 'preco', 1, T[2][l], T[1][l], { faixa_acima: 2, ld: l, lm: l, logistic_type: ag ? 'cross_docking' : 'fulfillment', base: ag ? 'anuncio' : 'full' }); } });
           // cobrado em dobro (carrinho dividido) e outros valores
-          for(let n = 0; n < Math.round(14 * k); n++){ const it = I[n % 4], l = it.lFull; venda(it, 'multiplo', 1, T[it.bv][l] * 2, T[it.bv][l], { ld: l, lm: l }); }
-          for(let n = 0; n < Math.round(8 * k); n++){ const it = I[(n + 3) % I.length], l = it.lFull; venda(it, 'outro', 1, T[it.bv][l] + 2.9 + (n % 3), T[it.bv][l], { ld: l, lm: l }); }
+          for(let n = 0; n < Math.round(14 * k); n++){ const it = I[n % 4], l = it.lFull; venda(it, 'multiplo', 1, T[it.bv][l] * 2, T[it.bv][l], { ld: l, lm: l, logistic_type: 'fulfillment' }); }
+          for(let n = 0; n < Math.round(8 * k); n++){ const it = I[(n + 3) % I.length], l = it.lFull; venda(it, 'outro', 1, T[it.bv][l] + 2.9 + (n % 3), T[it.bv][l], { ld: l, lm: l, logistic_type: 'fulfillment' }); }
           // poucas vendas cobradas a menos, só para o quadro ficar completo
-          for(let n = 0; n < Math.round(6 * k); n++){ const it = I[5], l = it.lFull; venda(it, 'peso_menos', 1, T[it.bv][l - 1], T[it.bv][l], { ld: l, lm: l }); }
+          for(let n = 0; n < Math.round(6 * k); n++){ const it = I[5], l = it.lFull; venda(it, 'peso_menos', 1, T[it.bv][l - 1], T[it.bv][l], { ld: l, lm: l, logistic_type: 'fulfillment' }); }
           lista.sort((a, b) => String(b.data_venda).localeCompare(String(a.data_venda)));
           const fora = lista.length + menos.length, conferidas = Math.round((envio === 'ag' ? 30 : envio === 'full' ? 150 : 180) * dias);
           R.certo = { n: Math.max(0, conferidas - fora), mais: 0, menos: 0, n_mais: 0, n_menos: 0 };
@@ -72,7 +73,7 @@
             itens: I.map((it, i) => Object.assign({ item_id: it.item_id, ml_user_id: conta, sku: it.sku, peso_g: it.peso_g, vendas: Math.round([520, 410, 330, 280, 190, 360, 300, 240][i] * k), certas: 0, ld: it.lFull, lp: it.lDecl, hab: it.lDecl, sem_peso: false, faixas_no_periodo: 1, bv: it.bv }, por[it.item_id] || { n_peso: 0, rs_peso: 0, n_preco: 0, rs_preco: 0, n_peso_menos: 0, rs_peso_menos: 0 })).map(x => { x.certas = Math.max(0, x.vendas - x.n_peso - x.n_preco - x.n_peso_menos); return x; }) };
         }
         function demoPromos(c){
-          const I = demoItens(), hoje = new Date(), dia = n => new Date(hoje.getTime() + n * 86400000).toISOString();
+          const I = demoItens().map(it => Object.assign({}, it, { preco: it.custo ? Math.round(it.custo * 3.4 * 100) / 100 : it.preco })), hoje = new Date(), dia = n => new Date(hoje.getTime() + n * 86400000).toISOString();
           if(c && c.acao === 'base') return { ok: true, itens: I.filter(it => (c.itens || []).includes(it.item_id)).map(it => ({ ml_user_id: c.conta, item_id: it.item_id, titulo: it.titulo, thumbnail: null, sku: it.sku, preco: it.preco, categoria: 'MLB0', tipo_anuncio: 'gold_special', tarifa_pct: 0.115, peso_g: it.peso_g, frete_lista: null })) };
           if(c && c.acao === 'itens'){
             const sit = c.situacao || '', todos = I.map((it, i) => { const ml = [6, 0, 8, 5, 0, 10, 4, 0][i], vd = [14, 15, 12, 20, 10, 15, 16, 12][i], s = ['candidate', 'candidate', 'started', 'candidate', 'pending', 'started', 'candidate', 'candidate'][i];
