@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
       const taxas = new Map<string, number>()
       for (let i = 0; i < ids.length; i += 20) {
         const lote = ids.slice(i, i + 20)
-        const mg: any = await g(`${ML}/items?ids=${lote.join(',')}&attributes=id,title,thumbnail,price,category_id,listing_type_id,seller_custom_field,attributes,shipping,variations`)
+        const mg: any = await g(`${ML}/items?ids=${lote.join(',')}&attributes=id,title,thumbnail,price,category_id,listing_type_id,seller_custom_field,attributes,shipping,variations&include_attributes=all`)
         const corpos = (Array.isArray(mg) ? mg : []).filter((x: any) => x?.code === 200 && x.body?.id).map((x: any) => x.body)
         await Promise.all(corpos.map(async (it: any) => {
           const atr = (it.attributes || []).find((a: any) => a?.id === 'SELLER_SKU')
@@ -72,10 +72,15 @@ Deno.serve(async (req: Request) => {
           ])
           if (tx && !tx.erro && tx.sale_fee_details?.percentage_fee != null) taxas.set(chave, Number(tx.sale_fee_details.percentage_fee) / 100)
           const cob = fr?.coverage?.all_country || {}
+          // medidas: declaradas pelo vendedor (SELLER_PACKAGE_*) e medidas pelo ML (PACKAGE_*), em cm e g
+          const med = (id: string) => { const a = (it.attributes || []).find((x: any) => x?.id === id); const v = parseFloat(String(a?.value_name || '').replace(',', '.')); if (!(v > 0)) return null; return /kg/i.test(String(a?.value_name)) ? v * 1000 : v }
+          const fonte = (it.attributes || []).find((x: any) => x?.id === 'PACKAGE_DATA_SOURCE')
           linhas.push({
             usuario_id: userId, ml_user_id: conta, item_id: it.id, titulo: it.title || null, thumbnail: String(it.thumbnail || '').replace('http://', 'https://') || null, sku: sku || null,
             preco: Number(it.price) || null, categoria: it.category_id || null, tipo_anuncio: it.listing_type_id || null, tarifa_pct: taxas.get(chave) ?? null,
             peso_g: Number(cob.billable_weight) || null, frete_lista: Number(cob.list_cost) || null, logistica: it.shipping?.logistic_type || null, lido_em: new Date().toISOString(),
+            decl_a: med('SELLER_PACKAGE_HEIGHT'), decl_l: med('SELLER_PACKAGE_WIDTH'), decl_c: med('SELLER_PACKAGE_LENGTH'), decl_g: med('SELLER_PACKAGE_WEIGHT'),
+            ml_a: med('PACKAGE_HEIGHT'), ml_l: med('PACKAGE_WIDTH'), ml_c: med('PACKAGE_LENGTH'), ml_g: med('PACKAGE_WEIGHT'), ml_origem: fonte?.value_name || null,
           })
         }))
       }

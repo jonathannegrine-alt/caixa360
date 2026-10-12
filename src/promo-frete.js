@@ -183,11 +183,13 @@
           }
         }
         fr.lendo = 'Conferindo cada venda contra a tabela de frete…'; frDesenhar();
-        const [a, c, m] = await Promise.all([
+        const [a, c, m, bs] = await Promise.all([
           supa.rpc('frete_conferencia_tab', { p_de: de, p_ate: ate, p_conta: conta }),
           supa.from('frete_conferidos').select('order_id').eq('usuario_id', usuarioAtual.id).limit(20000),
-          supa.from('frete_medidas').select('item_id,altura,largura,comprimento,peso_g').eq('usuario_id', usuarioAtual.id).limit(5000)
+          supa.from('frete_medidas').select('item_id,altura,largura,comprimento,peso_g').eq('usuario_id', usuarioAtual.id).limit(5000),
+          supa.from('ml_itens_base').select('item_id,preco,decl_a,decl_l,decl_c,decl_g,ml_a,ml_l,ml_c,ml_g').eq('usuario_id', usuarioAtual.id).limit(5000)
         ]);
+        fr.base = {}; ((bs && bs.data) || []).forEach(x => { fr.base[x.item_id] = x; });
         if(fr.chave !== chave) return;
         if(a.error){ fr.erro = a.error.message; fr.dados = vazio; } else fr.dados = a.data || vazio;
         fr.vistos = new Set((c.data || []).map(x => String(x.order_id)));
@@ -360,19 +362,24 @@
           ${l.length ? l.map(x => `<tr><td>${loja(x)}<a href="https://www.mercadolivre.com.br/vendas/${x.order_id}/detalhe" target="_blank" rel="noopener">#${x.order_id}</a><br><small class="text-muted">${dh(x.data_venda)} · ${FR_LOG[x.logistic_type] || ''}</small></td><td><b>${pqE(x.sku || x.item_id)}</b></td><td class="num">${x.qtd}</td><td class="num">R$ ${pqN(x.preco_unit)}</td><td class="num">R$ ${pqN(Number(x.devido_un) * x.qtd)}</td><td class="num"><b>R$ ${pqN(x.frete)}</b></td><td class="num"><b class="text-success">R$ ${pqN(-x.dif)}</b></td><td>${FR_MENOS[x.classe] || ''}</td></tr>`).join('') : '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:26px;">Nenhuma venda cobrada a menos no período.</td></tr>'}
           </tbody></table></div>${l.length >= 300 ? '<div class="text-muted" style="font-size:12px;padding:10px 18px;">Mostrando as 300 maiores diferenças.</div>' : ''}`;
       } else if(fr.ver === 'anuncios'){
-        const l = (d.itens || []).slice().sort((a, b) => (Number(b.rs_peso) + Number(b.rs_preco)) - (Number(a.rs_peso) + Number(a.rs_preco)) || b.vendas - a.vendas);
-        sub = 'Peso tarifável de cada anúncio hoje e como ele foi cobrado no período. Aqui você também informa o peso e as medidas conferidos na expedição.';
-        corpo = `<div style="overflow-x:auto;max-height:620px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th class="num" title="O peso que o Mercado Livre usa hoje para cobrar o frete deste anúncio">Peso tarifável hoje</th><th>Faixa de peso hoje</th><th>Sua medida</th><th class="num">Vendas</th><th class="num">Certas</th><th class="num">Preço errado</th><th class="num">Peso acima</th><th class="num">Peso abaixo</th><th></th></tr></thead><tbody>
-          ${l.length ? l.map(x => { const m = (fr.medidas || {})[x.item_id], gm = frPesoMeu(m), lm = gm ? frLinhaDoPeso(gm) : null, lml = x.peso_g ? frLinhaDoPeso(Number(x.peso_g)) : x.ld;
-            return `<tr><td>${loja(x)}<b>${pqE(x.sku || x.item_id)}</b><br><small class="text-muted"><a href="https://produto.mercadolivre.com.br/${pqE(String(x.item_id).replace(/^MLB/, 'MLB-'))}" target="_blank" rel="noopener">${pqE(x.item_id)}</a></small></td>
-              <td class="num">${x.peso_g ? pqN(x.peso_g, 0) + ' g' : '<small class="text-muted" title="O Mercado Livre não informou o peso deste anúncio">não informado</small>'}</td>
-              <td>${pqE(t0.rot[lml] || '—')}${x.faixas_no_periodo > 1 ? '<br><small class="text-muted" title="O anúncio foi cobrado em mais de uma faixa de peso no período: o Mercado Livre remediu o produto">mudou de faixa no período</small>' : ''}</td>
-              <td>${gm ? `${pqN(gm, 0)} g<br><small class="${lm < lml ? 'text-danger' : 'text-muted'}">${pqE(t0.rot[lm] || '')}${lm < lml ? ' · faixa menor' : ''}</small>` : '<small class="text-muted">não informada</small>'}</td>
+        // peso que conta para o frete: o maior entre o peso e o peso cúbico (altura x largura x comprimento / 6, em gramas)
+        const conta = (a, l, c, g) => { const cub = a > 0 && l > 0 && c > 0 ? a * l * c / 6 : 0, t = Math.max(cub, Number(g) || 0); return t > 0 ? { g: t, cub, linha: frLinhaDoPeso(t) } : null; };
+        const cel = (a, l, c, g, k) => k ? `${pqN(a, 1)} × ${pqN(l, 1)} × ${pqN(c, 1)} cm · ${pqN(g, 0)} g<br><small class="text-muted">conta ${pqN(k.g / 1000, 2)} kg · faixa ${pqE(t0.rot[k.linha] || '')}</small>` : '<small class="text-muted">não informado</small>';
+        const l = (d.itens || []).map(x => { const b = (fr.base || {})[x.item_id] || {}, dc = conta(b.decl_a, b.decl_l, b.decl_c, b.decl_g), ml = conta(b.ml_a, b.ml_l, b.ml_c, b.ml_g), m = (fr.medidas || {})[x.item_id], eu = m ? conta(m.altura, m.largura, m.comprimento, m.peso_g) : null;
+          // a referência para "o que deveria ser" é a sua medida conferida; sem ela, a medida do próprio ML
+          const ref = eu || ml, fx = frFaixaDoPreco(Number(b.preco) || 0), tv = (fr.tab || {})[frVersaoHoje()];
+          const eco = dc && ref && tv && ref.linha < dc.linha && tv.v[dc.linha] && tv.v[ref.linha] ? tv.v[dc.linha][fx] - tv.v[ref.linha][fx] : 0;
+          return { x, b, dc, ml, eu, eco, ecoTot: eco * (Number(x.vendas) || 0) }; }).sort((a, b) => b.ecoTot - a.ecoTot || b.x.vendas - a.x.vendas);
+        const ecoSoma = l.reduce((s, y) => s + y.ecoTot, 0), nEco = l.filter(y => y.eco > 0).length;
+        sub = 'O frete é cobrado pelo maior entre o peso e o peso cúbico (altura × largura × comprimento ÷ 6.000). O Mercado Livre usa as medidas que estão declaradas no anúncio. Quando a medida declarada é maior que a que o próprio Mercado Livre mediu, corrigir o anúncio baixa o frete de todas as vendas seguintes.';
+        corpo = (nEco ? `<div class="alert alert-warning" style="margin:0 18px 14px;"><b>${nEco} anúncio${nEco > 1 ? 's estão' : ' está'} com a medida declarada maior que a medida real.</b> Com as vendas deste período, corrigir essas medidas economizaria cerca de <b>R$ ${pqN(ecoSoma)}</b>. Os anúncios estão no topo da lista.</div>` : '') +
+          `<div style="overflow-x:auto;max-height:620px;overflow-y:auto;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th title="Medidas da embalagem informadas no anúncio. É com elas que o frete é calculado.">Declarado no anúncio</th><th title="Medidas que o Mercado Livre registrou ao medir o produto">Medido pelo Mercado Livre</th><th>Sua conferência</th><th class="num">Vendas</th><th class="num">Frete certo</th><th class="num" title="Diferença de frete por venda entre a faixa da medida declarada e a da medida real, no preço atual do anúncio">Economia por venda</th><th class="num">No período</th><th></th></tr></thead><tbody>
+          ${l.length ? l.map(({ x, b, dc, ml, eu, eco, ecoTot }) => `<tr><td>${loja(x)}<b>${pqE(x.sku || x.item_id)}</b><br><small class="text-muted"><a href="https://produto.mercadolivre.com.br/${pqE(String(x.item_id).replace(/^MLB/, 'MLB-'))}" target="_blank" rel="noopener">${pqE(x.item_id)}</a>${x.faixas_no_periodo > 1 ? ' · mudou de faixa no período' : ''}</small></td>
+              <td>${cel(b.decl_a, b.decl_l, b.decl_c, b.decl_g, dc)}</td><td>${cel(b.ml_a, b.ml_l, b.ml_c, b.ml_g, ml)}</td>
+              <td>${eu ? `${pqN(eu.g / 1000, 2)} kg<br><small class="text-muted">faixa ${pqE(t0.rot[eu.linha] || '')}</small>` : '<small class="text-muted">não informada</small>'}</td>
               <td class="num">${pqN(x.vendas, 0)}</td><td class="num">${x.vendas ? pqN(x.certas / x.vendas * 100, 0) + '%' : '—'}</td>
-              <td class="num">${x.n_preco ? `<b class="text-danger">R$ ${pqN(x.rs_preco)}</b><br><small class="text-muted">${x.n_preco} venda${x.n_preco > 1 ? 's' : ''}</small>` : '—'}</td>
-              <td class="num">${x.n_peso ? `<b class="text-danger">R$ ${pqN(x.rs_peso)}</b><br><small class="text-muted">${x.n_peso} venda${x.n_peso > 1 ? 's' : ''}</small>` : '—'}</td>
-              <td class="num">${x.n_peso_menos ? `<b class="text-success">R$ ${pqN(x.rs_peso_menos)}</b><br><small class="text-muted">${x.n_peso_menos} venda${x.n_peso_menos > 1 ? 's' : ''}</small>` : '—'}</td>
-              <td><button class="btn-out btn btn-sm" onclick="frMedidas('${pqE(x.item_id)}')">${gm ? 'Editar medida' : 'Informar medida'}</button></td></tr>`; }).join('') : '<tr><td colspan="10" class="text-muted" style="text-align:center;padding:26px;">Nenhum anúncio com venda no período.</td></tr>'}
+              <td class="num">${eco > 0 ? `<b class="text-danger">R$ ${pqN(eco)}</b>` : '—'}</td><td class="num">${ecoTot > 0 ? `<b class="text-danger">R$ ${pqN(ecoTot)}</b>` : '—'}</td>
+              <td><button class="btn-out btn btn-sm" onclick="frMedidas('${pqE(x.item_id)}')" title="Informe o peso e as medidas da embalagem conferidos na sua expedição">${eu ? 'Editar conferência' : 'Informar conferência'}</button></td></tr>`).join('') : '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:26px;">Nenhum anúncio com venda no período.</td></tr>'}
           </tbody></table></div>`;
       } else {
         const lista = frLista(), mostra = lista.slice(0, 300), esc = frEscolhidas(), nMarc = lista.filter(x => fr.marc.has(String(x.order_id))).length, todasMarc = lista.length > 0 && nMarc === lista.length;
