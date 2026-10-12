@@ -1048,10 +1048,10 @@
         const estoqueKit = calcEstoqueKit(kitSku);
         const estoqueKitLabel = estoqueKit !== null
           ? (estoqueKit === 0
-            ? `<span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">📦 0 kits</span>`
+            ? `<span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">0 kits</span>`
             : (estoqueKit <= 5
-              ? `<span style="background:#ffedd5;color:#c2410c;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">📦 ${estoqueKit} kits</span>`
-              : `<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">📦 ${estoqueKit} kits</span>`))
+              ? `<span style="background:#ffedd5;color:#c2410c;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">${estoqueKit} kits em estoque</span>`
+              : `<span style="background:#dcfce7;color:#166534;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">${estoqueKit} kits em estoque</span>`))
           : '';
         const _skuKitEnt = skus.find(function(s){ return s.sku === kitSku; });
         const impostoKit = _skuKitEnt ? (_skuKitEnt.imposto || 0) : 0;
@@ -1061,15 +1061,16 @@
           <div class="card-body" style="padding:12px 15px;cursor:pointer;" onclick="abrirModalComposicao('${skuEsc}')">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
               <div style="display:flex;align-items:center;gap:8px;" onclick="event.stopPropagation()">
-                <input type="checkbox" class="kit-sel-cb" data-sku="${kitSku}" onchange="atualizarContadorKitsSel()" style="margin:0;">
+                <input type="checkbox" class="kit-sel-cb" data-sku="${kitSku}" onchange="atualizarContadorKitsSel()" style="margin:0;width:auto;">
+                ${typeof fotoMini === 'function' ? fotoMini(kitSku) : ''}
                 <div>
-                  <div style="font-family:monospace;font-weight:600;font-size:12px;">${kitSku}</div>
-                  <div style="font-size:11px;color:#666;margin-top:2px;">${titulo}</div>
+                  <div style="font-weight:650;font-size:13.5px;color:var(--text);">${kitSku}</div>
+                  <div style="font-size:12.5px;color:var(--text-2);margin-top:2px;">${titulo || ''}</div>
                 </div>
               </div>
               <div class="d-flex gap-1" onclick="event.stopPropagation()">
-                <button class="btn-out btn-sm" onclick="abrirModalComposicao('${skuEsc}')">✏️</button>
-                <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${skuEsc}')">🗑️</button>
+                <button class="btn-out btn-sm" onclick="abrirModalComposicao('${skuEsc}')">Editar</button>
+                <button class="btn-out btn-sm" style="color:var(--danger);" onclick="deletarComposicaoKit('${skuEsc}')">Excluir</button>
               </div>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;">${tags}<span style="margin-left:auto;display:flex;gap:6px;align-items:center;">${estoqueKitLabel}${custoLabel}${impostoLabel}</span></div>
@@ -1077,6 +1078,8 @@
         </div>`;
       });
       el.innerHTML = html;
+      // fotos dos kits: busca as que faltam e redesenha uma vez
+      if(typeof fotosPara === 'function') fotosPara(kitsExibir, () => { const vv = document.getElementById('view-skus'); if(vv && vv.classList.contains('active')) renderComposicoesTab(); });
     }
     function atualizarContadorKitsSel(){
       const selecionados = document.querySelectorAll('.kit-sel-cb:checked').length;

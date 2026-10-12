@@ -137,7 +137,7 @@
         ${sec('Itens da compra')}
         <datalist id="ocn-prods">${prods.map(p => `<option value="${ocEsc(p)}">`).join('')}</datalist>
         <div class="pf-tab" style="max-height:none;margin-top:0;"><table><thead><tr><th>Cód (SKU)</th><th>Item</th><th style="text-align:right;">Qtde</th><th style="text-align:right;">Preço un</th><th style="text-align:right;">IPI %</th><th style="text-align:right;">Preço total</th><th></th></tr></thead><tbody>
-          ${n.itens.map((i, k) => `<tr class="ocn-linha"><td><input class="ocn-sku" list="ocn-prods" value="${ocEsc(i.sku)}" placeholder="SKU" style="width:150px;" onchange="ocCriarSku(${k})"></td>
+          ${n.itens.map((i, k) => `<tr class="ocn-linha"><td><span style="display:flex;align-items:center;gap:7px;">${i.sku && typeof fotoMini === 'function' ? fotoMini(i.sku) : '<span class="foto-mini vazia" style="cursor:default;"></span>'}<input class="ocn-sku" list="ocn-prods" value="${ocEsc(i.sku)}" placeholder="SKU" style="width:150px;" onchange="ocCriarSku(${k})"></span></td>
             <td><input class="ocn-nome" value="${ocEsc(i.desc || '')}" placeholder="Descrição" style="min-width:180px;width:100%;"></td>
             <td style="text-align:right;"><input type="number" class="ocn-qtd" value="${ocEsc(i.qtd)}" min="0" style="width:90px;text-align:right;" oninput="ocCriarTotal()"></td>
             <td style="text-align:right;"><input class="ocn-val money-input" value="${ocEsc(i.valor)}" placeholder="0,00" style="width:100px;text-align:right;" oninput="onMoneyInput(this);ocCriarTotal()"></td>

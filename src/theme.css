@@ -1427,3 +1427,12 @@ body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-sele
 .fx-conf td:nth-child(6){max-width:210px;}
 .fx-conf td:nth-child(6) span{white-space:normal;}
 .fx-conf th.num,.fx-conf td.num{white-space:nowrap;width:96px;}
+
+/* fotos: um tamanho só em todo o sistema (o do Estoque), com ampliação ao passar o mouse */
+.foto-mini,.cp-prod-l span.foto-mini{display:inline-block !important;width:40px !important;height:40px !important;border-radius:8px;font-size:0;position:relative;overflow:visible;flex:none;}
+.foto-mini img{border-radius:7px;}
+.cp-prod-l span.foto-mini{margin-right:9px;vertical-align:middle;}
+.foto-mini:not(.vazia):hover img,.est-foto:hover img{position:relative;z-index:40;transform:scale(3.2);transform-origin:left center;box-shadow:0 10px 30px rgba(0,0,0,.35);transition:transform .12s ease;}
+.est-foto{overflow:visible !important;}
+/* centro de decisão: marcador colorido no lugar do emoji */
+.cd-marca{flex:none;width:10px;height:10px;border-radius:50%;margin-top:6px;}

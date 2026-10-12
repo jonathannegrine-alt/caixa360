@@ -396,7 +396,7 @@
         const clickStyle = ins.onclick ? 'cursor:pointer;' : '';
         const clickAttr  = ins.onclick ? `onclick="${ins.onclick}"` : '';
         return `<div ${clickAttr} style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:8px;background:${c.bg};border-left:3px solid ${c.borda};${clickStyle}">
-          <span style="font-size:18px;flex-shrink:0;line-height:1.4;">${ins.icon}</span>
+          <span class="cd-marca" style="background:${c.borda};" aria-hidden="true"></span>
           <div>
             <div style="font-size:13px;color:${c.txt};line-height:1.5;">${ins.texto}</div>
             ${ins.sub ? `<div style="font-size:11px;color:#666;margin-top:3px;">${ins.sub}</div>` : ''}

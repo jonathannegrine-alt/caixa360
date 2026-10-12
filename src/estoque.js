@@ -316,6 +316,7 @@
         const itens = (Array.isArray(estoqueFullML) ? estoqueFullML.slice() : []).filter(x => !dep.ml_user_id || String(x._conta || '') === String(dep.ml_user_id));
         const b = esN(est.busca), lista = itens.filter(x => !b || esN(x.sku).includes(b) || esN(x.titulo).includes(b)).sort((a, c) => (Number(c.total_geral) || 0) - (Number(a.total_geral) || 0));
         const tot = itens.reduce((s, x) => s + (Number(x.total_geral) || 0), 0), disp = itens.reduce((s, x) => s + (Number(x.aptos_venda) || 0), 0), transf = itens.reduce((s, x) => s + (Number(x.em_transito) || 0), 0);
+        if(typeof fotosPara === 'function') fotosPara(lista.map(x => x.sku), () => { const vv = document.getElementById('view-estoque'); if(vv && vv.classList.contains('active')) estDesenhar(); });
         host.innerHTML = cab + erro + abas + `
           <div class="kpi-grid k4i">
             <div class="kpi k-venda"><div class="kpi-label">Unidades no Full</div><div class="kpi-value">${esInt(tot)}</div><div class="kpi-sub">${itens.length} anúncios (kits contam como anúncio)</div></div>
@@ -325,8 +326,8 @@
           </div>
           <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou título" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)">
             ${lojas.length > 1 ? `<div class="chips">${[['', 'As duas lojas']].concat(lojas.map(l => [l, (typeof contaNome === 'function' && contaNome(l)) || l])).map(([k, t]) => `<button class="chip ${est.loja === k ? 'active' : ''}" onclick="est.loja='${k}';estDesenhar();">${esEsc(t)}</button>`).join('')}</div>` : ''}</div>
-          <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th>Conta</th><th class="num">Disponível</th><th class="num">Em transferência</th><th class="num">Sem condição de venda</th><th class="num">Total</th></tr></thead><tbody>
-            ${lista.length ? lista.map(x => `<tr><td class="cp-prod" style="max-width:520px;"><b>${esEsc(x.sku)}</b><span title="${esEsc(x.titulo)}">${esEsc(x.titulo || '')}</span></td><td class="cp-forn">${esEsc((typeof contaNome === 'function' && x._conta && contaNome(x._conta)) || '—')}</td><td class="num"><b>${esInt(x.aptos_venda)}</b></td><td class="num">${esInt(x.em_transito)}</td><td class="num" title="${esEsc(x.detalhe || '')}">${esInt(x.nao_aptos)}</td><td class="num"><b>${esInt(x.total_geral)}</b></td></tr>`).join('') : '<tr><td colspan="6"><div class="vazio"><b>Sem estoque do Full carregado</b>Clique em Atualizar do Mercado Livre.</div></td></tr>'}
+          <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:48px;"></th><th>Anúncio</th><th>Conta</th><th class="num">Disponível</th><th class="num">Em transferência</th><th class="num">Sem condição de venda</th><th class="num">Total</th></tr></thead><tbody>
+            ${lista.length ? lista.map(x => `<tr>${estFotoTd(esN(x.sku))}<td class="cp-prod" style="max-width:520px;"><b>${esEsc(x.sku)}</b><span title="${esEsc(x.titulo)}">${esEsc(x.titulo || '')}</span></td><td class="cp-forn">${esEsc((typeof contaNome === 'function' && x._conta && contaNome(x._conta)) || '—')}</td><td class="num"><b>${esInt(x.aptos_venda)}</b></td><td class="num">${esInt(x.em_transito)}</td><td class="num" title="${esEsc(x.detalhe || '')}">${esInt(x.nao_aptos)}</td><td class="num"><b>${esInt(x.total_geral)}</b></td></tr>`).join('') : '<tr><td colspan="6"><div class="vazio"><b>Sem estoque do Full carregado</b>Clique em Atualizar do Mercado Livre.</div></td></tr>'}
           </tbody></table></div></div>`;
         return;
       }

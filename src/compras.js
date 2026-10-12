@@ -275,7 +275,7 @@
       const d1 = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 });
 
       const fontes = comprasFontes(C), pend = fontes.filter(x => x.st !== 'ok').length;
-      if(comprasFontesAbertas === null) comprasFontesAbertas = fontes.some(x => x.st === 'falta');
+      if(comprasFontesAbertas === null) comprasFontesAbertas = false;   // abre fechado; a linha de resumo já avisa se algum ponto pede atenção
       const stTxt = { ok: 'Em dia', parcial: 'Atenção', falta: 'Faltando' };
 
       // barra "dura quantos dias": verde quando cobre o desejado, vermelha quando acaba antes da compra chegar
