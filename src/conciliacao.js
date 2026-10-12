@@ -123,7 +123,8 @@
       if(x.classes.includes('devolucao')) p.push('tarifa de devolução ' + cnR(x.m_dev));
       return p.join(' · ');
     }
-    function cnVisiveis(){ return (cn.div || []).filter(x => !cn.classe || x.classes.includes(cn.classe)); }
+    // maiores diferenças primeiro
+    function cnVisiveis(){ return (cn.div || []).filter(x => !cn.classe || x.classes.includes(cn.classe)).sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor)); }
     async function cnExcel(){
       try {
         await cnScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
@@ -167,7 +168,7 @@
         <div class="kpi k-hoje"><div class="kpi-label">Cobranças fora das vendas</div><div class="kpi-value">${cnR(totAv)}</div><div class="kpi-sub"><span>publicidade, armazenagem, impostos e juros</span></div></div>
       </div>`;
       const abas = `<div class="chips" style="margin:14px 0 10px;">${[['resumo', 'Resumo'], ['div', 'Vendas que não fecharam (' + D.length + ')'], ['avulsas', 'Cobranças fora das vendas'], ['dias', 'Dinheiro liberado por dia'], ['arquivos', 'Relatórios importados']].map(([k, t]) => `<button class="chip ${cn.aba === k ? 'active' : ''}" onclick="cnAba('${k}')">${t}</button>`).join('')}</div>`;
-      const periodo = `<div class="card" style="padding:12px 16px;"><div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><b>${cnE(nome(conta))}</b><span class="text-muted">vendas de</span><input type="date" id="cn-de" value="${cn.de}" onchange="cnPeriodo()" aria-label="Data inicial"><span class="text-muted">até</span><input type="date" id="cn-ate" value="${cn.ate}" onchange="cnPeriodo()" aria-label="Data final">${cn.carregando ? '<span class="text-muted">conferindo…</span>' : ''}</div></div>`;
+      const periodo = `<div class="card" style="padding:12px 16px;"><div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><b>${cnE(nome(conta))}</b><span class="text-muted">vendas de</span><input type="date" id="cn-de" value="${cn.de}" onchange="cnPeriodo()" aria-label="Data inicial" style="width:auto;"><span class="text-muted">até</span><input type="date" id="cn-ate" value="${cn.ate}" onchange="cnPeriodo()" aria-label="Data final" style="width:auto;">${cn.carregando ? '<span class="text-muted">conferindo…</span>' : ''}</div></div>`;
       let corpo = '';
       if(cn.aba === 'resumo'){
         const ordem = ['canc_cobrada', 'estornada', 'nao_liberada', 'devolucao', 'frete', 'produto', 'tarifa'].filter(c => porClasse[c]);

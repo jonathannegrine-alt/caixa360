@@ -135,6 +135,7 @@
       if(semCusto) alertas.push({ t:'warning', i:'⚖', tx:`<b>${semCusto} produto${semCusto > 1 ? 's' : ''} sem custo</b> cadastrado — a margem fica superestimada.`, ac:"nav('skus')", la:'Cadastrar' });
       const ultSync = parseInt(localStorage.getItem('mk_ultimo_sync_ml') || '0');
       if(ultSync && Date.now() - ultSync > 6 * 3600000) alertas.push({ t:'info', i:'↻', tx:`Dados do Mercado Livre atualizados há mais de 6 horas.`, ac:'sincronizarML()', la:'Atualizar' });
+      if(typeof gsAlertaInicio === 'function'){ const al = gsAlertaInicio(); if(al) alertas.push(al); }
       if(!alertas.length) alertas.push({ t:'ok', i:'✓', tx:'Tudo em ordem: sem contas atrasadas e caixa positivo nos próximos 30 dias.', ac:'', la:'' });
 
       const atalhos = [
