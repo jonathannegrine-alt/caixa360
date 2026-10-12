@@ -48,6 +48,10 @@ gestaomk/
     analise.js        ← página Análise de vendas (anRender): 12 meses, produtos, compradores, estados, cancelamentos, ADS
     pos-venda.js      ← página Pós-venda com IA (fila, histórico, regras, automação) — Edge Function pos-venda
     compras-lista.js  ← marcar produtos na Sugestão de compras e gerar lista em PDF (jsPDF sob demanda)
+    conciliacao.js    ← Conciliação do ML (página 'conciliacao'): lê no navegador os relatórios "por vendas" e "por liberação"
+                        (Excel), grava em concil_linhas e compara com vendas_ml (RPCs concil_resumo / concil_divergencias)
+    gestao.js         ← abas da Análise de vendas: Lucro real (margem − ADS), Degrau do frete, Venda perdida
+    gestao-fin.js     ← ponto de equilíbrio por dia e custo da dívida (Início e Empréstimos) + fechamento do mês em PDF
     contas-ml.js      ← GRUPOS DE CONTAS ML: contasML, contaAtiva ("" = todas), liberacoesTodas/extratoTodos,
                         aplicarContaAtiva() recorta liberacoes e extratoHistorico; seletor na barra lateral
     vendas-ml.js      ← páginas Vendas (renderVendas, gráfico comparativo) e Resumo Financeiro (renderResumoFin,
@@ -165,6 +169,11 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   TODAS as contas a pagar deve usar pagTodos() ou lojasAbrir()/lojasFechar(), nunca o array pagamentos direto.
 - PÓS-VENDA: tabelas pos_venda_cfg/casos/log; função pos-venda (--no-verify-jwt; cron 'pos-venda' aos 12 e 42 min, só
   para pos_venda_cfg.ativo). Nada é enviado ao ML sem aprovação, a não ser com auto_msg/auto_dinheiro ligados.
+- CONCILIAÇÃO: no relatório "por vendas" cada linha é um evento do dia (a venda num dia, o frete quando o pacote sai);
+  a tarifa de envio vem cheia e o frete pago pelo comprador entra no valor bruto; "Cancelamento ..." abate a tarifa.
+  A comparação é por envio (carrinho = um envio). Reimportar não duplica (chave por linha).
+- ml-webhook também trata: items (ml_itens_base.situacao/estoque/preco), fbm_stock_operations (aviso 'full'),
+  orders_feedback (aviso 'avaliacao' só para nota negativa ou neutra).
 - Outras funções novas: ml-ads (anúncios pagos), ml-envios também grava vendas_ml.uf (estado do comprador).
 - VÁRIAS CONTAS ML POR USUÁRIO: ml_tokens tem PK (usuario_id, ml_user_id). Todo PATCH/DELETE em ml_tokens e toda
   gravação em liberacoes/extrato_historico/snapshots_ml/vendas_ml/vendas_ml_dias precisa do ml_user_id.
