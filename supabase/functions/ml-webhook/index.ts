@@ -9,6 +9,8 @@
 // Configuração (uma vez, no DevCenter do ML → aplicativo → "URL de retornos de chamada de notificação"):
 //   https://qasrccmtrllotukyeiax.supabase.co/functions/v1/ml-webhook      (tópicos orders_v2, questions e messages marcados)
 // Perguntas e mensagens: cada notificação grava uma linha em ml_avisos (src/avisos.js mostra o selo no menu).
+// Reclamações e devoluções (tópicos claims / claims_actions): também viram aviso (selo no Pós-venda).
+// Envios (tópico shipments): a situação do envio é lida na hora e gravada na venda (vendas_ml.envio_status).
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void }
 
@@ -42,6 +44,28 @@ async function avisar(conta: string, topico: string, recurso: string) {
   await fetch(`${supaUrl}/rest/v1/ml_avisos?em=lt.${new Date(Date.now() - 10 * 86400000).toISOString()}`, { method: 'DELETE', headers: dbH }).catch(() => null)
 }
 
+// envio mudou de situação: lê o envio com o token da conta e atualiza a venda. Token vencido: deixa para a rotina de envios.
+async function envioMudou(conta: string, recurso: string) {
+  const m = recurso.match(/\/shipments\/(\d{6,20})/); if (!m) return
+  const sid = m[1]
+  const supaUrl = Deno.env.get('SUPABASE_URL')!, supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const dbH = { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json' }
+  const toks = await fetch(`${supaUrl}/rest/v1/ml_tokens?ml_user_id=eq.${conta}&select=usuario_id,access_token,expires_at`, { headers: dbH }).then(r => r.json()).catch(() => [])
+  for (const t of (Array.isArray(toks) ? toks : [])) {
+    if (!t.access_token || new Date(t.expires_at).getTime() < Date.now() + 30000) continue
+    const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: { Authorization: `Bearer ${t.access_token}`, 'x-format-new': 'true' } }).catch(() => null)
+    if (!r || !r.ok) continue
+    const s: any = await r.json().catch(() => null); if (!s || !s.status) continue
+    const hist = s.status_history || {}, status = String(s.status)
+    const saiu = ['shipped', 'delivered', 'not_delivered'].includes(status) || !!hist.date_shipped
+    const campos: Record<string, unknown> = { envio_status: status }
+    const quando = hist.date_shipped || hist.date_delivered || (saiu ? (s.last_updated || new Date().toISOString()) : null)
+    if (saiu && quando) campos.enviado_em = quando
+    if (s.tracking_number) campos.rastreio = String(s.tracking_number)
+    await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${t.usuario_id}&ml_user_id=eq.${conta}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify(campos) }).catch(() => null)
+  }
+}
+
 Deno.serve(async (req) => {
   // o ML exige resposta 200 rápida; o trabalho segue em segundo plano
   if (req.method === 'POST') {
@@ -56,6 +80,13 @@ Deno.serve(async (req) => {
     }
     else if ((topico === 'questions' || topico === 'messages') && /^\d{4,20}$/.test(conta)) {
       EdgeRuntime.waitUntil(avisar(conta, topico, String(b?.resource || '')))
+    }
+    // reclamação/devolução aberta ou com ação pendente: aviso para o Pós-venda (os dois tópicos viram "claims")
+    else if (/^(claims|claims_actions|post_purchase)$/.test(topico) && /^\d{4,20}$/.test(conta)) {
+      EdgeRuntime.waitUntil(avisar(conta, 'claims', String(b?.resource || '')))
+    }
+    else if (topico === 'shipments' && /^\d{4,20}$/.test(conta)) {
+      EdgeRuntime.waitUntil(envioMudou(conta, String(b?.resource || '')))
     }
   }
   return new Response('ok', { status: 200 })
