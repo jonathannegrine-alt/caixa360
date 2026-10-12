@@ -1318,3 +1318,24 @@ a.pv-venda:hover{border-bottom-style:solid;}
 .seg-radio label{cursor:pointer;display:inline-flex;align-items:center;}
 .seg-radio input{position:absolute;opacity:0;pointer-events:none;}
 .seg-radio label:has(input:checked){background:var(--primary);color:#fff;border-color:var(--primary);}
+
+/* menu: nome comprido quebra em duas linhas em vez de cortar com "…" */
+.nav-item span:not(.nav-novo):not(.nav-selo):not(.nav-cont){white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25;min-width:0;}
+/* dica "?": a caixa é posicionada pela tela (não fica cortada na borda nem dentro de cartão) */
+.tip-box.tip-fixa{position:fixed;transform:none;bottom:auto;right:auto;display:block;max-width:min(300px,calc(100vw - 16px));}
+.tip-box.tip-fixa::after{display:none;}
+/* sininho de notificações no Início */
+.ini-topo{display:flex;align-items:center;gap:12px;}
+.ini-sino{position:relative;display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff;border-radius:999px;padding:5px 12px 5px 9px;font-size:12.5px;font-weight:600;cursor:pointer;line-height:1;}
+.ini-sino:hover{background:rgba(255,255,255,.22);}
+.ini-sino svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+.ini-sino.tem{background:#fff;color:#b91c1c;border-color:#fff;animation:sinoPulsa 2.4s ease-in-out infinite;}
+.ini-sino .n{min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#ef4444;color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;}
+@keyframes sinoPulsa{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.55);}50%{box-shadow:0 0 0 7px rgba(255,255,255,0);}}
+@media (prefers-reduced-motion:reduce){.ini-sino.tem{animation:none;}}
+.sino-sec{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:700;margin:16px 0 6px;}
+.sino-sec:first-child{margin-top:0;}
+.sino-it{display:block;width:100%;text-align:left;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;font:inherit;}
+.sino-it:hover{border-color:var(--primary);background:var(--surface-2);}
+.sino-it small{display:block;color:var(--text-muted);font-size:12px;margin-bottom:3px;}
+.sino-it b{display:block;font-weight:600;font-size:13.5px;line-height:1.4;white-space:normal;}

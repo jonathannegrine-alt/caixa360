@@ -77,11 +77,47 @@
         }
         const num = (cab.match(/Fatura N.?:?\s*(\d+)/i) || [])[1] || '', per = cab.match(/(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})/);
         fx.fat = { numero: num, transportador: transp, emitida: fxIso((cab.match(/Emitida em:?\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1]), venc: fxIso((cab.match(/Vencimento:?\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1]),
-          de: per ? fxIso(per[1]) : '', ate: per ? fxIso(per[2]) : '', total: fxNum((cab.match(/Valor a Pagar:?\s*R\$\s*([\d.,]+)/i) || [])[1]), arquivo: file.name };
+          de: per ? fxIso(per[1]) : '', ate: per ? fxIso(per[2]) : '', total: fxNum((cab.match(/Valor a Pagar:?\s*R\$\s*([\d.,]+)/i) || [])[1]), arquivo: file.name, ...fxQuadro(cab) };
         fx.linhas = [...linhas.values()];
         if(!fx.linhas.length) throw new Error('não achei nenhum envio neste PDF. Ele é a fatura do transportador do Flex, com um envio por linha?');
         await fxConferir();
       } catch(e){ fx.erro = (e && e.message) || String(e); fx.lendo = ''; fxDesenhar(); }
+    }
+
+    // Quadro de totais da fatura (1ª página): Pedidos | Frete | ICMS | Gris | ADValorem | Cobrança | Débitos | Despesa | Créditos | Receita | Fatura.
+    // "Créditos" é onde o transportador lança estornos e abatimentos; "Débitos", cobranças extras.
+    function fxQuadro(cab){
+      const m = String(cab || '').match(/R\$\s*Fatura\s+(\d{1,6})((?:\s+\d{1,3}(?:\.\d{3})*,\d{2}){10})(?!\d)/);
+      if(!m) return { quadro: false };
+      const v = m[2].trim().split(/\s+/).map(fxNum);
+      return { quadro: true, pedidos: Number(m[1]), freteBruto: v[0], debitos: v[5], creditos: v[7] };
+    }
+
+    // ---------- importar pelo link ----------
+    function fxLink(){
+      if(typeof vmlModal !== 'function') return;
+      vmlModal('Importar a fatura pelo link', `<div class="form-group" style="margin:0;"><label for="fx-link-url">Link que o transportador mandou</label>
+          <input type="url" id="fx-link-url" placeholder="https://tracken.app.br/tracken/fatura/..." style="width:100%;" onkeydown="if(event.key==='Enter')fxLinkIr()"></div>
+        <div class="text-muted" style="font-size:12.5px;margin-top:10px;line-height:1.5;">Por segurança, só são aceitos links de <b>tracken.app.br</b>. O sistema baixa o PDF pelo servidor e lê apenas o texto dele. Se a sua fatura vem de outro endereço, baixe o PDF e use "Enviar fatura (PDF)".</div>
+        <div id="fx-link-msg" class="alert alert-danger" style="display:none;margin-top:12px;"></div>`,
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="fx-link-bt" onclick="fxLinkIr()">Importar</button>`);
+      setTimeout(() => { const i = document.getElementById('fx-link-url'); if(i) i.focus(); }, 60);
+    }
+    async function fxLinkIr(){
+      const inp = document.getElementById('fx-link-url'), msg = document.getElementById('fx-link-msg'), bt = document.getElementById('fx-link-bt'); if(!inp) return;
+      const erro = t => { if(msg){ msg.textContent = t; msg.style.display = 'block'; } if(bt){ bt.disabled = false; bt.textContent = 'Importar'; } };
+      const url = inp.value.trim();
+      if(!/^https:\/\/tracken\.app\.br\/tracken\/fatura\/[0-9a-f]{16,64}$/i.test(url)){ erro('Este link não é de uma fatura de tracken.app.br. Confira se colou o link inteiro; para outro transportador, baixe o PDF e use "Enviar fatura (PDF)".'); return; }
+      if(bt){ bt.disabled = true; bt.textContent = 'Baixando…'; } if(msg) msg.style.display = 'none';
+      let r;
+      try {
+        const sd = await supa.auth.getSession(), tk = sd.data.session.access_token;
+        r = await fetch(SUPA_URL + '/functions/v1/flex-fatura', { method: 'POST', headers: { Authorization: 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }).then(x => x.json());
+      } catch(e){ r = { error: 'sem conexão com o servidor' }; }
+      if(!r || r.error || !r.pdf){ erro('Não consegui importar: ' + ((r && r.error) || 'resposta vazia')); return; }
+      const bin = atob(r.pdf), u8 = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      fecharModal('modal-vml');
+      fxArquivo(new File([u8], r.nome || 'fatura.pdf', { type: 'application/pdf' }));
     }
 
     // ---------- conferência ----------
@@ -160,18 +196,19 @@
 
     function fxDesenhar(){
       const view = document.getElementById('view-flex'); if(!view) return;
-      const cab = `<div class="pg-head"><div><div class="pg-title">Conferência da fatura do Flex</div><div class="pg-sub">Envie o PDF da fatura do transportador antes de pagar. O sistema confere envio por envio com as suas vendas e mostra o que vale questionar.</div></div>
-        <div class="d-flex gap-1" style="flex-wrap:wrap;"><label class="btn btn-sm" style="cursor:pointer;margin:0;">Enviar fatura (PDF)<input type="file" accept="application/pdf,.pdf" aria-label="Fatura do Flex em PDF" style="display:none" onchange="fxEscolher(this)"></label></div></div>`;
+      const cab = `<div class="pg-head"><div><div class="pg-title">Conferência da fatura do Flex</div><div class="pg-sub">Envie o PDF da fatura do transportador (ou cole o link dela) antes de pagar. O sistema confere envio por envio com as suas vendas e mostra o que vale questionar.</div></div>
+        <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="fxLink()" title="Cole o link que o transportador manda (tracken.app.br)">Importar pelo link</button><label class="btn btn-sm" style="cursor:pointer;margin:0;">Enviar fatura (PDF)<input type="file" accept="application/pdf,.pdf" aria-label="Fatura do Flex em PDF" style="display:none" onchange="fxEscolher(this)"></label></div></div>`;
       if(fx.lendo){ view.innerHTML = cab + `<div class="card"><div class="carregando-msg"><span class="carregando-roda"></span><b>${fxE(fx.lendo)}</b></div></div>`; return; }
       const erro = fx.erro ? `<div class="alert alert-danger">Não consegui conferir: ${fxE(fx.erro)}</div>` : '';
       if(!fx.fat){
         const h = fx.hist || [];
         view.innerHTML = cab + erro + `<div class="card"><div class="card-header"><div class="card-title">Faturas já conferidas</div></div>
-          ${h.length ? `<div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Fatura</th><th>Transportador</th><th>Período</th><th class="num">Envios</th><th class="num">Valor</th><th class="num">A questionar</th><th></th></tr></thead><tbody>
+          ${h.length ? `<div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Fatura</th><th>Transportador</th><th>Período</th><th class="num">Envios</th><th class="num">Valor fechado</th><th class="num" title="Créditos (estornos e abatimentos) que o transportador lançou nesta fatura">Estornos na fatura</th><th class="num">A questionar</th><th></th></tr></thead><tbody>
             ${h.map(f => `<tr><td><b>${fxE(f.numero || '—')}</b><br><small class="text-muted">conferida em ${fxDH(f.criado_em)}</small></td><td>${fxE(f.transportador || '')}</td><td>${f.de ? ptDate(f.de) + ' a ' + ptDate(f.ate) : '—'}</td>${(() => { const lj = fxLoja(), pl = f.resumo && f.resumo.porLoja, nome = k => k === '-' ? 'sem venda' : (typeof contaNome === 'function' && contaNome(k)) || k;
-              if(lj && pl){ const o = pl[lj] || { envios: 0, frete: 0, marcados: 0, pedir: 0 }; return `<td class="num">${o.envios}</td><td class="num">${fmt(o.frete)}</td><td class="num" style="color:${o.pedir > 0 ? 'var(--danger)' : 'var(--primary)'};font-weight:700;">${o.marcados} · ${fmt(o.pedir)}</td>`; }
+              const est = f.resumo && f.resumo.quadro ? `<td class="num" style="${f.resumo.creditos > 0 ? 'color:var(--success,#16a34a);font-weight:700;' : ''}">${f.resumo.creditos > 0 ? fmt(f.resumo.creditos) : 'nenhum'}</td>` : '<td class="num text-muted" title="Fatura conferida antes de o sistema ler este campo: abra e guarde de novo, ou reenvie o PDF">—</td>';
+              if(lj && pl){ const o = pl[lj] || { envios: 0, frete: 0, marcados: 0, pedir: 0 }; return `<td class="num">${o.envios}</td><td class="num">${fmt(o.frete)}</td>${est}<td class="num" style="color:${o.pedir > 0 ? 'var(--danger)' : 'var(--primary)'};font-weight:700;">${o.marcados} · ${fmt(o.pedir)}</td>`; }
               const det = pl ? '<br><small class="text-muted">' + Object.keys(pl).map(k => fxE(nome(k)) + ' ' + pl[k].envios).join(' · ') + '</small>' : '', ped = f.resumo ? f.resumo.qFrete + f.resumo.qRessarcir : 0;
-              return `<td class="num">${(f.resumo && f.resumo.envios) || '—'}${det}</td><td class="num">${fmt(Number(f.total) || 0)}</td><td class="num" style="color:${ped > 0 ? 'var(--danger)' : 'var(--primary)'};font-weight:700;">${f.resumo ? f.resumo.marcados + ' · ' + fmt(ped) : '—'}</td>`; })()}<td style="text-align:right;"><button class="btn-out btn-sm" onclick="fxAbrir(${f.id})">Abrir</button></td></tr>`).join('')}
+              return `<td class="num">${(f.resumo && f.resumo.envios) || '—'}${det}</td><td class="num">${fmt(Number(f.total) || 0)}</td>${est}<td class="num" style="color:${ped > 0 ? 'var(--danger)' : 'var(--primary)'};font-weight:700;">${f.resumo ? f.resumo.marcados + ' · ' + fmt(ped) : '—'}</td>`; })()}<td style="text-align:right;"><button class="btn-out btn-sm" onclick="fxAbrir(${f.id})">Abrir</button></td></tr>`).join('')}
           </tbody></table></div>` : '<div class="vazio"><div class="vazio-ico"></div><b>Nenhuma fatura conferida ainda</b>Clique em "Enviar fatura (PDF)" e escolha o arquivo que o transportador mandou.</div>'}</div>`;
         return;
       }
@@ -187,6 +224,10 @@
             <button class="btn-out btn-sm" onclick="fxSalvar(this)">Guardar conferência</button>
             <button class="btn btn-sm" ${R.marcados ? '' : 'disabled'} onclick="fxPdf()">Relatório para o transportador</button>
           </div></div></div>
+        ${F.quadro ? `<div class="alert ${F.creditos > 0 ? 'alert-success' : 'alert-info'}" style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;">
+            <span>Período <b>${F.de ? ptDate(F.de) + ' a ' + ptDate(F.ate) : '—'}</b></span><span>Pedidos <b>${F.pedidos}</b></span><span>Fretes <b>${fmt(F.freteBruto)}</b></span>
+            <span>Cobranças extras (débitos) <b>${fmt(F.debitos)}</b></span><span>Estornos (créditos) <b>${fmt(F.creditos)}</b></span><span>Valor fechado <b>${fmt(F.total)}</b></span>
+            <span style="flex-basis:100%;font-size:12.5px;">${F.creditos > 0 ? 'O transportador lançou ' + fmt(F.creditos) + ' de estorno nesta fatura. Confira se bate com o que foi combinado.' : 'Esta fatura não tem nenhum estorno lançado. Se o transportador prometeu abater algum envio, ele não entrou aqui.'}</span></div>` : ''}
         ${difTotal ? `<div class="alert alert-warning">A soma dos envios que li (${fmt(R.frete)}) é diferente do valor a pagar da fatura (${fmt(F.total)}). Pode haver linha que não consegui ler: confira o total de envios.</div>` : ''}
         <div class="kpi-grid k4i">
           <div class="kpi k-venda"><div class="kpi-label">Envios na fatura${lj && typeof contaNome === 'function' ? ' · ' + fxE(contaNome(lj)) : ''}</div><div class="kpi-value">${R.envios}</div><div class="kpi-sub"><span>${lj ? 'desta loja' : 'valor a pagar'} <b>${fmt(lj ? R.frete : (F.total || R.frete))}</b></span>${lj ? '<span>fatura inteira ' + fmt(F.total) + '</span>' : ''}</div></div>
@@ -219,7 +260,7 @@
       const R = { envios: todas.length, frete: todas.reduce((s, l) => s + l.frete, 0), marcados: todas.filter(mk).length, qFrete: todas.filter(mk).reduce((s, l) => s + fxFreteQ(l), 0), qRessarcir: todas.filter(mk).reduce((s, l) => s + fxProdutoQ(l), 0), porLoja };
       const linhas = fx.linhas.map(l => ({ envio: l.envio, codigo: l.codigo, coleta: l.coleta, cep: l.cep || '', dest: l.dest || '', frete: l.frete, cat: l.cat, nota: l.nota, conta: l.conta, valor: l.valor, custo: l.custo, vendas: l.vendas, marc: fx.marc.has(l.codigo + '|' + l.envio) }));
       if(F.numero) await supa.from('flex_faturas').delete().eq('usuario_id', uid).eq('numero', F.numero);
-      const r = await supa.from('flex_faturas').insert({ usuario_id: uid, numero: F.numero || null, transportador: F.transportador || null, emitida: F.emitida || null, de: F.de || null, ate: F.ate || null, total: F.total || null, arquivo: F.arquivo || null, linhas, resumo: { ...R, venc: F.venc || null } });
+      const r = await supa.from('flex_faturas').insert({ usuario_id: uid, numero: F.numero || null, transportador: F.transportador || null, emitida: F.emitida || null, de: F.de || null, ate: F.ate || null, total: F.total || null, arquivo: F.arquivo || null, linhas, resumo: { ...R, venc: F.venc || null, quadro: !!F.quadro, pedidos: F.pedidos || null, freteBruto: F.freteBruto || 0, debitos: F.debitos || 0, creditos: F.creditos || 0 } });
       if(btn){ btn.disabled = false; btn.textContent = 'Guardar conferência'; }
       toast(r.error ? 'Não consegui guardar: ' + r.error.message : 'Conferência guardada. Envios desta fatura cobrados de novo em outra serão apontados.');
       fx.hist = null;
@@ -228,7 +269,7 @@
       const r = await supa.from('flex_faturas').select('*').eq('id', id).eq('usuario_id', usuarioAtual.id).maybeSingle();
       if(r.error || !r.data){ toast('Não consegui abrir esta fatura.'); return; }
       const f = r.data;
-      fx.fat = { numero: f.numero || '', transportador: f.transportador || '', emitida: f.emitida || '', de: f.de || '', ate: f.ate || '', total: Number(f.total) || 0, arquivo: f.arquivo || '', venc: (f.resumo && f.resumo.venc) || '' };
+      fx.fat = { numero: f.numero || '', transportador: f.transportador || '', emitida: f.emitida || '', de: f.de || '', ate: f.ate || '', total: Number(f.total) || 0, arquivo: f.arquivo || '', venc: (f.resumo && f.resumo.venc) || '', quadro: !!(f.resumo && f.resumo.quadro), pedidos: (f.resumo && f.resumo.pedidos) || 0, freteBruto: (f.resumo && f.resumo.freteBruto) || 0, debitos: (f.resumo && f.resumo.debitos) || 0, creditos: (f.resumo && f.resumo.creditos) || 0 };
       fx.linhas = (f.linhas || []).map(l => ({ ...l, vendas: l.vendas || [], cat: FX_CAT[l.cat] ? l.cat : 'andamento' }));
       fx.marc = new Set(fx.linhas.filter(l => l.marc).map(l => l.codigo + '|' + l.envio)); fx.ver = 'questionar'; fxDesenhar();
     }

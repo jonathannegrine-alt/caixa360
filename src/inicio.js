@@ -157,7 +157,7 @@
       el.innerHTML = `
         <div class="ini-hero ${oculto ? 'ini-oc' : ''}">
           <div class="ini-hero-txt">
-            <div class="ini-data">${dataExt}</div>
+            <div class="ini-topo"><div class="ini-data">${dataExt}</div>${typeof avSinoHtml === 'function' ? avSinoHtml() : ''}</div>
             <div class="ini-saud">${saud}! 👋</div>
             <div class="ini-sub">Este é o resumo do seu negócio agora.</div>
             <div class="ini-acoes">

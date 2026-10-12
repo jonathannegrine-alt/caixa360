@@ -449,6 +449,23 @@
       return '<span class="tip' + (paraBaixo ? ' tip-down' : '') + '"><span class="tip-icon" tabindex="0" role="button" aria-label="Explicação">?</span><span class="tip-box">' + t + '</span></span>';
     }
 
+    // A caixa da dica é posicionada pela tela: perto da borda ela desloca para dentro em vez de sair cortada.
+    function dicaPosicionar(tip){
+      const cx = tip.querySelector('.tip-box'), ic = tip.querySelector('.tip-icon') || tip; if(!cx) return;
+      cx.classList.add('tip-fixa'); cx.style.left = '0px'; cx.style.top = '0px';
+      const r = ic.getBoundingClientRect(), w = cx.offsetWidth, a = cx.offsetHeight, L = window.innerWidth, A = window.innerHeight;
+      let x = r.left + r.width / 2 - w / 2; x = Math.max(8, Math.min(x, L - w - 8));
+      let y = tip.classList.contains('tip-down') ? r.bottom + 7 : r.top - a - 7;
+      if(y < 8) y = r.bottom + 7; if(y + a > A - 8) y = Math.max(8, r.top - a - 7);
+      cx.style.left = Math.round(x) + 'px'; cx.style.top = Math.round(y) + 'px';
+    }
+    function dicaSoltar(tip){ const cx = tip.querySelector('.tip-box'); if(cx){ cx.classList.remove('tip-fixa'); cx.style.left = ''; cx.style.top = ''; } }
+    document.addEventListener('mouseover', e => { const t = e.target.closest && e.target.closest('.tip'); if(t && !t.contains(e.relatedTarget)) dicaPosicionar(t); });
+    document.addEventListener('mouseout', e => { const t = e.target.closest && e.target.closest('.tip'); if(t && !t.contains(e.relatedTarget) && !t.contains(document.activeElement)) dicaSoltar(t); });
+    document.addEventListener('focusin', e => { const t = e.target.closest && e.target.closest('.tip'); if(t) dicaPosicionar(t); });
+    document.addEventListener('focusout', e => { const t = e.target.closest && e.target.closest('.tip'); if(t) dicaSoltar(t); });
+    window.addEventListener('scroll', () => document.querySelectorAll('.tip-box.tip-fixa').forEach(cx => { cx.classList.remove('tip-fixa'); cx.style.left = ''; cx.style.top = ''; }), true);
+
     // valor dentro da célula do calendário: no celular vai abreviado (12,3 mil) para caber
     function fmtCal(v){
       if(window.innerWidth > 700) return fmt(v);
