@@ -54,6 +54,8 @@ gestaomk/
     fatura-ml.js      ← fatura do ML no DRE: soma por mês (RPC ml_fatura_mes), modo comprasCfg.faturaDre ('auto' | 'pagar'),
                         categoria com dreGrupo 'fatura' = "só caixa" (sai do DRE nos meses em que a fatura entrou)
     opinioes.js       ← aba Opiniões da Análise de vendas (função ml-opinioes) + texto pronto para colar numa IA
+    sistema.js        ← página "Estamos atualizando" (tabela sistema_status) e faixa de conta ainda carregando o histórico
+    tarefas.js        ← fila de tarefas pesadas com aviso no sininho: tarefaPedir(), tfTotaisRpc() (tabela tarefas)
     gestao-fin.js     ← ponto de equilíbrio por dia e custo da dívida (Início e Empréstimos) + fechamento do mês em PDF
     contas-ml.js      ← GRUPOS DE CONTAS ML: contasML, contaAtiva ("" = todas), liberacoesTodas/extratoTodos,
                         aplicarContaAtiva() recorta liberacoes e extratoHistorico; seletor na barra lateral
@@ -180,6 +182,21 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   (ml_fatura_periodos.prox). Lista de faturas: limit máximo 12. Linhas: limit 1000, filtro detail_sub_types=A,B,C.
   Só grava cobranças fora das vendas (ml_fatura_tipos.classe <> 'venda'); bonificação entra negativa. O DRE só usa a
   fatura depois da primeira leitura completa (lido_ok). DIFAL não traz a venda nem o estado.
+- CAPACIDADE (desde 13/10/2026): plano Pro, máquina Micro (1 GB). Em 12/10 o banco caiu por falta de recurso. Regras:
+  nada de cron por minuto chamando função de borda nem carga longa de dia; rotina pesada vai para a madrugada ou
+  para a fila (tarefas). Antes de operação pesada, olhar public.sistema_saude (retrato a cada 10 min).
+- RESUMO DAS VENDAS: vendas_ml_por_mes / vendas_ml_por_dia leem vendas_resumo_dia (totais por usuário, conta e dia).
+  Gatilhos em vendas_ml, vendas_cfg e skus marcam o dia em vendas_resumo_pend; a leitura refaz na hora se for pouco
+  (≤ 45 dias) ou calcula direto das vendas se for muito; o cron 'vendas-resumo' (SQL) refaz o resto. Coluna nova que
+  entre na margem precisa entrar em vendas_resumo_calc E na lista de colunas do gatilho vendas_resumo_marcar.
+- FOTO DO ANÚNCIO: fica em vendas_fotos (uma por anúncio); vendas_ml.thumbnail é nulo e a view vendas_ml_calc devolve
+  a coluna. Ler foto pela view, nunca pela tabela vendas_ml.
+- FILA (tarefas): tipos 'nivelar' e 'totais'; cron 'tarefas' (SQL, a cada minuto) executa como o usuário dono.
+  Tipo novo = incluir em tarefa_criar e em tarefas_cron.
+- FATURA: fatura fechada e lida vira total em ml_fatura_totais (ml_fatura_compactar, cron diário) e as linhas somem;
+  ler sempre pela view ml_fatura_tudo. Só a fatura aberta mantém linhas.
+- MANUTENÇÃO: update public.sistema_status set manutencao = true where id = 1 → o site mostra "Estamos atualizando".
+- mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N
   filtra por nota (sem isso vêm as mais relevantes, quase todas nota 5).
 - ml-webhook também trata: items (ml_itens_base.situacao/estoque/preco), fbm_stock_operations (aviso 'full'),
