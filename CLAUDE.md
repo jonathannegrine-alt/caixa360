@@ -55,6 +55,7 @@ gestaomk/
                         categoria com dreGrupo 'fatura' = "só caixa" (sai do DRE nos meses em que a fatura entrou)
     opinioes.js       ← aba Opiniões da Análise de vendas (função ml-opinioes) + texto pronto para colar numa IA
     sistema.js        ← página "Estamos atualizando" (tabela sistema_status) e faixa de conta ainda carregando o histórico
+    admin.js          ← painel do administrador (contas, cobrança simulada, cupons, servidor) e cartão "Minha assinatura"
     tarefas.js        ← fila de tarefas pesadas com aviso no sininho: tarefaPedir(), tfTotaisRpc() (tabela tarefas)
     gestao-fin.js     ← ponto de equilíbrio por dia e custo da dívida (Início e Empréstimos) + fechamento do mês em PDF
     contas-ml.js      ← GRUPOS DE CONTAS ML: contasML, contaAtiva ("" = todas), liberacoesTodas/extratoTodos,
@@ -196,6 +197,15 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - FATURA: fatura fechada e lida vira total em ml_fatura_totais (ml_fatura_compactar, cron diário) e as linhas somem;
   ler sempre pela view ml_fatura_tudo. Só a fatura aberta mantém linhas.
 - MANUTENÇÃO: update public.sistema_status set manutencao = true where id = 1 → o site mostra "Estamos atualizando".
+- GRUPO DA CATEGORIA (categorias[].dreGrupo): fixo | variavel | emprestimo | fora | fatura. Editável em Contas a pagar
+  (pfGrupoGravar) e em DRE → Configurar categorias. "emprestimo" = devolução do valor: fora do DRE, mas conta no ponto de
+  equilíbrio e no custo da dívida (gfEhPrincipal). Empréstimo com sistema "aberto" = sem data, saldo × taxa ao mês.
+- FLEX NO DRE: repasse do ML (vendas_ml.frete_flex, valor cheio da tabela do Flex) entra como redução de custo; o
+  transportador vem de Contas a pagar em categoria com "Flex" no nome e, no mês sem lançamento, de flex_custo × entregas.
+- SELOS do menu (avisos.js): avReal = pendência real (perguntas sem resposta, conversas não lidas, casos na fila).
+  Mensagens: "não lida" manual fica em localStorage mk_msg_naolidas; "lida" chama ml-atendimento com marcar_lida.
+- ADMINISTRAÇÃO (src/admin.js, só app_admin): RPC admin_painel; planos, cupons (uso único), assinaturas; cobranca_calc
+  simula a mensalidade pelos pedidos de 30 dias (vendas_resumo_dia). Nada é cobrado de verdade ainda (fase 1).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N
   filtra por nota (sem isso vêm as mais relevantes, quase todas nota 5).
