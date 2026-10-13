@@ -25,6 +25,10 @@
       pfl.base = b.data || []; pfl.refs = [...new Set((r.data || []).map(x => x.referencia))];
       pfl.sug = [];
       if(pfl.refs.length){ const s = await supa.from('full_sugestoes').select('*').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).eq('referencia', pfl.refs[0]).limit(2000); pfl.sug = s.data || []; }
+      // foto de cada produto (cadastro, anúncio ou última venda)
+      pfl.fotos = {};
+      try { const skus = [...new Set([...pfl.base.map(x => x.sku), ...pfl.sug.map(x => String(x.sku).toUpperCase())])];
+        if(skus.length){ const f = await supa.rpc('sku_fotos', { p_skus: skus }); (f.data || []).forEach(x => { pfl.fotos[String(x.sku).toUpperCase()] = String(x.foto || '').replace(/^http:/, 'https:'); }); } } catch(e){}
       pfl.chave = chave;
     }
     // conta da previsão por produto
@@ -80,7 +84,7 @@
           <div class="adm-tab"><table><thead><tr><th>Produto</th><th style="text-align:right;">7 dias</th><th style="text-align:right;">7 anteriores</th><th style="text-align:right;">30 dias</th><th style="text-align:right;">No Full</th><th style="text-align:right;">A caminho</th>
             <th style="text-align:right;">Por dia${dc('Ritmo previsto por dia, já com aceleração e sazonalidade. Passe o mouse no número para ver os fatores.')}</th><th>Acaba em</th><th style="text-align:right;">Enviar</th><th style="text-align:right;">Mercado Livre</th><th style="text-align:right;">Diferença</th></tr></thead><tbody>
           ${L.map(l => { const urg = l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo;
-            return `<tr><td><b>${pflE(l.sku)}</b>${l.estrela ? ' <span class="badge">estrela</span>' : ''}${l.novo ? ' <span class="badge" title="Pouco histórico: a previsão de produto novo erra mais; o Mercado Livre costuma pedir mais a cada semana.">novo</span>' : ''}<br><small class="text-muted">${pflE(String(l.titulo).slice(0, 62))}</small></td>
+            return `<tr><td><div style="display:flex;gap:10px;align-items:center;">${(pfl.fotos || {})[l.sku] ? `<img src="${pflE(pfl.fotos[l.sku])}" loading="lazy" alt="" style="width:42px;height:42px;object-fit:cover;border-radius:8px;flex:none;border:1px solid var(--border);">` : '<span style="width:42px;height:42px;border-radius:8px;flex:none;background:var(--surface-3);"></span>'}<div><b>${pflE(l.sku)}</b>${l.estrela ? ' <span class="badge">estrela</span>' : ''}${l.novo ? ' <span class="badge" title="Pouco histórico: a previsão de produto novo erra mais; o Mercado Livre costuma pedir mais a cada semana.">novo</span>' : ''}<br><small class="text-muted">${l.cod ? pflE(l.cod) + ' · ' : ''}${pflE(String(l.titulo).slice(0, 62))}</small></div></div></td>
               <td style="text-align:right;">${pflN(l.s7)}</td><td style="text-align:right;">${pflN(l.s7a)}</td><td style="text-align:right;">${pflN(l.s30)}${l.d30 && l.d30 < 26 ? '<br><small class="text-muted">' + l.d30 + ' dias c/ venda</small>' : ''}</td>
               <td style="text-align:right;">${pflN(l.aptas)}</td><td style="text-align:right;">${pflN(l.caminho)}</td>
               <td style="text-align:right;" title="ritmo ${l.ritmo.toFixed(1)} × aceleração ${l.acel.toFixed(2)} × sazonalidade ${l.saz.toFixed(2)}">${l.porDia.toFixed(1).replace('.', ',')}</td>
