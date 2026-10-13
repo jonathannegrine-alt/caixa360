@@ -1611,3 +1611,6 @@ input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;bo
 
 /* Administração: janela usa a largura da tela, para a tabela de contas caber sem rolar para o lado */
 #modal-vml:has(.adm-abas) .modal-content{max-width:1500px !important;}
+
+/* avisos com título em negrito: no celular o título virava uma coluna estreita ao lado do texto */
+@media (max-width:768px){ .alert{display:block !important;} .alert>svg,.alert>b:first-child{margin-right:5px;} }
