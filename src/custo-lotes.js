@@ -35,7 +35,7 @@
     }
 
     function pepsDesenhar(){
-      const larga = () => { const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '940px'; };
+      const larga = () => { const mc = document.querySelector('#modal-vml .modal-content'); if(mc){ mc.style.maxWidth = '1120px'; mc.style.width = '96vw'; } };
       const como = `<div class="text-muted" style="line-height:1.55;font-size:13px;">Cada produto tem uma fila de lotes. O primeiro é o <b style="color:var(--text)">estoque de hoje</b>, ao custo que está no cadastro de Produtos. Depois, cada <b style="color:var(--text)">chegada de ordem de compra</b> vira um lote, ao preço da ordem. As vendas consomem os lotes na ordem: quando acaba o lote de R$ 19,00 e começa o de R$ 19,95, o custo das vendas muda sozinho. Kits somam o custo dos componentes.</div>`;
       if(!peps.cfg){
         vmlModal('Custo por lote', `${como}

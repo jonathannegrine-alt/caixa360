@@ -1608,3 +1608,6 @@ input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;bo
 /* título do anúncio cortado sem reticências nas tabelas da Análise */
 .an-anuncio .cp-prod{min-width:0;}
 .an-anuncio .cp-prod b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* Administração: janela usa a largura da tela, para a tabela de contas caber sem rolar para o lado */
+#modal-vml:has(.adm-abas) .modal-content{max-width:1500px !important;}
