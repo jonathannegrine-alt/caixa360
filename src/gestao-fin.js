@@ -142,7 +142,13 @@
         <div class="gf-eq"><div><small>Juros neste mês</small><b style="color:var(--danger)">${fmt(V.juros)}</b></div><div><small title="Só o que passa de 90 dias de venda de cada produto, a preço de custo. Não é o estoque inteiro.">Estoque além de 90 dias</small><b>${V.parado ? fmt(V.parado.valor) : '—'}</b></div><div><small>Lucro de ${gfMesNome(V.mesAnt).split(' de ')[0]}</small><b style="color:${cor(V.lucroAnt)}">${fmt(V.lucroAnt)}</b></div></div>
         <div class="text-muted gf-nota" style="display:none;">${V.juros > 0 ? (cobre >= 1 ? 'O lucro do mês passado cobre os juros ' + cobre.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' vez' + (cobre >= 2 ? 'es' : '') + '.' : (V.lucroAnt > 0 ? 'Os juros levam ' + Math.round(V.juros / V.lucroAnt * 100) + '% do lucro do mês passado.' : 'O mês passado não deu lucro para cobrir os juros.')) : (V.contratos ? 'Sem juros lançados para este mês.' : 'Nenhum empréstimo cadastrado: cadastre em Financeiro → Empréstimos para o juro aparecer aqui.')}${V.parado && V.parado.valor > 0 && V.taxa > 0 ? ' O estoque parado, à taxa média de ' + V.taxa.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '% ao mês, custa ' + fmt(V.parado.valor * V.taxa / 100) + ' por mês em juros.' : ''}${V.parado && V.parado.total > 0 ? ' O estoque inteiro (galpão + Full, a preço de custo) soma ' + fmt(V.parado.total) + '; o número acima é só o que passa de 90 dias de venda de cada produto.' : ''}${V.parado && V.parado.itens.length ? ' Maiores sobras: ' + V.parado.itens.slice(0, 3).map(i => String(i.sku).toUpperCase() + ' ' + fmt(i.valor)).join(', ') + '.' : ''}</div></div>` : '';
       const antM = gfMesAnt(E.ym), fech = `<div class="gf-fech-l"><a onclick="gfFechamento('${antM}', this)">Fechamento de ${gfMesNome(antM)} em PDF</a> · <a onclick="gfFechamento('${E.ym}', this)">parcial de ${gfMesNome(E.ym).split(' de ')[0]}</a></div>`;
-      return soDivida ? dv : `<div class="gf-grid">${eq}${dv}</div>${fech}`;
+      gf.fechLinks = fech;
+      return soDivida ? dv : `<div class="gf-grid">${eq}${dv}</div>`;
+    }
+    // links do fechamento em PDF (ficam no DRE)
+    function gfFechLinks(){
+      const ym = getToday().slice(0, 7), ant = gfMesAnt(ym);
+      return `<a class="fx-link" style="cursor:pointer;font-weight:650;" onclick="gfFechamento('${ant}', this)">Fechamento de ${gfMesNome(ant)} em PDF</a> · <a class="fx-link" style="cursor:pointer;" onclick="gfFechamento('${ym}', this)">parcial de ${gfMesNome(ym).split(' de ')[0]}</a>`;
     }
     async function gfInicio(){
       const ok = await gfCarregar(); const h = document.getElementById('ini-gestao'); if(!h || !ok) return;
@@ -185,7 +191,7 @@
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), L = doc.internal.pageSize.getWidth();
         doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.text('Fechamento de ' + gfMesNome(ym), 40, 52);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100); doc.text(nome + '  ·  gerado em ' + new Date().toLocaleString('pt-BR'), 40, 70);
-        const cx = [['Faturamento', M.entrada, [79, 70, 229], vr(M.entrada, A.entrada)], ['Margem bruta das vendas', bruta, [8, 145, 178], pc(bruta, M.entrada)], ['Despesas do mês', despMes, [217, 119, 6], pc(despMes, M.entrada)], ['Lucro do mês', M.lucro, M.lucro >= 0 ? [22, 163, 74] : [220, 38, 38], pc(M.lucro, M.entrada)]], w = (L - 80 - 30) / 4;
+        const cx = [['Faturamento', M.entrada, [79, 70, 229], vr(M.entrada, A.entrada)], ['Margem bruta', bruta, [8, 145, 178], pc(bruta, M.entrada)], ['Despesas do mês', despMes, [217, 119, 6], pc(despMes, M.entrada)], ['Lucro do mês', M.lucro, M.lucro >= 0 ? [22, 163, 74] : [220, 38, 38], pc(M.lucro, M.entrada)]], w = (L - 80 - 30) / 4;
         cx.forEach((c, i) => { const x = 40 + i * (w + 10); doc.setDrawColor(225); doc.setFillColor(248, 249, 252); doc.roundedRect(x, 86, w, 58, 6, 6, 'FD'); doc.setFillColor(...c[2]); doc.rect(x, 86, 4, 58, 'F');
           doc.setFontSize(8); doc.setTextColor(110); doc.text(c[0].toUpperCase(), x + 12, 102); doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(20); doc.text(n2(c[1]), x + 12, 121); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120); doc.text(String(c[3] || ''), x + 12, 135); });
         const tab = (head, body, y, cor, foot) => { doc.autoTable({ startY: y, margin: { left: 40, right: 40 }, head: [head], body, foot: foot ? [foot] : undefined, styles: { fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: cor, textColor: 255 }, footStyles: { fillColor: [240, 241, 246], textColor: 20, fontStyle: 'bold' },

@@ -49,7 +49,7 @@
         enviar = enviar >= 100 ? Math.ceil(enviar / 10) * 10 : Math.ceil(enviar);
         const acaba = porDia > 0 ? (aptas + caminho) / porDia : null;
         L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', s7, s7a, s30, d30, aptas, caminho, ritmo, acel, saz, porDia, previsao, enviar, acaba, novo: false,
-          ml: s ? Number(s.sugestao) || 0 : null, urg: s ? s.urgencia : '', estrela: s ? !!s.estrela : false, temEstoque: !!(s || f) });
+          cod: (s && s.inventory_id) || '', ml: s ? Number(s.sugestao) || 0 : null, urg: s ? s.urgencia : '', estrela: s ? !!s.estrela : false, temEstoque: !!(s || f) });
       });
       return L.sort((a, b) => (a.acaba == null ? 9999 : a.acaba) - (b.acaba == null ? 9999 : b.acaba));
     }
@@ -69,7 +69,8 @@
             <label>Cobrir <input type="number" min="7" max="120" value="${pfl.dias}" style="width:64px;" onchange="pflParam('dias', this.value)"> dias</label>
             <label>Agendar com <input type="number" min="0" max="60" value="${pfl.prazo}" style="width:58px;" onchange="pflParam('prazo', this.value)"> dias de antecedência${dc('Quantos dias antes você precisa marcar o envio (agendamento no galpão mais o tempo até o Full receber). Produto que acaba antes disso aparece como urgente.')}</label>
             <label class="btn-out btn btn-sm" style="cursor:pointer;">Importar relatório do Mercado Livre<input type="file" accept=".xlsx" style="display:none;" onchange="pflImportar(this)"></label>
-            <button class="btn-out btn btn-sm" onclick="pflExportar()">Exportar</button></div></div>
+            <button class="btn btn-sm" onclick="pflPdf(this)" title="Lista do que enviar, com foto, código do Full, SKU e quantidade, para mandar ao galpão.">Baixar PDF do envio</button>
+            <button class="btn-out btn btn-sm" onclick="pflExportar()">Planilha</button></div></div>
         <div class="card-body">
           ${pfl.msg ? `<div class="alert alert-info">${pflE(pfl.msg)}</div>` : ''}
           ${semEst ? '<div class="alert alert-warning">Não achei o estoque do Full desta loja: importe o relatório do Mercado Livre (botão acima) ou abra Estoque → Full para carregar. Sem o estoque, a coluna "Enviar" mostra a previsão cheia.</div>' : ''}
@@ -137,8 +138,41 @@
       pfl.chave = ''; if(typeof an !== 'undefined') an.chave = '';
       if(typeof anRender === 'function') anRender(); else if(typeof anDesenhar === 'function') anDesenhar();
     }
+    // PDF do envio: foto, código do Full (o da etiqueta), SKU, produto e quantidade
+    async function pflPdf(bt){
+      const L = pflLinhas().filter(l => l.enviar > 0).sort((a, b) => a.sku.localeCompare(b.sku));
+      if(!L.length){ if(typeof toast === 'function') toast('Nenhum produto com quantidade a enviar.'); return; }
+      const rot = bt.textContent; bt.disabled = true; bt.textContent = 'Gerando…';
+      try {
+        const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+        // fotos: do cadastro/anúncio (RPC sku_fotos), convertidas para dentro do PDF; sem foto, a célula fica vazia
+        const fotos = {};
+        try { const r = await supa.rpc('sku_fotos', { p_skus: L.map(l => l.sku) }); (r.data || []).forEach(x => { fotos[String(x.sku).toUpperCase()] = x.foto; }); } catch(e){}
+        const img = {};
+        await Promise.all(L.map(async l => { const u = fotos[l.sku]; if(!u) return;
+          try { const b = await (await fetch(String(u).replace(/^http:/, 'https:'))).blob(); img[l.sku] = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ok(null); fr.readAsDataURL(b); }); } catch(e){} }));
+        const conta = typeof contaParam === 'function' ? contaParam() : null, loja = conta && typeof contaNome === 'function' ? contaNome(conta) : '';
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Envio ao Full' + (loja ? ' · ' + loja : ''), 40, 50);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
+        doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR') + '  ·  cobertura de ' + pfl.dias + ' dias  ·  ' + L.length + ' produtos, ' + L.reduce((s, l) => s + l.enviar, 0).toLocaleString('pt-BR') + ' unidades', 40, 68);
+        doc.autoTable({ startY: 84, margin: { left: 40, right: 40 }, head: [['Foto', 'Código Full', 'SKU', 'Produto', 'Quantidade']],
+          body: L.map(l => ['', l.cod || '—', l.sku, String(l.titulo || '').slice(0, 90), l.enviar.toLocaleString('pt-BR')]),
+          foot: [['', '', '', L.length + ' produtos', L.reduce((s, l) => s + l.enviar, 0).toLocaleString('pt-BR')]],
+          styles: { fontSize: 9.5, cellPadding: 5, overflow: 'linebreak', valign: 'middle', minCellHeight: 46 },
+          headStyles: { fillColor: [40, 44, 60], textColor: 255, minCellHeight: 18 }, footStyles: { fillColor: [235, 237, 243], textColor: 20, fontStyle: 'bold', minCellHeight: 18 },
+          columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 78, fontStyle: 'bold' }, 2: { cellWidth: 120, fontStyle: 'bold' }, 4: { halign: 'right', cellWidth: 68, fontStyle: 'bold', fontSize: 11 } },
+          didDrawCell: d => { if(d.section !== 'body' || d.column.index !== 0) return; const u = img[L[d.row.index].sku]; if(!u) return;
+            try { doc.addImage(u, /png/i.test(u.slice(0, 30)) ? 'PNG' : /webp/i.test(u.slice(0, 30)) ? 'WEBP' : 'JPEG', d.cell.x + 5, d.cell.y + 3, 40, 40); } catch(e){} },
+          didParseCell: d => { if(d.section !== 'body' && d.column.index === 4) d.cell.styles.halign = 'right'; } });
+        doc.save('envio_full_' + (loja ? loja.toLowerCase().replace(/[^a-z0-9]+/gi, '_') + '_' : '') + getToday() + '.pdf');
+      } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + ((e && e.message) || e)); }
+      bt.disabled = false; bt.textContent = rot;
+    }
     function pflExportar(){
       const L = pflLinhas(), n = v => String(v).replace('.', ',');
-      const csv = ['SKU;Produto;Vendas 7 dias;7 dias anteriores;Vendas 30 dias;No Full;A caminho;Previsto por dia;Dias até acabar;Enviar;Sugestão do Mercado Livre'].concat(L.map(l => [l.sku, '"' + String(l.titulo).replace(/"/g, '""') + '"', l.s7, l.s7a, l.s30, l.aptas, l.caminho, n(l.porDia.toFixed(2)), l.acaba == null ? '' : Math.round(l.acaba), l.enviar, l.ml == null ? '' : l.ml].join(';'))).join('\r\n');
+      const csv = ['Código Full;SKU;Produto;Vendas 7 dias;7 dias anteriores;Vendas 30 dias;No Full;A caminho;Previsto por dia;Dias até acabar;Enviar;Sugestão do Mercado Livre'].concat(L.map(l => [l.cod, l.sku, '"' + String(l.titulo).replace(/"/g, '""') + '"', l.s7, l.s7a, l.s30, l.aptas, l.caminho, n(l.porDia.toFixed(2)), l.acaba == null ? '' : Math.round(l.acaba), l.enviar, l.ml == null ? '' : l.ml].join(';'))).join('\r\n');
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = 'previsao-full-' + getToday() + '.csv'; a.click();
     }

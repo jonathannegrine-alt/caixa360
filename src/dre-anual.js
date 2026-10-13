@@ -188,6 +188,7 @@
             </table>
           </div>
           <div class="text-muted" style="font-size:11.5px;padding:12px 18px;line-height:1.6;">
+            ${typeof gfFechLinks === 'function' ? '<div style="font-size:13px;margin-bottom:8px;">' + gfFechLinks() + '</div>' : ''}
             Faturamento ML = valor dos produtos das vendas aprovadas e canceladas (as canceladas saem em seguida). Custo e imposto são os gravados em cada venda.
             Despesas aparecem somadas por grupo: clique num grupo para ver as categorias. Entram pelo mês de competência da conta; sem ela, pela competência padrão da categoria (em geral o mês do vencimento). ● = mês com vendas ainda sendo importadas do Mercado Livre.
             ${typeof ftRodape === 'function' ? ftRodape() : ''}
