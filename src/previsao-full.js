@@ -54,19 +54,24 @@
       skus.forEach(k => {
         const b = pfl.base.find(x => x.sku === k) || { s7: 0, s7ant: 0, s30: 0, d30: 0, ano_base: 0, ano_prox: 0, ano_dias: pfl.dias }, s = sug.get(k), f = full.get(k);
         const aptas = s ? Number(s.aptas) || 0 : (f ? Number(f.aptos_venda) || 0 : 0), caminho = s ? Number(s.caminho) || 0 : (f ? (Number(f.em_separacao) || 0) + (Number(f.em_transito) || 0) : 0);
-        const s7 = Number(b.s7) || 0, s7a = Number(b.s7ant) || 0, s30 = Number(b.s30) || 0, d30 = Number(b.d30) || 0;
-        if(!s30 && !s7 && !(s && s.sugestao)) return;
-        const r30 = aptas === 0 && d30 > 0 && d30 < 26 ? s30 / Math.max(d30, 18) : s30 / 30;
-        let ritmo = 0.4 * (s7 / 7) + 0.6 * r30;
-        if(aptas === 0 && s7 / 7 < r30) ritmo = r30;                       // zerado: a última semana não mostra a procura
-        const acel = s7a >= 7 && s7 > s7a ? Math.min(1.35, Math.sqrt(s7 / s7a)) : 1;
+        // 6 semanas de venda (a mais recente por último), como no "Histórico de vendas semanais" do Mercado Livre
+        const sem = Array.isArray(b.sem) && b.sem.length === 6 ? b.sem.map(Number) : [0, 0, 0, 0, Number(b.s7ant) || 0, Number(b.s7) || 0];
+        const s7 = sem[5], s7a = sem[4], s30 = Number(b.s30) || 0, d30 = Number(b.d30) || 0, est = aptas + caminho;
+        if(!s30 && !sem.some(x => x) && !(s && s.sugestao)) return;
+        // média das 6 semanas; produto zerado no Full conta só as semanas em que vendeu (a ruptura não vira "procura baixa")
+        const comVenda = sem.filter(x => x > 0).length, media = sem.reduce((x, y) => x + y, 0) / (aptas === 0 ? Math.max(comVenda, 3) : 6);
+        // tendência: quanto as 2 últimas semanas passam da média (o ML mostra "+N% por alta demanda"); entra amortecida, até +40%
+        const ult2 = (sem[4] + sem[5]) / 2, tend = media > 0 && aptas > 0 ? Math.max(0, Math.min(0.4, 0.6 * (ult2 / media - 1))) : 0, acel = 1 + tend, ritmo = media / 7;
         const base = Number(b.ano_base) || 0, prox = Number(b.ano_prox) || 0, n = Number(b.ano_dias) || pfl.dias;
         const saz = base >= 20 && prox > 0 ? Math.max(0.8, Math.min(2.5, (prox / n) / (base / 14))) : 1;
-        const porDia = ritmo * acel * saz, previsao = porDia * pfl.dias;
-        let enviar = Math.max(0, previsao - aptas - caminho);
-        enviar = enviar >= 100 ? Math.ceil(enviar / 10) * 10 : Math.ceil(enviar);
-        const acaba = porDia > 0 ? (aptas + caminho) / porDia : null;
-        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', s7, s7a, s30, d30, aptas, caminho, ritmo, acel, saz, porDia, previsao, enviar, acaba, novo: false,
+        const porSemana = media * acel * saz, porDia = porSemana / 7, previsao = porDia * pfl.dias;
+        // cobertura em semanas e urgência (faixas medidas na tela do ML: até 2 semanas, até 4, até 4,6; acima disso não pede envio)
+        const cob = porSemana > 0 ? est / porSemana : null, urgN = cob == null ? '' : cob < 2 ? 'esta semana' : cob < 4 ? 'próxima semana' : cob < 4.6 ? 'em 2 semanas' : 'sem urgência';
+        // o envio é um lote de N dias de venda (não "até completar"): só quando a cobertura está abaixo de 4,6 semanas; zerado leva uma semana a mais
+        let enviar = cob != null && cob < 4.6 ? previsao + (est === 0 ? porSemana : 0) : 0;
+        enviar = enviar >= 100 ? Math.round(enviar / 10) * 10 : Math.ceil(enviar);
+        const acaba = porDia > 0 ? est / porDia : null;
+        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', sem, tend, urgN, cob, s7, s7a, s30, d30, aptas, caminho, ritmo, acel, saz, porDia, previsao, enviar, acaba, novo: false,
           cod: (s && s.inventory_id) || '', ml: s ? Number(s.sugestao) || 0 : null, urg: s ? s.urgencia : '', estrela: s ? !!s.estrela : false, temEstoque: !!(s || f) });
       });
       return L.sort((a, b) => (a.acaba == null ? 9999 : a.acaba) - (b.acaba == null ? 9999 : b.acaba));
@@ -101,15 +106,15 @@
             <th style="text-align:right;">Por dia${dc('Ritmo previsto por dia, já com aceleração e sazonalidade. Passe o mouse no número para ver os fatores.')}</th><th>Acaba em</th><th>Enviar até${dc('Data-limite para o envio sair: o dia em que o estoque acaba menos os dias de antecedência que você informou acima.')}</th><th style="text-align:right;">Enviar${dc('Quantidade calculada. Você pode trocar o número; o PDF sai com o que estiver aqui, só dos produtos marcados.')}</th><th style="text-align:right;">Mercado Livre</th><th style="text-align:right;">Diferença</th></tr></thead><tbody>
           ${F.map(l => { const urg = l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo, ate = pflAte(l), k = pflE(l.sku).split(String.fromCharCode(39)).join(String.fromCharCode(38) + "#39;");
             return `<tr><td><input type="checkbox" ${pflSel(l) ? 'checked' : ''} onchange="pflMarcar('${k}', this.checked)"></td><td><div style="display:flex;gap:10px;align-items:center;">${(pfl.fotos || {})[l.sku] ? `<img src="${pflE(pfl.fotos[l.sku])}" loading="lazy" alt="" style="width:42px;height:42px;object-fit:cover;border-radius:8px;flex:none;border:1px solid var(--border);">` : '<span style="width:42px;height:42px;border-radius:8px;flex:none;background:var(--surface-3);"></span>'}<div><b>${pflE(l.sku)}</b>${l.estrela ? ' <span class="badge">estrela</span>' : ''}${l.novo ? ' <span class="badge" title="Pouco histórico: a previsão de produto novo erra mais; o Mercado Livre costuma pedir mais a cada semana.">novo</span>' : ''}<br><small class="text-muted">${l.cod ? pflE(l.cod) + ' · ' : ''}${pflE(String(l.titulo).slice(0, 62))}</small></div></div></td>
-              <td style="text-align:right;">${pflN(l.s7)}</td><td style="text-align:right;">${pflN(l.s7a)}</td><td style="text-align:right;">${pflN(l.s30)}${l.d30 && l.d30 < 26 ? '<br><small class="text-muted">' + l.d30 + ' dias c/ venda</small>' : ''}</td>
+              <td style="text-align:right;" title="6 semanas, da mais antiga para a mais recente: ${l.sem.join(' · ')}">${pflN(l.s7)}${l.tend > 0 ? '<br><small style="color:var(--success,#16a34a);">+' + Math.round(l.tend * 100) + '% tendência</small>' : ''}</td><td style="text-align:right;">${pflN(l.s7a)}</td><td style="text-align:right;">${pflN(l.s30)}${l.d30 && l.d30 < 26 ? '<br><small class="text-muted">' + l.d30 + ' dias c/ venda</small>' : ''}</td>
               <td style="text-align:right;">${pflN(l.aptas)}</td><td style="text-align:right;">${pflN(l.caminho)}</td>
               <td style="text-align:right;" title="ritmo ${l.ritmo.toFixed(1)} × aceleração ${l.acel.toFixed(2)} × sazonalidade ${l.saz.toFixed(2)}">${l.porDia.toFixed(1).replace('.', ',')}</td>
               <td style="${urg ? 'color:var(--danger);font-weight:700;' : ''}">${l.acaba == null ? '—' : l.acaba < 1 ? 'zerado' : l.acaba > 120 ? 'mais de 4 meses' : pflDia(l.acaba) + ' <small class="text-muted">(' + Math.round(l.acaba) + ' d)</small>'}</td>
-              <td style="${l.enviar > 0 && ate != null && ate <= 0 ? 'color:var(--danger);font-weight:700;' : ''}">${l.enviar <= 0 || ate == null ? '—' : ate <= 0 ? 'agora' : pflDia(ate)}</td>
+              <td style="${l.enviar > 0 && ate != null && ate <= 0 ? 'color:var(--danger);font-weight:700;' : ''}">${l.enviar <= 0 || ate == null ? '—' : ate <= 0 ? 'agora' : pflDia(ate)}${l.urgN && l.enviar > 0 ? '<br><small class="text-muted">' + l.urgN + '</small>' : ''}</td>
               <td style="text-align:right;"><input type="number" min="0" value="${pflQtd(l)}" style="width:86px;text-align:right;font-weight:700;" onchange="pflQtdMudar('${k}', this.value)"></td><td style="text-align:right;">${l.ml == null ? '—' : pflN(l.ml)}${l.urg ? '<br><small class="text-muted">' + pflE(l.urg) + '</small>' : ''}</td>
               <td style="text-align:right;">${l.ml == null ? '—' : (l.enviar - l.ml > 0 ? '+' : '') + pflN(l.enviar - l.ml)}</td></tr>`; }).join('') || ('<tr><td colspan="13" class="text-muted">' + (T.length ? 'Nenhum produto neste filtro.' : 'Sem vendas pelo Full nos últimos 30 dias nesta loja.') + '</td></tr>')}
           </tbody></table></div>
-          <div class="text-muted adm-nota"><b>Como a conta é feita:</b> ritmo por dia = 40% dos últimos 7 dias + 60% dos últimos 30 (produto zerado e com poucos dias de venda: os 30 dias são divididos pelos dias em que vendeu, no mínimo 18). Se a última semana vendeu mais que a anterior, o ritmo sobe até 35%. Se o produto vendeu no ano passado, entra a sazonalidade: quanto ele vendeu nos ${pfl.dias} dias seguintes ÷ o que vendia nas duas semanas equivalentes. Enviar = ritmo × dias de cobertura − o que está no Full − o que está a caminho. A regra é uma aproximação: o Mercado Livre não publica a dele. Ela acerta mais em produto estabilizado do que em produto novo. Importe o relatório do Mercado Livre toda segunda para comparar e afinar.</div>
+          <div class="text-muted adm-nota"><b>Como a conta é feita (regra 2, tirada da tela de Planejamento de envios do Mercado Livre):</b> média das últimas 6 semanas de venda pelo Full; se as 2 últimas semanas passam da média, entra uma tendência de alta (amortecida, até +40%); produto zerado conta só as semanas em que vendeu. Com isso sai a cobertura: até 2 semanas de estoque = enviar esta semana; até 4 = próxima semana; até 4,6 = em 2 semanas; acima disso, sem necessidade. O envio é um lote do tamanho dos dias de cobertura escolhidos (o Mercado Livre usa perto de 5 semanas), mais uma semana quando o produto está zerado. <span style="display:none;"> ritmo por dia = 40% dos últimos 7 dias + 60% dos últimos 30 (produto zerado e com poucos dias de venda: os 30 dias são divididos pelos dias em que vendeu, no mínimo 18). Se a última semana vendeu mais que a anterior, o ritmo sobe até 35%. Se o produto vendeu no ano passado, entra a sazonalidade: quanto ele vendeu nos ${pfl.dias} dias seguintes ÷ o que vendia nas duas semanas equivalentes. Enviar = ritmo × dias de cobertura − o que está no Full − o que está a caminho. A regra é uma aproximação: o Mercado Livre não publica a dele. Ela acerta mais em produto estabilizado do que em produto novo. </span>A regra é uma aproximação: o Mercado Livre não publica a dele. Importe o relatório toda segunda para comparar e afinar.</div>
         </div></div>`;
     }
     // página: carrega (quando muda a loja ou os dias de cobertura) e desenha
