@@ -1582,3 +1582,23 @@ body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-sele
   .ap-row .ap-data span{white-space:nowrap;}
   .ap-row .ap-acao{grid-column:3;grid-row:2;}
 }
+
+/* ===== REVISÃO VISUAL, 2ª rodada (13/10/2026) ===== */
+/* Assistente: no PC mora no menu lateral (o botão flutuante ficava por cima do último botão das listas) */
+.side-foot .side-ia{background:linear-gradient(135deg,var(--primary),#8b5cf6);color:#fff;border-color:transparent;font-weight:650;}
+.side-foot .side-ia svg{stroke:#fff;}
+.side-foot .side-ia:hover{filter:brightness(1.1);}
+@media (min-width:769px){ .cfo-btn-flutuante{display:none !important;} }
+@media (max-width:768px){
+  .cfo-btn-flutuante{width:44px !important;min-width:44px;height:44px;bottom:12px;right:10px;}
+  .cfo-btn-flutuante::after{animation:none;}
+  /* faixa fixa no topo: o botão do menu não fica mais solto por cima do texto */
+  body::before{content:'Caixa 360';position:fixed;top:0;left:0;right:0;height:54px;padding-left:62px;line-height:54px;font-size:15px;font-weight:750;letter-spacing:-.01em;color:var(--text);background:var(--bg);border-bottom:1px solid var(--border);z-index:900;}
+  .hamburger{top:7px !important;box-shadow:none !important;}
+}
+/* ícone das opções de importar: uma seta de arquivo no lugar do quadrado vazio */
+.opt-ico::before{inset:8px;border:0;border-radius:0;opacity:1;background:var(--primary);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='M12 12v6'/%3E%3Cpath d='M9.500 15.500L12 18l2.500-2.500'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='M12 12v6'/%3E%3Cpath d='M9.500 15.500L12 18l2.500-2.500'/%3E%3C/svg%3E") center/contain no-repeat;}
+/* Previsão de Full: nome do produto numa linha só (o nome inteiro aparece ao passar o mouse) */
+.pfl-tit{display:block;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

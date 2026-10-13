@@ -81,6 +81,10 @@
         <li class="nav-item sec-oculta" data-sec="sis" onclick="nav('config')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.100-1.500 1.7 1.7 0 0 0-1.800.300l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.500-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.500-1.100 1.7 1.7 0 0 0-.300-1.800l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.800.300H9a1.7 1.7 0 0 0 1-1.500V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.500 1.7 1.7 0 0 0 1.800-.300l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.300 1.800V9a1.7 1.7 0 0 0 1.500 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.500 1z"/></svg><span>Configurações</span></li>
       </ul>
       <div class="side-foot">
+        <button class="tema-toggle side-ia" onclick="if(typeof toggleCFO==='function')toggleCFO()" title="Assistente: pergunte sobre os seus números">
+          <svg viewBox="0 0 24 24"><path d="M12 3l1.6 4.2L18 9l-4.400 1.800L12 15l-1.600-4.200L6 9l4.400-1.800z"/><path d="M19 15l.8 2.100L22 18l-2.200.900L19 21l-.800-2.100L16 18l2.200-.900z"/></svg>
+          <span>Assistente</span>
+        </button>
         <button class="tema-toggle" onclick="abrirFeedback()" title="Mandar uma sugestão, dúvida ou avisar de um problema">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .8c0 1.7-2.5 2.2-2.5 3.8"/><path d="M12 17h.01"/></svg>
           <span>Ajuda e sugestões</span>
@@ -2183,7 +2187,7 @@
           <div><div style="font-weight:600;font-size:13px;">Importar backup completo (JSON)</div><div style="font-size:11px;color:#666;">Restaura todos os dados de um backup exportado</div></div>
         </div>
         <div onclick="nav('receber');fecharModal('modal-importar')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">💵</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Importar recebimentos ML</div><div style="font-size:11px;color:#666;">Vai para a página "A Receber ML" para colar o JSON do Mercado Livre</div></div>
         </div>
       </div>
@@ -2252,11 +2256,11 @@
       </div>
       <div class="modal-body" style="padding:10px 0;">
         <div onclick="document.getElementById('import-upseller-estoque').click();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">🏪</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Lista Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo Lista_de_Estoque — cria SKUs novos e atualiza estoque galpão</div></div>
         </div>
         <div onclick="document.getElementById('import-skus-csv').click();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">📄</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV exportado pelo sistema com SKU, título e custo</div></div>
         </div>
         <div onclick="exportarSKUs();fecharModal('modal-importar-produtos')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
@@ -2276,11 +2280,11 @@
       </div>
       <div class="modal-body" style="padding:10px 0;">
         <div onclick="document.getElementById('import-upseller-kits').click();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">🏪</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Kits Upseller (XLS)</div><div style="font-size:11px;color:#666;">Arquivo export_kit do Upseller — cria/atualiza composição dos kits</div></div>
         </div>
         <div onclick="document.getElementById('import-csv-kit').click();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-          <span style="font-size:22px;">📄</span>
+          <span class="opt-ico"></span>
           <div><div style="font-weight:600;font-size:13px;">Planilha modelo (CSV)</div><div style="font-size:11px;color:#666;">CSV no formato do sistema</div></div>
         </div>
         <div onclick="baixarTemplateKit();fecharModal('modal-importar-kits-prod')" style="display:flex;align-items:center;gap:12px;padding:14px 20px;cursor:pointer;border-bottom:1px solid var(--gray-100);transition:background 0.15s;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
