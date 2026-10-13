@@ -76,6 +76,19 @@
       renderInicio();
     }
 
+    // ícones do quadro "Precisa da sua atenção": traço fino, no mesmo padrão do menu (o símbolo antigo vira a chave)
+    const INI_ICO = {
+      '!': '<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+      '⏰': '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/>',
+      '📅': '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
+      '▲': '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
+      '▼': '<path d="m22 17-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/>',
+      '⚖': '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+      '↻': '<path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/>',
+      '✓': '<path d="M20 6 9 17l-5-5"/>'
+    };
+    function iniIcone(i){ return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (INI_ICO[i] || INI_ICO['!']) + '</svg>'; }
+
     function renderInicio(){
       const el = document.getElementById('view-inicio');
       if(!el) return;
@@ -201,7 +214,7 @@
           <div class="card">
             <div class="card-header"><div class="card-title">Precisa da sua atenção</div></div>
             <div class="card-body ini-alertas">
-              ${alertas.map(a => `<div class="ini-alerta ${a.t}"><span class="ic">${a.i}</span><div><div>${a.tx}</div>${a.la ? `<a onclick="${a.ac}">${a.la} →</a>` : ''}</div></div>`).join('')}
+              ${alertas.map(a => `<div class="ini-alerta ${a.t}"><span class="ic">${iniIcone(a.i)}</span><div><div>${a.tx}</div>${a.la ? `<a onclick="${a.ac}">${a.la} →</a>` : ''}</div></div>`).join('')}
             </div>
           </div>
         </div></div>

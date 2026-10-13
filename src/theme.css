@@ -486,7 +486,7 @@ a.v-id{text-decoration:none;}
 .ini-alertas{display:flex;flex-direction:column;gap:10px;}
 .ini-alerta{display:flex;gap:11px;align-items:flex-start;padding:11px 12px;border-radius:11px;font-size:12.5px;line-height:1.5;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);}
 .ini-alerta b{color:var(--text);}
-.ini-alerta .ic{flex:none;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:var(--surface-3);color:var(--text-2);}
+.ini-alerta .ic{flex:none;width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:var(--surface-3);color:var(--text-2);}
 .ini-alerta.danger .ic{background:var(--tint-red);color:var(--tint-red-fg);} .ini-alerta.warning .ic{background:var(--tint-amber);color:var(--tint-amber-fg);}
 .ini-alerta.info .ic{background:var(--tint-blue);color:var(--tint-blue-fg);} .ini-alerta.ok .ic{background:var(--tint-green);color:var(--tint-green-fg);}
 .ini-alerta a,.ini-link{color:var(--primary);font-weight:650;font-size:12px;cursor:pointer;text-decoration:none;}
