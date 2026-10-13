@@ -206,6 +206,10 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   Mensagens: "não lida" manual fica em localStorage mk_msg_naolidas; "lida" chama ml-atendimento com marcar_lida.
 - ADMINISTRAÇÃO (src/admin.js, só app_admin): RPC admin_painel; planos, cupons (uso único), assinaturas; cobranca_calc
   simula a mensalidade pelos pedidos de 30 dias (vendas_resumo_dia). Nada é cobrado de verdade ainda (fase 1).
+- PREVISÃO DE FULL (src/previsao-full.js, aba da Análise de vendas): RPC full_previsao_base (vendas Full por SKU: 7 d, 7 d
+  anteriores, 30 d, dias com venda, mesmo período do ano passado) + tabela full_sugestoes (sugestão do ML importada do
+  relatório de planejamento ou do relatório geral de estoque). A regra fica no topo do arquivo e no rodapé da tela.
+- ml-sonda: função só para o administrador que faz GET na API do ML e devolve um resumo (estudo de endpoints).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N
   filtra por nota (sem isso vêm as mais relevantes, quase todas nota 5).
