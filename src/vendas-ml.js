@@ -393,7 +393,7 @@
 
     async function vdCarrinho(packId){
       vmlModal('Carrinho: ' + packId, '<div class="vazio">Carregando…</div>');
-      const { data } = await supa.from('vendas_ml').select('order_id,qtd,titulo,sku,preco_unit,thumbnail').eq('usuario_id', usuarioAtual.id).eq('pack_id', packId);
+      const { data } = await supa.from('vendas_ml_calc').select('order_id,qtd,titulo,sku,preco_unit,thumbnail').eq('usuario_id', usuarioAtual.id).eq('pack_id', packId);
       vmlModal('Carrinho: ' + packId, `
         <div class="alert alert-info">Os produtos abaixo foram vendidos no mesmo carrinho e seguem no mesmo frete (o custo do frete é dividido entre eles).</div>
         ${(data || []).map(v => `<div class="d-flex gap-2" style="align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">

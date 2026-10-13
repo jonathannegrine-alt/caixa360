@@ -215,8 +215,8 @@
       if(conversas.length && usuarioAtual){
         const ids = conversas.map(c => c.pack_id);
         const [a, b] = await Promise.all([
-          supa.from('vendas_ml').select('order_id,pack_id,titulo,comprador_nome,comprador_apelido,comprador_id,thumbnail').eq('usuario_id', usuarioAtual.id).in('pack_id', ids),
-          supa.from('vendas_ml').select('order_id,pack_id,titulo,comprador_nome,comprador_apelido,comprador_id,thumbnail').eq('usuario_id', usuarioAtual.id).in('order_id', ids)
+          supa.from('vendas_ml_calc').select('order_id,pack_id,titulo,comprador_nome,comprador_apelido,comprador_id,thumbnail').eq('usuario_id', usuarioAtual.id).in('pack_id', ids),
+          supa.from('vendas_ml_calc').select('order_id,pack_id,titulo,comprador_nome,comprador_apelido,comprador_id,thumbnail').eq('usuario_id', usuarioAtual.id).in('order_id', ids)
         ]);
         const porId = {};
         (a.data || []).forEach(v => { porId[v.pack_id] = v; });

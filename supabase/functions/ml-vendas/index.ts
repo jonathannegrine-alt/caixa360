@@ -114,7 +114,16 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   ).then(r => r.json()).catch(() => [])
   if (Array.isArray(existentes)) for (const e of existentes) {
     jaTem.set(Number(e.order_id), e)
-    if (e.item_id && e.thumbnail) thumbs.set(e.item_id, e.thumbnail)
+  }
+  // a foto fica uma vez por anúncio (tabela vendas_fotos), não em cada venda; relida do ML a cada 7 dias (troca de capa)
+  const fotosVelhas = new Map<string, string>(), fotosNovas = new Set<string>()
+  const idsDia = [...new Set([...pedidos.values()].map(o => o.order_items?.[0]?.item?.id).filter((id: string) => id))] as string[]
+  for (let i = 0; i < idsDia.length; i += 150) {
+    const fs = await fetch(`${ctx.supaUrl}/rest/v1/vendas_fotos?usuario_id=eq.${userId}&item_id=in.(${idsDia.slice(i, i + 150).join(',')})&select=item_id,thumbnail,atualizado_em`, { headers: ctx.dbH }).then(r => r.json()).catch(() => [])
+    if (Array.isArray(fs)) for (const f of fs) {
+      if (!f.thumbnail) continue
+      if (Date.now() - new Date(f.atualizado_em).getTime() < 7 * 86400000) thumbs.set(f.item_id, f.thumbnail); else fotosVelhas.set(f.item_id, f.thumbnail)
+    }
   }
 
   // 3. frete — vendas do mesmo carrinho dividem o envio (custo rateado igualmente)
@@ -148,8 +157,13 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   await emParalelo(lotes, 4, async (lote) => {
     const r = await mlGet(`https://api.mercadolibre.com/items?ids=${lote.join(',')}&attributes=id,thumbnail`, accessToken, prazoMs)
     if (!r.ok || !Array.isArray(r.data)) return
-    for (const x of r.data) if (x.code === 200 && x.body?.thumbnail) thumbs.set(x.body.id, String(x.body.thumbnail).replace('http://', 'https://'))
+    for (const x of r.data) if (x.code === 200 && x.body?.thumbnail) { thumbs.set(x.body.id, String(x.body.thumbnail).replace('http://', 'https://')); fotosNovas.add(x.body.id) }
   })
+  if (fotosNovas.size) {
+    const agora = new Date().toISOString()
+    await fetch(`${ctx.supaUrl}/rest/v1/vendas_fotos?on_conflict=usuario_id,item_id`, { method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify([...fotosNovas].map(id => ({ usuario_id: userId, item_id: id, thumbnail: thumbs.get(id), atualizado_em: agora }))) }).catch(() => null)
+  }
 
   // 5. gravar
   let pendentes = 0
@@ -191,7 +205,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       frete_flex: freteFlex,
       envio_n: n,
       total_pago: Number(o.paid_amount) || 0,
-      thumbnail: (it.id && thumbs.get(it.id)) || ant?.thumbnail || null,
+      thumbnail: null,   // a foto vem de vendas_fotos (view vendas_ml_calc)
       atualizado_em: new Date().toISOString(),
     }
   })
