@@ -211,6 +211,12 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   relatório de planejamento ou do relatório geral de estoque). A regra fica no topo do arquivo e no rodapé da tela.
   Antes de mexer na regra, ler docs/previsao-full-aprendizado.md (fontes, fórmula declarada pelo ML, regras já testadas
   e o que cada uma acertou) e registrar ali o resultado de cada nova calibragem.
+  Envio com data marcada (pfl.envio): projeta o estoque até o dia em que o envio fica disponível. sku_trocas liga SKU antigo ao atual.
+- FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
+- ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
+- assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).
+- PÓS-VENDA NA HORA: ml-webhook (claims) chama pos-venda { cron, secret, usuario } para quem tem ativo = true; a função ignora se rodou há menos de 5 min.
+- ml-promos acao "ativas": promoções em andamento de até 120 anúncios (selo da lista Por anúncio); /items original_price não serve para isso.
 - ml-sonda: função só para o administrador que faz GET na API do ML e devolve um resumo (estudo de endpoints).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N

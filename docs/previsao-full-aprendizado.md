@@ -82,7 +82,13 @@ conta: pode cair em outras semanas.
 1. Importar o relatório toda segunda, de todas as contas. A cada importação, guardar o multiplicador de cada produto
    (a tela já mostra no dica da coluna "Mercado Livre") e acompanhar como ele se move até a Black Friday e depois dela.
 2. Com quatro ou mais semanas: trocar a regra 2 pela fórmula declarada, usando o multiplicador aprendido por produto.
-3. Ligar SKU antigo ao novo para a sazonalidade usar o ano anterior (conhecido: J-2006-ROSA → J-2005-Rosa).
-4. Campo de "datas especiais" na tela, para ajuste manual antes de eventos.
+3. Feito em 13/10/2026: tabela sku_trocas e quadro "Produto que trocou de SKU" na tela. Falta o usuário cadastrar J-2006-ROSA → J-2005-Rosa e medir se a sazonalidade melhora o acerto.
+4. Feito em 13/10/2026: campo "Reforço para data especial" (percentual único para todos os produtos). O ideal é por produto, com o multiplicador aprendido.
 5. Entender "de acordo com sua frequência de envio": as 4 semanas podem mudar para quem envia com outra frequência.
 6. Ler o EP 03 (estoque distribuído) e a documentação oficial da API, para confirmar se a sugestão existe por lá.
+
+## Rodada de 13/10/2026 (tarde)
+
+- Filtros com os nomes do ML (esta semana, próxima semana, 2 semanas ou mais). Contagem do sistema: 32 / 5 / 2; tela do ML no mesmo dia: 31 / 6 / 2.
+- Envio com data marcada: o estoque é projetado até a data do envio mais os dias de conferência (padrão 2) e o lote é calculado com essa sobra. A comparação com o ML continua sendo feita com a conta de hoje (80%).
+- O ML tem dois status que o sistema não reproduz: "Urgente" (zerado, "o quanto antes") e "Excedente" / "não repor por estoque antigo" (sugestão zero mesmo com cobertura baixa).
