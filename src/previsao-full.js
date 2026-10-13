@@ -1,7 +1,7 @@
 // ===== PREVISÃO DE ENVIOS AO FULL (aba "Previsão de Full" da Análise de vendas) =====
 // Para quem precisa agendar o envio antes de o Mercado Livre publicar a sugestão da semana.
 // Regra (versão 1, declarada na tela e afinada com os relatórios importados):
-//   ritmo        = 60% do ritmo dos últimos 7 dias + 40% do ritmo dos últimos 30 dias (unidades por dia, só Full);
+//   ritmo        = 40% do ritmo dos últimos 7 dias + 60% do ritmo dos últimos 30 dias (unidades por dia, só Full);
 //                  produto zerado no Full: os 30 dias são divididos só pelos dias em que houve venda (corrige a ruptura)
 //   aceleração   = se a última semana vendeu mais que a anterior, o ritmo sobe (no máximo 35%)
 //   sazonalidade = quanto o produto vendeu nos próximos N dias do ano passado ÷ o que vendia nas duas semanas
@@ -10,7 +10,7 @@
 //   enviar       = previsão − aptas no Full − a caminho (arredondado para cima)
 // Estoque: o da última importação do relatório do ML; sem relatório, o do Estoque Full já carregado no sistema.
 // Importação: "Relatório de Planejamento de envios" ou "Relatório geral de estoque" (aba Resumo) → tabela full_sugestoes.
-    let pfl = { chave: '', base: [], sug: [], refs: [], dias: 45, prazo: 14, erro: '', lendo: false, msg: '' };
+    let pfl = { chave: '', base: [], sug: [], refs: [], dias: 35, prazo: 14, erro: '', lendo: false, msg: '' };
     const pflE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     const pflN = v => (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
     const pflNum = v => typeof v === 'number' ? v : Number(String(v == null ? '' : v).replace(/[R$\s.]/g, '').replace(',', '.')) || 0;
@@ -38,8 +38,8 @@
         const aptas = s ? Number(s.aptas) || 0 : (f ? Number(f.aptos_venda) || 0 : 0), caminho = s ? Number(s.caminho) || 0 : (f ? (Number(f.em_separacao) || 0) + (Number(f.em_transito) || 0) : 0);
         const s7 = Number(b.s7) || 0, s7a = Number(b.s7ant) || 0, s30 = Number(b.s30) || 0, d30 = Number(b.d30) || 0;
         if(!s30 && !s7 && !(s && s.sugestao)) return;
-        const r30 = aptas === 0 && d30 > 0 && d30 < 26 ? s30 / Math.max(d30, 7) : s30 / 30;
-        let ritmo = 0.6 * (s7 / 7) + 0.4 * r30;
+        const r30 = aptas === 0 && d30 > 0 && d30 < 26 ? s30 / Math.max(d30, 18) : s30 / 30;
+        let ritmo = 0.4 * (s7 / 7) + 0.6 * r30;
         if(aptas === 0 && s7 / 7 < r30) ritmo = r30;                       // zerado: a última semana não mostra a procura
         const acel = s7a >= 7 && s7 > s7a ? Math.min(1.35, Math.sqrt(s7 / s7a)) : 1;
         const base = Number(b.ano_base) || 0, prox = Number(b.ano_prox) || 0, n = Number(b.ano_dias) || pfl.dias;
@@ -87,7 +87,7 @@
               <td style="text-align:right;"><b>${l.enviar ? pflN(l.enviar) : '—'}</b></td><td style="text-align:right;">${l.ml == null ? '—' : pflN(l.ml)}${l.urg ? '<br><small class="text-muted">' + pflE(l.urg) + '</small>' : ''}</td>
               <td style="text-align:right;">${l.ml == null ? '—' : (l.enviar - l.ml > 0 ? '+' : '') + pflN(l.enviar - l.ml)}</td></tr>`; }).join('') || '<tr><td colspan="11" class="text-muted">Sem vendas pelo Full nos últimos 30 dias nesta loja.</td></tr>'}
           </tbody></table></div>
-          <div class="text-muted adm-nota"><b>Como a conta é feita:</b> ritmo por dia = 60% dos últimos 7 dias + 40% dos últimos 30 (produto zerado: os 30 dias contam só os dias em que vendeu). Se a última semana vendeu mais que a anterior, o ritmo sobe até 35%. Se o produto vendeu no ano passado, entra a sazonalidade: quanto ele vendeu nos ${pfl.dias} dias seguintes ÷ o que vendia nas duas semanas equivalentes. Enviar = ritmo × dias de cobertura − o que está no Full − o que está a caminho. A regra é uma aproximação: o Mercado Livre não publica a dele. Ela acerta mais em produto estabilizado do que em produto novo. Importe o relatório do Mercado Livre toda segunda para comparar e afinar.</div>
+          <div class="text-muted adm-nota"><b>Como a conta é feita:</b> ritmo por dia = 40% dos últimos 7 dias + 60% dos últimos 30 (produto zerado e com poucos dias de venda: os 30 dias são divididos pelos dias em que vendeu, no mínimo 18). Se a última semana vendeu mais que a anterior, o ritmo sobe até 35%. Se o produto vendeu no ano passado, entra a sazonalidade: quanto ele vendeu nos ${pfl.dias} dias seguintes ÷ o que vendia nas duas semanas equivalentes. Enviar = ritmo × dias de cobertura − o que está no Full − o que está a caminho. A regra é uma aproximação: o Mercado Livre não publica a dele. Ela acerta mais em produto estabilizado do que em produto novo. Importe o relatório do Mercado Livre toda segunda para comparar e afinar.</div>
         </div></div>`;
     }
     function pflParam(k, v){ pfl[k] = Math.max(k === 'dias' ? 7 : 0, Math.min(120, Number(v) || 0)); if(k === 'dias'){ pfl.chave = ''; if(typeof an !== 'undefined'){ an.chave = ''; if(typeof anRender === 'function') return anRender(); } } if(typeof anDesenhar === 'function') anDesenhar(); }
