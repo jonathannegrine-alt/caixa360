@@ -41,16 +41,18 @@
       const L = d.contas || [], cap = d.capacidade || {}, comLoja = L.filter(x => (x.lojas || []).length);
       const receita = comLoja.reduce((s, x) => s + (Number(x.cobranca.a_pagar) || 0), 0), tabela = comLoja.filter(x => x.cobranca.situacao !== 'cortesia').reduce((s, x) => s + (Number(x.cobranca.preco_tabela) || 0), 0);
       return `<div class="adm-nums"><div><small>Contas com loja</small><b>${comLoja.length}</b></div><div><small>Pedidos em 30 dias</small><b>${admN(cap.pedidos_30d)}</b></div><div><small>Valor do mês, somado</small><b>${admR(tabela)}</b></div><div><small>A receber hoje, por mês</small><b>${admR(receita)}</b></div></div>
-        <div class="adm-tab"><table><thead><tr><th>Conta</th><th>Lojas</th><th>Último acesso</th><th style="text-align:right;">Pedidos 30 d</th><th>Plano que cabe</th><th style="text-align:right;">Valor do mês</th><th>Situação</th><th style="text-align:right;">Pagaria</th><th></th></tr></thead><tbody>
+        <div class="adm-tab"><table><thead><tr><th>Conta</th><th>Lojas</th><th>Último acesso</th><th style="text-align:right;">Pedidos 30 d</th><th>Plano que cabe</th><th style="text-align:right;">Valor do mês${admDica('Valor calculado pela regra da aba Planos (rateio do custo ou tabela), já com o desconto do cupom. É só a sua referência de custo.')}</th><th style="text-align:right;">Valor a cobrar${admDica('O que você combinou com a pessoa. Em branco, vale o valor do mês. É este valor que aparece para ela em Minha assinatura.')}</th><th>Situação</th><th style="text-align:right;">Pagaria</th><th>Crédito de IA${admDica('Pacote pré-pago: você lança a recarga em reais e o sistema desconta a cada caso de pós-venda analisado pela IA. "Sem limite" = conta liberada sem saldo controlado. Quem usa chave própria de IA não consome crédito.')}</th><th></th></tr></thead><tbody>
         ${L.map(x => { const k = x.cobranca || {}, sem = !(x.lojas || []).length;
           return `<tr><td><b>${admE(x.email)}</b><br><small class="text-muted">desde ${admData(x.criado)} · ${admN(x.vendas_guardadas)} vendas guardadas${x.historico_dias < 360 && !sem ? ' · histórico ' + x.historico_dias + '/365 dias' : ''}</small></td>
             <td>${sem ? '<span class="text-muted">nenhuma conectada</span>' : (x.lojas || []).map(admE).join('<br>')}</td><td>${admQuando(x.ultimo_acesso)}</td>
-            <td style="text-align:right;">${sem ? '—' : admN(k.pedidos_30d)}</td><td>${sem ? '—' : admE(k.plano || '')}</td><td style="text-align:right;">${sem ? '—' : admR(k.preco_tabela)}</td>
+            <td style="text-align:right;">${sem ? '—' : admN(k.pedidos_30d)}</td><td>${sem ? '—' : admE(k.plano || '')}</td><td style="text-align:right;">${sem ? '—' : admR(k.valor_calculado != null ? k.valor_calculado : k.preco_tabela)}</td>
+            <td style="text-align:right;">${sem ? '—' : `<input type="number" min="0" step="0.01" value="${k.valor_combinado == null ? '' : k.valor_combinado}" placeholder="${(Number(k.valor_calculado != null ? k.valor_calculado : k.preco_tabela) || 0).toFixed(2)}" style="width:96px;text-align:right;" onchange="admCombinado('${x.id}', this.value)">`}</td>
             <td>${sem ? '—' : admE(ADM_SIT[k.situacao] || k.situacao)}${k.situacao === 'teste' ? '<br><small class="text-muted">até ' + admData(k.teste_ate) + '</small>' : ''}${k.cupom ? '<br><small class="text-muted">' + admE(k.cupom) + (k.desconto_ate ? ' até ' + admData(k.desconto_ate) : '') + '</small>' : ''}</td>
             <td style="text-align:right;"><b>${sem ? '—' : admR(k.a_pagar)}</b></td>
+            <td style="white-space:nowrap;">${!k.ia_liberado ? '<span class="text-muted">não liberada</span>' : k.ia_credito == null ? 'sem limite' : '<b style="' + (Number(k.ia_credito) <= 0 ? 'color:var(--danger)' : '') + '">' + admR(k.ia_credito) + '</b>'}${Number(k.ia_gasto) ? '<br><small class="text-muted">usou ' + admR(k.ia_gasto) + '</small>' : ''}<br><a class="fx-link" style="cursor:pointer;" onclick="admIaRecarga('${x.id}', this)">recarregar</a></td>
             <td><a class="fx-link" style="cursor:pointer;" onclick="admCortesia('${x.id}', ${k.situacao !== 'cortesia'})">${k.situacao === 'cortesia' ? 'tirar cortesia' : 'dar cortesia'}</a></td></tr>`; }).join('')}
         </tbody></table></div>
-        <div class="text-muted adm-nota">Nada é cobrado de verdade ainda, e ninguém é bloqueado: "Pagaria" é uma simulação. A regra do valor está na aba Planos (hoje: ${(L[0] && L[0].cobranca.modo) === 'tabela' ? 'tabela de planos' : 'rateio do custo do servidor'}). Pedidos = vendas aprovadas dos últimos 30 dias, somando as lojas da conta. O teste grátis começa no próximo acesso de cada pessoa. Para liberar alguém depois do teste, gere um cupom na aba Cupons.</div>`;
+        <div class="text-muted adm-nota">Nada é cobrado de verdade ainda, e ninguém é bloqueado: "Pagaria" é uma simulação (o valor a cobrar, ou o valor do mês quando não há combinado; zero durante o teste e na cortesia). A regra do valor está na aba Planos (hoje: ${(L[0] && L[0].cobranca.modo) === 'tabela' ? 'tabela de planos' : 'rateio do custo do servidor'}). Pedidos = vendas aprovadas dos últimos 30 dias, somando as lojas da conta. O teste grátis começa no próximo acesso de cada pessoa. Para liberar alguém depois do teste, gere um cupom na aba Cupons.</div>`;
     }
     function admCupons(d){
       const L = d.cupons || [];
@@ -111,6 +113,24 @@
       bt.disabled = false; if(typeof toast === 'function') toast(r.error ? r.error.message : 'Regra de cobrança salva.');
       await admCarregar(); admDesenhar();
     }
+    // valor combinado com a conta (vazio = volta a valer o calculado)
+    async function admCombinado(id, v){
+      const n = String(v).trim() === '' ? null : Math.max(0, Number(v) || 0);
+      const r = await supa.rpc('admin_valor_combinado', { p_usuario: id, p_valor: n });
+      if(typeof toast === 'function') toast(r.error ? r.error.message : n == null ? 'Voltou a valer o valor do mês.' : 'Valor a cobrar gravado: ' + admR(n) + '.');
+      await admCarregar(); admDesenhar();
+    }
+    // recarga de crédito de IA: troca o link por um campo de valor na própria linha
+    function admIaRecarga(id, el){
+      const td = el.parentElement; if(!td || td.querySelector('.adm-ia-in')) return;
+      const d = document.createElement('div'); d.className = 'adm-ia-in'; d.style.cssText = 'display:flex;gap:6px;margin-top:6px;';
+      d.innerHTML = '<input type="number" step="0.01" placeholder="R$" style="width:84px;"><button class="btn btn-sm">Lançar</button>';
+      d.querySelector('button').onclick = async () => { const v = Number(d.querySelector('input').value) || 0; if(!v) return;
+        const r = await supa.rpc('admin_ia_recarga', { p_usuario: id, p_valor: v });
+        if(typeof toast === 'function') toast(r.error ? r.error.message : 'Recarga lançada. Saldo de IA: ' + admR(r.data) + '.');
+        await admCarregar(); admDesenhar(); };
+      td.appendChild(d); d.querySelector('input').focus();
+    }
     async function admCortesia(id, sim){ await supa.rpc('admin_cortesia', { p_usuario: id, p_sim: !!sim }); await admCarregar(); admDesenhar(); }
 
     // usuário comum: situação da própria assinatura e campo do cupom (aparece em Configurações → Conta)
@@ -119,7 +139,8 @@
       const r = await supa.rpc('minha_assinatura'); if(r.error || !r.data) return; const k = r.data;
       alvo.innerHTML = `<div class="card-title" style="margin-bottom:8px;">Minha assinatura</div>
         <div style="font-size:13px;line-height:1.7;">Plano pelo seu volume: <b>${admE(k.plano || '—')}</b> (${admN(k.pedidos_30d)} pedidos nos últimos 30 dias, ${k.lojas} loja${k.lojas === 1 ? '' : 's'}).<br>
-        Situação: <b>${admE(ADM_SIT[k.situacao] || k.situacao)}</b>${k.situacao === 'teste' ? ' até ' + admData(k.teste_ate) : ''}${k.cupom ? ' · cupom ' + admE(k.cupom) : ''}. Valor do mês: <b>${admR(k.a_pagar)}</b>${Number(k.preco_tabela) !== Number(k.a_pagar) ? ' <span class="text-muted">(sem desconto: ' + admR(k.preco_tabela) + ')</span>' : ''}.</div>
+        Situação: <b>${admE(ADM_SIT[k.situacao] || k.situacao)}</b>${k.situacao === 'teste' ? ' até ' + admData(k.teste_ate) : ''}${k.cupom ? ' · cupom ' + admE(k.cupom) : ''}. Valor do mês: <b>${admR(k.a_pagar)}</b>${k.valor_combinado == null && Number(k.preco_tabela) !== Number(k.a_pagar) ? ' <span class="text-muted">(sem desconto: ' + admR(k.preco_tabela) + ')</span>' : ''}.<br>
+        Inteligência artificial (pós-venda): ${!k.ia_liberado ? 'não liberada nesta conta' : k.ia_credito == null ? 'liberada' : 'crédito pré-pago de <b>' + admR(k.ia_credito) + '</b>'}${Number(k.ia_gasto) ? ' · uso até agora: ' + admR(k.ia_gasto) : ''}.</div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;"><input id="ass-cupom" placeholder="Tem um cupom? Digite aqui" style="max-width:240px;"><button class="btn btn-out" onclick="assCupom(this)">Aplicar cupom</button></div>
         <div class="text-muted" style="font-size:12px;margin-top:8px;">Por enquanto nada é cobrado: este quadro mostra como ficaria a sua mensalidade.</div>`;
     }
