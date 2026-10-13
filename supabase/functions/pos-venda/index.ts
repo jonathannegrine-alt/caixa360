@@ -498,6 +498,15 @@ Deno.serve(async (req: Request) => {
 
     if (body?.cron === true) {
       if (!Deno.env.get('CRON_SECRET') || body.secret !== Deno.env.get('CRON_SECRET')) return resp({ error: 'não autorizado' }, 401)
+      // chamada imediata (ml-webhook, quando chega aviso de reclamação): só aquele usuário, se a automação estiver ligada
+      // e a última rodada tiver mais de 5 minutos (várias notificações do mesmo caso viram uma rodada só)
+      if (/^[0-9a-f-]{36}$/i.test(String(body?.usuario || ''))) {
+        const c = (await db(`pos_venda_cfg?usuario_id=eq.${body.usuario}&ativo=eq.true&select=usuario_id,ultima_rodada`)).json
+        const u = Array.isArray(c) ? c[0] : null
+        if (!u) return resp({ ok: true, imediato: false, motivo: 'automação desligada' })
+        if (u.ultima_rodada && Date.now() - Date.parse(u.ultima_rodada) < 5 * 60000) return resp({ ok: true, imediato: false, motivo: 'rodou há menos de 5 minutos' })
+        return resp({ ok: true, imediato: true, resumo: await rodada(u.usuario_id) })
+      }
       const us0 = (await db('pos_venda_cfg?ativo=eq.true&select=usuario_id,horarios,ultima_rodada')).json
       // horários de Brasília escolhidos pelo usuário (HH:MM). Roda quando passou de um horário e ainda não rodou depois dele.
       const agora = new Date(Date.now() - 3 * 3600000), hoje = agora.toISOString().slice(0, 10), hm = agora.toISOString().slice(11, 16)

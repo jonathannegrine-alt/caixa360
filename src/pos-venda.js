@@ -232,6 +232,7 @@
       const c = pv.cfg || {};
       return `<div class="card"><div class="card-header"><div class="card-title">Regras e textos prontos</div><span class="text-muted" style="font-size:12px;">É a orientação que a IA segue. Escreva como falaria com um atendente novo.</span></div>
         <div class="card-body">
+          <div class="alert alert-info" style="margin-bottom:12px;"><b>Este texto é o treinamento e também a trava da IA.</b> Ela só faz o que estiver escrito aqui: o que pode responder sozinha, o que precisa da sua aprovação, quando pode reembolsar e até que valor. O que não estiver previsto vai para a fila e espera você.</div>
           <textarea id="pv-regras" rows="26" style="width:100%;font-family:inherit;font-size:13px;line-height:1.55;" placeholder="Postura, o que passa direto, o que vai para a fila, regras por produto e textos prontos (R1, R2...).">${pvE(c.regras || '')}</textarea>
           <div class="d-flex gap-1" style="margin-top:10px;align-items:center;flex-wrap:wrap;"><button class="btn" onclick="pvSalvarRegras(this)">Salvar regras</button><span class="text-muted" style="font-size:12px;">As correções que você escreve na fila entram sozinhas no fim deste texto, em "Regras aprendidas".</span></div>
         </div></div>
@@ -281,7 +282,7 @@
       return `<div class="card"><div class="card-header"><div class="card-title">Acesso à inteligência artificial</div></div><div class="card-body">${acessoHtml}</div></div>
       <div class="card"><div class="card-header"><div class="card-title">O que a IA pode fazer sozinha</div></div><div class="card-body">
         ${chave('ativo', 'Analisar sozinha nos horários abaixo', 'Sem depender do computador ligado. Desligado, a análise só roda quando você clica em "Analisar agora".')}
-        <div class="pv-chave" style="cursor:default;"><div style="margin-left:34px;width:100%;"><b>Horários (de Brasília, todos os dias)</b><span>${hs.length ? 'A análise roda nestes horários (até 10 minutos depois).' : 'Sem horários escolhidos: roda a cada 10 minutos, dia e noite.'}</span>
+        <div class="pv-chave" style="cursor:default;"><div style="margin-left:34px;width:100%;"><b>Horários (de Brasília, todos os dias)</b><span>${hs.length ? 'A análise roda nestes horários (até 10 minutos depois).' : 'Sem horários escolhidos: roda a cada 10 minutos, dia e noite.'} Além disso, quando o Mercado Livre avisa de uma reclamação nova, a análise roda na hora, sem esperar o horário.</span>
           <div class="chips" style="margin-top:8px;">${hs.map(h => `<span class="chip active" style="cursor:default;">${h} <a style="cursor:pointer;margin-left:6px;" title="Tirar este horário" onclick="pvHorario('${h}', false)">✕</a></span>`).join('') || '<span class="text-muted" style="font-size:12.5px;">nenhum</span>'}</div>
           <div class="d-flex gap-1" style="margin-top:10px;flex-wrap:wrap;align-items:center;font-size:13px;">
             <input type="time" id="pv-h-novo" style="width:120px;"><button class="btn-out btn-sm" onclick="pvHorario(document.getElementById('pv-h-novo').value, true)">Adicionar horário</button>

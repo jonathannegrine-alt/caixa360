@@ -221,6 +221,12 @@
           .concat([['= Margem de contribuição', n2(M.mc), pc(M.mc, M.entrada), n2(A.mc)], ['(-) Despesas fixas', n2(-M.fixo), pc(M.fixo, M.entrada), n2(-A.fixo)]]);
         y = tab(['', gfMesNome(ym), '% do faturamento', gfMesNome(ant)], corpo, y, [79, 70, 229], ['= Lucro do mês', n2(M.lucro), pc(M.lucro, M.entrada), n2(A.lucro)]);
         if(M.fixas.length){ y = tit('Despesas fixas por categoria', y + 26); y = tab(['Categoria', 'Valor', '% das fixas'], M.fixas.sort((a, b) => b.v - a.v).slice(0, 14).map(l => [l.nome, n2(l.v), pc(l.v, M.fixo)]), y, [217, 119, 6]); }
+        // saídas de caixa que não são despesa (devolução de empréstimo, retirada marcada como "fora" etc.): não mexem no lucro, mas saem do caixa
+        const foraCat = {}; pagamentos.filter(p => String(p.data || '').slice(0, 7) === ym && ['fora', 'emprestimo'].includes(dreGrupoDe(p.cat))).forEach(p => { const c = p.cat || 'Sem categoria'; foraCat[c] = (foraCat[c] || 0) + (Number(p.val) || 0); });
+        const foraL = Object.entries(foraCat).filter(x => x[1]).sort((a, b) => b[1] - a[1]), foraTot = foraL.reduce((s, x) => s + x[1], 0);
+        if(foraL.length){ y = tit('Saídas de caixa que não entram no resultado', y + 26);
+          y = tab(['Categoria', 'Valor'], foraL.slice(0, 14).map(x => [x[0], n2(x[1])]), y, [100, 116, 139], ['Total', n2(foraTot)]);
+          doc.setFontSize(9); doc.setTextColor(60); doc.text(doc.splitTextToSize('Não são despesa (devolução de empréstimo, retirada de lucro e outras categorias fora do resultado), por isso não reduzem o lucro. Mas saem do caixa: lucro do mês ' + n2(M.lucro) + ' menos essas saídas ' + n2(foraTot) + ' = ' + n2(M.lucro - foraTot) + ' de sobra.', L - 80), 40, y + 16); y += 30; }
 
         // 2. caixa
         y = tit('2. Caixa (posição de hoje)', y + 26);

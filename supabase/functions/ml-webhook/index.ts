@@ -36,6 +36,22 @@ async function sincronizar(conta: string) {
   }).catch(() => null)
 }
 
+// reclamação nova: aciona o Pós-venda na hora para os donos da conta que ligaram a automação (a função pos-venda
+// confere de novo e ignora se rodou há menos de 5 minutos). Quem não ligou continua só com o aviso.
+async function posVendaJa(conta: string) {
+  const supaUrl = Deno.env.get('SUPABASE_URL')!, supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const dbH = { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
+  const donos = await fetch(`${supaUrl}/rest/v1/ml_tokens?ml_user_id=eq.${conta}&select=usuario_id`, { headers: dbH }).then(r => r.json()).catch(() => [])
+  if (!Array.isArray(donos) || !donos.length) return
+  const ids = [...new Set(donos.map((d: any) => d.usuario_id))]
+  const lig = await fetch(`${supaUrl}/rest/v1/pos_venda_cfg?ativo=eq.true&usuario_id=in.(${ids.join(',')})&select=usuario_id,ultima_rodada`, { headers: dbH }).then(r => r.json()).catch(() => [])
+  for (const u of (Array.isArray(lig) ? lig : [])) {
+    if (u.ultima_rodada && Date.now() - Date.parse(u.ultima_rodada) < 5 * 60000) continue
+    await fetch(`${supaUrl}/functions/v1/pos-venda`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cron: true, secret: Deno.env.get('CRON_SECRET') || '', usuario: u.usuario_id }) }).catch(() => null)
+  }
+}
+
 // pergunta ou mensagem nova: grava um aviso para cada usuário dono daquela conta (a tela mostra o selo em até 1 minuto)
 async function avisar(conta: string, topico: string, recurso: string) {
   const supaUrl = Deno.env.get('SUPABASE_URL')!, supaKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -116,7 +132,7 @@ Deno.serve(async (req) => {
     }
     // reclamação/devolução aberta ou com ação pendente: aviso para o Pós-venda (os dois tópicos viram "claims")
     else if (/^(claims|claims_actions|post_purchase)$/.test(topico) && /^\d{4,20}$/.test(conta)) {
-      EdgeRuntime.waitUntil(avisar(conta, 'claims', String(b?.resource || '')))
+      EdgeRuntime.waitUntil(avisar(conta, 'claims', String(b?.resource || '')).then(() => posVendaJa(conta)))
     }
     // promoção nova para um anúncio (candidato) ou oferta que mudou: aviso para a Central de promoções.
     // No máximo um aviso a cada 10 minutos por conta: o ML manda um por anúncio e uma campanha nova gera dezenas.
