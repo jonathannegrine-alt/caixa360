@@ -366,7 +366,7 @@
         ${pe.length ? `<div class="card"><div class="card-header"><div class="card-title">Por tipo de envio</div></div><div class="card-body"><div class="an-ufs">${pe.map(x => `<div class="an-uf"><b style="width:70px;">${anE(x.envio)}</b><span class="an-uf-n"></span><div class="an-uf-t"><i class="an-verm" style="width:${Math.min(100, Math.max(1, x.canc / x.total * 100 * 5))}%"></i></div><span class="an-uf-v">${anP(x.canc, x.total, 2)}</span><span class="an-uf-p"></span><span class="an-uf-q">${anN(x.canc)} de ${anN(x.total)}</span></div>`).join('')}</div></div></div>` : ''}
         <div class="card"><div class="card-header"><div class="card-title">Produtos com cancelamento</div></div>
         ${anTabela(pp, [
-          { k: 'sku', t: 'Produto', fmt: l => `<div class="cp-prod" style="max-width:380px;"><b>${anE(l.sku)}</b><span>${anE(l.titulo || '')}</span></div>` },
+          { k: 'sku', t: 'Produto', fmt: l => (h => typeof fotoLinha === 'function' ? fotoLinha(l.sku, h) : h)(`<div class="cp-prod" style="max-width:380px;"><b>${anE(l.sku)}</b><span>${anE(l.titulo || '')}</span></div>`) },
           { k: 'canc', t: 'Canceladas', num: 1, fmt: l => '<b>' + anN(l.canc) + '</b>' }, { k: 'total', t: 'Vendas', num: 1, fmt: l => anN(l.total) },
           { k: 'taxa', t: 'Taxa', num: 1, fmt: l => `<span class="${l.taxa > 5 ? 'text-danger' : ''}">${anN(l.taxa, 1)}%</span>` }, { k: 'valor', t: 'Valor cancelado', num: 1, fmt: l => fmt(l.valor) }
         ], 'canc')}</div>`;

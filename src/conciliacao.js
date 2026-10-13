@@ -211,7 +211,7 @@
             </tbody><tfoot><tr><td colspan="6"><b>Total (${L.length} vendas)</b></td><td class="num"><b>${cnR(tot)}</b></td></tr></tfoot></table></div>${L.length > max ? `<div class="text-muted" style="padding-top:8px;">Mostrando as primeiras ${max}. O Excel traz todas.</div>` : ''}` : '<div class="vazio"><b>Nenhuma venda neste filtro</b></div>'}</div>`;
       } else if(cn.aba === 'avulsas'){
         corpo = `<div class="card"><div class="card-header"><div class="card-title">Cobranças que não aparecem em venda nenhuma</div></div>
-          <div class="text-muted" style="margin-bottom:10px;">São valores que o Mercado Livre cobra na fatura ou desconta do saldo e que não entram na margem de nenhuma venda. Para o lucro do mês ficar certo, precisam estar no seu DRE.</div>
+          <div class="text-muted" style="margin:0 20px 10px;">São valores que o Mercado Livre cobra na fatura ou desconta do saldo e que não entram na margem de nenhuma venda. Para o lucro do mês ficar certo, precisam estar no seu DRE.</div>
           ${avulsas.length ? `<div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Cobrança</th><th>Como aparece no relatório</th><th class="num">Lançamentos</th><th class="num">Valor</th></tr></thead><tbody>
             ${avulsas.map(a => `<tr><td><b>${cnE(CN_AVULSA[a.tipo] || a.tipo)}</b></td><td class="text-muted">${cnE(a.nome)}</td><td class="num">${a.n}</td><td class="num" style="font-weight:700;">${cnR(a.valor)}</td></tr>`).join('')}
             </tbody><tfoot><tr><td colspan="3"><b>Total do período</b></td><td class="num"><b>${cnR(totAv)}</b></td></tr></tfoot></table></div>` : '<div class="vazio"><b>Nenhuma cobrança fora das vendas no período</b>Este quadro vem do relatório "por vendas".</div>'}</div>` + cnFaturaQuadro(avulsas);
@@ -221,13 +221,13 @@
         const ks = Object.keys(dias).sort(), T = ks.reduce((s, k) => { for(const c in dias[k]) s[c] = (s[c] || 0) + dias[k][c]; return s; }, { lib: 0, est: 0, env: 0, cash: 0, sai: 0, outros: 0 });
         const lin = d => { const entrou = d.lib + d.est + d.env + d.cash + d.outros; return `<td class="num">${cnR(d.lib)}</td><td class="num" style="${d.est < 0 ? 'color:var(--danger)' : ''}">${cnR(d.est)}</td><td class="num">${cnR(d.env)}</td><td class="num">${cnR(d.cash)}</td><td class="num"><b>${cnR(entrou)}</b></td><td class="num text-muted">${cnR(d.sai)}</td>`; };
         corpo = `<div class="card"><div class="card-header"><div class="card-title">Dinheiro liberado por dia</div></div>
-          <div class="text-muted" style="margin-bottom:10px;">Pela data em que o dinheiro entrou na conta do Mercado Pago, não pela data da venda. "Saídas" são reservas, pagamentos de crédito e transferências que você mesmo fez: não são custo.</div>
+          <div class="text-muted" style="margin:0 20px 10px;">Pela data em que o dinheiro entrou na conta do Mercado Pago, não pela data da venda. "Saídas" são reservas, pagamentos de crédito e transferências que você mesmo fez: não são custo.</div>
           ${ks.length ? `<div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Dia</th><th class="num">Vendas liberadas</th><th class="num">Estornos</th><th class="num" title="Frete pago pelo comprador, liberado à parte">Frete</th><th class="num">Cashback</th><th class="num">Entrou no dia</th><th class="num">Saídas</th></tr></thead><tbody>
             ${ks.map(k => `<tr><td>${cnD(k)}</td>${lin(dias[k])}</tr>`).join('')}</tbody><tfoot><tr><td><b>Total</b></td>${lin(T)}</tr></tfoot></table></div>` : '<div class="vazio"><b>Sem liberações no período</b>Este quadro vem do relatório "por liberação".</div>'}</div>`;
       } else {
         corpo = `<div class="card"><div class="card-header"><div class="card-title">Relatórios importados</div></div><div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Loja</th><th>Relatório</th><th>Período coberto</th><th class="num">Linhas</th><th></th></tr></thead><tbody>
           ${(cn.cob || []).map(x => `<tr><td><b>${cnE(nome(x.ml_user_id))}</b></td><td>${x.origem === 'v' ? 'Por vendas' : 'Por liberação'}</td><td>${cnD(x.de)} a ${cnD(x.ate)}</td><td class="num">${Number(x.linhas).toLocaleString('pt-BR')}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="cnApagar('${cnE(x.ml_user_id)}','${x.origem}','${x.de}','${x.ate}')">Apagar</button></td></tr>`).join('')}
-          </tbody></table></div><div class="text-muted" style="font-size:12.5px;padding-top:8px;">Pode enviar o mesmo arquivo de novo ou meses que se sobrepõem: o sistema não duplica as linhas.</div></div>`;
+          </tbody></table></div><div class="text-muted" style="font-size:12.5px;padding:8px 20px 12px;">Pode enviar o mesmo arquivo de novo ou meses que se sobrepõem: o sistema não duplica as linhas.</div></div>`;
       }
       view.innerHTML = cab + erro + (falta ? `<div class="alert alert-warning">${falta}</div>` : '') + periodo + cartoes + abas + corpo;
     }

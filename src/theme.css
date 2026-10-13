@@ -1602,3 +1602,9 @@ body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-sele
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='M12 12v6'/%3E%3Cpath d='M9.500 15.500L12 18l2.500-2.500'/%3E%3C/svg%3E") center/contain no-repeat;}
 /* Previsão de Full: nome do produto numa linha só (o nome inteiro aparece ao passar o mouse) */
 .pfl-tit{display:block;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* campos de busca (type=search) com o mesmo desenho dos outros campos: apareciam finos e sem borda visível */
+input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;border:1px solid var(--ctl-border,var(--border));border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;min-height:36px;box-sizing:border-box;}
+/* título do anúncio cortado sem reticências nas tabelas da Análise */
+.an-anuncio .cp-prod{min-width:0;}
+.an-anuncio .cp-prod b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
