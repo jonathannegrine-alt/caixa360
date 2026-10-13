@@ -115,7 +115,7 @@
         <datalist id="eso-map-lista">${[...prods.values()].concat([...kits.keys()].map(k => (composicaoKit.find(c => esN(c.sku_comercial) === k) || {}).sku_comercial || k)).sort().map(p => `<option value="${esEsc(p)}">`).join('')}</datalist>
         <div class="chips" style="margin-bottom:10px;"><button class="chip ${esoMapaSo === 'sem' ? 'active' : ''}" onclick="esoMapaSo='sem';esoMapeamento();">Sem correspondência e mapeados<span class="n">${sem + mapa.size}</span></button><button class="chip ${esoMapaSo === 'todos' ? 'active' : ''}" onclick="esoMapaSo='todos';esoMapeamento();">Todos os anúncios<span class="n">${linhas.length}</span></button></div>
         <div style="overflow-x:auto;max-height:48vh;"><table class="cp-tab"><thead><tr><th>SKU do anúncio</th><th class="num" title="Unidades vendidas nos últimos 25 dias, fora do Full">Vendido</th><th class="num">No Full</th><th>Situação</th><th>Vai para o produto ou kit</th><th class="num" title="Quantas unidades do produto cada unidade vendida consome">× unidades</th></tr></thead><tbody>
-          ${mostra.length ? mostra.map(l => `<tr><td><b>${esEsc(l.sku)}</b></td><td class="num">${l.vend ? esInt(l.vend) : '—'}</td><td class="num">${l.full ? esInt(l.full) : '—'}</td><td><span class="cp-sit ${selo[l.tipo][1]}">${selo[l.tipo][0]}</span></td>
+          ${mostra.length ? mostra.map(l => `<tr><td>${typeof fotoLinha === 'function' ? fotoLinha(l.sku, `<b>${esEsc(l.sku)}</b>`) : `<b>${esEsc(l.sku)}</b>`}</td><td class="num">${l.vend ? esInt(l.vend) : '—'}</td><td class="num">${l.full ? esInt(l.full) : '—'}</td><td><span class="cp-sit ${selo[l.tipo][1]}">${selo[l.tipo][0]}</span></td>
             <td>${l.tipo === 'sem' || l.tipo === 'mapeado' ? `<input type="text" class="eso-map-para" data-de="${esEsc(l.sku)}" list="eso-map-lista" value="${esEsc(l.eq ? l.eq.para : '')}" placeholder="Escolha o produto" style="min-width:220px;">` : '<span class="text-muted">o próprio código</span>'}</td>
             <td class="num">${l.tipo === 'sem' || l.tipo === 'mapeado' ? `<input type="number" class="eso-map-mult" data-de="${esEsc(l.sku)}" min="1" value="${l.eq ? l.eq.mult : 1}" style="width:80px;text-align:right;">` : ''}</td></tr>`).join('') : '<tr><td colspan="6" class="text-muted" style="padding:18px;text-align:center;">Todos os anúncios casam com um produto ou kit do estoque.</td></tr>'}
         </tbody></table></div>`,
@@ -422,7 +422,7 @@
       vmlModal('Digitar contagem — ' + esEsc(dep.nome), `
         <div class="text-muted" style="margin-bottom:10px;">${marc.length ? 'Mostrando só os <b>' + marc.length + ' produtos marcados</b> na tela de estoque. ' : ''}Preencha só os produtos que foram contados; os que ficarem em branco não entram.</div>
         <div style="overflow-x:auto;max-height:56vh;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">No sistema</th><th class="num">Contado</th></tr></thead><tbody>
-          ${linhas.map(l => `<tr><td class="cp-prod"><b>${esEsc(l.sku)}</b><span>${esEsc(l.nome)}</span></td><td class="num">${esInt(l.fisico)}</td><td class="num"><input type="number" class="cp-dias eso-ct" data-sku="${esEsc(l.sku)}" style="width:110px !important;" placeholder="—"></td></tr>`).join('')}
+          ${linhas.map(l => `<tr><td class="cp-prod">${typeof fotoLinha === 'function' ? fotoLinha(l.sku, `<b>${esEsc(l.sku)}</b><span>${esEsc(l.nome)}</span>`) : `<b>${esEsc(l.sku)}</b><span>${esEsc(l.nome)}</span>`}</td><td class="num">${esInt(l.fisico)}</td><td class="num"><input type="number" class="cp-dias eso-ct" data-sku="${esEsc(l.sku)}" style="width:110px !important;" placeholder="—"></td></tr>`).join('')}
         </tbody></table></div>`,
         `<button class="btn-out" onclick="esoContagens()">Voltar</button><button class="btn" onclick="esoContagemRevisar([...document.querySelectorAll('.eso-ct')].filter(i => i.value !== '').map(i => ({ sku: i.dataset.sku, real: Number(i.value) || 0 })), 'Digitada', '', new Date().toISOString().substring(0, 16))">Conferir diferenças</button>`);
     }
@@ -441,7 +441,7 @@
           <div class="kpi k-atraso"><div class="kpi-label">Contado a menos</div><div class="kpi-value">−${esInt(falta)}</div></div>
         </div>
         <div style="overflow-x:auto;max-height:40vh;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">No Caixa 360</th><th class="num">Contado</th><th class="num">Diferença</th></tr></thead><tbody>
-          ${lista.map(i => `<tr><td><b>${esEsc(i.sku)}</b></td><td class="num">${esInt(i.sistema)}</td><td class="num">${esInt(i.real)}</td><td class="num ${i.dif > 0 ? 'text-success' : i.dif < 0 ? 'text-danger' : 'text-muted'}"><b>${i.dif > 0 ? '+' : ''}${esInt(i.dif)}</b></td></tr>`).join('')}
+          ${lista.map(i => `<tr><td>${typeof fotoLinha === 'function' ? fotoLinha(i.sku, `<b>${esEsc(i.sku)}</b>`) : `<b>${esEsc(i.sku)}</b>`}</td><td class="num">${esInt(i.sistema)}</td><td class="num">${esInt(i.real)}</td><td class="num ${i.dif > 0 ? 'text-success' : i.dif < 0 ? 'text-danger' : 'text-muted'}"><b>${i.dif > 0 ? '+' : ''}${esInt(i.dif)}</b></td></tr>`).join('')}
         </tbody></table></div>
         <div class="form-group" style="margin-top:12px;"><label class="form-label">Observação</label><input type="text" id="eso-ct-obs" placeholder="Ex.: contagem enviada pelo galpão em 10/10" value="${esEsc(arquivo || '')}"></div>`,
         `<button class="btn-out" onclick="esoContagens()">Cancelar</button><button class="btn-out" onclick="esoContagemSalvar(false, this)">Só guardar a comparação</button><button class="btn" onclick="esoContagemSalvar(true, this)">Ajustar o estoque para o contado</button>`);
@@ -473,6 +473,6 @@
       const lista = (c.itens || []).map(i => ({ ...i, dif: Number(i.real) - Number(i.sistema) })).sort((a, b) => Math.abs(b.dif) - Math.abs(a.dif));
       vmlModal('Contagem CT' + c.id, `${c.obs ? `<div class="text-muted" style="margin-bottom:10px;">${esEsc(c.obs)}</div>` : ''}
         <div style="overflow-x:auto;max-height:60vh;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">No Caixa 360</th><th class="num">Contado</th><th class="num">Diferença</th></tr></thead><tbody>
-        ${lista.map(i => `<tr><td><b>${esEsc(i.sku)}</b></td><td class="num">${esInt(i.sistema)}</td><td class="num">${esInt(i.real)}</td><td class="num ${i.dif > 0 ? 'text-success' : i.dif < 0 ? 'text-danger' : 'text-muted'}"><b>${i.dif > 0 ? '+' : ''}${esInt(i.dif)}</b></td></tr>`).join('')}
+        ${lista.map(i => `<tr><td>${typeof fotoLinha === 'function' ? fotoLinha(i.sku, `<b>${esEsc(i.sku)}</b>`) : `<b>${esEsc(i.sku)}</b>`}</td><td class="num">${esInt(i.sistema)}</td><td class="num">${esInt(i.real)}</td><td class="num ${i.dif > 0 ? 'text-success' : i.dif < 0 ? 'text-danger' : 'text-muted'}"><b>${i.dif > 0 ? '+' : ''}${esInt(i.dif)}</b></td></tr>`).join('')}
         </tbody></table></div>`, `<button class="btn-out" onclick="esoContagens()">Voltar</button>`);
     }

@@ -131,7 +131,7 @@
       vmlModal(`Ordem nº ${ocEsc(o.numero || o.id)} — ${ocEsc(o.fornecedor || '')}`, `
         ${r.antiga ? '<div class="alert alert-info">Esta ordem já estava como atendida no Olist antes de a conferência existir aqui, então aparece como recebida.</div>' : ''}
         <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">Comprado</th><th class="num">Já recebido</th><th class="num">Falta</th>${aberta ? '<th class="num">Chegou agora <a class="fx-link" style="color:var(--primary);font-size:11px;margin-left:6px;" onclick="ocReceberTudo()">receber tudo</a></th>' : ''}</tr></thead><tbody>
-          ${r.itens.map((i, n) => `<tr><td class="cp-prod"><b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span></td><td class="num">${ocInt(i.comprado)}</td><td class="num">${ocInt(r.antiga ? i.comprado : i.recebido)}</td><td class="num"><b>${ocInt(r.antiga ? 0 : i.falta)}</b></td>
+          ${r.itens.map((i, n) => `<tr><td class="cp-prod">${typeof fotoLinha === 'function' ? fotoLinha(i.sku, `<b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span>`) : `<b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span>`}</td><td class="num">${ocInt(i.comprado)}</td><td class="num">${ocInt(r.antiga ? i.comprado : i.recebido)}</td><td class="num"><b>${ocInt(r.antiga ? 0 : i.falta)}</b></td>
             ${aberta ? `<td class="num"><input type="number" min="0" step="1" class="cp-dias oc-qtd" style="width:110px !important;" data-sku="${ocEsc(i.sku)}" data-falta="${i.falta}" placeholder="0" ${i.falta ? '' : 'disabled'}></td>` : ''}</tr>`).join('')}
         </tbody></table></div>
         ${aberta ? `

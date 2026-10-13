@@ -177,6 +177,19 @@
       return `<span class="foto-mini${u ? '' : ' vazia'}" onclick="event.stopPropagation();estFotoAbrir('${esEsc(k)}')" title="${u ? 'Ver ou trocar a foto' : 'Colocar uma foto'}">${u ? `<img src="${esEsc(u)}" loading="lazy" alt="">` : ''}</span>`;
     }
 
+    // FOTO EM QUALQUER TABELA DE PRODUTO: fotoLinha(sku, html) devolve a miniatura ao lado do conteúdo da célula.
+    // Quem chama não precisa buscar nada: os SKUs pedidos são juntados e as fotos que faltarem entram na tela sozinhas.
+    const fotosPedidas = new Set(); let fotosTimer = null;
+    function fotoCel(sku){
+      const k = esN(sku); if(!k) return '<span class="foto-mini vazia" style="cursor:default;"></span>';
+      if(!estFotos.has(k)){ fotosPedidas.add(k); clearTimeout(fotosTimer); fotosTimer = setTimeout(fotosNaTela, 60); }
+      return fotoMini(sku).replace('<span class="foto-mini', '<span data-k="' + esEsc(k) + '" class="foto-mini');
+    }
+    function fotoLinha(sku, html){ return '<div style="display:flex;align-items:center;gap:9px;">' + fotoCel(sku) + '<div style="min-width:0;">' + html + '</div></div>'; }
+    function fotosNaTela(){
+      const lista = [...fotosPedidas]; fotosPedidas.clear(); if(!lista.length) return;
+      fotosPara(lista, () => document.querySelectorAll('.foto-mini.vazia[data-k]').forEach(el => { const u = estFotos.get(el.dataset.k); if(u){ el.classList.remove('vazia'); el.title = 'Ver ou trocar a foto'; el.innerHTML = '<img src="' + esEsc(u) + '" loading="lazy" alt="">'; } }));
+    }
     function estFotoTd(k){
       const u = estFotos.get(k);
       return `<td class="est-foto" onclick="estFotoAbrir('${esEsc(k)}')" title="${u ? 'Ver ou trocar a foto' : 'Colocar uma foto'}">${u ? `<img src="${esEsc(u)}" loading="lazy" alt="">` : '<span>+ foto</span>'}</td>`;

@@ -54,7 +54,7 @@
         </div>
         <label class="pf-check" style="margin:0 0 10px;"><input type="checkbox" id="cl-preco" ${window._clSemPreco ? '' : 'checked'} onchange="window._clSemPreco=!this.checked"> Mostrar o último preço pago e o total no PDF</label>
         <div class="pf-tab" style="max-height:44vh;"><table><thead><tr><th>SKU</th><th>Produto</th><th style="text-align:right;">Quantidade</th><th style="text-align:right;">Último preço pago</th><th style="text-align:right;">Subtotal</th><th></th></tr></thead><tbody>
-          ${clItens.map((x, i) => `<tr><td><b>${clE(x.sku)}</b></td><td style="max-width:230px;">${clE(x.nome || '—')}${x.forn ? `<div class="text-muted" style="font-size:11.5px;">${clE(x.forn)}</div>` : ''}</td>
+          ${clItens.map((x, i) => `<tr><td>${typeof fotoLinha === 'function' ? fotoLinha(x.sku, `<b>${clE(x.sku)}</b>`) : `<b>${clE(x.sku)}</b>`}</td><td style="max-width:230px;">${clE(x.nome || '—')}${x.forn ? `<div class="text-muted" style="font-size:11.5px;">${clE(x.forn)}</div>` : ''}</td>
             <td style="text-align:right;"><input type="number" min="0" value="${x.qtd}" style="width:90px;text-align:right;" onchange="clItens[${i}].qtd = Math.max(0, Math.round(Number(this.value) || 0)); comprasListaDesenhar()"></td>
             <td style="text-align:right;" title="${clE(x.origem)}"><input class="money-input" value="${fmtMoney(x.preco)}" style="width:100px;text-align:right;" oninput="onMoneyInput(this)" onchange="clItens[${i}].preco = parseMoney(this.value); clItens[${i}].origem = 'digitado'; comprasListaDesenhar()"><div class="text-muted" style="font-size:11px;">${clE(x.origem)}</div></td>
             <td style="text-align:right;white-space:nowrap;">${fmt(x.qtd * x.preco)}</td>

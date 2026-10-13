@@ -50,7 +50,7 @@
         return ls.map((l, i) => {
           const eAtual = l === atual, rest = Number(l.restante) || 0;
           return `<tr${eAtual ? ' style="background:color-mix(in srgb,var(--primary) 8%,transparent);"' : ''}>
-            <td>${i === 0 ? `<b>${ppE(l.sku)}</b>` : ''}</td>
+            <td>${i === 0 ? (typeof fotoLinha === 'function' ? fotoLinha(l.sku, '<b>' + ppE(l.sku) + '</b>') : `<b>${ppE(l.sku)}</b>`) : ''}</td>
             <td>${l.origem === 'inicial' ? 'Estoque inicial' : l.origem === 'compra' ? ppE(l.ref || 'Compra') : 'Lote manual'}<br><small class="text-muted">${ppDH(l.data)}</small></td>
             <td class="num">${ppI(l.qtd)}</td><td class="num"><b>${fmt(l.custo)}</b></td>
             <td class="num">${ppI(l.consumido)}</td><td class="num">${rest > 0 ? `<b>${ppI(rest)}</b>` : '<span class="text-muted">acabou</span>'}</td>
@@ -106,7 +106,7 @@
         ${sem.length ? `<div class="alert alert-warning"><b>${sem.length} produto(s) sem custo no cadastro</b>&nbsp;ficam fora dos lotes até você cadastrar o custo: ${sem.map(x => ppE(x.sku)).join(', ')}.</div>` : ''}
         ${peps.cfg ? '<div class="alert alert-warning">Já existe um lote inicial. Gravar de novo <b>substitui</b> o lote inicial e os lotes manuais, e a contagem das vendas recomeça de agora.</div>' : ''}
         <div style="max-height:48vh;overflow:auto;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">Galpão</th><th class="num">Full</th><th class="num">Total</th><th class="num">Custo</th><th class="num">Valor</th></tr></thead><tbody>
-          ${lista.map(x => `<tr><td><b>${ppE(x.sku)}</b></td><td class="num">${ppI(x.galpao)}</td><td class="num">${ppI(x.full)}</td><td class="num"><b>${ppI(x.total)}</b></td><td class="num">${x.custo > 0 ? fmt(x.custo) + (x.daUps ? ' <small class="text-muted">UpSeller</small>' : '') : '<span style="color:var(--danger)">sem custo</span>'}</td><td class="num">${fmt(x.total * x.custo)}</td></tr>`).join('') || '<tr><td colspan="6" class="text-muted" style="padding:18px;text-align:center;">Nenhum produto com estoque. Importe a lista de estoque na página Estoque.</td></tr>'}
+          ${lista.map(x => `<tr><td>${typeof fotoLinha === 'function' ? fotoLinha(x.sku, `<b>${ppE(x.sku)}</b>`) : `<b>${ppE(x.sku)}</b>`}</td><td class="num">${ppI(x.galpao)}</td><td class="num">${ppI(x.full)}</td><td class="num"><b>${ppI(x.total)}</b></td><td class="num">${x.custo > 0 ? fmt(x.custo) + (x.daUps ? ' <small class="text-muted">UpSeller</small>' : '') : '<span style="color:var(--danger)">sem custo</span>'}</td><td class="num">${fmt(x.total * x.custo)}</td></tr>`).join('') || '<tr><td colspan="6" class="text-muted" style="padding:18px;text-align:center;">Nenhum produto com estoque. Importe a lista de estoque na página Estoque.</td></tr>'}
         </tbody><tfoot><tr><td><b>Total</b></td><td class="num">${ppI(lista.reduce((s, x) => s + x.galpao, 0))}</td><td class="num">${ppI(lista.reduce((s, x) => s + x.full, 0))}</td><td class="num"><b>${ppI(lista.reduce((s, x) => s + x.total, 0))}</b></td><td></td><td class="num"><b>${fmt(lista.reduce((s, x) => s + x.total * x.custo, 0))}</b></td></tr></tfoot></table></div>`,
         `<button class="btn-out btn" onclick="${peps.cfg ? 'pepsDesenhar()' : "fecharModal('modal-vml')"}">Cancelar</button><button class="btn" ${lista.some(x => x.custo > 0) ? '' : 'disabled'} onclick="pepsGravar(this)">Gravar lote inicial e ligar</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
