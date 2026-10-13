@@ -15,10 +15,18 @@
       if(!s){ s = document.createElement('span'); s.className = 'nav-selo'; li.appendChild(s); }
       s.textContent = n > 99 ? '99+' : n; s.title = titulo;
     }
+    // o selo mostra o que está de fato pendente (não a contagem de avisos recebidos): perguntas sem resposta,
+    // conversas com mensagem não lida e casos de pós-venda esperando decisão
+    let avReal = { perguntas: null, mensagens: null, posvenda: null };
+    async function avRealCarregar(){
+      if(typeof avSino !== 'undefined' && avSino.em){ avReal.perguntas = avSino.totalPerg || 0; avReal.mensagens = avSino.conv.length; }
+      try { const r = await supa.from('pos_venda_casos').select('id', { count: 'exact', head: true }).eq('usuario_id', usuarioAtual.id).in('situacao', ['fila', 'erro']); if(!r.error) avReal.posvenda = r.count || 0; } catch(e){}
+    }
     function avDesenhar(){
-      avSelo('perguntas', avisos.perguntas, avisos.perguntas + ' pergunta(s) nova(s) desde a última vez que você abriu');
-      avSelo('mensagens', avisos.mensagens, avisos.mensagens + ' mensagem(ns) nova(s) desde a última vez que você abriu');
-      avSelo('posvenda', avisos.posvenda, avisos.posvenda + ' novidade(s) em reclamações ou devoluções desde a última vez que você abriu');
+      const real = k => avReal[k] == null ? 0 : avReal[k];
+      avSelo('perguntas', real('perguntas'), real('perguntas') + ' pergunta(s) sem resposta');
+      avSelo('mensagens', real('mensagens'), real('mensagens') + ' conversa(s) com mensagem não lida');
+      avSelo('posvenda', real('posvenda'), real('posvenda') + ' reclamação(ões) esperando a sua decisão');
       avSelo('promocoes', avisos.promocoes, 'Há promoções novas ou alteradas desde a última vez que você abriu');
       avSelo('config', avisos.sugestoes, avisos.sugestoes + ' sugestão(ões) de usuários ainda não lida(s): Configurações → Conta');
     }
@@ -36,7 +44,8 @@
           avisos[p] = n;
         }
         await avExtras();
-        avSinoCarregar();
+        await avSinoCarregar();
+        await avRealCarregar();
         if(avisos.admin === null){ const a = await supa.rpc('eh_admin'); avisos.admin = !!a.data; }
         if(avisos.admin){
           const f = await supa.rpc('feedbacks_todos');

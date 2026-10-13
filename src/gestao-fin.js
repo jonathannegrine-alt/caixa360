@@ -43,20 +43,22 @@
     }
     function gfMes(ym){
       const D = gfDre(Number(ym.slice(0, 4))), m = Number(ym.slice(5, 7)), x = D.meses[m - 1], soma = ls => ls.reduce((s, l) => s + (l.v[m] || 0), 0);
-      return { ym, D, m, entrada: x.entrada, ml: D.linhasML.map(l => ({ nome: l.nome, v: l.v[m] || 0 })), variavel: soma(D.variaveis), fixo: x.fixo, mc: x.mc, lucro: x.lucro,
+      return { ym, D, m, entrada: x.entrada, ml: D.linhasML.map(l => ({ nome: l.nome, v: l.v[m] || 0, fatura: !!l.fatura })), variavel: soma(D.variaveis), fixo: x.fixo, mc: x.mc, lucro: x.lucro,
         fixas: D.fixas.map(l => ({ nome: l.nome, v: l.v[m] || 0 })).filter(l => l.v), variaveis: D.variaveis.map(l => ({ nome: l.nome, v: l.v[m] || 0 })).filter(l => l.v) };
     }
     // parcelas de empréstimo do mês que não entram no DRE (devolução do principal)
     function gfParcelas(ym){
       if(typeof emp === 'undefined' || !emp.todos || typeof empContas !== 'function') return 0;
       const vistos = new Set(); let t = 0;
-      emp.todos.forEach(c => empContas(c).forEach(p => { if(vistos.has(p) || String(p.data || '').slice(0, 7) !== ym) return; vistos.add(p); if(dreGrupoDe(p.cat) === 'fora') t += Number(p.val) || 0; }));
+      emp.todos.forEach(c => empContas(c).forEach(p => { if(vistos.has(p) || String(p.data || '').slice(0, 7) !== ym) return; vistos.add(p); if(['fora', 'emprestimo'].includes(dreGrupoDe(p.cat))) t += Number(p.val) || 0; }));
       return t;
     }
-    const gfEhPrincipal = p => !/juros/i.test(p.cat || '') && /amortiza|empr[eé]stimo|capital de giro|financiamento/i.test(p.cat || '');
+    // devolução de empréstimo: a categoria marcada como "Empréstimo" (Contas a pagar ou DRE → Configurar categorias);
+    // sem marcação, vale o nome da categoria (amortização, empréstimo, capital de giro, financiamento)
+    const gfEhPrincipal = p => dreGrupoDe(p.cat) === 'emprestimo' || (dreGrupoDe(p.cat) === 'fora' && !/juros/i.test(p.cat || '') && /amortiza|empr[eé]stimo|capital de giro|financiamento/i.test(p.cat || ''));
     // contas do mês que saem do caixa e não estão no DRE: devolução de empréstimo lançada só em Contas a pagar e retirada dos sócios
     function gfForaDoDre(ym){
-      const P = (typeof pagTodos === 'function' ? pagTodos() : (typeof pagamentos !== 'undefined' ? pagamentos : [])).filter(p => String(p.data || '').slice(0, 7) === ym && dreGrupoDe(p.cat) === 'fora');
+      const P = (typeof pagTodos === 'function' ? pagTodos() : (typeof pagamentos !== 'undefined' ? pagamentos : [])).filter(p => String(p.data || '').slice(0, 7) === ym && ['fora', 'emprestimo'].includes(dreGrupoDe(p.cat)));
       const soma = f => P.filter(f).reduce((s, p) => s + (Number(p.val) || 0), 0), semContrato = typeof emp === 'undefined' || !emp.todos || !emp.todos.length;
       return { parcelas: semContrato ? soma(gfEhPrincipal) : 0, retirada: soma(p => /retirada|pr[oó][- ]?labore|distribui[cç][aã]o de lucro/i.test(p.cat || '')) };
     }
@@ -114,18 +116,31 @@
       return { contratos, saldo, juros, taxa: saldo ? taxaPond / saldo : 0, parado: gfParado(), lucroAnt: ant.lucro, mesAnt: ant.ym, doPagar };
     }
 
+    // texto das dicas (o "?" ao lado do título): o detalhe que antes ficava aberto no quadro
+    function gfEqDica(E){
+      return 'O que as vendas precisam render por dia para pagar ' + fmt(E.precisa) + ' no mês: despesas fixas ' + fmt(E.fixo) + (E.variavel ? ', outras despesas ' + fmt(E.variavel) : '') + (E.parcelas ? ', parcelas de empréstimo ' + fmt(E.parcelas) : '') + (E.retirada ? ', retirada dos sócios ' + fmt(E.retirada) : '') + '. '
+        + (E.n > 0 ? 'Até ontem a margem somou ' + fmt(E.mcAcum) + ' em ' + E.n + ' dia' + (E.n > 1 ? 's' : '') + (E.fatura ? ', já sem ' + fmt(E.fatura) + ' de publicidade, Full e outras cobranças da fatura do Mercado Livre' : '') + '.' : 'O mês começa hoje.');
+    }
+    function gfDvDica(V){
+      const cobre = V.juros > 0 ? V.lucroAnt / V.juros : null;
+      return (V.juros > 0 ? (cobre >= 1 ? 'O lucro do mês passado cobre os juros ' + cobre.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' vez' + (cobre >= 2 ? 'es' : '') + '.' : (V.lucroAnt > 0 ? 'Os juros levam ' + Math.round(V.juros / V.lucroAnt * 100) + '% do lucro do mês passado.' : 'O mês passado não deu lucro para cobrir os juros.')) : 'Sem juros lançados para este mês.')
+        + (V.parado && V.parado.total > 0 ? ' Estoque além de 90 dias: só o que passa de 90 dias de venda de cada produto, a preço de custo. O estoque inteiro (galpão + Full) soma ' + fmt(V.parado.total) + '.' : '')
+        + (V.parado && V.parado.itens.length ? ' Maiores sobras: ' + V.parado.itens.slice(0, 3).map(i => String(i.sku).toUpperCase() + ' ' + fmt(i.valor)).join(', ') + '.' : '')
+        + (V.doPagar ? ' Empréstimos lidos de Contas a pagar (categorias marcadas como Empréstimo e de juros).' : '');
+    }
+
     // ---------- bloco no Início e em Empréstimos ----------
     function gfHtml(soDivida){
       const E = gfEquilibrio(), V = gfDivida(), cor = v => v >= 0 ? 'var(--success,#16a34a)' : 'var(--danger)';
       const pct = E.meta > 0 ? Math.max(0, Math.min(100, E.porDia / E.meta * 100)) : 100;
-      const eq = `<div class="card gf-card"><div class="card-header"><div class="card-title">Ponto de equilíbrio de ${gfMesNome(E.ym).split(' de ')[0]}</div><span class="text-muted" style="font-size:12px;">margem das vendas por dia</span></div>
+      const eq = `<div class="card gf-card"><div class="card-header"><div class="card-title">Ponto de equilíbrio de ${gfMesNome(E.ym).split(' de ')[0]} ${typeof dica === 'function' ? dica(gfEqDica(E)) : ''}</div><span class="text-muted" style="font-size:12px;">margem das vendas por dia</span></div>
         <div class="gf-eq"><div><small>Precisa por dia</small><b>${fmt(E.meta)}</b></div><div><small>Está fazendo</small><b style="color:${cor(E.porDia - E.meta)}">${E.n > 0 ? fmt(E.porDia) : '—'}</b></div><div><small>Projeção do mês</small><b style="color:${cor(E.projecao)}">${E.n > 0 ? fmt(E.projecao) : '—'}</b></div></div>
         <div class="gf-barra"><i style="width:${pct}%;background:${cor(E.porDia - E.meta)}"></i></div>
-        <div class="text-muted gf-nota">Para pagar ${fmt(E.precisa)} no mês: despesas fixas ${fmt(E.fixo)}${E.variavel ? ', outras despesas ' + fmt(E.variavel) : ''}${E.parcelas ? ', parcelas de empréstimo ' + fmt(E.parcelas) : ''}${E.retirada ? ', retirada dos sócios ' + fmt(E.retirada) : ''}. ${E.n > 0 ? 'Até ontem a margem somou ' + fmt(E.mcAcum) + ' em ' + E.n + ' dia' + (E.n > 1 ? 's' : '') + (E.fatura ? ', já sem ' + fmt(E.fatura) + ' de publicidade, Full e outras cobranças da fatura do Mercado Livre' : '') + '.' : 'O mês começa hoje.'}</div></div>`;
+        <div class="text-muted gf-nota" style="display:none;">Para pagar ${fmt(E.precisa)} no mês: despesas fixas ${fmt(E.fixo)}${E.variavel ? ', outras despesas ' + fmt(E.variavel) : ''}${E.parcelas ? ', parcelas de empréstimo ' + fmt(E.parcelas) : ''}${E.retirada ? ', retirada dos sócios ' + fmt(E.retirada) : ''}. ${E.n > 0 ? 'Até ontem a margem somou ' + fmt(E.mcAcum) + ' em ' + E.n + ' dia' + (E.n > 1 ? 's' : '') + (E.fatura ? ', já sem ' + fmt(E.fatura) + ' de publicidade, Full e outras cobranças da fatura do Mercado Livre' : '') + '.' : 'O mês começa hoje.'}</div></div>`;
       const cobre = V.juros > 0 ? V.lucroAnt / V.juros : null;
-      const dv = V.contratos || V.juros > 0 || (V.parado && V.parado.valor > 0) ? `<div class="card gf-card"><div class="card-header"><div class="card-title">Custo da dívida</div><span class="text-muted" style="font-size:12px;" ${V.doPagar ? 'title="Lido de Contas a pagar: categorias de juros e de amortização de empréstimo. Cadastrando os contratos em Financeiro → Empréstimos, passa a valer o cadastro."' : ''}>${V.contratos} ${V.doPagar ? 'empréstimo' : 'contrato'}${V.contratos === 1 ? '' : 's'} · ${V.doPagar ? 'a pagar' : 'saldo'} ${fmt(V.saldo)}${V.doPagar ? ' · de Contas a pagar' : ''}</span></div>
+      const dv = V.contratos || V.juros > 0 || (V.parado && V.parado.valor > 0) ? `<div class="card gf-card"><div class="card-header"><div class="card-title">Custo da dívida ${typeof dica === 'function' ? dica(gfDvDica(V)) : ''}</div><span class="text-muted" style="font-size:12px;" ${V.doPagar ? 'title="Lido de Contas a pagar: categorias de juros e de amortização de empréstimo. Cadastrando os contratos em Financeiro → Empréstimos, passa a valer o cadastro."' : ''}>${V.contratos} ${V.doPagar ? 'empréstimo' : 'contrato'}${V.contratos === 1 ? '' : 's'} · ${V.doPagar ? 'a pagar' : 'saldo'} ${fmt(V.saldo)}${V.doPagar ? ' · de Contas a pagar' : ''}</span></div>
         <div class="gf-eq"><div><small>Juros neste mês</small><b style="color:var(--danger)">${fmt(V.juros)}</b></div><div><small title="Só o que passa de 90 dias de venda de cada produto, a preço de custo. Não é o estoque inteiro.">Estoque além de 90 dias</small><b>${V.parado ? fmt(V.parado.valor) : '—'}</b></div><div><small>Lucro de ${gfMesNome(V.mesAnt).split(' de ')[0]}</small><b style="color:${cor(V.lucroAnt)}">${fmt(V.lucroAnt)}</b></div></div>
-        <div class="text-muted gf-nota">${V.juros > 0 ? (cobre >= 1 ? 'O lucro do mês passado cobre os juros ' + cobre.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' vez' + (cobre >= 2 ? 'es' : '') + '.' : (V.lucroAnt > 0 ? 'Os juros levam ' + Math.round(V.juros / V.lucroAnt * 100) + '% do lucro do mês passado.' : 'O mês passado não deu lucro para cobrir os juros.')) : (V.contratos ? 'Sem juros lançados para este mês.' : 'Nenhum empréstimo cadastrado: cadastre em Financeiro → Empréstimos para o juro aparecer aqui.')}${V.parado && V.parado.valor > 0 && V.taxa > 0 ? ' O estoque parado, à taxa média de ' + V.taxa.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '% ao mês, custa ' + fmt(V.parado.valor * V.taxa / 100) + ' por mês em juros.' : ''}${V.parado && V.parado.total > 0 ? ' O estoque inteiro (galpão + Full, a preço de custo) soma ' + fmt(V.parado.total) + '; o número acima é só o que passa de 90 dias de venda de cada produto.' : ''}${V.parado && V.parado.itens.length ? ' Maiores sobras: ' + V.parado.itens.slice(0, 3).map(i => String(i.sku).toUpperCase() + ' ' + fmt(i.valor)).join(', ') + '.' : ''}</div></div>` : '';
+        <div class="text-muted gf-nota" style="display:none;">${V.juros > 0 ? (cobre >= 1 ? 'O lucro do mês passado cobre os juros ' + cobre.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' vez' + (cobre >= 2 ? 'es' : '') + '.' : (V.lucroAnt > 0 ? 'Os juros levam ' + Math.round(V.juros / V.lucroAnt * 100) + '% do lucro do mês passado.' : 'O mês passado não deu lucro para cobrir os juros.')) : (V.contratos ? 'Sem juros lançados para este mês.' : 'Nenhum empréstimo cadastrado: cadastre em Financeiro → Empréstimos para o juro aparecer aqui.')}${V.parado && V.parado.valor > 0 && V.taxa > 0 ? ' O estoque parado, à taxa média de ' + V.taxa.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '% ao mês, custa ' + fmt(V.parado.valor * V.taxa / 100) + ' por mês em juros.' : ''}${V.parado && V.parado.total > 0 ? ' O estoque inteiro (galpão + Full, a preço de custo) soma ' + fmt(V.parado.total) + '; o número acima é só o que passa de 90 dias de venda de cada produto.' : ''}${V.parado && V.parado.itens.length ? ' Maiores sobras: ' + V.parado.itens.slice(0, 3).map(i => String(i.sku).toUpperCase() + ' ' + fmt(i.valor)).join(', ') + '.' : ''}</div></div>` : '';
       const antM = gfMesAnt(E.ym), fech = `<div class="gf-fech-l"><a onclick="gfFechamento('${antM}', this)">Fechamento de ${gfMesNome(antM)} em PDF</a> · <a onclick="gfFechamento('${E.ym}', this)">parcial de ${gfMesNome(E.ym).split(' de ')[0]}</a></div>`;
       return soDivida ? dv : `<div class="gf-grid">${eq}${dv}</div>${fech}`;
     }
@@ -162,12 +177,15 @@
         const B = typeof balCalcular === 'function' ? balCalcular() : null, V = gfDivida();
         const atras = pagamentos.filter(p => !p.pago && p.data < hoje), vAtras = atras.reduce((s, p) => s + (Number(p.val) || 0), 0);
         const prox30 = pagamentos.filter(p => !p.pago && p.data >= hoje && p.data <= addDias(hoje, 30)).reduce((s, p) => s + (Number(p.val) || 0), 0);
-        const nome = typeof lojaAtiva === 'function' && lojaAtiva() && typeof contaNome === 'function' ? contaNome(lojaAtiva()) : 'Todas as lojas';
+        const nome = typeof lojaAtiva === 'function' && lojaAtiva() && typeof contaNome === 'function' ? contaNome(lojaAtiva()) : ((typeof contasML !== 'undefined' && contasML.length ? contasML.map(c => c.apelido || 'Conta ' + c.id).join(' + ') : 'Todas as lojas'));
+        // margem bruta das vendas: antes de publicidade, Full e despesas de Contas a pagar
+        const custoVenda = M.ml.filter(l => !l.fatura).reduce((s, l) => s + l.v, 0), bruta = M.entrada - custoVenda, despMes = bruta - M.lucro;
+        const custoVendaA = A.ml.filter(l => !l.fatura).reduce((s, l) => s + l.v, 0), brutaA = A.entrada - custoVendaA;
 
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), L = doc.internal.pageSize.getWidth();
         doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.text('Fechamento de ' + gfMesNome(ym), 40, 52);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100); doc.text(nome + '  ·  gerado em ' + new Date().toLocaleString('pt-BR'), 40, 70);
-        const cx = [['Faturamento', M.entrada, [79, 70, 229], vr(M.entrada, A.entrada)], ['Margem das vendas', M.mc, [8, 145, 178], pc(M.mc, M.entrada)], ['Despesas fixas', M.fixo, [217, 119, 6], vr(M.fixo, A.fixo)], ['Lucro do mês', M.lucro, M.lucro >= 0 ? [22, 163, 74] : [220, 38, 38], pc(M.lucro, M.entrada)]], w = (L - 80 - 30) / 4;
+        const cx = [['Faturamento', M.entrada, [79, 70, 229], vr(M.entrada, A.entrada)], ['Margem bruta das vendas', bruta, [8, 145, 178], pc(bruta, M.entrada)], ['Despesas do mês', despMes, [217, 119, 6], pc(despMes, M.entrada)], ['Lucro do mês', M.lucro, M.lucro >= 0 ? [22, 163, 74] : [220, 38, 38], pc(M.lucro, M.entrada)]], w = (L - 80 - 30) / 4;
         cx.forEach((c, i) => { const x = 40 + i * (w + 10); doc.setDrawColor(225); doc.setFillColor(248, 249, 252); doc.roundedRect(x, 86, w, 58, 6, 6, 'FD'); doc.setFillColor(...c[2]); doc.rect(x, 86, 4, 58, 'F');
           doc.setFontSize(8); doc.setTextColor(110); doc.text(c[0].toUpperCase(), x + 12, 102); doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(20); doc.text(n2(c[1]), x + 12, 121); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120); doc.text(String(c[3] || ''), x + 12, 135); });
         const tab = (head, body, y, cor, foot) => { doc.autoTable({ startY: y, margin: { left: 40, right: 40 }, head: [head], body, foot: foot ? [foot] : undefined, styles: { fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: cor, textColor: 255 }, footStyles: { fillColor: [240, 241, 246], textColor: 20, fontStyle: 'bold' },
@@ -178,7 +196,9 @@
         let y = tit('1. Resultado do mês', 172);
         const linhaAnt = k => (A.ml.find(l => l.nome === k) || {}).v || 0;
         const corpo = [['Faturamento (vendas, com as canceladas)', n2(M.entrada), '100%', n2(A.entrada)]]
-          .concat(M.ml.filter(l => l.v).map(l => ['(-) ' + l.nome, n2(-l.v), pc(l.v, M.entrada), n2(-linhaAnt(l.nome))]))
+          .concat(M.ml.filter(l => l.v && !l.fatura).map(l => ['(-) ' + l.nome, n2(-l.v), pc(l.v, M.entrada), n2(-linhaAnt(l.nome))]))
+          .concat([['= Margem bruta das vendas', n2(bruta), pc(bruta, M.entrada), n2(brutaA)]])
+          .concat(M.ml.filter(l => l.v && l.fatura).map(l => ['(-) ' + l.nome, n2(-l.v), pc(l.v, M.entrada), n2(-linhaAnt(l.nome))]))
           .concat(M.variavel ? [['(-) Outras despesas variáveis (contas a pagar)', n2(-M.variavel), pc(M.variavel, M.entrada), n2(-A.variavel)]] : [])
           .concat([['= Margem de contribuição', n2(M.mc), pc(M.mc, M.entrada), n2(A.mc)], ['(-) Despesas fixas', n2(-M.fixo), pc(M.fixo, M.entrada), n2(-A.fixo)]]);
         y = tab(['', gfMesNome(ym), '% do faturamento', gfMesNome(ant)], corpo, y, [79, 70, 229], ['= Lucro do mês', n2(M.lucro), pc(M.lucro, M.entrada), n2(A.lucro)]);
@@ -199,10 +219,10 @@
           : tab([''], [['Nenhum empréstimo cadastrado.']], y, [220, 38, 38]);
 
         // 5. Mercado Livre (conciliação)
-        if(conc){ y = tit('5. Mercado Livre: conferência do repasse', y + 26);
+        if(conc){ y = tit('5. Mercado Livre: conferência do repasse (' + (typeof contaNome === 'function' ? contaNome(conc.conta) : 'loja conferida') + ')', y + 26);
           const av = conc.r.avulsas || [], contra = conc.d.filter(x => x.valor > 0).reduce((s, x) => s + Number(x.valor), 0);
           y = tab(['Cobranças fora das vendas', 'Valor'], av.map(a => [(typeof CN_AVULSA !== 'undefined' && CN_AVULSA[a.tipo]) || a.tipo, n2(a.valor)]), y, [100, 116, 139], ['Total', n2(av.reduce((s, a) => s + Number(a.valor || 0), 0))]);
-          doc.setFontSize(9); doc.setTextColor(60); doc.text(doc.splitTextToSize((conc.r.conferidas || 0).toLocaleString('pt-BR') + ' vendas conferidas com o relatório do Mercado Livre; ' + conc.d.length + ' não fecharam, somando ' + n2(contra) + ' contra a loja. Confira se as cobranças acima estão lançadas nas contas a pagar: se não estiverem, o lucro do mês é menor do que o mostrado.', L - 80), 40, y + 16); y += 34; }
+          doc.setFontSize(9); doc.setTextColor(60); doc.text(doc.splitTextToSize((conc.r.conferidas || 0).toLocaleString('pt-BR') + ' vendas conferidas com o relatório do Mercado Livre; ' + conc.d.length + ' não fecharam, somando ' + n2(contra) + ' contra a loja. Este quadro vem da planilha de conciliação e vale só para ' + (typeof contaNome === 'function' ? contaNome(conc.conta) : 'a loja conferida') + '; as outras lojas não entram nele, por isso os valores podem ser menores que os do item 1. Confira se as cobranças acima estão lançadas nas contas a pagar: se não estiverem, o lucro do mês é menor do que o mostrado.', L - 80), 40, y + 16); y += 34; }
 
         // alertas
         const al = [];

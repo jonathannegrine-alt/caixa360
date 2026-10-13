@@ -42,11 +42,19 @@
           <label class="pf-c"><span>Nº do documento</span><input id="pf-doc" value="${pfE(p.doc || '')}" ${dis}></label>
           <label class="pf-c pf-larg"><span>Histórico</span><input id="pf-desc" value="${pfE(p.desc || '')}" placeholder="O que é esta conta" ${dis}></label>
           <label class="pf-c"><span>Categoria</span>
-            <select id="pf-cat" onchange="document.getElementById('pf-cat-nova').style.display = this.value === '__nova' ? '' : 'none'" ${dis}>
+            <select id="pf-cat" onchange="document.getElementById('pf-cat-nova').style.display = this.value === '__nova' ? '' : 'none';pfGrupoMostrar()" ${dis}>
               <option value="">Sem categoria</option>${cats.map(c => `<option ${p.cat === c ? 'selected' : ''}>${pfE(c)}</option>`).join('')}<option value="__nova">+ Nova categoria…</option></select>
             <input id="pf-cat-nova" placeholder="Nome da nova categoria" style="display:none;margin-top:6px;"></label>
-          <label class="pf-c"><span>Competência</span><input type="month" id="pf-comp" value="${pfE((p.competencia || '').slice(0, 7))}" ${dis}></label>
-        </div>`;
+          <label class="pf-c"><span>No resultado (DRE), esta categoria é ${typeof dica === 'function' ? dica('Vale para todas as contas desta categoria, não só para esta. Custo fixo: existe mesmo sem vender (aluguel, sistemas, pró-labore). Custo variável: acompanha a venda (embalagem, frete, mão de obra por pedido). Empréstimo: devolução de dinheiro emprestado; não é despesa, mas sai do caixa. Não entra: compra de mercadoria, imposto já contado na venda, transferência.') : ''}</span>
+            <select id="pf-grupo" ${dis}>${PF_GRUPOS.map(g => `<option value="${g[0]}" ${(typeof dreGrupoDe === 'function' ? dreGrupoDe(p.cat) : 'fora') === g[0] ? 'selected' : ''}>${g[1]}</option>`).join('')}</select></label>
+        </div>
+        ${pf.idx === null && !travado ? `<div class="pf-emp"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="checkbox" id="pf-emp" onchange="pfEmpMostrar()"> <b>É parcela de empréstimo?</b> <span class="text-muted" style="font-size:12px;">Separa o que é devolução do valor emprestado, juros e IOF.</span></label>
+          <div id="pf-emp-campos" class="pf-grid" style="display:none;margin-top:10px;">
+            <label class="pf-c"><span>Devolução do valor (amortização)</span><input id="pf-emp-am" class="money-input" inputmode="decimal" placeholder="0,00" oninput="onMoneyInput(this);pfEmpSomar()"></label>
+            <label class="pf-c"><span>Juros</span><input id="pf-emp-ju" class="money-input" inputmode="decimal" placeholder="0,00" oninput="onMoneyInput(this);pfEmpSomar()"></label>
+            <label class="pf-c"><span>IOF e taxas</span><input id="pf-emp-io" class="money-input" inputmode="decimal" placeholder="0,00" oninput="onMoneyInput(this);pfEmpSomar()"></label>
+            <div class="text-muted" style="font-size:12px;line-height:1.5;grid-column:1/-1;">Preencha o que souber: a soma vira o valor da conta. Os juros e o IOF entram no resultado como despesa; a devolução não entra, mas aparece no ponto de equilíbrio e no custo da dívida. Em conta parcelada, a mesma proporção vale para todas as parcelas. Se preferir lançar tudo junto, deixe desmarcado.</div>
+          </div></div>` : ''}`;
     }
 
     // ----- nova conta -----
@@ -123,6 +131,33 @@
       pfDesenharParcelas();
     }
 
+    const PF_GRUPOS = [['fixo', 'Custo fixo'], ['variavel', 'Custo variável'], ['emprestimo', 'Empréstimo (devolução do valor)'], ['fora', 'Não entra no resultado'], ['fatura', 'Fatura do Mercado Livre (só caixa)']];
+    function pfGrupoMostrar(){ const s = document.getElementById('pf-grupo'), c = pfV('pf-cat'); if(s && c && c !== '__nova' && typeof dreGrupoDe === 'function') s.value = dreGrupoDe(c); }
+    // grava o grupo escolhido na categoria (vale para todas as contas dela)
+    function pfGrupoGravar(cat){
+      const s = document.getElementById('pf-grupo'); if(!s || !cat) return;
+      const c = categorias.find(x => x.nome === cat); if(!c) return;
+      if(typeof dreGrupoDe === 'function' && dreGrupoDe(cat) === s.value) return;
+      c.dreGrupo = s.value; c.impactaDRE = s.value === 'fixo' || s.value === 'variavel';
+      if(typeof gf !== 'undefined') gf.chave = '';
+    }
+    function pfCatGarantir(nome, grupo){
+      let c = categorias.find(x => String(x.nome).toLowerCase() === nome.toLowerCase());
+      if(!c){ c = { nome, impactaDRE: grupo === 'fixo' || grupo === 'variavel', tipoPassivo: grupo === 'emprestimo' ? 'financeiro' : 'operacional', dreGrupo: grupo }; categorias.push(c); }
+      return c.nome;
+    }
+    function pfEmpMostrar(){ const on = document.getElementById('pf-emp')?.checked, c = document.getElementById('pf-emp-campos'); if(c) c.style.display = on ? '' : 'none'; if(on) pfEmpSomar(); }
+    function pfEmpPartes(){ return [['pf-emp-am', 'Empréstimo – Devolução do valor', 'emprestimo', 'amortização'], ['pf-emp-ju', 'Empréstimo – Juros', 'fixo', 'juros'], ['pf-emp-io', 'Empréstimo – IOF e taxas', 'fixo', 'IOF']].map(x => ({ v: parseMoney(pfV(x[0])) || 0, cat: x[1], grupo: x[2], rot: x[3] })).filter(x => x.v > 0); }
+    function pfEmpSomar(){ const t = pfEmpPartes().reduce((s, x) => s + x.v, 0), el = document.getElementById('pf-val'); if(el && t > 0){ el.value = fmtMoney(t); if(typeof pfMontarParcelas === 'function') pfMontarParcelas(); } }
+    // uma conta vira até três lançamentos (devolução, juros, IOF), na proporção informada
+    function pfEmpDividir(l){
+      const P = document.getElementById('pf-emp')?.checked ? pfEmpPartes() : [], tot = P.reduce((s, x) => s + x.v, 0);
+      if(!P.length || !tot) return [l];
+      let resto = Number(l.val) || 0;
+      return P.map((x, i) => { const v = i === P.length - 1 ? Math.round(resto * 100) / 100 : Math.round((Number(l.val) || 0) * x.v / tot * 100) / 100; resto -= v;
+        return { ...l, val: v, cat: pfCatGarantir(x.cat, x.grupo), desc: l.desc + ' (' + x.rot + ')' }; });
+    }
+
     function pfLer(){
       let cat = pfV('pf-cat');
       if(cat === '__nova'){
@@ -150,7 +185,8 @@
       if(!b.desc || !b.val || !b.data){ toast('Preencha o histórico (ou o fornecedor), o valor e o vencimento.'); return; }
       const base = { desc: b.desc, forn: b.forn, cat: b.cat, formaPgto: b.formaPgto, doc: b.doc, emissao: b.emissao, competencia: b.competencia, pago: false };
       if(b.loja) base.loja = b.loja;
-      if(oc === 'unica') pagamentos.push({ ...base, val: b.val, data: b.data, tipo: 'unico' });
+      pfGrupoGravar(b.cat);
+      if(oc === 'unica') pagamentos.push(...pfEmpDividir({ ...base, val: b.val, data: b.data, tipo: 'unico' }));
       else {
         if(!pf.parcelas.length){ toast('Clique em "Gerar parcelas" antes de salvar.'); return; }
         const parc = oc === 'parcelada', grupo = (parc ? 'g_' : 'r_') + Date.now();
@@ -159,7 +195,7 @@
           if(x.doc) l.doc = x.doc; if(x.desc) l.desc = base.desc + ' — ' + x.desc;
           if(parc) l.parcela = (i + 1) + '/' + pf.parcelas.length;
           else if(b.competencia) l.competencia = pfSomaMesesComp(b.competencia, b.data, x.data);
-          pagamentos.push(l);
+          pagamentos.push(...pfEmpDividir(l));
         });
       }
       pfDepois();
@@ -216,6 +252,7 @@
       const p = pagamentos[pf.idx]; if(!p) return;
       const loja = pfV('pf-loja');
       const b = pfLer();
+      pfGrupoGravar(pfV('pf-cat') === '__nova' ? pfV('pf-cat-nova').trim() : pfV('pf-cat'));
       const antes = new Map((pf.serie.length ? pf.serie : [p]).map(x => [x, { desc: x.desc, forn: x.forn || '', val: Number(x.val), data: x.data, cat: x.cat || '', competencia: (x.competencia || '').slice(0, 7) }]));
       if(!b.desc || !b.val || !b.data){ toast('Preencha o histórico, o valor e o vencimento.'); return; }
       // parcelas da série (lidas antes de mexer na conta aberta)

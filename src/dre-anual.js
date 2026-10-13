@@ -233,6 +233,7 @@
               <option value="fora" ${g === 'fora' ? 'selected' : ''}>Não entra</option>
               <option value="variavel" ${g === 'variavel' ? 'selected' : ''}>Custo variável (operacional)</option>
               <option value="fixo" ${g === 'fixo' ? 'selected' : ''}>Custo fixo</option>
+              <option value="emprestimo" ${g === 'emprestimo' ? 'selected' : ''}>Empréstimo (devolução do valor)</option>
               <option value="fatura" ${g === 'fatura' ? 'selected' : ''}>Fatura do ML (só caixa)</option></select></td>
               <td><select data-cat="${dreEsc(n)}" class="dre-cfg-comp">${DRE_COMP.map(o => `<option value="${o[0]}" ${cc === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></td>
               ${trat ? `<td><select data-cat="${dreEsc(n)}" class="dre-cfg-bal">${trat.map(o => `<option value="${o[0]}" ${tb === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></td>` : ''}</tr>`; }).join('') || '<tr><td colspan="5" class="text-muted">Nenhuma categoria cadastrada.</td></tr>'}
@@ -259,7 +260,7 @@
         if(!c){ c = { nome, impactaDRE:false, tipoPassivo:'operacional' }; categorias.push(c); }
         // só grava como escolha o que difere do padrão do grupo (assim, se o grupo mudar no Olist, acompanha)
         c.dreGrupo = (c.grupo && drePadraoDoGrupo(c.grupo) === g) ? null : g;
-        c.impactaDRE = g !== 'fora';
+        c.impactaDRE = g === 'fixo' || g === 'variavel';
       });
       const selBal = document.querySelectorAll('.dre-cfg-bal');
       if(selBal.length && typeof comprasCfg !== 'undefined'){
