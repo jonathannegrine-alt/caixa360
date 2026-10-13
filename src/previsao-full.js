@@ -1,0 +1,144 @@
+// ===== PREVISÃO DE ENVIOS AO FULL (aba "Previsão de Full" da Análise de vendas) =====
+// Para quem precisa agendar o envio antes de o Mercado Livre publicar a sugestão da semana.
+// Regra (versão 1, declarada na tela e afinada com os relatórios importados):
+//   ritmo        = 60% do ritmo dos últimos 7 dias + 40% do ritmo dos últimos 30 dias (unidades por dia, só Full);
+//                  produto zerado no Full: os 30 dias são divididos só pelos dias em que houve venda (corrige a ruptura)
+//   aceleração   = se a última semana vendeu mais que a anterior, o ritmo sobe (no máximo 35%)
+//   sazonalidade = quanto o produto vendeu nos próximos N dias do ano passado ÷ o que vendia nas duas semanas
+//                  equivalentes (entre 0,8 e 2,5; só quando há venda suficiente no ano passado)
+//   previsão     = ritmo × aceleração × sazonalidade × dias de cobertura
+//   enviar       = previsão − aptas no Full − a caminho (arredondado para cima)
+// Estoque: o da última importação do relatório do ML; sem relatório, o do Estoque Full já carregado no sistema.
+// Importação: "Relatório de Planejamento de envios" ou "Relatório geral de estoque" (aba Resumo) → tabela full_sugestoes.
+    let pfl = { chave: '', base: [], sug: [], refs: [], dias: 45, prazo: 14, erro: '', lendo: false, msg: '' };
+    const pflE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const pflN = v => (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+    const pflNum = v => typeof v === 'number' ? v : Number(String(v == null ? '' : v).replace(/[R$\s.]/g, '').replace(',', '.')) || 0;
+    const PFL_MES = { janeiro: 1, fevereiro: 2, 'março': 3, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
+
+    async function pflCarregar(chave, conta){
+      pfl.erro = '';
+      if(!conta){ pfl.base = []; pfl.sug = []; pfl.chave = chave; return; }
+      const [b, r] = await Promise.all([supa.rpc('full_previsao_base', { p_conta: conta, p_dias: pfl.dias }),
+        supa.from('full_sugestoes').select('referencia').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).order('referencia', { ascending: false }).limit(400)]);
+      if(b.error){ pfl.erro = b.error.message; return; }
+      pfl.base = b.data || []; pfl.refs = [...new Set((r.data || []).map(x => x.referencia))];
+      pfl.sug = [];
+      if(pfl.refs.length){ const s = await supa.from('full_sugestoes').select('*').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).eq('referencia', pfl.refs[0]).limit(2000); pfl.sug = s.data || []; }
+      pfl.chave = chave;
+    }
+    // conta da previsão por produto
+    function pflLinhas(){
+      const sug = new Map(pfl.sug.map(s => [String(s.sku).toUpperCase(), s]));
+      const full = new Map((typeof estoqueFullML !== 'undefined' && Array.isArray(estoqueFullML) ? estoqueFullML : []).map(e => [String(e.sku || '').trim().toUpperCase(), e]));
+      const skus = new Set([...pfl.base.map(b => b.sku), ...sug.keys()]);
+      const L = [];
+      skus.forEach(k => {
+        const b = pfl.base.find(x => x.sku === k) || { s7: 0, s7ant: 0, s30: 0, d30: 0, ano_base: 0, ano_prox: 0, ano_dias: pfl.dias }, s = sug.get(k), f = full.get(k);
+        const aptas = s ? Number(s.aptas) || 0 : (f ? Number(f.aptos_venda) || 0 : 0), caminho = s ? Number(s.caminho) || 0 : (f ? (Number(f.em_separacao) || 0) + (Number(f.em_transito) || 0) : 0);
+        const s7 = Number(b.s7) || 0, s7a = Number(b.s7ant) || 0, s30 = Number(b.s30) || 0, d30 = Number(b.d30) || 0;
+        if(!s30 && !s7 && !(s && s.sugestao)) return;
+        const r30 = aptas === 0 && d30 > 0 && d30 < 26 ? s30 / Math.max(d30, 7) : s30 / 30;
+        let ritmo = 0.6 * (s7 / 7) + 0.4 * r30;
+        if(aptas === 0 && s7 / 7 < r30) ritmo = r30;                       // zerado: a última semana não mostra a procura
+        const acel = s7a >= 7 && s7 > s7a ? Math.min(1.35, Math.sqrt(s7 / s7a)) : 1;
+        const base = Number(b.ano_base) || 0, prox = Number(b.ano_prox) || 0, n = Number(b.ano_dias) || pfl.dias;
+        const saz = base >= 20 && prox > 0 ? Math.max(0.8, Math.min(2.5, (prox / n) / (base / 14))) : 1;
+        const porDia = ritmo * acel * saz, previsao = porDia * pfl.dias;
+        let enviar = Math.max(0, previsao - aptas - caminho);
+        enviar = enviar >= 100 ? Math.ceil(enviar / 10) * 10 : Math.ceil(enviar);
+        const acaba = porDia > 0 ? (aptas + caminho) / porDia : null;
+        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', s7, s7a, s30, d30, aptas, caminho, ritmo, acel, saz, porDia, previsao, enviar, acaba, novo: s30 > 0 && base === 0 && d30 < 20,
+          ml: s ? Number(s.sugestao) || 0 : null, urg: s ? s.urgencia : '', estrela: s ? !!s.estrela : false, temEstoque: !!(s || f) });
+      });
+      return L.sort((a, b) => (a.acaba == null ? 9999 : a.acaba) - (b.acaba == null ? 9999 : b.acaba));
+    }
+    function pflDia(n){ const d = new Date(); d.setDate(d.getDate() + Math.round(n)); return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }); }
+    function pflCorpo(){
+      const conta = typeof contaParam === 'function' ? contaParam() : null;
+      if(!conta) return `<div class="card"><div class="card-body"><b>Escolha uma loja</b> no seletor do alto do menu para ver a previsão de envios ao Full. Cada loja tem o seu estoque e a sua previsão.</div></div>`;
+      if(pfl.erro) return `<div class="alert alert-warning">${pflE(pfl.erro)}</div>`;
+      const L = pflLinhas(), comML = L.filter(l => l.ml != null), ref = pfl.refs[0];
+      const totEnviar = L.reduce((s, l) => s + l.enviar, 0), urgentes = L.filter(l => l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo).length;
+      // acerto contra o Mercado Livre na última importação: soma das diferenças ÷ soma das sugestões
+      const dif = comML.reduce((s, l) => s + Math.abs(l.enviar - l.ml), 0), totML = comML.reduce((s, l) => s + l.ml, 0), acerto = totML > 0 ? Math.max(0, 100 - dif / totML * 100) : null;
+      const semEst = L.length && !L.some(l => l.temEstoque);
+      const dc = t => typeof dica === 'function' ? ' ' + dica(t) : '';
+      return `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px;"><div><div class="card-title">Previsão de envios ao Full</div><div class="text-muted" style="font-size:12px;">Quanto mandar de cada produto para cobrir o período escolhido, com base no ritmo de venda, na aceleração e no mesmo período do ano passado.</div></div>
+          <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;font-size:12px;">
+            <label>Cobrir <input type="number" min="7" max="120" value="${pfl.dias}" style="width:64px;" onchange="pflParam('dias', this.value)"> dias</label>
+            <label>Agendar com <input type="number" min="0" max="60" value="${pfl.prazo}" style="width:58px;" onchange="pflParam('prazo', this.value)"> dias de antecedência${dc('Quantos dias antes você precisa marcar o envio (agendamento no galpão mais o tempo até o Full receber). Produto que acaba antes disso aparece como urgente.')}</label>
+            <label class="btn-out btn btn-sm" style="cursor:pointer;">Importar relatório do Mercado Livre<input type="file" accept=".xlsx" style="display:none;" onchange="pflImportar(this)"></label>
+            <button class="btn-out btn btn-sm" onclick="pflExportar()">Exportar</button></div></div>
+        <div class="card-body">
+          ${pfl.msg ? `<div class="alert alert-info">${pflE(pfl.msg)}</div>` : ''}
+          ${semEst ? '<div class="alert alert-warning">Não achei o estoque do Full desta loja: importe o relatório do Mercado Livre (botão acima) ou abra Estoque → Full para carregar. Sem o estoque, a coluna "Enviar" mostra a previsão cheia.</div>' : ''}
+          <div class="adm-nums"><div><small>Unidades a enviar</small><b>${pflN(totEnviar)}</b></div><div><small>Produtos que acabam em até ${pfl.prazo} dias</small><b style="${urgentes ? 'color:var(--danger)' : ''}">${urgentes}</b></div>
+            <div><small>Relatório do Mercado Livre${dc('Data do último relatório importado para esta loja. Importe toda segunda de manhã: é com esse histórico que a regra é afinada.')}</small><b>${ref ? ref.split('-').reverse().join('/') : 'nenhum'}</b></div>
+            <div><small>Proximidade com o Mercado Livre${dc('Compara o "Enviar" do sistema com a sugestão do Mercado Livre no último relatório importado: 100% seria igual em todos os produtos. Os dias de cobertura mudam esse número.')}</small><b>${acerto == null ? '—' : acerto.toFixed(0) + '%'}</b></div></div>
+          <div class="adm-tab"><table><thead><tr><th>Produto</th><th style="text-align:right;">7 dias</th><th style="text-align:right;">7 anteriores</th><th style="text-align:right;">30 dias</th><th style="text-align:right;">No Full</th><th style="text-align:right;">A caminho</th>
+            <th style="text-align:right;">Por dia${dc('Ritmo previsto por dia, já com aceleração e sazonalidade. Passe o mouse no número para ver os fatores.')}</th><th>Acaba em</th><th style="text-align:right;">Enviar</th><th style="text-align:right;">Mercado Livre</th><th style="text-align:right;">Diferença</th></tr></thead><tbody>
+          ${L.map(l => { const urg = l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo;
+            return `<tr><td><b>${pflE(l.sku)}</b>${l.estrela ? ' <span class="badge">estrela</span>' : ''}${l.novo ? ' <span class="badge" title="Pouco histórico: a previsão de produto novo erra mais; o Mercado Livre costuma pedir mais a cada semana.">novo</span>' : ''}<br><small class="text-muted">${pflE(String(l.titulo).slice(0, 62))}</small></td>
+              <td style="text-align:right;">${pflN(l.s7)}</td><td style="text-align:right;">${pflN(l.s7a)}</td><td style="text-align:right;">${pflN(l.s30)}${l.d30 && l.d30 < 26 ? '<br><small class="text-muted">' + l.d30 + ' dias c/ venda</small>' : ''}</td>
+              <td style="text-align:right;">${pflN(l.aptas)}</td><td style="text-align:right;">${pflN(l.caminho)}</td>
+              <td style="text-align:right;" title="ritmo ${l.ritmo.toFixed(1)} × aceleração ${l.acel.toFixed(2)} × sazonalidade ${l.saz.toFixed(2)}">${l.porDia.toFixed(1).replace('.', ',')}</td>
+              <td style="${urg ? 'color:var(--danger);font-weight:700;' : ''}">${l.acaba == null ? '—' : l.acaba < 1 ? 'zerado' : l.acaba > 120 ? 'mais de 4 meses' : pflDia(l.acaba) + ' <small class="text-muted">(' + Math.round(l.acaba) + ' d)</small>'}</td>
+              <td style="text-align:right;"><b>${l.enviar ? pflN(l.enviar) : '—'}</b></td><td style="text-align:right;">${l.ml == null ? '—' : pflN(l.ml)}${l.urg ? '<br><small class="text-muted">' + pflE(l.urg) + '</small>' : ''}</td>
+              <td style="text-align:right;">${l.ml == null ? '—' : (l.enviar - l.ml > 0 ? '+' : '') + pflN(l.enviar - l.ml)}</td></tr>`; }).join('') || '<tr><td colspan="11" class="text-muted">Sem vendas pelo Full nos últimos 30 dias nesta loja.</td></tr>'}
+          </tbody></table></div>
+          <div class="text-muted adm-nota"><b>Como a conta é feita:</b> ritmo por dia = 60% dos últimos 7 dias + 40% dos últimos 30 (produto zerado: os 30 dias contam só os dias em que vendeu). Se a última semana vendeu mais que a anterior, o ritmo sobe até 35%. Se o produto vendeu no ano passado, entra a sazonalidade: quanto ele vendeu nos ${pfl.dias} dias seguintes ÷ o que vendia nas duas semanas equivalentes. Enviar = ritmo × dias de cobertura − o que está no Full − o que está a caminho. A regra é uma aproximação: o Mercado Livre não publica a dele. Ela acerta mais em produto estabilizado do que em produto novo. Importe o relatório do Mercado Livre toda segunda para comparar e afinar.</div>
+        </div></div>`;
+    }
+    function pflParam(k, v){ pfl[k] = Math.max(k === 'dias' ? 7 : 0, Math.min(120, Number(v) || 0)); if(k === 'dias'){ pfl.chave = ''; if(typeof an !== 'undefined'){ an.chave = ''; if(typeof anRender === 'function') return anRender(); } } if(typeof anDesenhar === 'function') anDesenhar(); }
+
+    // ---------- importação do relatório do Mercado Livre ----------
+    function pflDataDe(txt){
+      const m = /(\d{1,2}) de ([a-zç]+)/i.exec(String(txt || '')); if(!m) return null;
+      const mes = PFL_MES[m[2].toLowerCase()]; if(!mes) return null;
+      const hoje = new Date(); let ano = hoje.getFullYear(); if(mes > hoje.getMonth() + 2) ano--;       // relatório de dezembro aberto em janeiro
+      return ano + '-' + String(mes).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
+    }
+    function pflLerPlanilha(wb){
+      for(const nome of wb.SheetNames){
+        const R = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header: 1, defval: '' }), topo = R.slice(0, 14);
+        const dataTxt = (topo.flat().find(c => /(Baixado|Atualizado) em/i.test(String(c))) || ''), ref = pflDataDe(dataTxt);
+        const iCab = topo.findIndex(l => l.some(c => /^SKU$/i.test(String(c).trim()))); if(iCab < 0) continue;
+        // cabeçalho em até 3 linhas: junta os textos de cada coluna
+        const col = t => { for(let j = 0; j < 60; j++){ const txt = [0, 1, 2].map(k => String((R[iCab + k] || [])[j] || '')).join(' '); if(t.test(txt)) return j; } return -1; };
+        const cSku = col(/^\s*SKU/i), cSug = col(/Unidades sugeridas para enviar|Estoque a enviar/i); if(cSku < 0 || cSug < 0) continue;
+        const cInv = col(/C[oó]digo ML/i), cProd = col(/^\s*Produto\s*$|^\s*Produto /i), cV30 = col(/Unidades vendidas [uú]lt/i), cApt = col(/Aptas para venda/i), cPend = col(/recebimento pendente|Entrada pendente/i), cTransf = col(/Em transfer[eê]ncia/i),
+          cMin = col(/Unidades m[ií]nimas/i), cUrg = col(/Urg[eê]ncia de envio/i), cPrazo = col(/Prazo limite/i), cEst = col(/Produto Estrela/i);
+        const itens = [];
+        R.slice(iCab + 1).forEach(l => { const sku = String(l[cSku] || '').trim(); if(!sku || /^SKU$/i.test(sku)) return;
+          itens.push({ sku: sku.toUpperCase(), inventory_id: cInv >= 0 ? String(l[cInv] || '').trim() || null : null, produto: cProd >= 0 ? String(l[cProd] || '').slice(0, 200) : null, v30: cV30 >= 0 ? Math.round(pflNum(l[cV30])) : null,
+            aptas: cApt >= 0 ? Math.round(pflNum(l[cApt])) : null, caminho: (cPend >= 0 ? Math.round(pflNum(l[cPend])) : 0) + (cTransf >= 0 ? Math.round(pflNum(l[cTransf])) : 0), minimo: cMin >= 0 ? Math.round(pflNum(l[cMin])) : null,
+            sugestao: Math.round(pflNum(l[cSug])), urgencia: cUrg >= 0 ? String(l[cUrg] || '').slice(0, 40) : null, prazo: cPrazo >= 0 ? String(l[cPrazo] || '').slice(0, 20) : null, estrela: cEst >= 0 ? /^sim/i.test(String(l[cEst])) : null }); });
+        if(itens.length) return { ref, itens, origem: /Planejamento/i.test(JSON.stringify(topo)) ? 'planejamento' : 'estoque' };
+      }
+      return null;
+    }
+    async function pflImportar(inp){
+      const arq = inp.files && inp.files[0]; inp.value = ''; if(!arq) return;
+      const conta = typeof contaParam === 'function' ? contaParam() : null; if(!conta){ if(typeof toast === 'function') toast('Escolha a loja antes de importar.'); return; }
+      if(typeof XLSX === 'undefined'){ if(typeof toast === 'function') toast('O leitor de planilhas ainda não carregou. Tente de novo em instantes.'); return; }
+      pfl.msg = 'Lendo ' + arq.name + '…'; if(typeof anDesenhar === 'function') anDesenhar();
+      try {
+        const wb = XLSX.read(await arq.arrayBuffer(), { type: 'array' }), d = pflLerPlanilha(wb);
+        if(!d){ pfl.msg = 'Não reconheci este arquivo. Use o "Relatório de Planejamento de envios" ou o "Relatório geral de estoque" baixado do Mercado Livre (Full), sem alterar.'; }
+        else {
+          const ref = d.ref || getToday(), mapa = new Map(); d.itens.forEach(i => mapa.set(i.sku, i));        // SKU repetido no arquivo: fica a última linha
+          const linhas = [...mapa.values()].map(i => ({ ...i, usuario_id: usuarioAtual.id, ml_user_id: conta, referencia: ref, origem: d.origem }));
+          let erro = null;
+          for(let k = 0; k < linhas.length && !erro; k += 300){ const r = await supa.from('full_sugestoes').upsert(linhas.slice(k, k + 300), { onConflict: 'usuario_id,ml_user_id,referencia,sku' }); erro = r.error; }
+          pfl.msg = erro ? 'Não consegui gravar: ' + erro.message : 'Relatório de ' + ref.split('-').reverse().join('/') + ' importado para ' + (typeof contaNome === 'function' ? contaNome(conta) : 'a loja') + ': ' + linhas.length + ' produtos, ' + linhas.filter(l => l.sugestao > 0).length + ' com sugestão de envio. Confira se o arquivo é mesmo desta loja.';
+        }
+      } catch(e){ pfl.msg = 'Não consegui ler o arquivo: ' + ((e && e.message) || e); }
+      pfl.chave = ''; if(typeof an !== 'undefined') an.chave = '';
+      if(typeof anRender === 'function') anRender(); else if(typeof anDesenhar === 'function') anDesenhar();
+    }
+    function pflExportar(){
+      const L = pflLinhas(), n = v => String(v).replace('.', ',');
+      const csv = ['SKU;Produto;Vendas 7 dias;7 dias anteriores;Vendas 30 dias;No Full;A caminho;Previsto por dia;Dias até acabar;Enviar;Sugestão do Mercado Livre'].concat(L.map(l => [l.sku, '"' + String(l.titulo).replace(/"/g, '""') + '"', l.s7, l.s7a, l.s30, l.aptas, l.caminho, n(l.porDia.toFixed(2)), l.acaba == null ? '' : Math.round(l.acaba), l.enviar, l.ml == null ? '' : l.ml].join(';'))).join('\r\n');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = 'previsao-full-' + getToday() + '.csv'; a.click();
+    }

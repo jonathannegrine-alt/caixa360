@@ -6,7 +6,7 @@
 // src/promo-frete.js (frTabela). Dados: RPCs vendas_ml_lucro_mlb, vendas_ml_degrau, vendas_ml_dias_item + função ml-ads.
 
     let gs = { chave: '', lucro: null, ads: null, adsErro: '', degrau: null, rupt: null, filtro: 'todos' };
-    const GS_ABAS = [['lucro', 'Lucro real'], ['degrau', 'Degrau do frete'], ['ruptura', 'Venda perdida'], ['opinioes', 'Opiniões']];
+    const GS_ABAS = [['lucro', 'Lucro real'], ['degrau', 'Degrau do frete'], ['ruptura', 'Venda perdida'], ['opinioes', 'Opiniões'], ['full', 'Previsão de Full']];
     const GS_DEGRAUS = [19, 49, 79, 100, 120, 150, 200];
     function gsMin(){ const v = Number(localStorage.getItem('mk_lucro_min')); return localStorage.getItem('mk_lucro_min') !== null && v >= 0 && v < 100 ? v : 10; }
     function gsMinMudar(v){ v = Number(String(v).replace(',', '.')); if(!(v >= 0 && v < 100)) return; localStorage.setItem('mk_lucro_min', String(v)); anDesenhar(); }
@@ -35,10 +35,11 @@
           const r = await supa.rpc('vendas_ml_dias_item', { p_dias: 90, p_conta: conta }); if(gs.chave !== chave) return; if(r.error) throw r.error; gs.rupt = r.data || [];
         }
         if(an.aba === 'opinioes' && typeof opCarregar === 'function') await opCarregar(chave, conta);
+        if(an.aba === 'full' && typeof pflCarregar === 'function') await pflCarregar(chave, conta);
       } catch(e){ gs.erro = (e && e.message) || String(e); }
       if(an.chave === chave) anDesenhar();
     }
-    function gsCorpo(aba){ return aba === 'lucro' ? gsLucro() : aba === 'degrau' ? gsDegrau() : aba === 'ruptura' ? gsRuptura() : aba === 'opinioes' && typeof opCorpo === 'function' ? opCorpo() : ''; }
+    function gsCorpo(aba){ return aba === 'lucro' ? gsLucro() : aba === 'degrau' ? gsDegrau() : aba === 'ruptura' ? gsRuptura() : aba === 'opinioes' && typeof opCorpo === 'function' ? opCorpo() : aba === 'full' && typeof pflCorpo === 'function' ? pflCorpo() : ''; }
 
     // ---------- lucro real por anúncio ----------
     function gsLucroLinhas(){
