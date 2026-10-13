@@ -105,7 +105,7 @@
         const dataTxt = (topo.flat().find(c => /(Baixado|Atualizado) em/i.test(String(c))) || ''), ref = pflDataDe(dataTxt);
         const iCab = topo.findIndex(l => l.some(c => /^SKU$/i.test(String(c).trim()))); if(iCab < 0) continue;
         // cabeçalho em até 3 linhas: junta os textos de cada coluna
-        const col = t => { for(let j = 0; j < 60; j++){ const txt = [0, 1, 2].map(k => String((R[iCab + k] || [])[j] || '')).join(' ').normalize('NFC').replace(/s+/g, ' ').trim(); if(t.test(txt)) return j; } return -1; };
+        const col = t => { for(let j = 0; j < 60; j++){ const txt = [0, 1, 2].map(k => String((R[iCab + k] || [])[j] || '')).join(' ').normalize('NFC').replace(/\s+/g, ' ').trim(); if(t.test(txt)) return j; } return -1; };
         const cSku = col(/^\s*SKU/i), cSug = col(/Unidades sugeridas para enviar|Estoque a enviar/i); if(cSku < 0 || cSug < 0) continue;
         const cInv = col(/C[oó]digo ML/i), cProd = col(/^\s*Produto\s*$|^\s*Produto /i), cV30 = col(/Unidades vendidas.{0,8}30/i), cApt = col(/Aptas para venda/), cPend = col(/recebimento pendente|Entrada pendente/i), cTransf = col(/Em transfer[eê]ncia/i),
           cMin = col(/Unidades m[ií]nimas/i), cUrg = col(/Urg[eê]ncia de envio/i), cPrazo = col(/Prazo limite/i), cEst = col(/Produto Estrela/i);
