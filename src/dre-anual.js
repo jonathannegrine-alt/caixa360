@@ -49,7 +49,7 @@
       const [ml, dias, fat] = await Promise.all([ supa.rpc('vendas_ml_por_mes', { p_ano: dreAno, p_conta: conta }), qDias, typeof ftMes === 'function' ? ftMes(dreAno, conta).catch(() => ({})) : null ]);
       if(dreDados.chave !== chave) return;
       const porMes = {};
-      (ml.data || []).forEach(r => { porMes[r.mes] = { fat:Number(r.faturamento), canc:Number(r.canceladas), imp:Number(r.imposto), frete:Number(r.frete_vendedor), custo:Number(r.custo), tarifa:Number(r.tarifa), vendas:Number(r.vendas), flex:-(Number(r.flex_repasse) || 0) }; });
+      (ml.data || []).forEach(r => { porMes[r.mes] = { fat:Number(r.faturamento), canc:Number(r.canceladas), imp:Number(r.imposto), frete:Number(r.frete_vendedor), custo:Number(r.custo), tarifa:Number(r.tarifa), vendas:Number(r.vendas), flex:-(Number(r.flex_repasse) || 0), flexc:Number(r.flex_custo) || 0 }; });
       if(fat && typeof ftJuntar === 'function') ftJuntar(porMes, fat);     // cobranças da fatura do ML, por mês em que aconteceram
       // dias do mês já importados do ML (para avisar mês incompleto); com várias contas, conta os dias distintos
       const cob = {}; const vistos = new Set();
@@ -91,6 +91,7 @@
       return out;
     }
 
+    const DRE_FLEX_RX = /flex/i;   // categoria de Contas a pagar que é o pagamento do transportador do Flex
     function dreMontar(){
       const ml = dreDados.ml, desp = dreDespesas();
       const val = (m, k) => (ml[m] && ml[m][k]) || 0;
@@ -99,8 +100,12 @@
         ['Custo dos Produtos ML', 'custo'], ['Tarifa de Venda ML', 'tarifa']
       ].map(([nome, k]) => ({ nome, v: Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, val(i + 1, k)])) }));
       // Flex: o Mercado Livre repassa ao vendedor o frete dos envios Flex (entra como valor negativo = reduz o custo).
-      // O que se paga ao transportador NÃO entra aqui: vem das contas a pagar, pelo valor realmente pago.
+      // O que se paga ao transportador: vale o que foi lançado em Contas a pagar numa categoria de Flex (nome com "Flex");
+      // no mês sem lançamento, entra o custo pela configuração (entregas × valor por entrega de Configurações → Vendas).
       if(DRE_MESES.some((_, i) => val(i + 1, 'flex'))) linhasML.push({ nome: 'Repasse do Flex (ML)', v: Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, val(i + 1, 'flex')])) });
+      const pagoFlex = m => ['variavel', 'fixo'].reduce((s, g) => s + Object.keys(desp[g]).filter(n => DRE_FLEX_RX.test(n)).reduce((t, n) => t + (desp[g][n][m] || 0), 0), 0);
+      const flexCfg = Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, pagoFlex(i + 1) > 0 ? 0 : val(i + 1, 'flexc')]));
+      if(Object.values(flexCfg).some(x => x)) linhasML.push({ nome: 'Entregas Flex (pela configuração)', v: flexCfg, flexCfg: true });
       if(typeof ftLinhas === 'function') linhasML.push(...ftLinhas(ml));
       const linhasDe = g => Object.keys(desp[g]).map(nome => ({ nome, v: desp[g][nome], grupo: dreGrupoOlist(nome) })).sort((a,b) => a.grupo.localeCompare(b.grupo) || a.nome.localeCompare(b.nome));
       const variaveis = linhasDe('variavel'), fixas = linhasDe('fixo');
@@ -186,6 +191,7 @@
             Faturamento ML = valor dos produtos das vendas aprovadas e canceladas (as canceladas saem em seguida). Custo e imposto são os gravados em cada venda.
             Despesas aparecem somadas por grupo: clique num grupo para ver as categorias. Entram pelo mês de competência da conta; sem ela, pela competência padrão da categoria (em geral o mês do vencimento). ● = mês com vendas ainda sendo importadas do Mercado Livre.
             ${typeof ftRodape === 'function' ? ftRodape() : ''}
+            Flex: o repasse do Mercado Livre entra como redução de custo; o transportador entra pelo que foi lançado em Contas a pagar numa categoria com “Flex” no nome e, no mês sem lançamento, pelo valor por entrega das Configurações.
             ${!dreDados.carregado ? ' Carregando vendas…' : ''}
           </div>
         </div>`;
