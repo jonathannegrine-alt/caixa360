@@ -145,6 +145,18 @@
       gf.fechLinks = fech;
       return soDivida ? dv : `<div class="gf-grid">${eq}${dv}</div>`;
     }
+    // aba "Fechamento do mês" do DRE: escolhe o mês e gera o PDF
+    function gfFechAba(){
+      const el = document.getElementById('res-fech-view'); if(!el) return;
+      const hoje = getToday().slice(0, 7), meses = []; let ym = hoje;
+      for(let i = 0; i < 13; i++){ meses.push(ym); ym = gfMesAnt(ym); }
+      const loja = typeof lojaAtiva === 'function' && lojaAtiva() && typeof contaNome === 'function' ? contaNome(lojaAtiva()) : 'todas as lojas';
+      el.innerHTML = `<div class="card"><div class="card-header"><div><div class="card-title">Fechamento do mês em PDF</div><div class="text-muted" style="font-size:12px;">Resultado, caixa, estoque, empréstimos e conferência do Mercado Livre num único relatório (${loja}; para uma loja só, escolha-a no seletor do menu).</div></div></div>
+        <div class="card-body"><div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">
+          <label style="font-size:13px;">Mês <select id="gf-fech-mes" style="width:auto;margin-left:6px;">${meses.map((m, i) => `<option value="${m}" ${i === 1 ? 'selected' : ''}>${gfMesNome(m)}${i === 0 ? ' (parcial)' : ''}</option>`).join('')}</select></label>
+          <button class="btn" onclick="gfFechamento(document.getElementById('gf-fech-mes').value, this)">Gerar fechamento em PDF</button></div>
+          <div class="text-muted" style="font-size:12.5px;line-height:1.6;margin-top:14px;">O resultado sai para qualquer mês com vendas no sistema. A parte "Mercado Livre: conferência do repasse" só aparece nos meses em que a planilha de conciliação foi importada (Financeiro → Conciliação ML). Caixa, estoque e empréstimos mostram a posição de hoje, não a do fim do mês escolhido.</div></div></div>`;
+    }
     // links do fechamento em PDF (ficam no DRE)
     function gfFechLinks(){
       const ym = getToday().slice(0, 7), ant = gfMesAnt(ym);

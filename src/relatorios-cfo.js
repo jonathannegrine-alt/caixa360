@@ -110,6 +110,8 @@
       document.getElementById('res-comp-view').style.display = tab === 'comparativo' ? '' : 'none';
       document.getElementById('res-tab-dre').className  = 'resultado-tab' + (tab === 'dre'         ? ' active' : '');
       document.getElementById('res-tab-comp').className = 'resultado-tab' + (tab === 'comparativo' ? ' active' : '');
+      const fv = document.getElementById('res-fech-view'), ft = document.getElementById('res-tab-fech');
+      if(fv && ft){ fv.style.display = tab === 'fechamento' ? '' : 'none'; ft.className = 'resultado-tab' + (tab === 'fechamento' ? ' active' : ''); if(tab === 'fechamento' && typeof gfFechAba === 'function') gfFechAba(); }
       if(tab === 'anual') renderDREAnual();
       else if(tab === 'dre') renderDRE();
       else renderComparativo();
