@@ -209,6 +209,8 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - PREVISÃO DE FULL (src/previsao-full.js, aba da Análise de vendas): RPC full_previsao_base (vendas Full por SKU: 7 d, 7 d
   anteriores, 30 d, dias com venda, mesmo período do ano passado) + tabela full_sugestoes (sugestão do ML importada do
   relatório de planejamento ou do relatório geral de estoque). A regra fica no topo do arquivo e no rodapé da tela.
+  Antes de mexer na regra, ler docs/previsao-full-aprendizado.md (fontes, fórmula declarada pelo ML, regras já testadas
+  e o que cada uma acertou) e registrar ali o resultado de cada nova calibragem.
 - ml-sonda: função só para o administrador que faz GET na API do ML e devolve um resumo (estudo de endpoints).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N
