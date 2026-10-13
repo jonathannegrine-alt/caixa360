@@ -438,7 +438,7 @@
       const dt = t => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
       const linhas = mv.map(m => { const depois = saldo; saldo -= Number(m.qtd); return `<tr><td>${dt(m.criado_em)}</td><td>${ES_MOTIVO[m.motivo] || m.motivo}${m.ref ? ` <span class="ap-parc">${esEsc(m.ref)}</span>` : ''}</td><td class="num ${Number(m.qtd) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(m.qtd) > 0 ? '+' : ''}${esInt(m.qtd)}</b></td><td class="num">${esInt(depois)}</td><td class="text-muted" style="font-size:12px;white-space:normal;">${esEsc(m.obs || '')}</td></tr>`; }).join('');
       vmlModal(`${esEsc(k.toUpperCase())} — movimentações em ${esEsc(dep.nome)}`, mv.length ? `<div style="max-height:60vh;overflow:auto;"><table class="cp-tab"><thead><tr><th>Quando</th><th>Motivo</th><th class="num">Quantidade</th><th class="num">Saldo depois</th><th>Observação</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<div class="vazio"><b>Sem movimentações</b>Este produto ainda não teve entrada nem saída neste depósito.</div>');
-      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) { mc.style.maxWidth = '1040px'; mc.style.width = '96vw'; }
     }
 
     function estAjuste(){
