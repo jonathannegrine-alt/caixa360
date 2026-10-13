@@ -1537,3 +1537,47 @@ body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-sele
 .adm-explica{border:1px solid var(--border);background:var(--surface-2);border-radius:11px;padding:12px 14px;margin-bottom:14px;font-size:12.5px;line-height:1.6;color:var(--text-2);}
 .adm-explica p{margin:6px 0 0;}
 .adm-explica b{color:var(--text);}
+
+/* ===== REVISÃO VISUAL DE 13/10/2026 (PC e celular) ===== */
+/* Ranking de produtos: a 1ª coluna herdava a largura do "Anúncio" do Resumo e o título ficava espremido */
+.rf-table.rk-tab td:first-child{min-width:0;white-space:nowrap;}
+.rf-table.rk-tab td.rk-prod{min-width:300px;max-width:440px;white-space:normal;}
+.rf-table.rk-tab td.rk-prod span:not(.foto-mini){display:block;font-size:11.5px;font-weight:400;color:var(--text-muted);line-height:1.3;}
+.rk-rola{max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:10px;}
+/* Resumo Financeiro: coluna do anúncio com a foto e largura para duas linhas de título */
+.rf-table:not(.rk-tab) td:first-child{min-width:320px;}
+/* menu lateral: um contador por item (Perguntas mostrava dois) */
+.nav-item:has(.nav-cont) .nav-selo{display:none;}
+.ini-sino{white-space:nowrap;flex:none;}
+.pfl-busca{width:300px;max-width:100%;padding:8px 12px;border:1px solid var(--border-strong,var(--border));border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;}
+/* botão de copiar não cai sozinho para a linha de baixo */
+.venda .ico-btn[title="Copiar"]{vertical-align:middle;margin-left:2px;}
+@media (max-width:768px){
+  /* cartões: o texto de baixo quebra em vez de ser cortado */
+  .kpi-sub span{white-space:normal;}
+  .kpi-sub{gap:4px 12px;}
+  .vg-meses{gap:12px;} .vg-meses>div+div{padding-left:12px;} .vg-meses b{font-size:15.5px;white-space:nowrap;}
+  /* filtros do Resumo: dois por linha, sem campo espremido */
+  .filtros{grid-template-columns:1fr 1fr;}
+  .filtros>div{grid-column:auto !important;min-width:0;}
+  .filtros>div[style*="span 3"]{grid-column:1 / -1 !important;}
+  .filtros input,.filtros select{width:100%;min-width:0;}
+  .ft-modo select{width:100% !important;}
+  .rf-table.rk-tab td.rk-prod{min-width:230px;}
+  .rf-table:not(.rk-tab) td:first-child{min-width:250px;}
+  .pfl-busca{width:100%;}
+  /* janela "Categorias": campos com largura para ler */
+  #modal-vml .modal-body table select,#modal-vml .modal-body table input[type="text"]{min-width:130px;}
+}
+@media (max-width:640px){
+  /* Contas a pagar: a regra de tela média (até 1500px) vinha depois e desfazia o desenho do celular */
+  .ap-row{grid-template-columns:20px minmax(0,1fr) auto !important;gap:6px 10px;padding:11px 12px;}
+  .ap-row .ap-cat,.ap-row .ap-sit{display:none;}
+  .ap-row .cb-pagar{grid-column:1;grid-row:1 / span 2;align-self:center;}
+  .ap-row .ap-main{grid-column:2;grid-row:1;}
+  .ap-row .ap-val{grid-column:3;grid-row:1;}
+  .ap-row .ap-val .entry-value{white-space:nowrap;}
+  .ap-row .ap-data{grid-column:2;grid-row:2;display:flex;gap:6px;align-items:baseline;}
+  .ap-row .ap-data span{white-space:nowrap;}
+  .ap-row .ap-acao{grid-column:3;grid-row:2;}
+}

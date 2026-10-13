@@ -199,7 +199,7 @@
         <div class="card"><div class="card-header"><div class="card-title">Rentabilidade por produto</div><input type="text" placeholder="Buscar SKU ou título" value="${anE(an.busca)}" oninput="an.busca=this.value;clearTimeout(an._t);an._t=setTimeout(()=>{anDesenhar();const i=document.querySelector('#an-host .card-header input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},350)" style="max-width:260px;"></div>
         ${anTabela(filt, [
           { k: 'curva', t: 'Curva', fmt: l => `<span class="an-curva an-${l.curva}">${l.curva}</span>` },
-          { k: 'chave', t: 'Produto', fmt: l => `<div class="cp-prod" style="max-width:340px;"><b>${anE(l.chave)}</b><span>${anE(l.titulo || '')}</span></div>` },
+          { k: 'chave', t: 'Produto', fmt: l => (h => typeof fotoLinha === 'function' ? fotoLinha(l.chave, h) : h)(`<div class="cp-prod" style="max-width:340px;"><b>${anE(l.chave)}</b><span>${anE(l.titulo || '')}</span></div>`) },
           { k: 'un', t: 'Unidades', num: 1, fmt: l => anN(l.un) }, { k: 'vendas', t: 'Vendas', num: 1, fmt: l => anN(l.vendas) },
           { k: 'bruto', t: 'Faturamento', num: 1, fmt: l => '<b>' + fmt(l.bruto) + '</b>' }, { k: 'part', t: '% do total', num: 1, fmt: l => anN(l.part, 1) + '%' },
           { k: 'custo', t: 'Custo', num: 1, fmt: l => l.custo ? fmt(l.custo) : '<span class="text-danger">sem custo</span>' },

@@ -840,7 +840,7 @@
                 ${d.linhas.length ? d.linhas.map(v => {
                   const x = vmlCalc(v), dt = vmlDataBRT(v.data_venda), canc = v.situacao === 'cancelada';
                   return `<tr style="${canc ? 'opacity:.55;' : ''}">
-                    <td style="max-width:260px;">${vmlEsc(v.titulo || '—')}${canc ? ' <span class="badge badge-danger">cancelada</span>' : ''}</td>
+                    <td>${(h => v.sku && typeof fotoLinha === 'function' ? fotoLinha(v.sku, h) : h)(vmlEsc(v.titulo || '—') + (canc ? ' <span class="badge badge-danger">cancelada</span>' : ''))}</td>
                     <td>${vmlEsc(v.sku || '—')}</td>
                     <td>${ptDate(dt.dia)}</td>
                     <td>${vmlEsc(v.envio)}</td>
@@ -923,12 +923,13 @@
       const linhas = L.slice().sort((a,b) => b[ord] - a[ord]);
       const abas = [['cons','Consolidado'],['mcp','Maior margem %'],['mc','Maior margem R$'],['fat','Mais geram faturamento'],['un','Mais unidades vendidas']];
       const cor = v => v >= 0 ? 'mc-pos' : 'mc-neg';
-      const rot = rfRankGrupo === 'sku' ? 'SKU' : 'MLB';
+      const rot = rfRankGrupo === 'sku' ? 'Produto' : 'Anúncio';
+      const prod = x => { const h = '<b>' + vmlEsc(x.chave) + '</b><span>' + vmlEsc(x.titulo || '') + '</span>'; return '<td class="rk-prod">' + (rfRankGrupo === 'sku' && typeof fotoLinha === 'function' ? fotoLinha(x.chave, h) : h) + '</td>'; };
       const tabela = rfRankAba === 'cons'
-        ? `<table class="rf-table"><thead><tr><th>Índice</th><th>${rot}</th><th>Título</th><th class="num">Unid. vendidas</th><th class="num" title="Participação nas unidades vendidas">Contrib. %</th><th class="num">Vendas aprovadas (R$)</th><th class="num" title="Participação no faturamento">Contrib. %</th><th class="num">Custo (R$)</th><th class="num" title="Margem de contribuição ÷ custo">Margem s/ custo %</th><th class="num">Margem contrib. (=)</th><th class="num">Margem contrib. %</th><th class="num" title="Participação na margem total">Contrib. %</th></tr></thead>
-            <tbody>${linhas.map(x => `<tr><td><span class="abc abc-${abc[x.chave]}">${abc[x.chave]}</span></td><td><b>${vmlEsc(x.chave)}</b></td><td style="max-width:230px;white-space:normal;">${vmlEsc(x.titulo)}</td><td class="num">${x.un}</td><td class="num">${vmlPct(pct(x.un, T.un))}</td><td class="num">${vmlNum(x.bruto)}</td><td class="num">${vmlPct(pct(x.bruto, T.bruto))}</td><td class="num">${vmlNum(x.custo)}</td><td class="num">${x.custo > 0 ? vmlPct(x.mc / x.custo * 100) : '—'}</td><td class="num"><b class="${cor(x.mc)}">${vmlNum(x.mc)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(x.mc_pct)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(pct(x.mc, T.mc))}</b></td></tr>`).join('')}</tbody></table>`
-        : `<table class="rf-table"><thead><tr><th>#</th><th>${rot}</th><th>Título</th><th class="num">Unid.</th><th class="num">Vendas aprovadas (R$)</th><th class="num">Margem contrib. (=)</th><th class="num">Margem contrib. %</th></tr></thead>
-            <tbody>${linhas.map((x,i) => `<tr><td>${i + 1}</td><td><b>${vmlEsc(x.chave)}</b></td><td style="max-width:260px;white-space:normal;">${vmlEsc(x.titulo)}</td><td class="num">${x.un}</td><td class="num">${vmlNum(x.bruto)}</td><td class="num"><b class="${cor(x.mc)}">${vmlNum(x.mc)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(x.mc_pct)}</b></td></tr>`).join('')}</tbody></table>`;
+        ? `<table class="rf-table rk-tab"><thead><tr><th title="Curva ABC pela margem acumulada">Curva</th><th>${rot}</th><th class="num">Unid. vendidas</th><th class="num" title="Participação nas unidades vendidas">Contrib. %</th><th class="num">Vendas aprovadas (R$)</th><th class="num" title="Participação no faturamento">Contrib. %</th><th class="num">Custo (R$)</th><th class="num" title="Margem de contribuição ÷ custo">Margem s/ custo %</th><th class="num">Margem contrib. (=)</th><th class="num">Margem contrib. %</th><th class="num" title="Participação na margem total">Contrib. %</th></tr></thead>
+            <tbody>${linhas.map(x => `<tr><td><span class="abc abc-${abc[x.chave]}">${abc[x.chave]}</span></td>${prod(x)}<td class="num">${x.un}</td><td class="num">${vmlPct(pct(x.un, T.un))}</td><td class="num">${vmlNum(x.bruto)}</td><td class="num">${vmlPct(pct(x.bruto, T.bruto))}</td><td class="num">${vmlNum(x.custo)}</td><td class="num">${x.custo > 0 ? vmlPct(x.mc / x.custo * 100) : '—'}</td><td class="num"><b class="${cor(x.mc)}">${vmlNum(x.mc)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(x.mc_pct)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(pct(x.mc, T.mc))}</b></td></tr>`).join('')}</tbody></table>`
+        : `<table class="rf-table rk-tab"><thead><tr><th>#</th><th>${rot}</th><th class="num">Unid.</th><th class="num">Vendas aprovadas (R$)</th><th class="num">Margem contrib. (=)</th><th class="num">Margem contrib. %</th></tr></thead>
+            <tbody>${linhas.map((x,i) => `<tr><td>${i + 1}</td>${prod(x)}<td class="num">${x.un}</td><td class="num">${vmlNum(x.bruto)}</td><td class="num"><b class="${cor(x.mc)}">${vmlNum(x.mc)}</b></td><td class="num"><b class="${cor(x.mc)}">${vmlPct(x.mc_pct)}</b></td></tr>`).join('')}</tbody></table>`;
       const faixa = rfRankAba === 'cons'
         ? `<div class="rk-faixa verde"><b>R$ ${vmlNum(T.mc)}</b><span>Margem de contribuição total</span></div>`
         : `<div class="rk-faixa"><b>${T.un.toLocaleString('pt-BR')} unidades</b><span>em ${T.vd.toLocaleString('pt-BR')} vendas aprovadas</span></div>`;
@@ -939,7 +940,7 @@
           <div class="chips"><button class="chip ${rfRankGrupo === 'sku' ? 'active' : ''}" onclick="rfRanking(null,'sku')">SKU</button><button class="chip ${rfRankGrupo === 'mlb' ? 'active' : ''}" onclick="rfRanking(null,'mlb')">MLB</button></div>
           <button class="btn-out btn btn-sm" onclick="rfRankExportar()">⬇ Exportar ranking</button>
         </div>
-        <div style="max-height:46vh;overflow:auto;">${L.length ? tabela : `<div class="vazio">${rfRankDados.erro ? vmlEsc(rfRankDados.erro) : 'Sem vendas aprovadas no período.'}</div>`}</div>
+        <div class="rk-rola">${L.length ? tabela : `<div class="vazio">${rfRankDados.erro ? vmlEsc(rfRankDados.erro) : 'Sem vendas aprovadas no período.'}</div>`}</div>
         <div class="text-muted" style="font-size:11px;margin-top:10px;line-height:1.5;">* Somente vendas aprovadas do período. ** Vendas sem SKU ficam agrupadas em "(sem SKU)". *** Vendas sem custo ou imposto distorcem o ranking: use o filtro "Custo &amp; imposto" do Resumo para encontrá-las.</div>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1180px';
       rfRankDados.abc = abc; rfRankDados.tot = T;
