@@ -10,7 +10,8 @@
 //   enviar       = previsão − aptas no Full − a caminho (arredondado para cima)
 // Estoque: o da última importação do relatório do ML; sem relatório, o do Estoque Full já carregado no sistema.
 // Importação: "Relatório de Planejamento de envios" ou "Relatório geral de estoque" (aba Resumo) → tabela full_sugestoes.
-    let pfl = { chave: '', base: [], sug: [], refs: [], dias: 34, prazo: 14, erro: '', lendo: false, msg: '', sel: {}, qtd: {}, filtro: 'todos', fotos: {}, ruptura: false };
+    let pfl = { chave: '', base: [], sug: [], refs: [], dias: 34, prazo: 14, erro: '', lendo: false, msg: '', sel: {}, qtd: {}, filtro: 'todos', fotos: {}, ruptura: (() => { try { return localStorage.getItem('mk_pfl_ruptura') === '1'; } catch(e){ return false; } })() };
+    function pflRuptura(v){ pfl.ruptura = !!v; try { localStorage.setItem('mk_pfl_ruptura', v ? '1' : '0'); } catch(e){} pflPagina(); }
     const PFL_FILTROS = [['todos', 'Todos'], ['enviar', 'Com envio'], ['urgente', 'Enviar agora'], ['semana', 'Enviar em até 7 dias'], ['zerado', 'Zerados no Full'], ['sem', 'Sem necessidade']];
     // marcado para o envio? (padrão: tudo que tem quantidade a enviar) e quantidade (padrão: a calculada; pode ser trocada à mão)
     function pflSel(l){ return pfl.sel[l.sku] !== undefined ? pfl.sel[l.sku] : l.enviar > 0; }
@@ -92,6 +93,7 @@
           <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;font-size:12px;">
             <label>Cobrir <input type="number" min="7" max="120" value="${pfl.dias}" style="width:64px;" onchange="pflParam('dias', this.value)"> dias</label>
             <label>Agendar com <input type="number" min="0" max="60" value="${pfl.prazo}" style="width:58px;" onchange="pflParam('prazo', this.value)"> dias de antecedência${dc('Quantos dias antes você precisa marcar o envio (agendamento no galpão mais o tempo até o Full receber). Produto que acaba antes disso aparece como urgente.')}</label>
+            <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" ${pfl.ruptura ? 'checked' : ''} onchange="pflRuptura(this.checked)"> Corrigir falta de estoque${dc('Desligado (padrão): semana sem estoque conta como venda baixa, igual ao Mercado Livre faz; o número fica perto do dele, mas produto que ficou zerado recebe menos do que venderia. Ligado: produto zerado no Full conta só as semanas em que vendeu, mostrando o que ele venderia se não tivesse faltado.')}</label>
             <label class="btn-out btn btn-sm" style="cursor:pointer;">Importar relatório do Mercado Livre<input type="file" accept=".xlsx" style="display:none;" onchange="pflImportar(this)"></label>
             <button class="btn btn-sm" onclick="pflPdf(this)" title="Lista do que enviar, com foto, código do Full, SKU e quantidade, para mandar ao galpão.">Baixar PDF do envio</button>
             <button class="btn-out btn btn-sm" onclick="pflExportar()">Planilha</button></div></div>
