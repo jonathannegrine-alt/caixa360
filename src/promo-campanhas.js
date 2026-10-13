@@ -20,8 +20,8 @@
       if(pmConta() === c) pcDesenhar();
       // primeiro os que mais vendem; a tela é redesenhada a cada lote
       const fila = ids.slice().sort((a, b) => (pc.vend[b] || 0) - (pc.vend[a] || 0));
-      for(let i = 0; i < fila.length; i += 120){
-        let d; try { d = await pqFuncao('ml-promos', { acao: 'ativas', conta: c, itens: fila.slice(i, i + 120) }); } catch(e){ d = null; }
+      for(let i = 0; i < fila.length; i += 40){
+        let d; try { d = await pqFuncao('ml-promos', { acao: 'ativas', conta: c, itens: fila.slice(i, i + 40) }); } catch(e){ d = null; }
         if(pmConta() !== c) return;
         ((d && d.ativas) || []).forEach(x => { if(x.n > 0) pc.promo[x.item] = { n: x.n, nome: x.nome }; else delete pc.promo[x.item]; });
         if(!document.activeElement || document.activeElement.id !== 'pc-busca') pcDesenhar();
