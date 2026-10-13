@@ -211,6 +211,8 @@
       const r = await atdChamar({ acao:'nao_lidas' });
       atdMsg.carregando = false; atdMsg.erro = r.error || null; atdMsg.semPermissao = !!r.sem_permissao;
       let conversas = r.conversas || [];
+      // conversas que o usuário marcou como "não lida" aqui (o Mercado Livre não tem essa função): ficam na lista até serem marcadas como lidas
+      atdNaoLidas().forEach(x => { if(!conversas.some(c => String(c.pack_id) === String(x.pack_id))) conversas.push({ pack_id: x.pack_id, conta: x.conta, nao_lidas: 0, manual: true }); });
       // dados da venda de cada conversa (o pack_id de uma venda sem carrinho é o próprio nº da venda)
       if(conversas.length && usuarioAtual){
         const ids = conversas.map(c => c.pack_id);
@@ -228,6 +230,21 @@
       atdMsgDesenhar();
     }
 
+    // "não lida" manual: guardada neste navegador
+    function atdNaoLidas(){ try { return JSON.parse(localStorage.getItem('mk_msg_naolidas') || '[]'); } catch(e){ return []; } }
+    function atdNaoLidaGravar(l){ try { localStorage.setItem('mk_msg_naolidas', JSON.stringify(l.slice(-200))); } catch(e){} }
+    function atdMarcarNaoLida(packId, conta){
+      const l = atdNaoLidas().filter(x => String(x.pack_id) !== String(packId)); l.push({ pack_id: String(packId), conta: conta || '', em: new Date().toISOString() }); atdNaoLidaGravar(l);
+      if(typeof toast === 'function') toast('Conversa marcada como não lida: ela fica na lista de Mensagens até você marcar como lida.');
+      if(typeof avSino !== 'undefined') avSino.em = 0;
+    }
+    async function atdMarcarLida(packId, conta, ev){
+      if(ev){ ev.stopPropagation(); }
+      atdNaoLidaGravar(atdNaoLidas().filter(x => String(x.pack_id) !== String(packId)));
+      await atdChamar({ acao: 'mensagens', pack_id: packId, conta: conta || '', marcar_lida: true });
+      if(typeof avSino !== 'undefined') avSino.em = 0;
+      renderMensagens();
+    }
     function atdMsgDesenhar(){
       const el = document.getElementById('view-mensagens');
       if(!el || !el.classList.contains('active')) return;
@@ -249,7 +266,8 @@
                 return `<div class="ini-venc" style="padding:12px 20px;" onclick="abrirMensagensVenda('${c.pack_id}','${v.order_id || c.pack_id}','${c.conta || ''}')">
                   ${v.thumbnail ? `<img class="v-thumb" style="width:46px;height:46px;" src="${atdEsc(v.thumbnail)}" alt="">` : '<div class="dt"><b>💬</b></div>'}
                   <div class="ds"><b>${atdEsc(v.comprador_nome || v.comprador_apelido || 'Venda #' + c.pack_id)}</b><small>${atdEsc(v.titulo || 'Venda #' + c.pack_id)}</small></div>
-                  <span class="badge badge-danger">${c.nao_lidas} nova${c.nao_lidas > 1 ? 's' : ''}</span>
+                  ${c.manual ? '<span class="badge">marcada como não lida</span>' : `<span class="badge badge-danger">${c.nao_lidas} nova${c.nao_lidas > 1 ? 's' : ''}</span>`}
+                  <button class="btn-out btn btn-sm" title="Tira a conversa desta lista sem responder" onclick="atdMarcarLida('${c.pack_id}','${c.conta || ''}', event)">Marcar como lida</button>
                 </div>`;
               }).join('') : (m.erro ? '<div class="vazio">Não foi possível carregar as mensagens.</div>' : '<div class="vazio"><b>Nenhuma mensagem não lida 🎉</b>As conversas com mensagens novas aparecem aqui.</div>'))}
         </div>`;
@@ -286,7 +304,7 @@
       vmlModal('Mensagens da venda #' + c.order, corpo,
         `<a class="btn-out btn" style="text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${c.order}/detalhe" target="_blank" rel="noopener">Abrir no ML ↗</a>
          <button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button>
-         ${c.carregando || c.erro ? '' : `<button class="btn" id="atd-msg-enviar" onclick="atdEnviarMensagem()">Enviar</button>`}`);
+         ${c.carregando || c.erro ? '' : `<button class="btn-out btn" title="Deixa a conversa na lista de Mensagens para responder depois" onclick="atdMarcarNaoLida(atdConversa.pack, atdConversa.conta)">Marcar como não lida</button><button class="btn" id="atd-msg-enviar" onclick="atdEnviarMensagem()">Enviar</button>`}`);
       const th = document.getElementById('atd-thread'); if(th) th.scrollTop = th.scrollHeight;
     }
 

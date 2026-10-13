@@ -171,6 +171,13 @@
       return q.ilike(VD_CAMPOS[f.campo] || 'sku', '%' + limpo + '%');
     }
 
+    async function vdFotos(bt){
+      const rot = bt.textContent; bt.disabled = true; bt.textContent = 'Atualizando fotos…';
+      let d = null; try { const r = await supa.functions.invoke('ml-vendas', { body: { acao: 'fotos' } }); d = r.data; } catch(e){}
+      bt.disabled = false; bt.textContent = rot;
+      if(typeof toast === 'function') toast(d && d.success ? d.atualizados + ' de ' + d.anuncios + ' anúncios com a foto atualizada.' : ((d && d.error) || 'Não foi possível atualizar as fotos agora.'));
+      if(d && d.success) vdCarregar();
+    }
     async function vdCarregar(){
       if(!usuarioAtual) return;
       const seq = ++vmlSeq, f = vdFiltro, buscando = !!f.termo.trim();
@@ -246,6 +253,7 @@
           <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">
             <span class="sync-bar vml-sync"></span>
             <button class="btn-out btn btn-sm" onclick="vdAtualizar()">↻ Atualizar</button>
+            <button class="btn-out btn btn-sm" onclick="vdFotos(this)" title="Busca de novo no Mercado Livre a foto de capa dos seus anúncios. Sem isso, cada foto se atualiza sozinha em até 7 dias.">Atualizar fotos dos anúncios</button>
             <button class="btn-out btn btn-sm" ${podeExportar ? '' : 'disabled style="opacity:.5;cursor:not-allowed;"'} title="${podeExportar ? 'Baixar as vendas filtradas' : `Exportação disponível para até ${VML_EXPORT_MAX_DIAS} dias e ${VML_EXPORT_MAX_LINHAS.toLocaleString('pt-BR')} vendas. Reduza o período ou filtre.`}" onclick="vdExportar()">⬇ Exportar .xlsx</button>
           </div>
         </div>

@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
 
     if (acao === 'mensagens') {
       if (!soNumero(body.pack_id)) return resp({ error: 'Venda inválida.' })
-      const r = await ml(`https://api.mercadolibre.com/messages/packs/${body.pack_id}/sellers/${c0.seller}?tag=post_sale&mark_as_read=false&limit=50`, c0.token)
+      const r = await ml(`https://api.mercadolibre.com/messages/packs/${body.pack_id}/sellers/${c0.seller}?tag=post_sale&mark_as_read=${body.marcar_lida === true ? 'true' : 'false'}&limit=50`, c0.token)
       if (!r.ok) return resp(falha(r))
       const msgs = (r.data.messages || []).map((m: any) => ({
         id: m.id, texto: m.text, data: m.message_date?.created || m.message_date?.received || null,

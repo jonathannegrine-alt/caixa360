@@ -19,7 +19,7 @@
     // conversas com mensagem não lida e casos de pós-venda esperando decisão
     let avReal = { perguntas: null, mensagens: null, posvenda: null };
     async function avRealCarregar(){
-      if(typeof avSino !== 'undefined' && avSino.em){ avReal.perguntas = avSino.totalPerg || 0; avReal.mensagens = avSino.conv.length; }
+      if(typeof avSino !== 'undefined' && avSino.em){ avReal.perguntas = avSino.totalPerg || 0; avReal.mensagens = avSino.conv.length + (typeof atdNaoLidas === 'function' ? atdNaoLidas().filter(x => !avSino.conv.some(c => String(c.pack_id) === String(x.pack_id))).length : 0); }
       try { const r = await supa.from('pos_venda_casos').select('id', { count: 'exact', head: true }).eq('usuario_id', usuarioAtual.id).in('situacao', ['fila', 'erro']); if(!r.error) avReal.posvenda = r.count || 0; } catch(e){}
     }
     function avDesenhar(){

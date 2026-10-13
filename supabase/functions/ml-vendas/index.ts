@@ -341,6 +341,24 @@ Deno.serve(async (req) => {
     if (contas.length === 0) return resp({ conectado: false, error: 'ML não conectado. Conecte sua conta primeiro.' })
 
     // Escopos do token de cada conta: vendas (pedidos) e comunicação (perguntas/mensagens)
+    // botão "Atualizar fotos dos anúncios": relê no Mercado Livre a foto de capa dos anúncios já vendidos
+    // (sem o botão, cada foto é relida sozinha a cada 7 dias, quando o anúncio vende de novo)
+    if (body?.acao === 'fotos') {
+      const tk = contas.find(c => c.accessToken)?.accessToken
+      if (!tk) return resp({ error: 'Conta do Mercado Livre desconectada. Reconecte para atualizar as fotos.' })
+      const linhas = await fetch(`${supaUrl}/rest/v1/vendas_fotos?usuario_id=eq.${userId}&select=item_id&order=atualizado_em.asc&limit=800`, { headers: ctx.dbH }).then(r => r.json()).catch(() => [])
+      const ids: string[] = (Array.isArray(linhas) ? linhas : []).map((l: any) => String(l.item_id))
+      const lotes: string[][] = []; for (let i = 0; i < ids.length; i += 20) lotes.push(ids.slice(i, i + 20))
+      const novas: any[] = [], agora = new Date().toISOString()
+      await emParalelo(lotes, 4, async (lote) => {
+        const r = await mlGet(`https://api.mercadolibre.com/items?ids=${lote.join(',')}&attributes=id,thumbnail`, tk, prazoMs)
+        if (!r.ok || !Array.isArray(r.data)) return
+        for (const x of r.data) if (x.code === 200 && x.body?.thumbnail) novas.push({ usuario_id: userId, item_id: x.body.id, thumbnail: String(x.body.thumbnail).replace('http://', 'https://'), atualizado_em: agora })
+      })
+      for (let i = 0; i < novas.length; i += 400) await fetch(`${supaUrl}/rest/v1/vendas_fotos?on_conflict=usuario_id,item_id`, { method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(novas.slice(i, i + 400)) })
+      return resp({ success: true, anuncios: ids.length, atualizados: novas.length })
+    }
+
     if (body?.checar === true) {
       const det = await Promise.all(contas.map(async (c) => {
         if (!c.accessToken) return { ml_user_id: c.mlUserId, apelido: c.apelido, tem_vendas: false, tem_comunicacao: false, erro: c.erro }
