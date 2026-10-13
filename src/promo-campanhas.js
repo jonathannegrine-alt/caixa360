@@ -13,16 +13,19 @@
         : o === 'ativa' ? (x, y) => a(x) - a(y) : o === 'caro' ? (x, y) => (Number(y.preco) || 0) - (Number(x.preco) || 0) : o === 'barato' ? (x, y) => (Number(x.preco) || 0) - (Number(y.preco) || 0) : s;
       return L.slice().sort((x, y) => (x.pausado - y.pausado) || f(x, y) || s(x, y));
     }
-    // vendas de 30 dias por anúncio e selo de promoção ativa (preço "de" maior que o preço de hoje): chegam depois da lista, sem travar a tela
+    // vendas de 30 dias por anúncio e selo de promoção ativa (promoções em andamento de cada anúncio): chegam depois da lista, sem travar a tela
     async function pcExtras(){
       const c = pmConta(), ids = (pc.anuncios || []).map(x => x.item_id);
       try { const r = await supa.rpc('vendas_por_anuncio', { p_conta: c, p_dias: 30 }); pc.vend = {}; (r.data || []).forEach(x => { pc.vend[x.item_id] = Number(x.qtd) || 0; }); } catch(e){}
       if(pmConta() === c) pcDesenhar();
-      for(let i = 0; i < ids.length; i += 400){
-        let d; try { d = await pqFuncao('ml-promos', { acao: 'precos', conta: c, itens: ids.slice(i, i + 400) }); } catch(e){ d = null; }
-        ((d && d.precos) || []).forEach(x => { if(x.original > x.preco && x.preco > 0) pc.promo[x.item] = { de: x.original, por: x.preco }; else delete pc.promo[x.item]; });
+      // primeiro os que mais vendem; a tela é redesenhada a cada lote
+      const fila = ids.slice().sort((a, b) => (pc.vend[b] || 0) - (pc.vend[a] || 0));
+      for(let i = 0; i < fila.length; i += 120){
+        let d; try { d = await pqFuncao('ml-promos', { acao: 'ativas', conta: c, itens: fila.slice(i, i + 120) }); } catch(e){ d = null; }
+        if(pmConta() !== c) return;
+        ((d && d.ativas) || []).forEach(x => { if(x.n > 0) pc.promo[x.item] = { n: x.n, nome: x.nome }; else delete pc.promo[x.item]; });
+        if(!document.activeElement || document.activeElement.id !== 'pc-busca') pcDesenhar();
       }
-      if(pmConta() === c) pcDesenhar();
     }
     const PC_SIT = { pending: 'Para começar', started: 'Em andamento', finished: 'Encerrada', deleted: 'Excluída' };
     const PC_SUB = { FLEXIBLE_PERCENTAGE: 'Porcentagem flexível', FIXED_PERCENTAGE: 'Porcentagem fixa' };
@@ -386,7 +389,7 @@
           <input type="search" id="pc-busca" placeholder="Buscar por nome, SKU ou código do anúncio" value="${pqE(pc.busca)}" style="max-width:340px;" oninput="pc.busca=this.value;pcDesenhar();const i=document.getElementById('pc-busca');i.focus();i.setSelectionRange(i.value.length,i.value.length);" onkeydown="if(event.key==='Enter')pcBuscaEnter()"></div>
         <div>${l.length ? l.slice(0, 200).map(x => `<div class="pc-an ${pc.aberto[x.item_id] ? 'aberto' : ''}"><button class="pc-an-cab" onclick="pcAbrirAnuncio('${x.item_id}')" aria-expanded="${pc.aberto[x.item_id] ? 'true' : 'false'}">
               ${x.thumbnail ? `<img src="${pqE(x.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<span class="pc-an-t"><b>${pqE(x.titulo || x.item_id)}</b><small>${pcTipoTag(x.item_id)}${pqE(x.sku || 'sem SKU')} · ${pqE(x.item_id)}${x.pausado ? ' · <i style="font-style:normal;color:var(--warning,#d97706);">pausado</i>' : ''}${pc.vend[x.item_id] ? ' · ' + pc.vend[x.item_id].toLocaleString('pt-BR') + ' vendidos em 30 dias' : ''}</small></span>
-              ${pc.promo[x.item_id] ? `<span class="v-tag conta" style="flex:none;" title="${pqE(pc.promo[x.item_id].nome ? 'Participando de: ' + pc.promo[x.item_id].nome : 'Este anúncio está com preço promocional ativo' + (pc.promo[x.item_id].de ? ' (de R$ ' + pqN(pc.promo[x.item_id].de) + ' por R$ ' + pqN(pc.promo[x.item_id].por) + ')' : '') + '. Clique para ver a campanha.')}">Promoção ativa${pc.promo[x.item_id].n > 1 ? ' (' + pc.promo[x.item_id].n + ')' : ''}</span>` : ''}
+              ${pc.promo[x.item_id] ? `<span class="v-tag conta" style="flex:none;" title="${pqE(pc.promo[x.item_id].nome ? 'Participando de: ' + pc.promo[x.item_id].nome : 'Este anúncio está em promoção. Clique para ver a campanha.')}">Promoção ativa${pc.promo[x.item_id].n > 1 ? ' (' + pc.promo[x.item_id].n + ')' : ''}</span>` : ''}
               <span class="pc-an-p">R$ ${pqN(x.preco)}</span><span class="pc-seta">${pc.aberto[x.item_id] ? '▾' : '▸'}</span></button>${pcCartoesAnuncio(x.item_id)}</div>`).join('') : '<div class="vazio"><b>Nenhum anúncio encontrado</b></div>'}</div>
         ${l.length > 200 ? '<div class="text-muted" style="font-size:12px;padding:10px 18px;">Mostrando 200. Use a busca para achar os outros.</div>' : ''}</div>`;
     }
