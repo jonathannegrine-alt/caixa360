@@ -15,7 +15,7 @@
         const orig = window.fetch.bind(window), SUPA = 'qasrccmtrllotukyeiax.supabase.co';
         const resp = (obj, status) => new Response(obj === undefined ? null : JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json' } });
         // funções do banco que gravam: na demonstração respondem "0 alteradas"
-        const GRAVA = new Set(['vendas_ml_carimbar', 'vendas_ml_reprocessar', 'vendas_ml_nivelar', 'vendas_ml_nivelar_sku', 'vendas_ml_custo_venda', 'custo_peps_recalcular']);
+        const GRAVA = new Set(['vendas_ml_carimbar', 'vendas_ml_reprocessar', 'vendas_ml_nivelar', 'vendas_ml_nivelar_sku', 'vendas_ml_custo_venda', 'custo_peps_recalcular', 'tarefa_criar', 'tarefa_vista']);
         const DESLIGADAS = ['cfo-chat', 'pos-venda', 'ml-atendimento', 'mcp', 'ml-callback'];
         const cache = {};
         let ultimoAviso = 0;

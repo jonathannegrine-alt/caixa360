@@ -1496,3 +1496,14 @@ body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-sele
 .op-est{color:var(--success,#16a34a);letter-spacing:1px;}
 .op-est.n3{color:var(--warning,#d97706);}
 .op-est.n1,.op-est.n2{color:var(--danger);}
+
+/* Sistema: página "Estamos atualizando" e faixa de conta carregando o histórico */
+.sis-manut{position:fixed;inset:0;z-index:99999;background:var(--bg,#0f172a);display:flex;align-items:center;justify-content:center;padding:24px;}
+.sis-manut-c{max-width:440px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px 28px;color:var(--text);}
+.sis-manut-c h2{margin:10px 0 8px;font-size:22px;}
+.sis-manut-c p{margin:0 0 14px;line-height:1.55;color:var(--text-muted);}
+.sis-manut-c small{color:var(--text-muted);font-size:12px;}
+.sis-manut-i{font-size:40px;line-height:1;display:inline-block;animation:sis-gira 1.6s linear infinite;color:var(--primary,#6366f1);}
+@keyframes sis-gira{to{transform:rotate(360deg);}}
+.sis-faixa{margin:12px 16px 0;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);font-size:12.5px;line-height:1.55;}
+.sis-faixa b{color:var(--text);}

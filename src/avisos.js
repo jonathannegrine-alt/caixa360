@@ -65,7 +65,7 @@
     let avSino = { perg: [], totalPerg: 0, conv: [], em: 0, lendo: false, erro: '' };
     const avE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     // o sininho conta só o que espera resposta: perguntas e mensagens (pós-venda e promoções têm o selo no menu)
-    function avSinoN(){ return (avSino.totalPerg || 0) + avSino.conv.length; }
+    function avSinoN(){ return (avSino.totalPerg || 0) + avSino.conv.length + (typeof tfSinoN === 'function' ? tfSinoN() : 0); }
     function avSinoHtml(){
       const n = avSinoN();
       return `<button class="ini-sino ${n ? 'tem' : ''}" id="ini-sino" onclick="avSinoAbrir()" title="${n ? n + ' pendência(s) de atendimento: clique para ver' : 'Nenhuma pergunta ou mensagem esperando resposta'}" aria-label="Notificações de atendimento"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>${n ? '<span class="n">' + (n > 99 ? '99+' : n) + '</span>' : ''}<span>${n ? (n === 1 ? 'esperando resposta' : 'esperando resposta') : 'Tudo respondido'}</span></button>`;
@@ -95,11 +95,12 @@
     }
     function avSinoAbrir(){
       if(typeof vmlModal !== 'function') return;
+      if(typeof tfMarcarVistas === 'function') setTimeout(tfMarcarVistas, 1500);
       const P = avSino.perg, C = avSino.conv, quando = d => typeof atdQuando === 'function' ? atdQuando(d) : '';
       const perg = P.length ? P.map(q => `<button class="sino-it" onclick="fecharModal('modal-vml');nav('perguntas')"><small>${avE((q.item && q.item.titulo) || q.item_id || '')} · ${avE(quando(q.data))}</small><b>${avE(q.texto)}</b></button>`).join('') + (avSino.totalPerg > P.length ? `<div class="text-muted" style="font-size:12.5px;">e mais ${avSino.totalPerg - P.length} na página Perguntas.</div>` : '') : '<div class="text-muted" style="font-size:13px;">Nenhuma pergunta sem resposta.</div>';
       const conv = C.length ? C.map(c => { const v = c.venda || {}; return `<button class="sino-it" onclick="fecharModal('modal-vml');nav('mensagens');abrirMensagensVenda('${avE(c.pack_id)}','${avE(v.order_id || c.pack_id)}','${avE(c.conta || '')}')"><small>${avE(v.titulo || 'Venda #' + c.pack_id)}</small><b>${avE(v.comprador_nome || v.comprador_apelido || 'Comprador')} · ${c.nao_lidas} mensagem${c.nao_lidas > 1 ? 's' : ''} nova${c.nao_lidas > 1 ? 's' : ''}</b></button>`; }).join('') : '<div class="text-muted" style="font-size:13px;">Nenhuma mensagem sem ler.</div>';
       vmlModal('Atendimento esperando resposta', (avSino.erro ? `<div class="alert alert-warning">Não consegui consultar o Mercado Livre agora: ${avE(avSino.erro)}</div>` : '') +
-        `<div class="sino-sec">Perguntas sem resposta (${avSino.totalPerg || 0})</div>${perg}<div class="sino-sec">Mensagens de compradores sem ler (${C.length})</div>${conv}
+        `${typeof tfSinoHtml === 'function' ? tfSinoHtml() : ''}<div class="sino-sec">Perguntas sem resposta (${avSino.totalPerg || 0})</div>${perg}<div class="sino-sec">Mensagens de compradores sem ler (${C.length})</div>${conv}
         <div class="text-muted" style="font-size:12px;margin-top:14px;">Clique numa pergunta para responder; clique numa mensagem para abrir a conversa. O que foi respondido pelo celular some daqui em até dois minutos.</div>`,
         `<button class="btn-out btn" onclick="avSinoCarregar(true).then(avSinoAbrir)">Atualizar</button><button class="btn" onclick="fecharModal('modal-vml')">Fechar</button>`);
     }

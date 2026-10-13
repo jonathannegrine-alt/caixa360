@@ -178,7 +178,7 @@
       const pagina = () => vdConsulta('*', { count:'exact' }).order('data_venda', {ascending:false}).range(ini, ini + f.porPagina - 1);
       let [pag, tot] = await Promise.all([
         pagina(),
-        supa.rpc('vendas_ml_totais', { p_de:f.de, p_ate:f.ate, p_conta:contaParam() })
+        (typeof tfTotaisRpc === 'function' ? tfTotaisRpc({ p_de:f.de, p_ate:f.ate, p_conta:contaParam() }, vdCarregar) : supa.rpc('vendas_ml_totais', { p_de:f.de, p_ate:f.ate, p_conta:contaParam() }))
       ]);
       if(seq !== vmlSeq) return;
       if(buscando && f.campo === 'sku' && !f.parcial && !pag.error && !pag.count){   // nenhum SKU com esse código inteiro: tenta por parte dele
@@ -573,7 +573,12 @@
       const per = document.getElementById('view-resumo-fin').classList.contains('active') ? rfFiltro : vdFiltro;
       try {
         await salvarSupabase();
-        if(aplicar) await supa.rpc('vendas_ml_nivelar', { p_de: per.de, p_ate: per.ate, p_sku: sku, p_custo: custo || null, p_imposto: imposto || null, p_conta: contaParam() });
+        // período longo: vai para a fila e o sininho avisa (não segura a tela nem estoura o tempo do banco)
+        if(aplicar && typeof tarefaPedir === 'function' && tfDias(per.de, per.ate) > TF_DIAS_FILA){
+          await supa.rpc('vendas_ml_carimbar');
+          await tarefaPedir('nivelar', { de: per.de, ate: per.ate, sku, custo: custo || null, imposto: imposto || null, conta: contaParam() || '' }, 'Nivelar custo de ' + sku + ' (' + per.de.split('-').reverse().join('/') + ' a ' + per.ate.split('-').reverse().join('/') + ')', () => vmlRecarregar());
+        }
+        else if(aplicar) await supa.rpc('vendas_ml_nivelar', { p_de: per.de, p_ate: per.ate, p_sku: sku, p_custo: custo || null, p_imposto: imposto || null, p_conta: contaParam() });
         else await supa.rpc('vendas_ml_carimbar');   // grava o valor nas vendas que estavam sem custo
       } catch(e){}
       fecharModal('modal-vml');
@@ -674,7 +679,7 @@
       const col = (RF_COLS.find(c => c[0] === f.ordem) || RF_COLS[2])[3];
       const [pag, tot] = await Promise.all([
         rfConsulta('*', { count:'exact' }).order(col, {ascending:!f.desc, nullsFirst:false}).range(ini, ini + f.porPagina - 1),
-        supa.rpc('vendas_ml_totais', rfParams())
+        (typeof tfTotaisRpc === 'function' ? tfTotaisRpc(rfParams(), rfCarregar) : supa.rpc('vendas_ml_totais', rfParams()))
       ]);
       if(seq !== vmlSeq) return;
       rfDados = { linhas: pag.data || [], total: pag.count || 0, tot: tot.data || null, carregado:true, erro: pag.error?.message || tot.error?.message };
