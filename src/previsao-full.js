@@ -10,7 +10,21 @@
 //   enviar       = previsão − aptas no Full − a caminho (arredondado para cima)
 // Estoque: o da última importação do relatório do ML; sem relatório, o do Estoque Full já carregado no sistema.
 // Importação: "Relatório de Planejamento de envios" ou "Relatório geral de estoque" (aba Resumo) → tabela full_sugestoes.
-    let pfl = { chave: '', base: [], sug: [], refs: [], dias: 35, prazo: 14, erro: '', lendo: false, msg: '' };
+    let pfl = { chave: '', base: [], sug: [], refs: [], dias: 35, prazo: 14, erro: '', lendo: false, msg: '', sel: {}, qtd: {}, filtro: 'todos', fotos: {} };
+    const PFL_FILTROS = [['todos', 'Todos'], ['enviar', 'Com envio'], ['urgente', 'Enviar agora'], ['semana', 'Enviar em até 7 dias'], ['zerado', 'Zerados no Full'], ['sem', 'Sem necessidade']];
+    // marcado para o envio? (padrão: tudo que tem quantidade a enviar) e quantidade (padrão: a calculada; pode ser trocada à mão)
+    function pflSel(l){ return pfl.sel[l.sku] !== undefined ? pfl.sel[l.sku] : l.enviar > 0; }
+    function pflQtd(l){ return pfl.qtd[l.sku] != null ? pfl.qtd[l.sku] : l.enviar; }
+    function pflMarcar(sku, v){ pfl.sel[sku] = !!v; pflResumoSel(); }
+    function pflSelTodos(v){ pflFiltrar(pflLinhas()).forEach(l => { pfl.sel[l.sku] = !!v; }); pflPagina(); }
+    function pflQtdMudar(sku, v){ const n = Math.max(0, Math.round(Number(v) || 0)); pfl.qtd[sku] = n; if(n > 0) pfl.sel[sku] = true; pflResumoSel(); }
+    function pflFiltro(f){ pfl.filtro = f; pflPagina(); }
+    // dias até a data-limite de envio: quando acaba menos a antecedência necessária
+    function pflAte(l){ return l.acaba == null ? null : l.acaba - pfl.prazo; }
+    function pflFiltrar(T){ const f = pfl.filtro;
+      return T.filter(l => f === 'enviar' ? l.enviar > 0 : f === 'urgente' ? l.enviar > 0 && pflAte(l) != null && pflAte(l) <= 0 : f === 'semana' ? l.enviar > 0 && pflAte(l) != null && pflAte(l) <= 7 : f === 'zerado' ? l.aptas === 0 : f === 'sem' ? l.enviar === 0 : true); }
+    function pflResumoSel(){ const el = document.getElementById('pfl-sel'); if(!el) return; const S = pflLinhas().filter(l => pflSel(l) && pflQtd(l) > 0);
+      el.textContent = S.length + ' produto' + (S.length === 1 ? '' : 's') + ' marcado' + (S.length === 1 ? '' : 's') + ' · ' + S.reduce((s, l) => s + pflQtd(l), 0).toLocaleString('pt-BR') + ' unidades'; }
     const pflE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     const pflN = v => (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
     const pflNum = v => typeof v === 'number' ? v : Number(String(v == null ? '' : v).replace(/[R$\s.]/g, '').replace(',', '.')) || 0;
@@ -62,7 +76,7 @@
       const conta = typeof contaParam === 'function' ? contaParam() : null;
       if(!conta) return `<div class="card"><div class="card-body"><b>Escolha uma loja</b> no seletor do alto do menu para ver a previsão de envios ao Full. Cada loja tem o seu estoque e a sua previsão.</div></div>`;
       if(pfl.erro) return `<div class="alert alert-warning">${pflE(pfl.erro)}</div>`;
-      const L = pflLinhas(), comML = L.filter(l => l.ml != null), ref = pfl.refs[0];
+      const T = pflLinhas(), L = T, comML = T.filter(l => l.ml != null), ref = pfl.refs[0], F = pflFiltrar(T), S = T.filter(l => pflSel(l) && pflQtd(l) > 0);
       const totEnviar = L.reduce((s, l) => s + l.enviar, 0), urgentes = L.filter(l => l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo).length;
       // acerto contra o Mercado Livre na última importação: soma das diferenças ÷ soma das sugestões
       const dif = comML.reduce((s, l) => s + Math.abs(l.enviar - l.ml), 0), totML = comML.reduce((s, l) => s + l.ml, 0), acerto = totML > 0 ? Math.max(0, 100 - dif / totML * 100) : null;
@@ -81,16 +95,19 @@
           <div class="adm-nums"><div><small>Unidades a enviar</small><b>${pflN(totEnviar)}</b></div><div><small>Produtos que acabam em até ${pfl.prazo} dias</small><b style="${urgentes ? 'color:var(--danger)' : ''}">${urgentes}</b></div>
             <div><small>Relatório do Mercado Livre${dc('Data do último relatório importado para esta loja. Importe toda segunda de manhã: é com esse histórico que a regra é afinada.')}</small><b>${ref ? ref.split('-').reverse().join('/') : 'nenhum'}</b></div>
             <div><small>Proximidade com o Mercado Livre${dc('Compara o "Enviar" do sistema com a sugestão do Mercado Livre no último relatório importado: 100% seria igual em todos os produtos. Os dias de cobertura mudam esse número.')}</small><b>${acerto == null ? '—' : acerto.toFixed(0) + '%'}</b></div></div>
-          <div class="adm-tab"><table><thead><tr><th>Produto</th><th style="text-align:right;">7 dias</th><th style="text-align:right;">7 anteriores</th><th style="text-align:right;">30 dias</th><th style="text-align:right;">No Full</th><th style="text-align:right;">A caminho</th>
-            <th style="text-align:right;">Por dia${dc('Ritmo previsto por dia, já com aceleração e sazonalidade. Passe o mouse no número para ver os fatores.')}</th><th>Acaba em</th><th style="text-align:right;">Enviar</th><th style="text-align:right;">Mercado Livre</th><th style="text-align:right;">Diferença</th></tr></thead><tbody>
-          ${L.map(l => { const urg = l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo;
-            return `<tr><td><div style="display:flex;gap:10px;align-items:center;">${(pfl.fotos || {})[l.sku] ? `<img src="${pflE(pfl.fotos[l.sku])}" loading="lazy" alt="" style="width:42px;height:42px;object-fit:cover;border-radius:8px;flex:none;border:1px solid var(--border);">` : '<span style="width:42px;height:42px;border-radius:8px;flex:none;background:var(--surface-3);"></span>'}<div><b>${pflE(l.sku)}</b>${l.estrela ? ' <span class="badge">estrela</span>' : ''}${l.novo ? ' <span class="badge" title="Pouco histórico: a previsão de produto novo erra mais; o Mercado Livre costuma pedir mais a cada semana.">novo</span>' : ''}<br><small class="text-muted">${l.cod ? pflE(l.cod) + ' · ' : ''}${pflE(String(l.titulo).slice(0, 62))}</small></div></div></td>
+          <div class="adm-abas" style="border:0;padding:0;margin-bottom:10px;align-items:center;">${PFL_FILTROS.map(f => `<button class="${pfl.filtro === f[0] ? 'ativa' : ''}" onclick="pflFiltro('${f[0]}')">${f[1]} (${(pfl.filtro === f[0] ? F : (() => { const a = pfl.filtro; pfl.filtro = f[0]; const r = pflFiltrar(T); pfl.filtro = a; return r; })()).length})</button>`).join('')}
+            <span class="text-muted" style="font-size:12.5px;margin-left:auto;" id="pfl-sel">${S.length} produto${S.length === 1 ? '' : 's'} marcado${S.length === 1 ? '' : 's'} · ${S.reduce((s, l) => s + pflQtd(l), 0).toLocaleString('pt-BR')} unidades</span></div>
+          <div class="adm-tab"><table><thead><tr><th style="width:30px;"><input type="checkbox" title="Marcar ou desmarcar todos os que estão na lista" onchange="pflSelTodos(this.checked)" ${F.length && F.every(pflSel) ? 'checked' : ''}></th><th>Produto</th><th style="text-align:right;">7 dias</th><th style="text-align:right;">7 anteriores</th><th style="text-align:right;">30 dias</th><th style="text-align:right;">No Full</th><th style="text-align:right;">A caminho</th>
+            <th style="text-align:right;">Por dia${dc('Ritmo previsto por dia, já com aceleração e sazonalidade. Passe o mouse no número para ver os fatores.')}</th><th>Acaba em</th><th>Enviar até${dc('Data-limite para o envio sair: o dia em que o estoque acaba menos os dias de antecedência que você informou acima.')}</th><th style="text-align:right;">Enviar${dc('Quantidade calculada. Você pode trocar o número; o PDF sai com o que estiver aqui, só dos produtos marcados.')}</th><th style="text-align:right;">Mercado Livre</th><th style="text-align:right;">Diferença</th></tr></thead><tbody>
+          ${F.map(l => { const urg = l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo, ate = pflAte(l), k = pflE(l.sku).split(String.fromCharCode(39)).join(String.fromCharCode(38) + "#39;");
+            return `<tr><td><input type="checkbox" ${pflSel(l) ? 'checked' : ''} onchange="pflMarcar('${k}', this.checked)"></td><td><div style="display:flex;gap:10px;align-items:center;">${(pfl.fotos || {})[l.sku] ? `<img src="${pflE(pfl.fotos[l.sku])}" loading="lazy" alt="" style="width:42px;height:42px;object-fit:cover;border-radius:8px;flex:none;border:1px solid var(--border);">` : '<span style="width:42px;height:42px;border-radius:8px;flex:none;background:var(--surface-3);"></span>'}<div><b>${pflE(l.sku)}</b>${l.estrela ? ' <span class="badge">estrela</span>' : ''}${l.novo ? ' <span class="badge" title="Pouco histórico: a previsão de produto novo erra mais; o Mercado Livre costuma pedir mais a cada semana.">novo</span>' : ''}<br><small class="text-muted">${l.cod ? pflE(l.cod) + ' · ' : ''}${pflE(String(l.titulo).slice(0, 62))}</small></div></div></td>
               <td style="text-align:right;">${pflN(l.s7)}</td><td style="text-align:right;">${pflN(l.s7a)}</td><td style="text-align:right;">${pflN(l.s30)}${l.d30 && l.d30 < 26 ? '<br><small class="text-muted">' + l.d30 + ' dias c/ venda</small>' : ''}</td>
               <td style="text-align:right;">${pflN(l.aptas)}</td><td style="text-align:right;">${pflN(l.caminho)}</td>
               <td style="text-align:right;" title="ritmo ${l.ritmo.toFixed(1)} × aceleração ${l.acel.toFixed(2)} × sazonalidade ${l.saz.toFixed(2)}">${l.porDia.toFixed(1).replace('.', ',')}</td>
               <td style="${urg ? 'color:var(--danger);font-weight:700;' : ''}">${l.acaba == null ? '—' : l.acaba < 1 ? 'zerado' : l.acaba > 120 ? 'mais de 4 meses' : pflDia(l.acaba) + ' <small class="text-muted">(' + Math.round(l.acaba) + ' d)</small>'}</td>
-              <td style="text-align:right;"><b>${l.enviar ? pflN(l.enviar) : '—'}</b></td><td style="text-align:right;">${l.ml == null ? '—' : pflN(l.ml)}${l.urg ? '<br><small class="text-muted">' + pflE(l.urg) + '</small>' : ''}</td>
-              <td style="text-align:right;">${l.ml == null ? '—' : (l.enviar - l.ml > 0 ? '+' : '') + pflN(l.enviar - l.ml)}</td></tr>`; }).join('') || '<tr><td colspan="11" class="text-muted">Sem vendas pelo Full nos últimos 30 dias nesta loja.</td></tr>'}
+              <td style="${l.enviar > 0 && ate != null && ate <= 0 ? 'color:var(--danger);font-weight:700;' : ''}">${l.enviar <= 0 || ate == null ? '—' : ate <= 0 ? 'agora' : pflDia(ate)}</td>
+              <td style="text-align:right;"><input type="number" min="0" value="${pflQtd(l)}" style="width:86px;text-align:right;font-weight:700;" onchange="pflQtdMudar('${k}', this.value)"></td><td style="text-align:right;">${l.ml == null ? '—' : pflN(l.ml)}${l.urg ? '<br><small class="text-muted">' + pflE(l.urg) + '</small>' : ''}</td>
+              <td style="text-align:right;">${l.ml == null ? '—' : (l.enviar - l.ml > 0 ? '+' : '') + pflN(l.enviar - l.ml)}</td></tr>`; }).join('') || ('<tr><td colspan="13" class="text-muted">' + (T.length ? 'Nenhum produto neste filtro.' : 'Sem vendas pelo Full nos últimos 30 dias nesta loja.') + '</td></tr>')}
           </tbody></table></div>
           <div class="text-muted adm-nota"><b>Como a conta é feita:</b> ritmo por dia = 40% dos últimos 7 dias + 60% dos últimos 30 (produto zerado e com poucos dias de venda: os 30 dias são divididos pelos dias em que vendeu, no mínimo 18). Se a última semana vendeu mais que a anterior, o ritmo sobe até 35%. Se o produto vendeu no ano passado, entra a sazonalidade: quanto ele vendeu nos ${pfl.dias} dias seguintes ÷ o que vendia nas duas semanas equivalentes. Enviar = ritmo × dias de cobertura − o que está no Full − o que está a caminho. A regra é uma aproximação: o Mercado Livre não publica a dele. Ela acerta mais em produto estabilizado do que em produto novo. Importe o relatório do Mercado Livre toda segunda para comparar e afinar.</div>
         </div></div>`;
@@ -152,8 +169,8 @@
     }
     // PDF do envio: foto, código do Full (o da etiqueta), SKU, produto e quantidade
     async function pflPdf(bt){
-      const L = pflLinhas().filter(l => l.enviar > 0).sort((a, b) => a.sku.localeCompare(b.sku));
-      if(!L.length){ if(typeof toast === 'function') toast('Nenhum produto com quantidade a enviar.'); return; }
+      const L = pflLinhas().filter(l => pflSel(l) && pflQtd(l) > 0).map(l => ({ ...l, enviar: pflQtd(l) })).sort((a, b) => a.sku.localeCompare(b.sku));
+      if(!L.length){ if(typeof toast === 'function') toast('Nenhum produto marcado com quantidade a enviar.'); return; }
       const rot = bt.textContent; bt.disabled = true; bt.textContent = 'Gerando…';
       try {
         const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
