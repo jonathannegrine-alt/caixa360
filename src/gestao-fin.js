@@ -215,7 +215,7 @@
         // 4. dívidas
         y = tit('4. Empréstimos', y + 26);
         const lista = (typeof emp !== 'undefined' && emp.lista) || [];
-        y = lista.length ? tab(['Contrato', 'Saldo devedor', 'Próxima parcela', 'Termina em'], lista.map(c => { const r = empResumo(c); return [c.nome || c.credor || 'Contrato', n2(r.saldo), r.prox ? n2(r.valorProx) + ' em ' + ptDate(r.prox.data) : '—', r.fim ? ptDate(r.fim) : 'quitado']; }), y, [220, 38, 38], ['Total · juros deste mês ' + n2(V.juros), n2(V.saldo), '', ''])
+        y = lista.length ? tab(['Contrato', 'Saldo devedor', 'Próxima parcela', 'Termina em'], lista.map(c => { const r = empResumo(c); return [c.nome || c.credor || 'Contrato', n2(r.saldo), r.prox ? n2(r.valorProx) + ' em ' + ptDate(r.prox.data) : '—', r.fim ? ptDate(r.fim) : (r.aberto ? 'sem data' : 'quitado')]; }), y, [220, 38, 38], ['Total · juros deste mês ' + n2(V.juros), n2(V.saldo), '', ''])
           : tab([''], [['Nenhum empréstimo cadastrado.']], y, [220, 38, 38]);
 
         // 5. Mercado Livre (conciliação)

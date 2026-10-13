@@ -35,6 +35,11 @@
     }
     function empResumo(c){
       const contas = empContas(c), ehJuros = p => /juros/i.test(p.desc || '');
+      // sem data para devolver: o saldo é o valor emprestado menos as devoluções já pagas; os juros do mês saem da taxa
+      if(c.sistema === 'aberto'){
+        const dev = contas.filter(p => !ehJuros(p) && p.pago).reduce((t, p) => t + (Number(p.valorPago != null ? p.valorPago : p.val) || 0), 0);
+        return { contas, total: 0, pagas: 0, saldo: Math.max(0, (Number(c.valor) || 0) - dev), jurosAbertos: 0, pago: dev, prox: null, valorProx: 0, atrasadas: 0, fim: null, aberto: true };
+      }
       const am = contas.filter(p => !ehJuros(p)), ju = contas.filter(ehJuros), s = a => a.reduce((t, p) => t + (Number(p.val) || 0), 0);
       const abertas = am.filter(p => !p.pago).sort((a, b) => String(a.data).localeCompare(String(b.data)));
       const prox = abertas[0] || null, jurosProx = prox ? s(ju.filter(p => !p.pago && p.data === prox.data)) : 0;
@@ -132,7 +137,8 @@
           <div class="form-group"><label class="form-label">Primeira parcela</label><input type="date" id="emp-primeira" value="${emEsc(f.primeira || '')}"></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Como as parcelas são calculadas</label><select id="emp-sistema">${opt('price', 'Parcelas iguais (Price)', f.sistema)}${opt('sac', 'Amortização igual, parcela diminui (SAC)', f.sistema)}${opt('outro', 'Outro', f.sistema)}</select></div>
+          <div class="form-group"><label class="form-label">Como as parcelas são calculadas</label><select id="emp-sistema">${opt('price', 'Parcelas iguais (Price)', f.sistema)}${opt('sac', 'Amortização igual, parcela diminui (SAC)', f.sistema)}${opt('outro', 'Outro', f.sistema)}${opt('aberto', 'Sem data para devolver (saldo em aberto, juros por mês)', f.sistema)}</select>
+            <div class="text-muted" style="font-size:11.5px;line-height:1.5;margin-top:4px;">Sem data: para dinheiro emprestado que você devolve quando puder ou quando pedirem. Informe o valor e a taxa ao mês; nenhuma parcela é criada. Cada devolução que você lançar e pagar em Contas a pagar com o trecho de identificação abaixo abate o saldo.</div></div>
           <div class="form-group"><label class="form-label" title="Opcional. Se o contrato informa o valor da parcela, as parcelas são geradas exatamente nesse valor.">Valor da parcela no contrato (R$)</label><input type="text" id="emp-valor_parcela" value="${emEsc(f.valor_parcela == null ? '' : f.valor_parcela)}" placeholder="opcional" onchange="empFormLer();empForm();">${empConfParcela(f)}</div>
           <div class="form-group"><label class="form-label" title="Opcional. O que caiu na conta. A diferença para o valor financiado é IOF, tarifa e seguro, que entram numa linha própria (IOF de empréstimo) em cada parcela.">Valor liberado na conta (R$)</label><input type="text" id="emp-valor_liberado" value="${emEsc(f.valor_liberado == null ? '' : f.valor_liberado)}" placeholder="opcional" onchange="empFormLer();empForm();">${(() => { const fin = emNum(f.valor), lib = emNum(f.valor_liberado); return fin > 0 && lib > 0 && lib < fin ? `<div class="emp-conf text-muted">IOF e encargos financiados: ${fmt(fin - lib)}. Cada parcela terá três linhas: amortização, juros e IOF.</div>` : (lib > fin && fin > 0 ? '<div class="emp-conf text-danger">O valor liberado não pode ser maior que o financiado.</div>' : ''); })()}</div>
           <div class="form-group"><label class="form-label">De quem é a dívida</label><select id="emp-dono">${Object.entries(EM_DONO).map(([k, t]) => opt(k, t, f.dono)).join('')}</select></div>
@@ -185,10 +191,11 @@
       empFormLer(); const f = emp.form;
       const erro = (t, campo) => { const el = document.getElementById('emp-erro'); if(el){ el.textContent = t; el.style.display = 'block'; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } toast(t); const c = campo && document.getElementById(campo); if(c){ c.style.borderColor = 'var(--danger)'; c.focus(); } };
       if(!String(f.nome).trim()){ erro('Falta o nome do contrato.', 'emp-nome'); return; }
-      if(f.modo === 'vincular' && !String(f.vinculo || '').trim()){ erro('Falta o "trecho que identifica as parcelas". Em "De onde vêm as parcelas" está escolhido que elas já estão no Contas a pagar: escreva um trecho da descrição dessas contas ou troque para "Gerar as parcelas aqui".', 'emp-vinculo'); return; }
+      if(f.sistema === 'aberto') f.modo = 'vincular';
+      if(f.sistema !== 'aberto' && f.modo === 'vincular' && !String(f.vinculo || '').trim()){ erro('Falta o "trecho que identifica as parcelas". Em "De onde vêm as parcelas" está escolhido que elas já estão no Contas a pagar: escreva um trecho da descrição dessas contas ou troque para "Gerar as parcelas aqui".', 'emp-vinculo'); return; }
       const reg = { usuario_id: usuarioAtual.id, nome: String(f.nome).trim(), credor: String(f.credor || '').trim() || null, numero_contrato: String(f.numero_contrato || '').trim() || null,
         valor: emNum(f.valor), taxa_mes: emNum(f.taxa_mes), parcelas: Math.max(1, Math.round(emNum(f.parcelas)) || 1), primeira: f.primeira || null, sistema: f.sistema, dono: f.dono, modo: f.modo,
-        vinculo: f.modo === 'vincular' ? String(f.vinculo).trim() : null, obs: String(f.obs || '').trim() || null, loja: f.loja || null, valor_parcela: emNum(f.valor_parcela) || null, valor_liberado: emNum(f.valor_liberado) || null };
+        vinculo: f.modo === 'vincular' ? (String(f.vinculo || '').trim() || null) : null, obs: String(f.obs || '').trim() || null, loja: f.loja || null, valor_parcela: emNum(f.valor_parcela) || null, valor_liberado: emNum(f.valor_liberado) || null };
       if(f.modo === 'gerar'){
         const tab = empTabela(reg);
         if(!tab.length){ erro('Para gerar as parcelas, informe o valor financiado e a data da primeira parcela.', emNum(f.valor) > 0 ? 'emp-primeira' : 'emp-valor'); return; }
