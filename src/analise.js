@@ -67,7 +67,7 @@
           anDesenhar();
         }
         if(an.aba === 'ads' && !an.ads && !an.adsErro) await anCarregarAds(chave, conta, p);
-        if(['lucro', 'degrau', 'ruptura', 'opinioes', 'full'].includes(an.aba) && typeof gsCarregar === 'function') await gsCarregar(chave, conta, p);
+        if(['lucro', 'degrau', 'ruptura', 'opinioes'].includes(an.aba) && typeof gsCarregar === 'function') await gsCarregar(chave, conta, p);
         if(an.aba === 'compradores' && !an.recompra){
           const rc = await supa.rpc('vendas_ml_recompra', { p_de: p.de, p_ate: p.ate, p_conta: conta });
           if(an.chave !== chave) return;
@@ -120,7 +120,7 @@
     function anDesenhar(){
       const host = document.getElementById('an-host'); if(!host) return;
       const abas = [['geral', 'Visão geral'], ['produtos', 'Produtos'], ['compradores', 'Compradores'], ['estados', 'Estados'], ['visitas', 'Visitas e conversão'], ['cancel', 'Cancelamentos'], ['ads', 'ADS']].concat(typeof GS_ABAS !== 'undefined' ? GS_ABAS : []);
-      const corpo = ['lucro', 'degrau', 'ruptura', 'opinioes', 'full'].includes(an.aba) && typeof gsCorpo === 'function' ? gsCorpo(an.aba) : an.aba === 'geral' ? anGeral() : an.aba === 'produtos' ? anProdutos() : an.aba === 'compradores' ? anCompradores() : an.aba === 'estados' ? anEstados() : an.aba === 'visitas' ? anVisitas() : an.aba === 'cancel' ? anCancel() : anAds();
+      const corpo = ['lucro', 'degrau', 'ruptura', 'opinioes'].includes(an.aba) && typeof gsCorpo === 'function' ? gsCorpo(an.aba) : an.aba === 'geral' ? anGeral() : an.aba === 'produtos' ? anProdutos() : an.aba === 'compradores' ? anCompradores() : an.aba === 'estados' ? anEstados() : an.aba === 'visitas' ? anVisitas() : an.aba === 'cancel' ? anCancel() : anAds();
       host.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Análise de vendas</div><div class="pg-sub">Crescimento, produtos, compradores, estados, cancelamentos e anúncios pagos — direto das vendas do Mercado Livre.</div></div>

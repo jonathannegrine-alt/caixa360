@@ -1,4 +1,4 @@
-// ===== PREVISÃO DE ENVIOS AO FULL (aba "Previsão de Full" da Análise de vendas) =====
+// ===== PREVISÃO DE ENVIOS AO FULL (página própria: menu Produtos e estoque → Previsão de Full) =====
 // Para quem precisa agendar o envio antes de o Mercado Livre publicar a sugestão da semana.
 // Regra (versão 1, declarada na tela e afinada com os relatórios importados):
 //   ritmo        = 40% do ritmo dos últimos 7 dias + 60% do ritmo dos últimos 30 dias (unidades por dia, só Full);
@@ -91,7 +91,16 @@
           <div class="text-muted adm-nota"><b>Como a conta é feita:</b> ritmo por dia = 40% dos últimos 7 dias + 60% dos últimos 30 (produto zerado e com poucos dias de venda: os 30 dias são divididos pelos dias em que vendeu, no mínimo 18). Se a última semana vendeu mais que a anterior, o ritmo sobe até 35%. Se o produto vendeu no ano passado, entra a sazonalidade: quanto ele vendeu nos ${pfl.dias} dias seguintes ÷ o que vendia nas duas semanas equivalentes. Enviar = ritmo × dias de cobertura − o que está no Full − o que está a caminho. A regra é uma aproximação: o Mercado Livre não publica a dele. Ela acerta mais em produto estabilizado do que em produto novo. Importe o relatório do Mercado Livre toda segunda para comparar e afinar.</div>
         </div></div>`;
     }
-    function pflParam(k, v){ pfl[k] = Math.max(k === 'dias' ? 7 : 0, Math.min(120, Number(v) || 0)); if(k === 'dias'){ pfl.chave = ''; if(typeof an !== 'undefined'){ an.chave = ''; if(typeof anRender === 'function') return anRender(); } } if(typeof anDesenhar === 'function') anDesenhar(); }
+    // página: carrega (quando muda a loja ou os dias de cobertura) e desenha
+    async function pflPagina(recarregar){
+      const el = document.getElementById('view-full'); if(!el) return;
+      const conta = typeof contaParam === 'function' ? contaParam() : null, chave = (conta || '') + '|' + pfl.dias + '|' + getToday();
+      const topo = '<div class="pg-head"><div><div class="pg-title">Previsão de Full</div><div class="pg-sub">Quanto enviar ao Full e até quando, para agendar o galpão antes de o Mercado Livre publicar a sugestão da semana.</div></div></div>';
+      if(recarregar || pfl.chave !== chave){ el.innerHTML = topo + '<div class="vazio"><b>Calculando a previsão…</b></div>'; if(typeof usuarioAtual !== 'undefined' && usuarioAtual) await pflCarregar(chave, conta); }
+      if(!el.classList.contains('active')) return;
+      el.innerHTML = topo + pflCorpo();
+    }
+    function pflParam(k, v){ pfl[k] = Math.max(k === 'dias' ? 7 : 0, Math.min(120, Number(v) || 0)); pflPagina(k === 'dias'); }
 
     // ---------- importação do relatório do Mercado Livre ----------
     function pflDataDe(txt){
@@ -123,7 +132,7 @@
       const arq = inp.files && inp.files[0]; inp.value = ''; if(!arq) return;
       const conta = typeof contaParam === 'function' ? contaParam() : null; if(!conta){ if(typeof toast === 'function') toast('Escolha a loja antes de importar.'); return; }
       if(typeof XLSX === 'undefined'){ if(typeof toast === 'function') toast('O leitor de planilhas ainda não carregou. Tente de novo em instantes.'); return; }
-      pfl.msg = 'Lendo ' + arq.name + '…'; if(typeof anDesenhar === 'function') anDesenhar();
+      pfl.msg = 'Lendo ' + arq.name + '…'; pflPagina();
       try {
         const wb = XLSX.read(await arq.arrayBuffer(), { type: 'array' }), d = pflLerPlanilha(wb);
         if(!d){ pfl.msg = 'Não reconheci este arquivo. Use o "Relatório de Planejamento de envios" ou o "Relatório geral de estoque" baixado do Mercado Livre (Full), sem alterar.'; }
@@ -135,8 +144,7 @@
           pfl.msg = erro ? 'Não consegui gravar: ' + erro.message : 'Relatório de ' + ref.split('-').reverse().join('/') + ' importado para ' + (typeof contaNome === 'function' ? contaNome(conta) : 'a loja') + ': ' + linhas.length + ' produtos, ' + linhas.filter(l => l.sugestao > 0).length + ' com sugestão de envio. Confira se o arquivo é mesmo desta loja.';
         }
       } catch(e){ pfl.msg = 'Não consegui ler o arquivo: ' + ((e && e.message) || e); }
-      pfl.chave = ''; if(typeof an !== 'undefined') an.chave = '';
-      if(typeof anRender === 'function') anRender(); else if(typeof anDesenhar === 'function') anDesenhar();
+      pflPagina(true);
     }
     // PDF do envio: foto, código do Full (o da etiqueta), SKU, produto e quantidade
     async function pflPdf(bt){

@@ -47,6 +47,7 @@
       else if(page === 'resultado'){ setResultadoTab('anual'); }
       else if(page === 'flex'){ if(typeof fxRender === 'function') fxRender(); }
       else if(page === 'conciliacao'){ if(typeof cnRender === 'function') cnRender(); }
+      else if(page === 'full'){ if(typeof pflPagina === 'function') pflPagina(); }
       else if(page === 'frete'){ if(typeof frRender === 'function') frRender(); }
       else if(page === 'promocoes'){ if(typeof pmRender === 'function') pmRender(); }
       else if(page === 'emprestimos'){ if(typeof renderEmprestimos === 'function') renderEmprestimos(); }
