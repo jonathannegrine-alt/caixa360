@@ -1555,6 +1555,7 @@ body.col-arrastando,body.col-arrastando *{cursor:col-resize !important;user-sele
 @media (max-width:768px){
   /* cartões: o texto de baixo quebra em vez de ser cortado */
   .kpi-sub span{white-space:normal;}
+  .kpi-sub b{white-space:nowrap;}
   .kpi-sub{gap:4px 12px;}
   .vg-meses{gap:12px;} .vg-meses>div+div{padding-left:12px;} .vg-meses b{font-size:15.5px;white-space:nowrap;}
   /* filtros do Resumo: dois por linha, sem campo espremido */

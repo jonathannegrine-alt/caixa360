@@ -942,7 +942,7 @@
         </div>
         <div class="rk-rola">${L.length ? tabela : `<div class="vazio">${rfRankDados.erro ? vmlEsc(rfRankDados.erro) : 'Sem vendas aprovadas no período.'}</div>`}</div>
         <div class="text-muted" style="font-size:11px;margin-top:10px;line-height:1.5;">* Somente vendas aprovadas do período. ** Vendas sem SKU ficam agrupadas em "(sem SKU)". *** Vendas sem custo ou imposto distorcem o ranking: use o filtro "Custo &amp; imposto" do Resumo para encontrá-las.</div>`);
-      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1180px';
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc){ mc.style.maxWidth = '1400px'; mc.style.width = '96vw'; }
       rfRankDados.abc = abc; rfRankDados.tot = T;
     }
 
