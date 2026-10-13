@@ -48,7 +48,7 @@
         let enviar = Math.max(0, previsao - aptas - caminho);
         enviar = enviar >= 100 ? Math.ceil(enviar / 10) * 10 : Math.ceil(enviar);
         const acaba = porDia > 0 ? (aptas + caminho) / porDia : null;
-        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', s7, s7a, s30, d30, aptas, caminho, ritmo, acel, saz, porDia, previsao, enviar, acaba, novo: s30 > 0 && base === 0 && d30 < 20,
+        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', s7, s7a, s30, d30, aptas, caminho, ritmo, acel, saz, porDia, previsao, enviar, acaba, novo: false,
           ml: s ? Number(s.sugestao) || 0 : null, urg: s ? s.urgencia : '', estrela: s ? !!s.estrela : false, temEstoque: !!(s || f) });
       });
       return L.sort((a, b) => (a.acaba == null ? 9999 : a.acaba) - (b.acaba == null ? 9999 : b.acaba));
@@ -105,9 +105,9 @@
         const dataTxt = (topo.flat().find(c => /(Baixado|Atualizado) em/i.test(String(c))) || ''), ref = pflDataDe(dataTxt);
         const iCab = topo.findIndex(l => l.some(c => /^SKU$/i.test(String(c).trim()))); if(iCab < 0) continue;
         // cabeçalho em até 3 linhas: junta os textos de cada coluna
-        const col = t => { for(let j = 0; j < 60; j++){ const txt = [0, 1, 2].map(k => String((R[iCab + k] || [])[j] || '')).join(' '); if(t.test(txt)) return j; } return -1; };
+        const col = t => { for(let j = 0; j < 60; j++){ const txt = [0, 1, 2].map(k => String((R[iCab + k] || [])[j] || '')).join(' ').normalize('NFC').replace(/s+/g, ' ').trim(); if(t.test(txt)) return j; } return -1; };
         const cSku = col(/^\s*SKU/i), cSug = col(/Unidades sugeridas para enviar|Estoque a enviar/i); if(cSku < 0 || cSug < 0) continue;
-        const cInv = col(/C[oó]digo ML/i), cProd = col(/^\s*Produto\s*$|^\s*Produto /i), cV30 = col(/Unidades vendidas [uú]lt/i), cApt = col(/Aptas para venda/i), cPend = col(/recebimento pendente|Entrada pendente/i), cTransf = col(/Em transfer[eê]ncia/i),
+        const cInv = col(/C[oó]digo ML/i), cProd = col(/^\s*Produto\s*$|^\s*Produto /i), cV30 = col(/Unidades vendidas.{0,8}30/i), cApt = col(/Aptas para venda/), cPend = col(/recebimento pendente|Entrada pendente/i), cTransf = col(/Em transfer[eê]ncia/i),
           cMin = col(/Unidades m[ií]nimas/i), cUrg = col(/Urg[eê]ncia de envio/i), cPrazo = col(/Prazo limite/i), cEst = col(/Produto Estrela/i);
         const itens = [];
         R.slice(iCab + 1).forEach(l => { const sku = String(l[cSku] || '').trim(); if(!sku || /^SKU$/i.test(sku)) return;
