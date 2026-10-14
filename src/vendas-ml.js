@@ -17,7 +17,7 @@
     let vdDados = { linhas:[], total:0, tot:null, carrinhos:{}, carregado:false };
     // Resumo Financeiro
     let rfPend = null;   // filtros do Resumo alterados na tela e ainda não buscados
-    let rfFiltro = { de:null, ate:null, pedido:'', titulo:'', sku:'', status:'aprovadas', modalidade:'todas', frete:'todos', custo:'todos', pagina:1, porPagina:50, ordem:'data', desc:true };
+    let rfFiltro = { de:null, ate:null, pedido:'', titulo:'', sku:'', status:'aprovadas', modalidade:'todas', frete:[], custo:'todos', pagina:1, porPagina:50, ordem:'data', desc:true };   // frete: tipos de envio marcados ([] = todos)
     let rfDados = { linhas:[], total:0, tot:null, carregado:false };
 
     function vmlEsc(s){
@@ -661,7 +661,7 @@
     function rfParams(){
       const f = rfFiltro;
       return { p_de:f.de, p_ate:f.ate, p_pedido:f.pedido.trim() || null, p_titulo:f.titulo.trim() || null, p_sku:f.sku.trim() || null,
-        p_modalidade: f.modalidade === 'todas' ? null : f.modalidade, p_envio: f.frete === 'todos' ? null : f.frete, p_custo: f.custo === 'todos' ? null : f.custo, p_conta: contaParam() };
+        p_modalidade: f.modalidade === 'todas' ? null : f.modalidade, p_envio: f.frete.length ? f.frete.join(',') : null, p_custo: f.custo === 'todos' ? null : f.custo, p_conta: contaParam() };
     }
     function rfConsulta(sel, opts){
       const f = rfFiltro, limpa = s => s.trim().replace(/[%,()]/g, ' ');
@@ -673,7 +673,7 @@
       if(f.titulo.trim()) q = q.or(`titulo.ilike.%${limpa(f.titulo)}%,item_id.ilike.%${limpa(f.titulo)}%`);
       if(f.sku.trim()) q = q.ilike('sku', '%' + limpa(f.sku) + '%');
       if(f.modalidade !== 'todas') q = q.eq('modalidade', f.modalidade);
-      if(f.frete !== 'todos') q = q.eq('envio', f.frete);
+      if(f.frete.length) q = q.in('envio', f.frete);
       if(f.custo === 'sem-custo') q = q.eq('tem_custo', false);
       if(f.custo === 'sem-imposto') q = q.eq('tem_imposto', false);
       if(f.custo === 'sem-um') q = q.or('tem_custo.eq.false,tem_imposto.eq.false');
@@ -792,7 +792,7 @@
         </div>
 
         <div style="display:grid;grid-template-columns:minmax(0,1.9fr) minmax(280px,1fr);gap:16px;" class="responsive-grid-2">
-          <div class="card"><div class="card-header"><div class="card-title">Filtrar busca</div><span class="text-muted">${nDias} dia${nDias > 1 ? 's' : ''}</span></div><div class="card-body">
+          <div class="card" style="overflow:visible;"><div class="card-header"><div class="card-title">Filtrar busca</div><span class="text-muted">${nDias} dia${nDias > 1 ? 's' : ''}</span></div><div class="card-body">
             <div class="filtros">
               <div style="grid-column:span 3;"><label>Período</label><div class="dt-nav dt-par">
                 <input type="date" value="${g.de}" onchange="rfSetData('de', this.value)" aria-label="Data de início">
@@ -805,7 +805,7 @@
               <div><label>SKU</label><input type="text" value="${vmlEsc(g.sku)}" oninput="rfSet('sku', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();rfBuscar();}"></div>
               <div><label>Status da venda</label>${sel('status', g.status, [['todas','Todos'],['aprovadas','Aprovados'],['canceladas','Cancelados']])}</div>
               <div><label>Modalidade</label>${sel('modalidade', g.modalidade, [['todas','Todos'],['Premium','Premium'],['Clássico','Clássico'],['Grátis','Grátis']])}</div>
-              <div><label>Tipo do frete</label>${sel('frete', g.frete, [['todos','Todos'],['Full','Full'],['Flex','Flex'],['Coleta','Coleta'],['Agência','Agência'],['Places','Places'],['Outros','Outros']])}</div>
+              <div><label>Tipo do frete</label><div class="rf-multi"><button type="button" class="rf-multi-bt" id="rf-frete-bt" onclick="rfMultiAbrir(this)">${rfFreteRot(g.frete)}</button><div class="rf-multi-menu" style="display:none;">${RF_FRETES.map(k => `<label><input type="checkbox" value="${k}" ${g.frete.includes(k) ? 'checked' : ''} onchange="rfSetFrete()"> ${k}</label>`).join('')}<a onclick="rfSetFrete(true)">Todos (limpar)</a></div></div></div>
               <div><label>Custo &amp; imposto</label>${sel('custo', g.custo, [['todos','Todos'],['sem-custo','Somente vendas sem custo'],['sem-imposto','Somente vendas sem imposto'],['sem-um','Sem custo ou sem imposto'],['sem-ambos','Sem custo e sem imposto']])}</div>
             </div>
             <div class="chips" style="margin-top:14px;">
@@ -873,9 +873,21 @@
 
     function rfIr(p){ rfFiltro.pagina = p; rfCarregar(); }
     // Filtros: mexer num campo só guarda o rascunho (rfPend); a consulta roda quando clicar em Buscar (ou Enter)
-    function rfRasc(){ if(!rfPend){ const f = rfFiltro; rfPend = { de:f.de, ate:f.ate, pedido:f.pedido, titulo:f.titulo, sku:f.sku, status:f.status, modalidade:f.modalidade, frete:f.frete, custo:f.custo }; } return rfPend; }
+    function rfRasc(){ if(!rfPend){ const f = rfFiltro; rfPend = { de:f.de, ate:f.ate, pedido:f.pedido, titulo:f.titulo, sku:f.sku, status:f.status, modalidade:f.modalidade, frete:f.frete.slice(), custo:f.custo }; } return rfPend; }
     function rfMarcaPend(){ const a = document.getElementById('rf-pend'); if(a) a.style.display = rfPend ? '' : 'none'; }
     function rfSet(campo, val){ rfRasc()[campo] = val; rfMarcaPend(); }
+    // Tipo do frete: marca um, vários ou nenhum (nenhum ou todos marcados = todos)
+    const RF_FRETES = ['Full', 'Flex', 'Coleta', 'Agência', 'Places', 'Outros'];
+    function rfFreteRot(a){ return !a.length ? 'Todos' : (a.length <= 2 ? a.join(' + ') : a.length + ' tipos marcados'); }
+    function rfMultiAbrir(bt){ const m = bt.nextElementSibling; m.style.display = m.style.display === 'none' ? 'block' : 'none'; }
+    function rfSetFrete(limpar){
+      const m = document.querySelector('#view-resumo-fin .rf-multi-menu'); if(!m) return;
+      const cs = [...m.querySelectorAll('input')]; if(limpar) cs.forEach(c => { c.checked = false; });
+      let a = cs.filter(c => c.checked).map(c => c.value); if(a.length === cs.length) a = [];
+      rfSet('frete', a);
+      const b = document.getElementById('rf-frete-bt'); if(b) b.textContent = rfFreteRot(a);
+    }
+    document.addEventListener('click', e => { if(!e.target.closest || !e.target.closest('.rf-multi')) document.querySelectorAll('.rf-multi-menu').forEach(m => { m.style.display = 'none'; }); });
     function rfBuscar(){
       const p = rfPend, mudouData = p && (p.de !== rfFiltro.de || p.ate !== rfFiltro.ate);
       if(p){ Object.assign(rfFiltro, p); rfPend = null; }

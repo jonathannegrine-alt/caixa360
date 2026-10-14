@@ -1634,3 +1634,14 @@ input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;bo
   .dre-tab.dre-mes td{padding:9px 8px;}
   .dre-tab.dre-mes .dre-m-pct{width:56px;}
 }
+
+/* filtro com várias opções marcáveis (Tipo do frete do Resumo Financeiro) */
+.rf-multi{position:relative;}
+.rf-multi-bt{width:100%;text-align:left;font:inherit;font-size:13px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 28px 8px 11px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;min-height:36px;}
+.rf-multi-bt::after{content:'▾';position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:11px;}
+.rf-multi-bt:hover{border-color:var(--primary);}
+.rf-multi-menu{position:absolute;left:0;top:calc(100% + 4px);z-index:30;min-width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:6px;}
+.filtros .rf-multi-menu label{display:flex;align-items:center;gap:8px;padding:7px 9px;margin:0;border-radius:7px;font-size:13px;font-weight:500;letter-spacing:0;color:var(--text);cursor:pointer;white-space:nowrap;}
+.rf-multi-menu label:hover{background:var(--surface-2);}
+.rf-multi-menu input{width:auto;margin:0;}
+.rf-multi-menu a{display:block;padding:7px 9px;margin-top:4px;border-top:1px solid var(--border);font-size:12px;color:var(--primary);cursor:pointer;}
