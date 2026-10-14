@@ -407,7 +407,7 @@
           rows.forEach(r => { const sku = String(r.SKU || '').trim(); if(!sku || (arm && String(r['Armazém'] || '').trim() !== arm) || String(r[colQ]).trim() === '') return;
             const k = esN(sku), a = mapa.get(k) || { sku, real: 0, custo: 0, titulo: String(r['Título'] || r['Produto'] || '').trim() }; a.real += Number(r[colQ]) || 0; if(upseller && Number(r['Custo Médio']) > 0) a.custo = Number(r['Custo Médio']); mapa.set(k, a); });
           // hora em que a planilha da UpSeller foi tirada vem no nome: Lista_de_Estoque_MMDDHHMMSS (horário UTC)
-          const m = upseller && f.name.match(/_(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.xlsx?$/i);
+          const m = upseller && (f.name.match(/_(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.xlsx?$/i) || f.name.match(/Lista_de_Estoque_(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/i));
           const quando = m ? new Date().getFullYear() + '-' + m[1] + '-' + m[2] + 'T' + m[3] + ':' + m[4] : new Date().toISOString().substring(0, 16);
           esoContagemRevisar([...mapa.values()], upseller ? 'Planilha da UpSeller' : 'Planilha modelo', f.name, quando);
         } catch(err){ alert('Não consegui ler a planilha: ' + err.message); } }; rd.readAsArrayBuffer(f); };

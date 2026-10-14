@@ -370,8 +370,8 @@
             <td><input type="checkbox" class="est-flag" data-k="${esEsc(l.k)}" style="width:auto;" ${estSel.has(l.k) ? 'checked' : ''} onchange="estMarcar(this.dataset.k, this.checked)"></td>
             ${estFotoTd(l.k)}
             <td class="cp-prod" style="max-width:440px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
-            <td class="num">${l.caminho ? esInt(l.caminho) : '<span class="text-muted">—</span>'}</td>
-            <td class="num">${l.ocupado ? esInt(l.ocupado) : '<span class="text-muted">—</span>'}</td>
+            <td class="num">${l.caminho ? esInt(l.caminho) + estSeta('caminho', l.k) : '<span class="text-muted">—</span>'}</td>
+            <td class="num">${l.ocupado ? esInt(l.ocupado) + estSeta('ocupado', l.k) : '<span class="text-muted">—</span>'}</td>
             <td class="num ${l.disp < 0 ? 'text-danger' : ''}">${esInt(l.disp)}</td>
             <td class="num"><b class="${l.fisico < 0 ? 'text-danger' : ''}">${esInt(l.fisico)}</b></td>
             <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td>
@@ -504,4 +504,64 @@
       };
       inp.onchange = () => (typeof impGuarda === 'function' ? impGuarda(arq || inp.files[0], ["upseller_estoque"], true) : Promise.resolve(true)).then(ok => { if(ok) _ler(); });
       if(arq) inp.onchange(); else inp.click();
+    }
+
+    // ----- de onde vem o ocupado e o a caminho (setinha ao lado do número, como na UpSeller) -----
+    // ocupado:   vendas aprovadas ainda não enviadas (kits abertos nos componentes) + envios ao Full em preparação
+    // a caminho: ordens de compra a receber ou parciais (o que falta chegar)
+    function estOrigens(k){
+      const dep = estDepProprio(), out = [];
+      if(typeof eso !== 'undefined' && dep && est.dep === dep.id){
+        const kits = typeof esoKits === 'function' ? esoKits() : new Map();
+        eso.vendas.filter(v => !v.enviado_em && v.sku && v.status !== 'cancelled').forEach(v => esoAbrir(v.sku, Number(v.qtd) || 0, kits).forEach(c => {
+          if(esN(c.sku) === k) out.push({ lado: 'ocupado', tipo: 'Venda', qtd: c.qtd, ref: String(v.order_id), pedido: String(v.order_id), quando: v.data_venda, obs: esN(v.sku) !== k ? 'Kit ' + v.sku : (v.logistic_type === 'self_service' ? 'Flex' : '') });
+        }));
+        eso.envios.filter(x => x.situacao === 'preparando' && x.ocupar !== false && Number(x.deposito_id) === dep.id).forEach(x => {
+          const q = (x.itens || []).reduce((s, i) => s + (i.componentes || []).filter(c => esN(c.sku) === k).reduce((a, c) => a + (Number(c.qtd) || 0), 0), 0);
+          if(q) out.push({ lado: 'ocupado', tipo: 'Envio ao Full', qtd: q, ref: x.titulo || ('Envio ' + x.id), quando: x.criado_em, obs: 'em preparação' });
+        });
+      }
+      if(typeof oc !== 'undefined' && typeof ocResumo === 'function' && typeof ocTemDados === 'function' && ocTemDados()){
+        oc.ordens.forEach(o => { const r = ocResumo(o); if(r.sit !== 'A receber' && r.sit !== 'Parcial') return;
+          r.itens.forEach(i => { if(i.falta > 0 && esN(i.sku) === k) out.push({ lado: 'caminho', tipo: 'Compra', qtd: i.falta, ref: 'OC ' + (o.numero || o.id), quando: o.data, obs: o.fornecedor || '' }); });
+        });
+      }
+      return out.sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || '')));
+    }
+    function estSeta(lado, k){ return '<button type="button" class="est-seta" title="De onde vem este número" onclick="event.stopPropagation();estPop(this,\'' + lado + '\',\'' + esEsc(k) + '\')">⌄</button>'; }
+    // quadro pequeno abaixo do número: o total separado por origem e o link Detalhes
+    function estPop(btn, lado, k){
+      let p = document.getElementById('est-pop');
+      if(p && p.dataset.id === lado + '|' + k){ p.remove(); return; }
+      if(p) p.remove();
+      const o = estOrigens(k).filter(x => x.lado === lado), soma = t => o.filter(x => x.tipo === t).reduce((s, x) => s + x.qtd, 0);
+      const cols = lado === 'ocupado' ? [['Pedidos', soma('Venda')], ['Envio ao Full', soma('Envio ao Full')]] : [['Compra', soma('Compra')]];
+      p = document.createElement('div'); p.id = 'est-pop'; p.className = 'est-pop'; p.dataset.id = lado + '|' + k;
+      p.innerHTML = '<table><thead><tr>' + cols.map(c => '<th>' + c[0] + '</th>').join('') + '<th></th></tr></thead><tbody><tr>' + cols.map(c => '<td>' + esInt(c[1]) + '</td>').join('') + '<td><a href="#" onclick="event.preventDefault();estDetalhe(\'' + esEsc(k) + '\',\'' + lado + '\')">Detalhes</a></td></tr></tbody></table>';
+      document.body.appendChild(p);
+      const r = btn.getBoundingClientRect(), w = p.offsetWidth;
+      p.style.top = (window.scrollY + r.bottom + 6) + 'px';
+      p.style.left = Math.max(8, Math.min(window.scrollX + r.right - w + 14, window.scrollX + document.documentElement.clientWidth - w - 8)) + 'px';
+      setTimeout(() => document.addEventListener('click', function fecha(e){ const q = document.getElementById('est-pop'); if(q && !q.contains(e.target)){ q.remove(); document.removeEventListener('click', fecha); } else if(!q) document.removeEventListener('click', fecha); }), 0);
+    }
+    let estDetAba = 'tudo';
+    function estDetalhe(k, aba){
+      const pop = document.getElementById('est-pop'); if(pop) pop.remove();
+      if(aba) estDetAba = aba;
+      const dep = est.depositos.find(d => d.id === est.dep), l = dep ? estLinhas(dep).find(x => x.k === k) : null;
+      const todas = estOrigens(k), lista = todas.filter(x => estDetAba === 'tudo' || x.lado === estDetAba);
+      const tot = lado => todas.filter(x => x.lado === lado).reduce((s, x) => s + x.qtd, 0);
+      const dt = t => t ? new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+      const ref = x => x.pedido && typeof vdDetalheML === 'function' ? '<a href="#" onclick="event.preventDefault();vdDetalheML(\'' + x.pedido + '\')">' + esEsc(x.ref) + '</a>' : esEsc(x.ref);
+      const u = estFotos.get(k);
+      vmlModal('Detalhes', `
+        <div class="est-det-topo">${u ? '<img src="' + esEsc(u) + '" alt="">' : '<span class="foto-mini vazia"></span>'}
+          <div><div><span class="text-muted">SKU:</span> <b>${esEsc(l ? l.sku : k.toUpperCase())}</b>${l && l.nome ? ' · ' + esEsc(l.nome) : ''}</div>
+            <div class="est-det-num"><span><span class="text-muted">Depósito:</span> ${esEsc(dep ? dep.nome : '')}</span><span><span class="text-muted">Disponível:</span> <b>${l ? esInt(l.disp) : '—'}</b></span><span><span class="text-muted">Estoque físico:</span> <b>${l ? esInt(l.fisico) : '—'}</b></span></div></div></div>
+        <div class="chips" style="margin:14px 0 10px;">${[['tudo', 'Tudo'], ['ocupado', 'Ocupado'], ['caminho', 'A caminho']].map(([a, t]) => '<button class="chip ' + (estDetAba === a ? 'active' : '') + '" onclick="estDetalhe(\'' + esEsc(k) + '\',\'' + a + '\')">' + t + '</button>').join('')}</div>
+        <div style="overflow:auto;max-height:52vh;"><table class="cp-tab"><thead><tr><th>Ocupado / A caminho</th><th>Tipo</th><th class="num">Qtd.</th><th>Referência</th><th>Quando</th></tr></thead><tbody>
+          <tr class="est-det-soma"><td colspan="5">Ocupado: <b>${esInt(tot('ocupado'))}</b> &nbsp; A caminho: <b>${esInt(tot('caminho'))}</b></td></tr>
+          ${lista.length ? lista.map(x => '<tr><td>' + (x.lado === 'ocupado' ? 'Ocupado' : 'A caminho') + '</td><td>' + x.tipo + (x.obs ? '<div class="cp-sub">' + esEsc(x.obs) + '</div>' : '') + '</td><td class="num"><b>' + esInt(x.qtd) + '</b></td><td>' + ref(x) + '</td><td>' + dt(x.quando) + '</td></tr>').join('') : '<tr><td colspan="5" class="text-muted" style="padding:16px;text-align:center;">Nada nesta aba.</td></tr>'}
+        </tbody></table></div>`, '<button class="btn-out" onclick="fecharModal(\'modal-vml\')">Fechar</button>');
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '760px';
     }
