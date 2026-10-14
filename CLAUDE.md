@@ -71,6 +71,8 @@ gestaomk/
     compras.js        ← Sugestão de compras (regras do módulo "Balanço e Compras"); parâmetros em comprasCfg
     ia-conector.js    ← Configurações → IA: gera/revoga a chave do conector MCP (Edge Function mcp)
     dash-painel.js    ← painel "Caixa projetado" (renderPainelCaixa) — desenha em .view.active .pc-host
+    pedidos.js        ← página Pedidos (renderPedidos): vendas do galpão até o envio, atrasados pelo prazo
+                        (vendas_ml.envio_limite, gravado pelo ml-envios) e alerta no Início (pdAlertaInicio)
     inicio.js         ← página Início (renderInicio): visão geral de caixa, vendas, contas e alertas
     init.js           ← renderConfig, autosave, Enter=Tab em inputs, botão voltar do browser
     p11-motor.js      ← P11 Motor de Reposição, Estoque Full ML (busca API)
@@ -138,7 +140,7 @@ Dados em `localStorage` (sync) + Supabase (async, fire-and-forget):
 
 ### Navigation pages
 
-`inicio` (página inicial) · `dashboard` · `planilha` · `pagar` · `emprestimos` · `receber` · `simulador` · `vendas` · `resumo-fin` · `posvenda` · `perguntas` · `mensagens` · `compras` · `skus` · `estoque` · `ordens-compra` · `analise` · `resultado` · `patrimonio` · `config`  
+`inicio` (página inicial) · `pedidos` · `dashboard` · `planilha` · `pagar` · `emprestimos` · `receber` · `simulador` · `vendas` · `resumo-fin` · `posvenda` · `perguntas` · `mensagens` · `compras` · `skus` · `estoque` · `ordens-compra` · `analise` · `resultado` · `patrimonio` · `config`  
 Cada página → `id="view-{page}"` em `index.html` e `render{Page}()` em `renders.js`
 
 ## Development workflow

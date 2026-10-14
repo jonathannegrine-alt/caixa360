@@ -57,6 +57,7 @@
       else if(page === 'resumo-fin') renderResumoFin();
       else if(page === 'posvenda'){ if(typeof renderPosVenda === 'function') renderPosVenda(); }
       else if(page === 'perguntas') renderPerguntas();
+      else if(page === 'pedidos'){ if(typeof renderPedidos === 'function') renderPedidos(); }
       else if(page === 'compras') renderCompras();
       else if(page === 'mensagens') renderMensagens();
     }

@@ -1676,3 +1676,7 @@ input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;bo
 .est-det-topo img{width:58px;height:58px;object-fit:cover;border-radius:8px;}
 .est-det-num{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;font-size:13px;}
 .est-det-soma td{background:var(--surface-2);font-size:13px;}
+
+/* Pedidos: linha de pedido atrasado */
+.pd-tab tr.pd-atrasado td{background:color-mix(in srgb, var(--danger) 7%, transparent);}
+.pd-tab tr.pd-atrasado td:first-child{box-shadow:inset 3px 0 0 var(--danger);}

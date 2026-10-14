@@ -93,7 +93,10 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
         saiu = true
         quando = ev?.date || s.last_updated || new Date().toISOString()
       }
-      const campos: Record<string, unknown> = { envio_status: status || null }
+      const campos: Record<string, unknown> = { envio_status: status || null, envio_substatus: s.substatus ? String(s.substatus) : null }
+      // prazo para o pacote sair (tela de Pedidos: atrasados e que vencem hoje)
+      const limite = s.lead_time?.estimated_schedule_limit?.date || s.lead_time?.estimated_handling_limit?.date || null
+      if (limite) campos.envio_limite = limite
       if (saiu && quando) { campos.enviado_em = quando; enviados++ }
       if (s.logistic?.type) campos.logistic_type = s.logistic.type
       const uf = ufDe(s); if (uf) campos.uf = uf
