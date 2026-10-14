@@ -319,14 +319,35 @@
         <div class="d-flex" style="justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;"><div class="text-muted" style="max-width:560px;">Importe o PDF de preparação do Mercado Livre. O envio ocupa o estoque enquanto está em preparação; ao dar a saída, o galpão baixa produto por produto.</div><button class="btn" onclick="esoImportarEnvio()">Importar PDF do envio</button></div>
         <div style="overflow-x:auto;max-height:56vh;"><table class="cp-tab"><thead><tr><th>Situação</th><th>Envio</th><th>Saída prevista</th><th class="num">Anúncios</th><th class="num">Unidades</th><th></th></tr></thead><tbody>
           ${eso.envios.length ? eso.envios.map(x => `<tr><td><span class="cp-sit ${sit[x.situacao][1]}">${sit[x.situacao][0]}</span></td>
-            <td class="cp-prod"><b>${esEsc(x.titulo)}</b><span>${x.situacao === 'preparando' ? (x.ocupar === false ? 'não ocupa o estoque' : 'ocupando o estoque') : x.saiu_em ? 'saiu em ' + dt(x.saiu_em) : ''}</span></td>
+            <td class="cp-prod"><a href="#" onclick="event.preventDefault();esoEnvioItens(${x.id})" title="Ver os itens deste envio"><b>${esEsc(x.titulo)}</b></a><span>${x.situacao === 'preparando' ? (x.ocupar === false ? 'não ocupa o estoque' : 'ocupando o estoque') : x.saiu_em ? 'saiu em ' + dt(x.saiu_em) : ''}</span></td>
             <td>${x.situacao === 'preparando' ? `<input type="date" value="${x.data_prevista || ''}" onchange="esoEnvioCampo(${x.id}, 'data_prevista', this.value || null)" style="width:150px;">` : dt(x.data_prevista)}</td>
             <td class="num">${(x.itens || []).length}</td><td class="num"><b>${esInt(un(x))}</b></td>
-            <td style="text-align:right;white-space:nowrap;">${x.situacao === 'preparando' ? `<button class="btn btn-sm" onclick="esoDarSaida(${x.id}, this)">Dar saída</button> <button class="btn-out btn-sm" onclick="esoEnvioCampo(${x.id}, 'ocupar', ${x.ocupar === false})">${x.ocupar === false ? 'Ocupar estoque' : 'Não ocupar'}</button> <button class="btn-out btn-sm" style="color:var(--danger);" onclick="esoExcluirEnvio(${x.id})">Excluir</button>`
+            <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="esoEnvioItens(${x.id})">Ver itens</button> ${x.situacao === 'preparando' ? `<button class="btn btn-sm" onclick="esoDarSaida(${x.id}, this)">Dar saída</button> <button class="btn-out btn-sm" onclick="esoEnvioCampo(${x.id}, 'ocupar', ${x.ocupar === false})">${x.ocupar === false ? 'Ocupar estoque' : 'Não ocupar'}</button> <button class="btn-out btn-sm" style="color:var(--danger);" onclick="esoExcluirEnvio(${x.id})">Excluir</button>`
               : x.situacao === 'saiu' ? `<button class="btn-out btn-sm" onclick="esoEnvioCampo(${x.id}, 'situacao', 'recebido')">Marcar recebido no Full</button> <button class="btn-out btn-sm" onclick="esoDesfazerSaida(${x.id})">Desfazer saída</button>` : ''}</td></tr>`).join('')
             : '<tr><td colspan="6"><div class="vazio"><b>Nenhum envio lançado</b>Clique em Importar PDF do envio.</div></td></tr>'}
         </tbody></table></div>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '980px';
+    }
+    let esoItensVer = 'anuncio';
+    function esoEnvioItens(id, modo){
+      const x = eso.envios.find(e => e.id === id); if(!x) return;
+      if(modo) esoItensVer = modo;
+      const itens = (x.itens || []).slice().sort((a, b) => (Number(b.qtd) || 0) - (Number(a.qtd) || 0));
+      const prods = esoMovsDoEnvio(x, 1).sort((a, b) => b.qtd - a.qtd);
+      const un = itens.reduce((s, i) => s + (Number(i.qtd) || 0), 0), unG = prods.reduce((s, p) => s + p.qtd, 0);
+      const cel = (sku, html) => typeof fotoLinha === 'function' ? fotoLinha(sku, html) : html;
+      const corpo = esoItensVer === 'produto'
+        ? '<thead><tr><th>Produto do galpão</th><th class="num">Unidades que saem</th><th class="num">No galpão hoje</th></tr></thead><tbody>' + prods.map(p => { const s = skus.find(z => esN(z.sku) === esN(p.sku)), saldo = estSaldoDe(x.deposito_id, p.sku);
+            return '<tr><td class="cp-prod">' + cel(p.sku, '<b>' + esEsc(p.sku) + '</b><span>' + esEsc((s && s.titulo) || '') + '</span>') + '</td><td class="num"><b>' + esInt(p.qtd) + '</b></td><td class="num ' + (saldo < p.qtd ? 'text-danger' : '') + '">' + esInt(saldo) + '</td></tr>'; }).join('') + '</tbody>'
+        : '<thead><tr><th>Anúncio (SKU do Mercado Livre)</th><th class="num">Unidades</th><th>Sai do galpão</th></tr></thead><tbody>' + itens.map(i => { const comp = i.componentes || [], kit = comp.length > 1 || (comp[0] && esN(comp[0].sku) !== esN(i.anuncio_sku));
+            return '<tr><td class="cp-prod">' + cel(i.anuncio_sku, '<b>' + esEsc(i.anuncio_sku) + '</b>' + (i.codigo_ml ? '<span>' + esEsc(i.codigo_ml) + '</span>' : '')) + '</td><td class="num"><b>' + esInt(i.qtd) + '</b></td><td style="font-size:12px;white-space:normal;">' + (kit ? comp.map(c => '<b>' + esInt(c.qtd) + '</b> × ' + esEsc(c.sku)).join(' &nbsp;·&nbsp; ') : '<span class="text-muted">o próprio produto</span>') + '</td></tr>'; }).join('') + '</tbody>';
+      const sit = { preparando: 'Em preparação', saiu: 'Saiu do galpão', recebido: 'Recebido no Full', cancelado: 'Cancelado' }[x.situacao] || x.situacao;
+      vmlModal('Itens do envio ' + esEsc(x.titulo), `
+        <div class="text-muted" style="margin-bottom:10px;">${sit}${x.situacao === 'preparando' ? (x.ocupar === false ? ' · não ocupa o estoque' : ' · ocupando o estoque') : ''} · ${itens.length} anúncios · ${esInt(un)} unidades${unG !== un ? ' (' + esInt(unG) + ' unidades de produto, com os kits abertos)' : ''}</div>
+        <div class="chips" style="margin-bottom:10px;"><button class="chip ${esoItensVer === 'anuncio' ? 'active' : ''}" onclick="esoEnvioItens(${x.id}, 'anuncio')">Por anúncio</button><button class="chip ${esoItensVer === 'produto' ? 'active' : ''}" onclick="esoEnvioItens(${x.id}, 'produto')">Por produto do galpão</button></div>
+        <div style="overflow-x:auto;max-height:54vh;"><table class="cp-tab">${corpo}</table></div>`,
+        '<button class="btn-out" onclick="esoEnvios()">Voltar</button>');
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '920px';
     }
     async function esoEnvioCampo(id, campo, valor){ const r = await supa.from('estoque_envios_full').update({ [campo]: valor }).eq('id', id); if(r.error){ alert(r.error.message); return; } await esoLer(true); estDesenhar(); esoEnvios(); }
     async function esoExcluirEnvio(id){ if(!confirm('Excluir este envio em preparação?')) return; await supa.from('estoque_envios_full').delete().eq('id', id); await esoLer(true); estDesenhar(); esoEnvios(); }
