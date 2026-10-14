@@ -65,6 +65,8 @@ gestaomk/
                         a página pede só a página atual e os totais ao banco
     atendimento.js    ← Perguntas e Mensagens do ML (Edge Function ml-atendimento) + pop-up de reconexão
     dre-anual.js      ← DRE mês a mês (aba padrão de "DRE e resultado"): RPC vendas_ml_por_mes + pagamentos
+    dre-simples.js    ← MODO SIMPLIFICADO do DRE (aba "Despesas simples"): tabela dre_simples; com comprasCfg.dreSimples ligado,
+                        dreDespesas() usa dsDespesas() no lugar de Contas a pagar e gfParcelas/gfForaDoDre devolvem zero
     config-abas.js    ← coloca os blocos de Configurações em abas pelo título do card
     compras.js        ← Sugestão de compras (regras do módulo "Balanço e Compras"); parâmetros em comprasCfg
     ia-conector.js    ← Configurações → IA: gera/revoga a chave do conector MCP (Edge Function mcp)
