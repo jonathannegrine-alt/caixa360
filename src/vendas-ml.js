@@ -16,6 +16,7 @@
     let vdFiltro = { de:null, ate:null, atalho:'hoje', status:'todas', envio:'todas', campo:'sku', termo:'', semCusto:false, pagina:1, porPagina:40 };
     let vdDados = { linhas:[], total:0, tot:null, carrinhos:{}, carregado:false };
     // Resumo Financeiro
+    let rfPend = null;   // filtros do Resumo alterados na tela e ainda não buscados
     let rfFiltro = { de:null, ate:null, pedido:'', titulo:'', sku:'', status:'aprovadas', modalidade:'todas', frete:'todos', custo:'todos', pagina:1, porPagina:50, ordem:'data', desc:true };
     let rfDados = { linhas:[], total:0, tot:null, carregado:false };
 
@@ -726,7 +727,7 @@
     function rfDesenhar(){
       const el = document.getElementById('view-resumo-fin');
       if(!el || !el.classList.contains('active')) return;
-      const f = rfFiltro, d = rfDados, T = d.tot || {}, a = T.aprov || {}, c = T.canc || {};
+      const f = rfFiltro, g = rfPend || rfFiltro, d = rfDados, T = d.tot || {}, a = T.aprov || {}, c = T.canc || {};
       const n = k => Number(a[k]) || 0;
       const vendas = n('bruto') + (vmlFreteComprador ? n('frete_comp') : 0);
       const porEnvio = {};
@@ -791,21 +792,25 @@
           <div class="card"><div class="card-header"><div class="card-title">Filtrar busca</div><span class="text-muted">${nDias} dia${nDias > 1 ? 's' : ''}</span></div><div class="card-body">
             <div class="filtros">
               <div style="grid-column:span 3;"><label>Período</label><div class="dt-nav dt-par">
-                <input type="date" value="${f.de}" onchange="rfSetData('de', this.value)" aria-label="Data de início">
+                <input type="date" value="${g.de}" onchange="rfSetData('de', this.value)" aria-label="Data de início">
                 <span class="text-muted">até</span>
-                <input type="date" value="${f.ate}" onchange="rfSetData('ate', this.value)" aria-label="Data de fim">
+                <input type="date" value="${g.ate}" onchange="rfSetData('ate', this.value)" aria-label="Data de fim">
                 <button class="ico-btn" title="Voltar um dia" onclick="rfMoverDia(-1)">‹</button>
                 <button class="ico-btn" title="Avançar um dia" onclick="rfMoverDia(1)">›</button></div></div>
-              <div><label>Nº pedido / carrinho</label><input type="text" value="${vmlEsc(f.pedido)}" onchange="rfSet('pedido', this.value)"></div>
-              <div><label>Título ou MLB</label><input type="text" value="${vmlEsc(f.titulo)}" onchange="rfSet('titulo', this.value)"></div>
-              <div><label>SKU</label><input type="text" value="${vmlEsc(f.sku)}" onchange="rfSet('sku', this.value)"></div>
-              <div><label>Status da venda</label>${sel('status', f.status, [['todas','Todos'],['aprovadas','Aprovados'],['canceladas','Cancelados']])}</div>
-              <div><label>Modalidade</label>${sel('modalidade', f.modalidade, [['todas','Todos'],['Premium','Premium'],['Clássico','Clássico'],['Grátis','Grátis']])}</div>
-              <div><label>Tipo do frete</label>${sel('frete', f.frete, [['todos','Todos'],['Full','Full'],['Flex','Flex'],['Coleta','Coleta'],['Agência','Agência'],['Places','Places'],['Outros','Outros']])}</div>
-              <div><label>Custo &amp; imposto</label>${sel('custo', f.custo, [['todos','Todos'],['sem-custo','Somente vendas sem custo'],['sem-imposto','Somente vendas sem imposto'],['sem-um','Sem custo ou sem imposto'],['sem-ambos','Sem custo e sem imposto']])}</div>
+              <div><label>Nº pedido / carrinho</label><input type="text" value="${vmlEsc(g.pedido)}" oninput="rfSet('pedido', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();rfBuscar();}"></div>
+              <div><label>Título ou MLB</label><input type="text" value="${vmlEsc(g.titulo)}" oninput="rfSet('titulo', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();rfBuscar();}"></div>
+              <div><label>SKU</label><input type="text" value="${vmlEsc(g.sku)}" oninput="rfSet('sku', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();rfBuscar();}"></div>
+              <div><label>Status da venda</label>${sel('status', g.status, [['todas','Todos'],['aprovadas','Aprovados'],['canceladas','Cancelados']])}</div>
+              <div><label>Modalidade</label>${sel('modalidade', g.modalidade, [['todas','Todos'],['Premium','Premium'],['Clássico','Clássico'],['Grátis','Grátis']])}</div>
+              <div><label>Tipo do frete</label>${sel('frete', g.frete, [['todos','Todos'],['Full','Full'],['Flex','Flex'],['Coleta','Coleta'],['Agência','Agência'],['Places','Places'],['Outros','Outros']])}</div>
+              <div><label>Custo &amp; imposto</label>${sel('custo', g.custo, [['todos','Todos'],['sem-custo','Somente vendas sem custo'],['sem-imposto','Somente vendas sem imposto'],['sem-um','Sem custo ou sem imposto'],['sem-ambos','Sem custo e sem imposto']])}</div>
             </div>
             <div class="chips" style="margin-top:14px;">
               ${[['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Mês atual'],['12m','12 meses']].map(([k,l]) => `<button class="chip" onclick="rfAtalho('${k}')">${l}</button>`).join('')}
+            </div>
+            <div class="d-flex" style="margin-top:14px;gap:12px;align-items:center;justify-content:flex-end;flex-wrap:wrap;">
+              <span id="rf-pend" class="text-muted" style="font-size:12px;${rfPend ? '' : 'display:none;'}">Filtros alterados. Clique em Buscar para atualizar.</span>
+              <button class="btn" id="rf-buscar" onclick="rfBuscar()">🔍 Buscar</button>
             </div>
           </div></div>
           <div class="card"><div class="card-header"><div class="card-title">Para onde vai cada real</div></div><div class="card-body">
@@ -864,17 +869,28 @@
     }
 
     function rfIr(p){ rfFiltro.pagina = p; rfCarregar(); }
-    function rfSet(campo, val){ rfFiltro[campo] = val; rfFiltro.pagina = 1; rfCarregar(); }
+    // Filtros: mexer num campo só guarda o rascunho (rfPend); a consulta roda quando clicar em Buscar (ou Enter)
+    function rfRasc(){ if(!rfPend){ const f = rfFiltro; rfPend = { de:f.de, ate:f.ate, pedido:f.pedido, titulo:f.titulo, sku:f.sku, status:f.status, modalidade:f.modalidade, frete:f.frete, custo:f.custo }; } return rfPend; }
+    function rfMarcaPend(){ const a = document.getElementById('rf-pend'); if(a) a.style.display = rfPend ? '' : 'none'; }
+    function rfSet(campo, val){ rfRasc()[campo] = val; rfMarcaPend(); }
+    function rfBuscar(){
+      const p = rfPend, mudouData = p && (p.de !== rfFiltro.de || p.ate !== rfFiltro.ate);
+      if(p){ Object.assign(rfFiltro, p); rfPend = null; }
+      rfFiltro.pagina = 1;
+      const b = document.getElementById('rf-buscar'); if(b){ b.disabled = true; b.textContent = 'Buscando…'; }
+      rfMarcaPend();
+      if(mudouData) renderResumoFin(); else rfCarregar();
+    }
     function rfOrdenar(col){ if(rfFiltro.ordem === col) rfFiltro.desc = !rfFiltro.desc; else { rfFiltro.ordem = col; rfFiltro.desc = true; } rfFiltro.pagina = 1; rfCarregar(); }
     function rfToggleFrete(on){ vmlFreteComprador = on; localStorage.setItem('mk_vml_frete_comp', on ? '1' : '0'); rfDesenhar(); }
     function rfSetData(campo, val){
       if(!val) return;
-      rfFiltro[campo] = val;
-      if(rfFiltro.ate < rfFiltro.de){ if(campo === 'de') rfFiltro.ate = val; else rfFiltro.de = val; }
-      rfFiltro.pagina = 1; renderResumoFin();
+      const r = rfRasc(); r[campo] = val;
+      if(r.ate < r.de){ if(campo === 'de') r.ate = val; else r.de = val; }
+      rfDesenhar();
     }
-    function rfMoverDia(n){ rfFiltro.de = addDias(rfFiltro.de, n); rfFiltro.ate = addDias(rfFiltro.ate, n); rfFiltro.pagina = 1; renderResumoFin(); }
-    function rfAtalho(k){ const p = vmlAtalho(k); rfFiltro.de = p.de; rfFiltro.ate = p.ate; rfFiltro.pagina = 1; renderResumoFin(); }
+    function rfMoverDia(n){ const r = rfRasc(); r.de = addDias(r.de, n); r.ate = addDias(r.ate, n); rfDesenhar(); }
+    function rfAtalho(k){ const p = vmlAtalho(k), r = rfRasc(); r.de = p.de; r.ate = p.ate; rfDesenhar(); }
     function rfAtualizar(){ vmlSincronizar(rfFiltro.de, rfFiltro.ate, vmlDiasEntre(rfFiltro.de, rfFiltro.ate) <= 3, () => rfCarregar()); }
     function rfExportar(formato){
       const grande = vmlDiasEntre(rfFiltro.de, rfFiltro.ate) > VML_EXPORT_MAX_DIAS || rfDados.total > VML_EXPORT_MAX_LINHAS;
