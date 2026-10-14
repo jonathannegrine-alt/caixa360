@@ -1614,3 +1614,23 @@ input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;bo
 
 /* avisos com título em negrito: no celular o título virava uma coluna estreita ao lado do texto */
 @media (max-width:768px){ .alert{display:block !important;} .alert>svg,.alert>b:first-child{margin-right:5px;} }
+
+/* DRE: a primeira coluna fica parada na rolagem lateral e precisa de fundo opaco
+   (a zebra é translúcida e deixava os números aparecerem por trás dos títulos) */
+.dre-tab tbody tr:nth-child(even):not(.dre-res):not(.dre-entrada):not(.dre-saida):not(.dre-grupo) td:first-child{background:color-mix(in srgb,var(--text) 9.5%,var(--surface));}
+.dre-tab td:first-child,.dre-tab th:first-child{z-index:2;box-shadow:1px 0 0 var(--border);}
+/* DRE mensal: um mês por vez, sem rolagem lateral */
+.dre-tab.dre-mes{min-width:0;width:100%;}
+.dre-tab.dre-mes td:first-child,.dre-tab.dre-mes th:first-child{min-width:0;white-space:normal;position:static;box-shadow:none;}
+.dre-tab.dre-mes td{font-size:13px;padding:9px 10px;}
+.dre-tab.dre-mes .dre-m-pct{color:var(--text-muted);font-size:12px;width:70px;}
+.dre-tab.dre-mes tr.dre-entrada .dre-m-pct,.dre-tab.dre-mes tr.dre-saida .dre-m-pct{color:#fff;}
+.dre-tab.dre-mes .dre-m-ant{color:var(--text-muted);}
+.dre-tab.dre-mes tr.dre-entrada .dre-m-ant,.dre-tab.dre-mes tr.dre-saida .dre-m-ant{color:rgba(255,255,255,.8);}
+.dre-mes-nav{display:flex;align-items:center;justify-content:center;gap:12px;padding:12px 16px 10px;}
+.dre-mes-nav b{min-width:150px;text-align:center;font-size:14px;}
+@media (max-width:700px){
+  .dre-tab.dre-mes .dre-m-ant{display:none;}
+  .dre-tab.dre-mes td{padding:9px 8px;}
+  .dre-tab.dre-mes .dre-m-pct{width:56px;}
+}

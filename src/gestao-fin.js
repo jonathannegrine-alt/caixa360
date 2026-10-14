@@ -199,11 +199,13 @@
         // margem bruta das vendas: antes de publicidade, Full e despesas de Contas a pagar
         const custoVenda = M.ml.filter(l => !l.fatura).reduce((s, l) => s + l.v, 0), bruta = M.entrada - custoVenda, despMes = bruta - M.lucro;
         const custoVendaA = A.ml.filter(l => !l.fatura).reduce((s, l) => s + l.v, 0), brutaA = A.entrada - custoVendaA;
+        // percentuais sobre as vendas válidas (faturamento sem as canceladas), como no Resumo Financeiro
+        const CANC = 'Vendas Canceladas ML', cancDe = X => (X.ml.find(l => l.nome === CANC) || {}).v || 0, canc = cancDe(M), cancA = cancDe(A), validas = M.entrada - canc, validasA = A.entrada - cancA;
 
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), L = doc.internal.pageSize.getWidth();
         doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.text('Fechamento de ' + gfMesNome(ym), 40, 52);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100); doc.text(nome + '  ·  gerado em ' + new Date().toLocaleString('pt-BR'), 40, 70);
-        const cx = [['Faturamento', M.entrada, [79, 70, 229], vr(M.entrada, A.entrada)], ['Margem bruta', bruta, [8, 145, 178], pc(bruta, M.entrada)], ['Despesas do mês', despMes, [217, 119, 6], pc(despMes, M.entrada)], ['Lucro do mês', M.lucro, M.lucro >= 0 ? [22, 163, 74] : [220, 38, 38], pc(M.lucro, M.entrada)]], w = (L - 80 - 30) / 4;
+        const cx = [['Faturamento', M.entrada, [79, 70, 229], vr(M.entrada, A.entrada)], ['Margem bruta', bruta, [8, 145, 178], pc(bruta, validas) + ' das vendas válidas'], ['Despesas do mês', despMes, [217, 119, 6], pc(despMes, validas)], ['Lucro do mês', M.lucro, M.lucro >= 0 ? [22, 163, 74] : [220, 38, 38], pc(M.lucro, validas)]], w = (L - 80 - 30) / 4;
         cx.forEach((c, i) => { const x = 40 + i * (w + 10); doc.setDrawColor(225); doc.setFillColor(248, 249, 252); doc.roundedRect(x, 86, w, 58, 6, 6, 'FD'); doc.setFillColor(...c[2]); doc.rect(x, 86, 4, 58, 'F');
           doc.setFontSize(8); doc.setTextColor(110); doc.text(c[0].toUpperCase(), x + 12, 102); doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(20); doc.text(n2(c[1]), x + 12, 121); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120); doc.text(String(c[3] || ''), x + 12, 135); });
         const tab = (head, body, y, cor, foot) => { doc.autoTable({ startY: y, margin: { left: 40, right: 40 }, head: [head], body, foot: foot ? [foot] : undefined, styles: { fontSize: 9, cellPadding: 5 }, headStyles: { fillColor: cor, textColor: 255 }, footStyles: { fillColor: [240, 241, 246], textColor: 20, fontStyle: 'bold' },
@@ -213,13 +215,14 @@
         // 1. resultado
         let y = tit('1. Resultado do mês', 172);
         const linhaAnt = k => (A.ml.find(l => l.nome === k) || {}).v || 0;
-        const corpo = [['Faturamento (vendas, com as canceladas)', n2(M.entrada), '100%', n2(A.entrada)]]
-          .concat(M.ml.filter(l => l.v && !l.fatura).map(l => ['(-) ' + l.nome, n2(-l.v), pc(l.v, M.entrada), n2(-linhaAnt(l.nome))]))
-          .concat([['= Margem bruta das vendas', n2(bruta), pc(bruta, M.entrada), n2(brutaA)]])
-          .concat(M.ml.filter(l => l.v && l.fatura).map(l => ['(-) ' + l.nome, n2(-l.v), pc(l.v, M.entrada), n2(-linhaAnt(l.nome))]))
-          .concat(M.variavel ? [['(-) Outras despesas variáveis (contas a pagar)', n2(-M.variavel), pc(M.variavel, M.entrada), n2(-A.variavel)]] : [])
-          .concat([['= Margem de contribuição', n2(M.mc), pc(M.mc, M.entrada), n2(A.mc)], ['(-) Despesas fixas', n2(-M.fixo), pc(M.fixo, M.entrada), n2(-A.fixo)]]);
-        y = tab(['', gfMesNome(ym), '% do faturamento', gfMesNome(ant)], corpo, y, [79, 70, 229], ['= Lucro do mês', n2(M.lucro), pc(M.lucro, M.entrada), n2(A.lucro)]);
+        const corpo = [['Faturamento (vendas, com as canceladas)', n2(M.entrada), '', n2(A.entrada)], ['(-) ' + CANC, n2(-canc), '', n2(-cancA)], ['= Vendas válidas', n2(validas), '100%', n2(validasA)]]
+          .concat(M.ml.filter(l => l.v && !l.fatura && l.nome !== CANC).map(l => ['(-) ' + l.nome, n2(-l.v), pc(l.v, validas), n2(-linhaAnt(l.nome))]))
+          .concat([['= Margem bruta das vendas', n2(bruta), pc(bruta, validas), n2(brutaA)]])
+          .concat(M.ml.filter(l => l.v && l.fatura).map(l => ['(-) ' + l.nome, n2(-l.v), pc(l.v, validas), n2(-linhaAnt(l.nome))]))
+          .concat(M.variavel ? [['(-) Outras despesas variáveis (contas a pagar)', n2(-M.variavel), pc(M.variavel, validas), n2(-A.variavel)]] : [])
+          .concat([['= Margem de contribuição', n2(M.mc), pc(M.mc, validas), n2(A.mc)], ['(-) Despesas fixas', n2(-M.fixo), pc(M.fixo, validas), n2(-A.fixo)]]);
+        y = tab(['', gfMesNome(ym), '% das vendas válidas', gfMesNome(ant)], corpo, y, [79, 70, 229], ['= Lucro do mês', n2(M.lucro), pc(M.lucro, validas), n2(A.lucro)]);
+        doc.setFontSize(8); doc.setTextColor(120); doc.text('Percentuais calculados sobre as vendas válidas (faturamento sem as canceladas), não sobre o faturamento total.', 40, y + 12); y += 10;
         if(M.fixas.length){ y = tit('Despesas fixas por categoria', y + 26); y = tab(['Categoria', 'Valor', '% das fixas'], M.fixas.sort((a, b) => b.v - a.v).slice(0, 14).map(l => [l.nome, n2(l.v), pc(l.v, M.fixo)]), y, [217, 119, 6]); }
         // saídas de caixa que não são despesa (devolução de empréstimo, retirada marcada como "fora" etc.): não mexem no lucro, mas saem do caixa
         const foraCat = {}; pagamentos.filter(p => String(p.data || '').slice(0, 7) === ym && ['fora', 'emprestimo'].includes(dreGrupoDe(p.cat))).forEach(p => { const c = p.cat || 'Sem categoria'; foraCat[c] = (foraCat[c] || 0) + (Number(p.val) || 0); });

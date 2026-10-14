@@ -115,9 +115,49 @@
         const entrada = val(m, 'fat');
         const operacional = soma(linhasML, m) + soma(variaveis, m);
         const fixo = soma(fixas, m);
-        return { m, entrada, operacional, mc: entrada - operacional, fixo, lucro: entrada - operacional - fixo };
+        return { m, entrada, validas: entrada - val(m, 'canc'), operacional, mc: entrada - operacional, fixo, lucro: entrada - operacional - fixo };
       });
       return { linhasML, variaveis, fixas, meses };
+    }
+
+    // Visão do DRE: 'ano' (12 meses lado a lado) ou 'mes' (um mês por vez). Sem escolha gravada, vale o tamanho da tela.
+    let dreModo = (() => { try { return localStorage.getItem('mk_dre_modo') || ''; } catch(e){ return ''; } })();
+    let dreMesSel = 0;
+    const DRE_MESES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    function dreModoAtual(){ return dreModo || (window.innerWidth < 760 ? 'mes' : 'ano'); }
+    function dreSetModo(m){ dreModo = m; try { localStorage.setItem('mk_dre_modo', m); } catch(e){} dreDesenhar(); }
+    function dreMesIr(n){
+      let m = dreMesSel + n, a = dreAno; if(m < 1){ m = 12; a--; } if(m > 12){ m = 1; a++; }
+      const hj = new Date().getFullYear(); if(a > hj || a < hj - 3) return;
+      dreMesSel = m;
+      if(a !== dreAno){ dreAno = a; renderDREAnual(); } else dreDesenhar();
+    }
+    // tabela de um mês: valor, % das vendas válidas e o mês anterior
+    function dreTabelaMes(D){
+      const m = dreMesSel, x = D.meses[m - 1], a = m > 1 ? D.meses[m - 2] : null;
+      const pct = v => x.validas && v ? (v / x.validas * 100).toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%' : '';
+      const lin = (rot, v, va, cls, semPct, extra) => `<tr class="${cls || ''}" ${extra || ''}><td>${rot}</td><td class="num">${dreNum(v)}</td><td class="num dre-m-pct">${semPct ? '' : pct(v)}</td><td class="num dre-m-ant">${a ? dreNum(va) : '–'}</td></tr>`;
+      const tem = l => (l.v[m] || 0) || (a && (l.v[m - 1] || 0));
+      const item = (l, cls) => lin(dreEsc(l.nome), l.v[m] || 0, l.v[m - 1] || 0, cls);
+      const grupos = (linhas, pref) => {
+        const gs = []; linhas.filter(tem).forEach(l => { const n = l.grupo || 'Sem grupo'; let g = gs.find(z => z.n === n); if(!g){ g = { n, l: [] }; gs.push(g); } g.l.push(l); });
+        return gs.map(g => { const k = pref + '|' + g.n, ab = dreAbertos.has(k), som = mm => g.l.reduce((t, l) => t + (l.v[mm] || 0), 0);
+          return lin(`<span class="dre-seta">${ab ? '▾' : '▸'}</span>${dreEsc(g.n)} <small>${g.l.length}</small>`, som(m), som(m - 1), 'dre-grupo dre-gsub', false, `onclick="dreAbrirGrupo('${dreEsc(k).replace(/'/g, "\\'")}')"`) + (ab ? g.l.map(l => item(l, 'dre-sub')).join('') : ''); }).join('');
+      };
+      const v = k => x[k], va = k => a ? a[k] : 0;
+      return `<table class="dre-tab dre-mes">
+        <thead><tr><th></th><th class="num">${DRE_MESES_NOME[m - 1]}</th><th class="num dre-m-pct" title="Percentual sobre as vendas válidas (faturamento sem as canceladas)">% vendas</th><th class="num dre-m-ant">${a ? DRE_MESES_NOME[m - 2] : 'Mês anterior'}</th></tr></thead>
+        <tbody>
+          ${lin('(+) TOTAL ENTRADA', v('entrada'), va('entrada'), 'dre-entrada', true)}
+          ${lin('Faturamento ML', v('entrada'), va('entrada'), '', true)}
+          ${lin('(−) TOTAL CUSTO OPERACIONAL', v('operacional'), va('operacional'), 'dre-saida')}
+          ${D.linhasML.filter(tem).map(l => item(l)).join('')}
+          ${grupos(D.variaveis, 'v')}
+          ${lin('(=) MARGEM DE CONTRIBUIÇÃO', v('mc'), va('mc'), 'dre-res')}
+          ${lin('(−) TOTAL CUSTO FIXO', v('fixo'), va('fixo'), 'dre-saida')}
+          ${grupos(D.fixas, 'f') || '<tr><td colspan="4" class="text-muted" style="font-style:italic;">Nenhuma despesa fixa neste mês</td></tr>'}
+          ${lin('(=) LUCRO LÍQUIDO', v('lucro'), va('lucro'), 'dre-res dre-lucro')}
+        </tbody></table>`;
     }
 
     function dreDesenhar(){
@@ -136,7 +176,7 @@
           return `<tr class="dre-grupo dre-gsub" onclick="dreAbrirGrupo('${dreEsc(k).replace(/'/g, "\\'")}')" title="${ab ? 'Esconder' : 'Mostrar'} as ${g.l.length} categorias deste grupo"><td><span class="dre-seta">${ab ? '▾' : '▸'}</span>${dreEsc(g.n)} <small>${g.l.length}</small></td>${D.meses.map(x => cel(somaM(x.m))).join('')}${cel(totG)}</tr>` + (ab ? g.l.map(l => linhaItem(l).replace('<tr>', '<tr class="dre-sub">')).join('') : ''); }).join('');
       };
       const pct = (a, b) => b ? (a / b * 100).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + '%' : '–';
-      const linhaPct = k => `<tr class="dre-pct"><td></td>${D.meses.map(x => `<td class="num">${pct(x[k], x.entrada)}</td>`).join('')}<td class="num">${pct(tot(k), tot('entrada'))}</td></tr>`;
+      const linhaPct = k => `<tr class="dre-pct"><td></td>${D.meses.map(x => `<td class="num">${pct(x[k], x.validas)}</td>`).join('')}<td class="num">${pct(tot(k), tot('validas'))}</td></tr>`;
       const diasNoMes = m => new Date(dreAno, m, 0).getDate();
       const hoje = new Date();
       const cabMes = (nome, i) => {
@@ -150,15 +190,19 @@
       };
       const anos = []; for(let a = new Date().getFullYear(); a >= new Date().getFullYear() - 3; a--) anos.push(a);
       const semCat = !D.variaveis.length && !D.fixas.length;
+      const modo = dreModoAtual();
+      if(!dreMesSel) dreMesSel = mesAtual || 1;
+      const mesFuturo = dreAno === hoje.getFullYear() && dreMesSel > hoje.getMonth() + 1;
 
       el.innerHTML = `
         <div class="card">
           <div class="card-header" style="flex-wrap:wrap;gap:10px;">
             <div>
-              <div class="card-title">DRE ${dreAno}</div>
-              <div class="pg-sub">Vendas do Mercado Livre + despesas de Contas a pagar, mês a mês.</div>
+              <div class="card-title">DRE ${modo === 'mes' ? DRE_MESES_NOME[dreMesSel - 1] + ' de ' : ''}${dreAno}</div>
+              <div class="pg-sub">Vendas do Mercado Livre + despesas de Contas a pagar${modo === 'mes' ? ', um mês por vez' : ', mês a mês'}.</div>
             </div>
             <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">
+              <div class="seg">${[['mes', 'Mensal'], ['ano', 'Anual']].map(([k, r]) => `<button type="button" class="btn-toggle ${modo === k ? 'active' : ''}" onclick="dreSetModo('${k}')">${r}</button>`).join('')}</div>
               <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer;"><input type="checkbox" ${dreSoPagas ? 'checked' : ''} onchange="dreSoPagas=this.checked;dreDesenhar();" style="width:auto;"> Somente despesas pagas</label>
               <button class="btn-out btn btn-sm" onclick="dreAbrirTodos(${dreAbertos.size ? 'false' : 'true'})" title="Mostrar ou esconder as categorias dentro de cada grupo">${dreAbertos.size ? 'Fechar grupos' : 'Abrir grupos'}</button>
               <button class="btn-out btn btn-sm" onclick="dreConfigurar()">Configurar categorias</button>
@@ -169,6 +213,13 @@
           ${dreDados.erro ? `<div class="alert alert-danger" style="margin:14px 16px 0;">${dreEsc(dreDados.erro)}</div>` : ''}
           ${typeof ftAviso === 'function' ? ftAviso() : ''}
           ${semCat ? `<div class="alert alert-info" style="margin:14px 16px 0;">Nenhuma categoria de despesa entra no DRE ainda. Clique em <b>&nbsp;Configurar categorias&nbsp;</b> e diga quais são custo variável e quais são custo fixo.</div>` : ''}
+          ${modo === 'mes' ? `<div class="dre-mes-nav">
+              <button class="ico-btn" title="Mês anterior" onclick="dreMesIr(-1)">‹</button>
+              <b>${DRE_MESES_NOME[dreMesSel - 1]} de ${dreAno}</b>
+              <button class="ico-btn" title="Próximo mês" onclick="dreMesIr(1)">›</button>
+              ${mesFuturo ? '' : `<button class="dre-sync" title="Buscar as vendas deste mês no Mercado Livre" onclick="dreSincMes(${dreMesSel}, this)">↻</button>`}
+            </div>
+            <div style="overflow-x:auto;">${dreTabelaMes(D)}</div>` : `
           <div style="overflow-x:auto;">
             <table class="dre-tab">
               <thead><tr><th></th>${DRE_MESES.map(cabMes).join('')}<th class="num">Total</th></tr></thead>
@@ -186,9 +237,10 @@
                 ${linhaPct('lucro')}
               </tbody>
             </table>
-          </div>
+          </div>`}
           <div class="text-muted" style="font-size:11.5px;padding:12px 18px;line-height:1.6;">
             Faturamento ML = valor dos produtos das vendas aprovadas e canceladas (as canceladas saem em seguida). Custo e imposto são os gravados em cada venda.
+            Os percentuais são sobre as vendas válidas (faturamento sem as canceladas).
             Despesas aparecem somadas por grupo: clique num grupo para ver as categorias. Entram pelo mês de competência da conta; sem ela, pela competência padrão da categoria (em geral o mês do vencimento). ● = mês com vendas ainda sendo importadas do Mercado Livre.
             ${typeof ftRodape === 'function' ? ftRodape() : ''}
             Flex: o repasse do Mercado Livre entra como redução de custo; o transportador entra pelo que foi lançado em Contas a pagar numa categoria com “Flex” no nome e, no mês sem lançamento, pelo valor por entrega das Configurações.
