@@ -91,14 +91,18 @@
       const snap = view.querySelector('button[onclick="salvarSnapshotPatrimonio()"]'); if(snap) snap.style.display = 'none';
       balClassificarCategorias();
       if(!host.innerHTML.trim() && typeof carregandoMsg === 'function') carregandoMsg(host, 'Calculando o balanço… (estoque, Full e vendas por loja)');
-      // dados que o balanço usa: estoque (movimentações), Full (API), envios e a venda por loja
+      await balPreparar();
+      balDesenhar();
+    }
+    // dados que o balanço usa: estoque (movimentações → saldo do galpão), Full (API), envios e a venda por loja.
+    // Sem isso, num aparelho que ainda não abriu o Estoque, o galpão sai zerado (o fechamento do mês também chama).
+    async function balPreparar(){
       try {
         if(typeof estCarregar === 'function') await estCarregar(false);
         if(typeof esoLer === 'function') await esoLer(false);
         if(typeof comprasCarregarVendas === 'function' && !(comprasVendas && comprasVendas.dados)) await comprasCarregarVendas(false);
         if((!Array.isArray(estoqueFullML) || !estoqueFullML.length) && typeof comprasFullAPI === 'function') await comprasFullAPI();
       } catch(e){}
-      balDesenhar();
     }
 
     function balDesenhar(){

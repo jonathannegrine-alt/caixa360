@@ -1659,3 +1659,6 @@ input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;bo
 .ds-grid{grid-template-columns:minmax(0,1.5fr) minmax(350px,1fr);}
 #ds-resumo .ds-tab th,#ds-resumo .ds-tab td{padding:8px 9px;font-size:12.5px;}
 @media (max-width:900px){ .ds-grid{grid-template-columns:1fr;} }
+
+/* modo simplificado: Início sem o caixa projetado, os avisos ocupam a linha toda */
+.ini-grid.pc-off{grid-template-columns:1fr;}

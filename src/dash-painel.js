@@ -39,6 +39,9 @@
       // Desenha em todos os painéis da página ativa (Início e Dashboard usam o mesmo)
       const hosts = document.querySelectorAll('.view.active .pc-host');
       if(!hosts.length) return;
+      const oculto = typeof dsAtivo === 'function' && dsAtivo();
+      hosts.forEach(h => { h.style.display = oculto ? 'none' : ''; if(h.parentElement) h.parentElement.classList.toggle('pc-off', oculto); if(oculto) h.innerHTML = ''; });
+      if(oculto) return;
       const serie = painelSerie = painelCalcular(painelDias);
       const n = serie.length;
       const tot = serie.reduce((a,d) => { a.conf += d.conf; a.proj += d.proj; a.saida += d.saida; return a; }, {conf:0, proj:0, saida:0});

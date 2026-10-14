@@ -195,6 +195,7 @@
         try { const cb = (await supa.rpc('concil_cobertura')).data || [], c = conta || (cb.find(x => x.origem === 'v' && x.de <= ate && x.ate >= de) || {}).ml_user_id;
           if(c && cb.some(x => x.ml_user_id === c && x.origem === 'v' && x.de <= ate && x.ate >= de)){ const [r, d] = await Promise.all([supa.rpc('concil_resumo', { p_de: de, p_ate: ate, p_conta: c }), supa.rpc('concil_divergencias', { p_de: de, p_ate: ate, p_conta: c })]);
             if(!r.error && !d.error) conc = { r: r.data || {}, d: d.data || [], conta: c }; } } catch(e){}
+        if(typeof balPreparar === 'function') await balPreparar();   // estoque do galpão, Full e venda por loja precisam estar carregados
         const B = typeof balCalcular === 'function' ? balCalcular() : null, V = gfDivida();
         const atras = pagamentos.filter(p => !p.pago && p.data < hoje), vAtras = atras.reduce((s, p) => s + (Number(p.val) || 0), 0);
         const prox30 = pagamentos.filter(p => !p.pago && p.data >= hoje && p.data <= addDias(hoje, 30)).reduce((s, p) => s + (Number(p.val) || 0), 0);
