@@ -43,7 +43,7 @@
       else if(page === 'estoque'){ if(typeof estRender === 'function') estRender(); else renderEstoque(); }
       else if(page === 'analise'){ if(typeof anRender === 'function') anRender(); else renderAnalise(); }
       else if(page === 'receber'){ renderReceber(); verificarConexaoML(); }
-      else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); if(typeof olistRenderCard === 'function') olistRenderCard(); if(typeof vrRenderCard === 'function') vrRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof iaRenderCard === 'function') iaRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }
+      else if(page === 'config'){ renderCategorias(); renderConfig(); atualizarStatusMLConfig(); renderPipelineMaturidade(); if(typeof olistRenderCard === 'function') olistRenderCard(); if(typeof dsRenderCard === 'function') dsRenderCard(); if(typeof vrRenderCard === 'function') vrRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof iaRenderCard === 'function') iaRenderCard().then(() => { if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }); if(typeof cfgMontarAbas === 'function') cfgMontarAbas(); }
       else if(page === 'resultado'){ setResultadoTab('anual'); }
       else if(page === 'flex'){ if(typeof fxRender === 'function') fxRender(); }
       else if(page === 'conciliacao'){ if(typeof cnRender === 'function') cnRender(); }

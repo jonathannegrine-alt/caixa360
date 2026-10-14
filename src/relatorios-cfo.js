@@ -112,9 +112,11 @@
       document.getElementById('res-tab-comp').className = 'resultado-tab' + (tab === 'comparativo' ? ' active' : '');
       const fv = document.getElementById('res-fech-view'), ft = document.getElementById('res-tab-fech');
       if(fv && ft){ fv.style.display = tab === 'fechamento' ? '' : 'none'; ft.className = 'resultado-tab' + (tab === 'fechamento' ? ' active' : ''); if(tab === 'fechamento' && typeof gfFechAba === 'function') gfFechAba(); }
+      const sv = document.getElementById('res-simples-view'), st = document.getElementById('res-tab-simples');
+      if(sv && st){ sv.style.display = tab === 'simples' ? '' : 'none'; st.className = 'resultado-tab' + (tab === 'simples' ? ' active' : ''); if(tab === 'simples' && typeof dsRender === 'function') dsRender(); }
       if(tab === 'anual') renderDREAnual();
       else if(tab === 'dre') renderDRE();
-      else renderComparativo();
+      else if(tab !== 'simples') renderComparativo();
     }
 
     function renderDRE(){

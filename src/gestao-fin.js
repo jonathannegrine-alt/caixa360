@@ -10,6 +10,7 @@
     const gfMesAnt = ym => { const d = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 2, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
 
     async function gfAno(ano, conta){
+      if(typeof dsAtivo === 'function' && dsAtivo()) await dsCarregar();   // modo simplificado: as despesas vêm da lista curta
       if(gf.anos[ano]) return gf.anos[ano];
       const [r, fat] = await Promise.all([supa.rpc('vendas_ml_por_mes', { p_ano: ano, p_conta: conta }), typeof ftMes === 'function' ? ftMes(ano, conta).catch(() => ({})) : null]), porMes = {};
       (r.data || []).forEach(x => { porMes[x.mes] = { fat: Number(x.faturamento), canc: Number(x.canceladas), imp: Number(x.imposto), frete: Number(x.frete_vendedor), custo: Number(x.custo), tarifa: Number(x.tarifa), vendas: Number(x.vendas), flex: -(Number(x.flex_repasse) || 0), flexc: Number(x.flex_custo) || 0 }; });
@@ -48,6 +49,7 @@
     }
     // parcelas de empréstimo do mês que não entram no DRE (devolução do principal)
     function gfParcelas(ym){
+      if(typeof dsAtivo === 'function' && dsAtivo()) return 0;   // modo simplificado não considera empréstimos
       if(typeof emp === 'undefined' || !emp.todos || typeof empContas !== 'function') return 0;
       const vistos = new Set(); let t = 0;
       emp.todos.forEach(c => empContas(c).forEach(p => { if(vistos.has(p) || String(p.data || '').slice(0, 7) !== ym) return; vistos.add(p); if(['fora', 'emprestimo'].includes(dreGrupoDe(p.cat))) t += Number(p.val) || 0; }));
@@ -58,6 +60,7 @@
     const gfEhPrincipal = p => dreGrupoDe(p.cat) === 'emprestimo' || (dreGrupoDe(p.cat) === 'fora' && !/juros/i.test(p.cat || '') && /amortiza|empr[eé]stimo|capital de giro|financiamento/i.test(p.cat || ''));
     // contas do mês que saem do caixa e não estão no DRE: devolução de empréstimo lançada só em Contas a pagar e retirada dos sócios
     function gfForaDoDre(ym){
+      if(typeof dsAtivo === 'function' && dsAtivo()) return { parcelas: 0, retirada: 0 };
       const P = (typeof pagTodos === 'function' ? pagTodos() : (typeof pagamentos !== 'undefined' ? pagamentos : [])).filter(p => String(p.data || '').slice(0, 7) === ym && ['fora', 'emprestimo'].includes(dreGrupoDe(p.cat)));
       const soma = f => P.filter(f).reduce((s, p) => s + (Number(p.val) || 0), 0), semContrato = typeof emp === 'undefined' || !emp.todos || !emp.todos.length;
       return { parcelas: semContrato ? soma(gfEhPrincipal) : 0, retirada: soma(p => /retirada|pr[oó][- ]?labore|distribui[cç][aã]o de lucro/i.test(p.cat || '')) };

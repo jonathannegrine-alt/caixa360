@@ -507,6 +507,7 @@
       if(document.activeElement && document.activeElement.blur) document.activeElement.blur();   // grava o campo que ainda está em edição
       const t = x => String(x == null ? '' : x).trim();
       comprasCfg = {
+        ...comprasCfg,   // mantém o que é de outros módulos (modo da fatura no DRE, modo simplificado)
         regra: cpNorm(c.regra) === 'galpao' ? 'GALPAO' : 'TOTAL', jurosMes: cpNum(c.jurosMes) || 3,
         padrao: { cob: cpNum(c.padrao.cob) || 90, prazo: cpNum(c.padrao.prazo), mult: cpNum(c.padrao.mult) || 1, base: t(c.padrao.base) || 'AUTO' },
         regras: (c.regras || []).filter(r => t(r.pat)).map(r => ({ pat: t(r.pat), cob: t(r.cob), prazo: t(r.prazo), mult: t(r.mult), manual: t(r.manual), base: t(r.base), obs: t(r.obs) })),

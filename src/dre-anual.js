@@ -35,7 +35,7 @@
       if(/custo/i.test(g)) return 'variavel';
       return 'fixo';
     }
-    function dreGrupoOlist(nomeCat){ const c = categorias.find(x => x.nome === nomeCat); return (c && c.grupo) || ''; }
+    function dreGrupoOlist(nomeCat){ if(typeof dsAtivo === 'function' && dsAtivo()) return dsGrupo(nomeCat); const c = categorias.find(x => x.nome === nomeCat); return (c && c.grupo) || ''; }
 
     async function renderDREAnual(){
       const el = document.getElementById('res-anual-view');
@@ -46,7 +46,7 @@
       const conta = typeof contaParam === 'function' ? contaParam() : null;
       let qDias = supa.from('vendas_ml_dias').select('dia').eq('usuario_id', usuarioAtual.id).gte('dia', dreAno + '-01-01').lte('dia', dreAno + '-12-31').eq('completo', true).limit(2000);
       if(conta) qDias = qDias.eq('ml_user_id', conta);
-      const [ml, dias, fat] = await Promise.all([ supa.rpc('vendas_ml_por_mes', { p_ano: dreAno, p_conta: conta }), qDias, typeof ftMes === 'function' ? ftMes(dreAno, conta).catch(() => ({})) : null ]);
+      const [ml, dias, fat] = await Promise.all([ supa.rpc('vendas_ml_por_mes', { p_ano: dreAno, p_conta: conta }), qDias, typeof ftMes === 'function' ? ftMes(dreAno, conta).catch(() => ({})) : null, typeof dsAtivo === 'function' && dsAtivo() ? dsCarregar() : null ]);
       if(dreDados.chave !== chave) return;
       const porMes = {};
       (ml.data || []).forEach(r => { porMes[r.mes] = { fat:Number(r.faturamento), canc:Number(r.canceladas), imp:Number(r.imposto), frete:Number(r.frete_vendedor), custo:Number(r.custo), tarifa:Number(r.tarifa), vendas:Number(r.vendas), flex:-(Number(r.flex_repasse) || 0), flexc:Number(r.flex_custo) || 0 }; });
@@ -74,6 +74,7 @@
 
     // Despesas de Contas a pagar por categoria e mês
     function dreDespesas(){
+      if(typeof dsAtivo === 'function' && dsAtivo()) return dsDespesas(dreAno);   // modo simplificado: despesas da lista curta, não de Contas a pagar
       const out = { variavel:{}, fixo:{} };
       pagamentos.forEach(p => {
         const ref = /^\d{4}-\d{2}/.test(p.competencia || '') ? p.competencia : dreCompetencia(p);
@@ -190,7 +191,7 @@
       };
       const anos = []; for(let a = new Date().getFullYear(); a >= new Date().getFullYear() - 3; a--) anos.push(a);
       const semCat = !D.variaveis.length && !D.fixas.length;
-      const modo = dreModoAtual();
+      const modo = dreModoAtual(), simples = typeof dsAtivo === 'function' && dsAtivo();
       if(!dreMesSel) dreMesSel = mesAtual || 1;
       const mesFuturo = dreAno === hoje.getFullYear() && dreMesSel > hoje.getMonth() + 1;
 
@@ -199,20 +200,21 @@
           <div class="card-header" style="flex-wrap:wrap;gap:10px;">
             <div>
               <div class="card-title">DRE ${modo === 'mes' ? DRE_MESES_NOME[dreMesSel - 1] + ' de ' : ''}${dreAno}</div>
-              <div class="pg-sub">Vendas do Mercado Livre + despesas de Contas a pagar${modo === 'mes' ? ', um mês por vez' : ', mês a mês'}.</div>
+              <div class="pg-sub">Vendas do Mercado Livre + ${simples ? 'despesas do modo simplificado' : 'despesas de Contas a pagar'}${modo === 'mes' ? ', um mês por vez' : ', mês a mês'}.</div>
             </div>
             <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">
               <div class="seg">${[['mes', 'Mensal'], ['ano', 'Anual']].map(([k, r]) => `<button type="button" class="btn-toggle ${modo === k ? 'active' : ''}" onclick="dreSetModo('${k}')">${r}</button>`).join('')}</div>
-              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer;"><input type="checkbox" ${dreSoPagas ? 'checked' : ''} onchange="dreSoPagas=this.checked;dreDesenhar();" style="width:auto;"> Somente despesas pagas</label>
+              ${simples ? `<span class="badge badge-info" title="As despesas vêm da aba Despesas simples; Contas a pagar e empréstimos não entram">Modo simplificado</span><button class="btn-out btn btn-sm" onclick="setResultadoTab('simples')">Lançar despesas</button>` : `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);cursor:pointer;"><input type="checkbox" ${dreSoPagas ? 'checked' : ''} onchange="dreSoPagas=this.checked;dreDesenhar();" style="width:auto;"> Somente despesas pagas</label>`}
               <button class="btn-out btn btn-sm" onclick="dreAbrirTodos(${dreAbertos.size ? 'false' : 'true'})" title="Mostrar ou esconder as categorias dentro de cada grupo">${dreAbertos.size ? 'Fechar grupos' : 'Abrir grupos'}</button>
-              <button class="btn-out btn btn-sm" onclick="dreConfigurar()">Configurar categorias</button>
+              ${simples ? '' : `<button class="btn-out btn btn-sm" onclick="dreConfigurar()">Configurar categorias</button>`}
               <button class="btn-out btn btn-sm" onclick="dreExportar()">Exportar</button>
               <select onchange="dreAno=parseInt(this.value);renderDREAnual();" style="width:auto;">${anos.map(a => `<option ${a === dreAno ? 'selected' : ''}>${a}</option>`).join('')}</select>
             </div>
           </div>
           ${dreDados.erro ? `<div class="alert alert-danger" style="margin:14px 16px 0;">${dreEsc(dreDados.erro)}</div>` : ''}
           ${typeof ftAviso === 'function' ? ftAviso() : ''}
-          ${semCat ? `<div class="alert alert-info" style="margin:14px 16px 0;">Nenhuma categoria de despesa entra no DRE ainda. Clique em <b>&nbsp;Configurar categorias&nbsp;</b> e diga quais são custo variável e quais são custo fixo.</div>` : ''}
+          ${simples ? `<div class="alert alert-info" style="margin:14px 16px 0;"><b>Modo simplificado:</b>&nbsp;as despesas deste DRE são as da aba Despesas simples. Contas a pagar e empréstimos não entram.</div>` : ''}
+          ${semCat && !simples ? `<div class="alert alert-info" style="margin:14px 16px 0;">Nenhuma categoria de despesa entra no DRE ainda. Clique em <b>&nbsp;Configurar categorias&nbsp;</b> e diga quais são custo variável e quais são custo fixo.</div>` : ''}
           ${modo === 'mes' ? `<div class="dre-mes-nav">
               <button class="ico-btn" title="Mês anterior" onclick="dreMesIr(-1)">‹</button>
               <b>${DRE_MESES_NOME[dreMesSel - 1]} de ${dreAno}</b>
