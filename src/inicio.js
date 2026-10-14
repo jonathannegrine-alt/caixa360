@@ -113,6 +113,10 @@
       const fim30 = serieCaixa[29].saldo;
       const pior = serieCaixa.reduce((m,d) => d.saldo < m.saldo ? d : m, serieCaixa[0]);
       const negativo = serieCaixa.find(d => d.saldo < 0);
+      // modo simplificado do DRE: não há vencimentos; no lugar de "Contas a pagar" entram as despesas lançadas no mês
+      const simples = typeof dsAtivo === 'function' && dsAtivo();
+      if(simples && typeof ds !== 'undefined' && !ds.carregado && !renderInicio._ds){ renderInicio._ds = true; dsCarregar().then(() => { if(document.getElementById('view-inicio')?.classList.contains('active')) renderInicio(); }); }
+      const despMes = simples && typeof ds !== 'undefined' && ds.carregado ? ds.itens.reduce((s, x) => s + dsValorNoMes(x, hoje.slice(0, 7)), 0) : null;
 
       // ----- vendas -----
       const sv = inicioSerieVendas();
@@ -140,17 +144,18 @@
 
       // ----- alertas -----
       const alertas = [];
-      if(negativo) alertas.push({ t:'danger', i:'!', tx:`Caixa fica <b>negativo em ${ptDate(negativo.data)}</b> na projeção de 30 dias.`, ac:"nav('planilha')", la:'Ver fluxo' });
+      if(simples){}
+      else if(negativo) alertas.push({ t:'danger', i:'!', tx:`Caixa fica <b>negativo em ${ptDate(negativo.data)}</b> na projeção de 30 dias.`, ac:"nav('planilha')", la:'Ver fluxo' });
       else if((Number(reservaMinima) || 0) > 0 && pior.saldo < reservaMinima) alertas.push({ t:'warning', i:'!', tx:`Saldo cai abaixo da reserva mínima em <b>${ptDate(pior.data)}</b> (${fmt(pior.saldo)}).`, ac:"nav('planilha')", la:'Ver fluxo' });
-      if(atrasadas.length) alertas.push({ t:'danger', i:'⏰', tx:`<b>${atrasadas.length} conta${atrasadas.length > 1 ? 's' : ''} em atraso</b> somando ${fmt(valAtras)}.`, ac:"nav('pagar')", la:'Regularizar' });
-      if(pagar7.length) alertas.push({ t:'info', i:'📅', tx:`<b>${pagar7.length} conta${pagar7.length > 1 ? 's' : ''}</b> vence${pagar7.length > 1 ? 'm' : ''} nos próximos 7 dias: ${fmt(valPagar7)}.`, ac:"nav('pagar')", la:'Ver contas' });
+      if(atrasadas.length && !simples) alertas.push({ t:'danger', i:'⏰', tx:`<b>${atrasadas.length} conta${atrasadas.length > 1 ? 's' : ''} em atraso</b> somando ${fmt(valAtras)}.`, ac:"nav('pagar')", la:'Regularizar' });
+      if(pagar7.length && !simples) alertas.push({ t:'info', i:'📅', tx:`<b>${pagar7.length} conta${pagar7.length > 1 ? 's' : ''}</b> vence${pagar7.length > 1 ? 'm' : ''} nos próximos 7 dias: ${fmt(valPagar7)}.`, ac:"nav('pagar')", la:'Ver contas' });
       if(varVendas !== null && Math.abs(varVendas) >= 8) alertas.push({ t: varVendas > 0 ? 'ok' : 'warning', i: varVendas > 0 ? '▲' : '▼', tx:`${rotVendas} ${varVendas > 0 ? 'cresceram' : 'caíram'} <b>${Math.abs(varVendas).toFixed(1).replace('.', ',')}%</b> nos últimos 30 dias contra os 30 anteriores.`, ac:"nav('resultado')", la:'Ver resultado' });
       const semCusto = skus.filter(s => !(Number(s.custo) > 0)).length;
       if(semCusto) alertas.push({ t:'warning', i:'⚖', tx:`<b>${semCusto} produto${semCusto > 1 ? 's' : ''} sem custo</b> cadastrado — a margem fica superestimada.`, ac:"nav('skus')", la:'Cadastrar' });
       const ultSync = parseInt(localStorage.getItem('mk_ultimo_sync_ml') || '0');
       if(ultSync && Date.now() - ultSync > 6 * 3600000) alertas.push({ t:'info', i:'↻', tx:`Dados do Mercado Livre atualizados há mais de 6 horas.`, ac:'sincronizarML()', la:'Atualizar' });
       if(typeof gsAlertaInicio === 'function'){ const al = gsAlertaInicio(); if(al) alertas.push(al); }
-      if(!alertas.length) alertas.push({ t:'ok', i:'✓', tx:'Tudo em ordem: sem contas atrasadas e caixa positivo nos próximos 30 dias.', ac:'', la:'' });
+      if(!alertas.length) alertas.push({ t:'ok', i:'✓', tx: simples ? 'Tudo em ordem.' : 'Tudo em ordem: sem contas atrasadas e caixa positivo nos próximos 30 dias.', ac:'', la:'' });
 
       const atalhos = [
         ['planilha','Fluxo de Caixa','Entradas e saídas dia a dia'], ['pagar','Contas a pagar','Lançar e dar baixa'],
@@ -176,7 +181,7 @@
             <div class="ini-saud">${saud}! 👋</div>
             <div class="ini-sub">Este é o resumo do seu negócio agora.</div>
             <div class="ini-acoes">
-              <button onclick="nav('pagar');abrirModalLanc();">+ Conta a pagar</button>
+              ${simples ? `<button onclick="nav('resultado');setTimeout(() => setResultadoTab('simples'), 50)">+ Lançar despesa</button>` : `<button onclick="nav('pagar');abrirModalLanc();">+ Conta a pagar</button>`}
               <button onclick="sincronizarML();this.textContent='Atualizando…';">↻ Atualizar Mercado Livre</button>
               <button onclick="nav('vendas')">Ver vendas</button>
             </div>
@@ -195,15 +200,17 @@
           <div class="kpi k-mc" onclick="nav('receber')" style="cursor:pointer;">
             <div class="kpi-label">A receber do Mercado Livre</div><div class="kpi-value">${fmt(aReceber)}</div>
             <div class="kpi-sub"><span>Próximos 7 dias <b>${fmt(receber7)}</b></span></div></div>
-          <div class="kpi k-custo" onclick="nav('pagar')" style="cursor:pointer;">
+          ${simples ? `<div class="kpi k-custo" onclick="nav('resultado');setTimeout(() => setResultadoTab('simples'), 50)" style="cursor:pointer;">
+            <div class="kpi-label">Despesas lançadas · ${['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][Number(hoje.slice(5, 7)) - 1]}</div><div class="kpi-value">${despMes === null ? '…' : fmt(despMes)}</div>
+            <div class="kpi-sub"><span>modo simplificado</span></div></div>` : `<div class="kpi k-custo" onclick="nav('pagar')" style="cursor:pointer;">
             <div class="kpi-label">Contas a pagar · 7 dias</div><div class="kpi-value">${fmt(valPagar7)}</div>
-            <div class="kpi-sub"><span>${pagar7.length} conta${pagar7.length === 1 ? '' : 's'}</span>${atrasadas.length ? `<span style="color:var(--danger)"><b style="color:inherit">${atrasadas.length}</b> em atraso (${fmt(valAtras)})</span>` : '<span>nenhuma em atraso</span>'}</div></div>
+            <div class="kpi-sub"><span>${pagar7.length} conta${pagar7.length === 1 ? '' : 's'}</span>${atrasadas.length ? `<span style="color:var(--danger)"><b style="color:inherit">${atrasadas.length}</b> em atraso (${fmt(valAtras)})</span>` : '<span>nenhuma em atraso</span>'}</div></div>`}
           <div class="kpi k-venda" onclick="nav('${sv.usaVendas ? 'vendas' : 'receber'}')" style="cursor:pointer;">
             <div class="kpi-label">${rotVendas} · 30 dias</div><div class="kpi-value">${fmt(tot30)}</div>
             <div class="kpi-sub">${seta(varVendas)}<span>vs. 30 dias anteriores</span></div></div>
           <div class="kpi k-frete" onclick="nav('dashboard')" style="cursor:pointer;">
             <div class="kpi-label">Saldo em caixa</div><div class="kpi-value">${fmt(saldoAtual)}</div>
-            <div class="kpi-sub"><span>Em 30 dias <b>${fmt(fim30)}</b></span>${seta(saldoAtual ? (fim30 - saldoAtual) / Math.abs(saldoAtual) * 100 : null)}</div></div>
+            ${simples ? '' : `<div class="kpi-sub"><span>Em 30 dias <b>${fmt(fim30)}</b></span>${seta(saldoAtual ? (fim30 - saldoAtual) / Math.abs(saldoAtual) * 100 : null)}</div>`}</div>
         </div></div>
 
         <div id="ini-gestao">${typeof gf !== 'undefined' && gf.html ? gf.html : ''}</div>
@@ -220,7 +227,7 @@
         </div></div>
 
         ${bloco('vendas', 'vendas dos últimos 30 dias e vencimentos')}
-        <div class="ini-grid">
+        <div class="ini-grid ${simples ? 'ini-uma' : ''}">
           <div class="card">
             <div class="card-header">
               <div><div class="card-title">${rotVendas} — últimos 30 dias</div>
@@ -238,7 +245,7 @@
               </div>
             </div>
           </div>
-          <div class="card">
+          ${simples ? '' : `<div class="card">
             <div class="card-header"><div class="card-title">Próximos vencimentos</div><a class="ini-link" onclick="nav('pagar')">Ver todas →</a></div>
             <div class="card-body" style="padding:6px 20px 14px;">
               ${atrasadas.length ? `<div class="ini-venc atras" onclick="nav('pagar')"><div class="dt"><b>!</b><small>atraso</small></div><div class="ds"><b>${atrasadas.length} conta${atrasadas.length > 1 ? 's' : ''} em atraso</b><small>desde ${ptDate(atrasadas.reduce((m,p) => p.data < m ? p.data : m, atrasadas[0].data))}</small></div><div class="vl">${fmt(valAtras)}</div></div>` : ''}
@@ -249,7 +256,7 @@
                   <div class="vl">${fmt(p.val)}</div></div>`;
               }).join('') : (atrasadas.length ? '' : '<div class="vazio" style="padding:26px 0;"><b>Nenhuma conta em aberto</b>Lance suas contas para acompanhar os vencimentos.</div>')}
             </div>
-          </div>
+          </div>`}
         </div></div>
 
         ${bloco('lib', 'liberações e produtos mais vendidos')}

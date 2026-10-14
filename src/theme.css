@@ -1662,3 +1662,4 @@ input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;bo
 
 /* modo simplificado: Início sem o caixa projetado, os avisos ocupam a linha toda */
 .ini-grid.pc-off{grid-template-columns:1fr;}
+.ini-grid.ini-uma{grid-template-columns:1fr;}
