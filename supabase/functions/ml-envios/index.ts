@@ -95,7 +95,12 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       }
       const campos: Record<string, unknown> = { envio_status: status || null, envio_substatus: s.substatus ? String(s.substatus) : null }
       // prazo para o pacote sair (tela de Pedidos: atrasados e que vencem hoje)
-      const limite = s.lead_time?.estimated_schedule_limit?.date || s.lead_time?.estimated_handling_limit?.date || null
+      // o prazo de despacho vem do SLA do envio (expected_date); o lead_time fica de reserva
+      let limite = s.lead_time?.estimated_schedule_limit?.date || s.lead_time?.estimated_handling_limit?.date || null
+      if (!saiu && status !== 'cancelled') {
+        const sla = await fetch(`https://api.mercadolibre.com/shipments/${sid}/sla`, { headers: { Authorization: `Bearer ${t.access_token}` } }).then(r => r.ok ? r.json() : null).catch(() => null)
+        if (sla?.expected_date) limite = sla.expected_date
+      }
       if (limite) campos.envio_limite = limite
       if (saiu && quando) { campos.enviado_em = quando; enviados++ }
       if (s.logistic?.type) campos.logistic_type = s.logistic.type
