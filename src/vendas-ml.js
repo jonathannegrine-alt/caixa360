@@ -730,6 +730,8 @@
       const f = rfFiltro, g = rfPend || rfFiltro, d = rfDados, T = d.tot || {}, a = T.aprov || {}, c = T.canc || {};
       const n = k => Number(a[k]) || 0;
       const vendas = n('bruto') + (vmlFreteComprador ? n('frete_comp') : 0);
+      // canceladas seguem a mesma regra das aprovadas (frete do comprador só se marcado); total antigo em cache traz só 'valor'
+      const canceladas = c.bruto != null ? (Number(c.bruto) || 0) + (vmlFreteComprador ? Number(c.frete_comp) || 0 : 0) : Number(c.valor) || 0;
       const porEnvio = {};
       (T.por_envio || []).forEach(e => { porEnvio[e.envio] = Number(e.bruto) + (vmlFreteComprador ? Number(e.frete_comp) : 0); });
       const log = k => 'R$ ' + vmlNum(porEnvio[k] || 0);
@@ -766,8 +768,9 @@
           <div class="kpi k-venda">
             <div class="kpi-label" title="Valor dos produtos${vmlFreteComprador ? ' + frete pago pelo comprador' : ''} das vendas aprovadas">Vendas aprovadas</div>
             <div class="kpi-value">R$ ${vmlNum(vendas)}</div>
-            <div class="kpi-sub"><span>Canceladas <b>R$ ${vmlNum(c.valor)}</b></span></div>
-            <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11.5px;color:var(--text-muted);cursor:pointer;">
+            <div class="kpi-sub"><span>Canceladas <b>R$ ${vmlNum(canceladas)}</b></span></div>
+            <div class="kpi-sub" style="margin-top:3px;"><span title="Vendas aprovadas + canceladas: o total vendido no período, como o Mercado Livre mostra em Faturamento e como entra no DRE e no fechamento do mês">Faturamento ML <b>R$ ${vmlNum(vendas + canceladas)}</b></span></div>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:10.5px;color:var(--text-muted);cursor:pointer;">
               <input type="checkbox" ${vmlFreteComprador ? 'checked' : ''} onchange="rfToggleFrete(this.checked)" style="width:auto;"> Considerar frete do comprador
             </label>
           </div>
