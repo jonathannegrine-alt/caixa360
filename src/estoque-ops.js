@@ -316,6 +316,7 @@
       const un = x => (x.itens || []).reduce((s, i) => s + (Number(i.qtd) || 0), 0);
       const sit = { preparando: ['Em preparação', 'cp-comprar'], saiu: ['Saiu do galpão', 'cp-excesso'], recebido: ['Recebido no Full', 'cp-ok'], cancelado: ['Cancelado', 'cp-semvenda'] };
       vmlModal('Envios ao Full', `
+        <div class="chips" style="margin-bottom:12px;"><button class="chip active">Envios</button><button class="chip" onclick="esoHistorico()">Histórico e acertividade</button></div>
         <div class="d-flex" style="justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;"><div class="text-muted" style="max-width:560px;">Importe o PDF de preparação do Mercado Livre. O envio ocupa o estoque enquanto está em preparação; ao dar a saída, o galpão baixa produto por produto.</div><button class="btn" onclick="esoImportarEnvio()">Importar PDF do envio</button></div>
         <div style="overflow-x:auto;max-height:56vh;"><table class="cp-tab"><thead><tr><th>Situação</th><th>Envio</th><th>Saída prevista</th><th class="num">Anúncios</th><th class="num">Unidades</th><th></th></tr></thead><tbody>
           ${eso.envios.length ? eso.envios.map(x => `<tr><td><span class="cp-sit ${sit[x.situacao][1]}">${sit[x.situacao][0]}</span></td>
@@ -323,11 +324,71 @@
             <td>${x.situacao === 'preparando' ? `<input type="date" value="${x.data_prevista || ''}" onchange="esoEnvioCampo(${x.id}, 'data_prevista', this.value || null)" style="width:150px;">` : dt(x.data_prevista)}</td>
             <td class="num">${(x.itens || []).length}</td><td class="num"><b>${esInt(un(x))}</b></td>
             <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="esoEnvioItens(${x.id})">Ver itens</button> ${x.situacao === 'preparando' ? `<button class="btn btn-sm" onclick="esoDarSaida(${x.id}, this)">Dar saída</button> <button class="btn-out btn-sm" onclick="esoEnvioCampo(${x.id}, 'ocupar', ${x.ocupar === false})">${x.ocupar === false ? 'Ocupar estoque' : 'Não ocupar'}</button> <button class="btn-out btn-sm" style="color:var(--danger);" onclick="esoExcluirEnvio(${x.id})">Excluir</button>`
-              : x.situacao === 'saiu' ? `<button class="btn-out btn-sm" onclick="esoEnvioCampo(${x.id}, 'situacao', 'recebido')">Marcar recebido no Full</button> <button class="btn-out btn-sm" onclick="esoDesfazerSaida(${x.id})">Desfazer saída</button>` : ''}</td></tr>`).join('')
+              : x.situacao === 'saiu' ? `<button class="btn btn-sm" onclick="esoConferir(${x.id})">Lançar conferência do Full</button> <button class="btn-out btn-sm" onclick="esoDesfazerSaida(${x.id})">Desfazer saída</button>`
+              : x.situacao === 'recebido' ? `<button class="btn-out btn-sm" onclick="esoConferir(${x.id})">${x.conferencia ? 'Ver conferência' : 'Lançar conferência do Full'}</button>` : ''}</td></tr>`).join('')
             : '<tr><td colspan="6"><div class="vazio"><b>Nenhum envio lançado</b>Clique em Importar PDF do envio.</div></td></tr>'}
         </tbody></table></div>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '980px';
     }
+    // ---------- conferência do Full: o que o Mercado Livre contou ao receber x o que saiu do galpão ----------
+    function esoConfResumo(x){
+      const it = (x.conferencia && x.conferencia.itens) || [];
+      const env = it.reduce((s, i) => s + (Number(i.enviado) || 0), 0), rec = it.reduce((s, i) => s + (Number(i.recebido) || 0), 0);
+      const erro = it.reduce((s, i) => s + Math.abs((Number(i.recebido) || 0) - (Number(i.enviado) || 0)), 0);
+      const difs = it.filter(i => Number(i.recebido) !== Number(i.enviado)).length;
+      return { env, rec, dif: rec - env, erro, difs, acerto: env ? Math.max(0, 1 - erro / env) : null, bateu: !!it.length && difs === 0 };
+    }
+    function esoConferir(id){
+      const x = eso.envios.find(e => e.id === id); if(!x) return;
+      const ant = new Map(((x.conferencia && x.conferencia.itens) || []).map(i => [esN(i.anuncio_sku), i]));
+      const itens = (x.itens || []).slice().sort((a, b) => String(a.anuncio_sku).localeCompare(String(b.anuncio_sku)));
+      const cel = (sku, html) => typeof fotoLinha === 'function' ? fotoLinha(sku, html) : html;
+      vmlModal('Conferência do Full — ' + esEsc(x.titulo), `
+        <div class="text-muted" style="margin-bottom:10px;">Lance o que o Mercado Livre contou ao receber o envio (relatório do envio no Mercado Livre). A diferença aparece ao lado. O estoque não muda: a conferência serve para medir a acertividade dos envios.</div>
+        <div class="d-flex" style="gap:8px;flex-wrap:wrap;margin-bottom:10px;"><button class="btn-out btn-sm" onclick="document.querySelectorAll('.eso-cf').forEach(i => { i.value = i.dataset.env; esoConfDif(i); })">Preencher igual ao enviado</button><span class="text-muted" style="font-size:12px;align-self:center;">depois corrija só o que o Full contou diferente</span></div>
+        <div style="overflow-x:auto;max-height:50vh;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th class="num">Enviado</th><th class="num">Recebido pelo Full</th><th class="num">Diferença</th></tr></thead><tbody>
+          ${itens.map(i => { const a = ant.get(esN(i.anuncio_sku)), v = a ? Number(a.recebido) : '';
+            return '<tr><td class="cp-prod">' + cel(i.anuncio_sku, '<b>' + esEsc(i.anuncio_sku) + '</b>' + (i.codigo_ml ? '<span>' + esEsc(i.codigo_ml) + '</span>' : '')) + '</td><td class="num">' + esInt(i.qtd) + '</td><td class="num"><input type="number" min="0" class="cp-dias eso-cf" data-sku="' + esEsc(i.anuncio_sku) + '" data-ml="' + esEsc(i.codigo_ml || '') + '" data-env="' + (Number(i.qtd) || 0) + '" value="' + v + '" oninput="esoConfDif(this)" style="width:100px !important;"></td><td class="num eso-cf-dif">' + esoConfDifHtml(v === '' ? null : v - (Number(i.qtd) || 0)) + '</td></tr>'; }).join('')}
+        </tbody></table></div>
+        <div class="form-group" style="margin-top:12px;"><label class="form-label">Observação</label><input type="text" id="eso-cf-obs" placeholder="Ex.: 2 unidades avariadas no recebimento" value="${esEsc((x.conferencia && x.conferencia.obs) || '')}"></div>`,
+        `<button class="btn-out" onclick="esoEnvios()">Voltar</button><button class="btn" onclick="esoConfSalvar(${x.id}, this)">Salvar conferência</button>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
+    }
+    function esoConfDifHtml(d){ return d === null || isNaN(d) ? '<span class="text-muted">—</span>' : d === 0 ? '<span class="text-success">ok</span>' : '<b class="' + (d < 0 ? 'text-danger' : 'text-warning') + '">' + (d > 0 ? '+' : '') + esInt(d) + '</b>'; }
+    function esoConfDif(inp){ const td = inp.closest('tr').querySelector('.eso-cf-dif'); if(td) td.innerHTML = esoConfDifHtml(inp.value === '' ? null : Number(inp.value) - Number(inp.dataset.env)); }
+    async function esoConfSalvar(id, btn){
+      const campos = [...document.querySelectorAll('.eso-cf')];
+      if(campos.some(i => i.value === '')){ alert('Preencha o recebido de todos os anúncios (use "Preencher igual ao enviado" e corrija o que mudou).'); return; }
+      const itens = campos.map(i => ({ anuncio_sku: i.dataset.sku, codigo_ml: i.dataset.ml || null, enviado: Number(i.dataset.env) || 0, recebido: Number(i.value) || 0 }));
+      if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
+      const r = await supa.from('estoque_envios_full').update({ conferencia: { itens, obs: (document.getElementById('eso-cf-obs')?.value || '').trim() || null }, conferido_em: new Date().toISOString(), situacao: 'recebido' }).eq('id', id);
+      if(r.error){ alert('Não consegui salvar a conferência: ' + r.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar conferência'; } return; }
+      await esoLer(true); estDesenhar(); esoHistorico();
+    }
+    // histórico dos envios que saíram e a acertividade das conferências
+    function esoHistorico(){
+      const dt = d => d ? ptDate(String(d).substring(0, 10)) : '—', pct = v => v === null ? '—' : (v * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
+      const saidos = eso.envios.filter(x => x.situacao === 'saiu' || x.situacao === 'recebido').sort((a, b) => String(b.saiu_em || b.criado_em).localeCompare(String(a.saiu_em || a.criado_em)));
+      const conf = saidos.filter(x => x.conferencia && (x.conferencia.itens || []).length).map(x => ({ x, r: esoConfResumo(x) }));
+      const env = conf.reduce((s, c) => s + c.r.env, 0), erro = conf.reduce((s, c) => s + c.r.erro, 0);
+      const falta = conf.reduce((s, c) => s + (c.x.conferencia.itens || []).reduce((a, i) => a + Math.max(0, i.enviado - i.recebido), 0), 0), sobra = conf.reduce((s, c) => s + (c.x.conferencia.itens || []).reduce((a, i) => a + Math.max(0, i.recebido - i.enviado), 0), 0);
+      const bateram = conf.filter(c => c.r.bateu).length;
+      vmlModal('Envios ao Full', `
+        <div class="chips" style="margin-bottom:12px;"><button class="chip" onclick="esoEnvios()">Envios</button><button class="chip active">Histórico e acertividade</button></div>
+        <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));">
+          <div class="kpi k-neutro"><div class="kpi-label">Envios que saíram</div><div class="kpi-value">${saidos.length}</div><div class="kpi-sub">${conf.length} conferidos · ${saidos.length - conf.length} aguardando</div></div>
+          <div class="kpi ${conf.length && bateram === conf.length ? 'k-mc' : 'k-hoje'}"><div class="kpi-label">Envios que bateram</div><div class="kpi-value">${conf.length ? pct(bateram / conf.length) : '—'}</div><div class="kpi-sub">${bateram} de ${conf.length} sem nenhuma diferença</div></div>
+          <div class="kpi k-venda"><div class="kpi-label">Acertividade em unidades</div><div class="kpi-value">${env ? pct(Math.max(0, 1 - erro / env)) : '—'}</div><div class="kpi-sub">${esInt(erro)} un. com diferença em ${esInt(env)} enviadas</div></div>
+          <div class="kpi k-atraso"><div class="kpi-label">Faltou / sobrou no Full</div><div class="kpi-value">−${esInt(falta)} / +${esInt(sobra)}</div><div class="kpi-sub">unidades, somando as conferências</div></div>
+        </div>
+        <div style="overflow-x:auto;max-height:46vh;"><table class="cp-tab"><thead><tr><th>Envio</th><th>Saiu</th><th>Conferido</th><th class="num">Enviado</th><th class="num">Recebido</th><th class="num">Diferença</th><th class="num">Acerto</th><th>Resultado</th><th></th></tr></thead><tbody>
+          ${saidos.length ? saidos.map(x => { const tem = x.conferencia && (x.conferencia.itens || []).length, r = tem ? esoConfResumo(x) : null, un = (x.itens || []).reduce((s, i) => s + (Number(i.qtd) || 0), 0);
+            return '<tr><td class="cp-prod"><a href="#" onclick="event.preventDefault();esoEnvioItens(' + x.id + ')"><b>' + esEsc(x.titulo) + '</b></a>' + (tem && x.conferencia.obs ? '<span title="' + esEsc(x.conferencia.obs) + '">' + esEsc(x.conferencia.obs) + '</span>' : '') + '</td><td>' + dt(x.saiu_em) + '</td><td>' + dt(x.conferido_em) + '</td><td class="num">' + esInt(tem ? r.env : un) + '</td><td class="num">' + (tem ? esInt(r.rec) : '—') + '</td><td class="num">' + (tem ? esoConfDifHtml(r.dif) : '—') + '</td><td class="num">' + (tem ? pct(r.acerto) : '—') + '</td><td>' + (!tem ? '<span class="cp-sit cp-semvenda">Aguardando conferência</span>' : r.bateu ? '<span class="cp-sit cp-ok">Bateu</span>' : '<span class="cp-sit cp-urgente">' + r.difs + ' anúncio' + (r.difs === 1 ? '' : 's') + ' com diferença</span>') + '</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="esoConferir(' + x.id + ')">' + (tem ? 'Ver' : 'Conferir') + '</button></td></tr>'; }).join('')
+            : '<tr><td colspan="9"><div class="vazio"><b>Nenhum envio saiu ainda</b>Quando você der a saída de um envio, ele aparece aqui para lançar a conferência do Full.</div></td></tr>'}
+        </tbody></table></div>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1080px';
+    }
+
     let esoItensVer = 'anuncio';
     function esoEnvioItens(id, modo){
       const x = eso.envios.find(e => e.id === id); if(!x) return;

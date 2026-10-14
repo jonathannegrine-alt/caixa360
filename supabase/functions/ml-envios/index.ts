@@ -82,8 +82,17 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       const status = String(s.status || '')
       const hist = s.status_history || {}
       // enviado = saiu do vendedor (shipped / delivered / not_delivered) — a data vem do histórico
-      const saiu = ['shipped', 'delivered', 'not_delivered'].includes(status) || !!hist.date_shipped
-      const quando = hist.date_shipped || hist.date_delivered || (saiu ? (s.last_updated || new Date().toISOString()) : null)
+      let saiu = ['shipped', 'delivered', 'not_delivered'].includes(status) || !!hist.date_shipped
+      let quando = hist.date_shipped || hist.date_delivered || (saiu ? (s.last_updated || new Date().toISOString()) : null)
+      // coleta/agência: o pacote já saiu do vendedor quando foi coletado ou deixado no ML, mesmo com o status ainda
+      // "ready_to_ship" (substatus picked_up / dropped_off / in_hub). A hora vem do histórico do envio.
+      const SUB_SAIU = ['picked_up', 'dropped_off', 'in_hub']
+      if (!saiu && status === 'ready_to_ship' && SUB_SAIU.includes(String(s.substatus || ''))) {
+        const h = await fetch(`https://api.mercadolibre.com/shipments/${sid}/history`, { headers: { Authorization: `Bearer ${t.access_token}` } }).then(r => r.ok ? r.json() : null).catch(() => null)
+        const ev = (Array.isArray(h) ? h : []).filter((e: any) => SUB_SAIU.includes(String(e?.substatus || '')) && e?.date).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)))[0]
+        saiu = true
+        quando = ev?.date || s.last_updated || new Date().toISOString()
+      }
       const campos: Record<string, unknown> = { envio_status: status || null }
       if (saiu && quando) { campos.enviado_em = quando; enviados++ }
       if (s.logistic?.type) campos.logistic_type = s.logistic.type
