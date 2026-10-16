@@ -389,7 +389,7 @@
 
       const todas = estLinhas(dep), b = esN(est.busca), vm = estComCobertura(todas, 'disp');
       const lista = todas.filter(l => (!b || l.k.includes(b) || esN(l.nome).includes(b)) && (est.so === '' || (est.so === 'zerado' ? l.fisico <= 0 : est.so === 'caminho' ? l.caminho > 0 : est.so === 'ocupado' ? l.ocupado > 0 : est.so === 'semcusto' ? !(l.custo > 0) && l.fisico > 0 : true)))
-        .sort(estComparar({ sku: l => l.k, caminho: l => l.caminho, ocupado: l => l.ocupado, disp: l => l.disp, fisico: l => l.fisico, media: l => l.media || 0, cob: l => l.cob === null ? -1 : l.cob === Infinity ? 1e9 : l.cob, custo: l => l.custo, valor: l => Math.max(0, l.fisico) * l.custo },
+        .sort(estComparar({ sku: l => l.k, caminho: l => l.caminho, ocupado: l => l.ocupado, disp: l => l.disp, fisico: l => l.fisico, media: l => l.media || 0, cob: l => l.cob === null ? (estOrd.dir > 0 ? 2e9 : -1) : l.cob === Infinity ? 1e9 : l.cob, custo: l => l.custo, valor: l => Math.max(0, l.fisico) * l.custo },
           (a, c) => c.fisico * c.custo - a.fisico * a.custo || c.fisico - a.fisico || a.k.localeCompare(c.k)));
       const un = todas.reduce((s, l) => s + Math.max(0, l.fisico), 0), valor = todas.reduce((s, l) => s + Math.max(0, l.fisico) * l.custo, 0);
       const cam = todas.reduce((s, l) => s + l.caminho, 0), ocp = todas.reduce((s, l) => s + l.ocupado, 0);
@@ -441,7 +441,7 @@
         l.custo = (g && Number(g.custo_medio) > 0 ? Number(g.custo_medio) : 0) || (s && Number(s.custo)) || 0;
         l.total = Object.values(l.por).reduce((a, v) => a + v, 0); });
       const b = esN(est.busca), todas = [...mapa.values()], vm = estComCobertura(todas, 'total');
-      const lista = todas.filter(l => !b || l.k.includes(b) || esN(l.nome).includes(b)).sort(estComparar(Object.assign({ sku: l => l.k, total: l => l.total, media: l => l.media || 0, cob: l => l.cob === null ? -1 : l.cob === Infinity ? 1e9 : l.cob, caminho: l => l.caminho, custo: l => l.custo, valor: l => Math.max(0, l.total) * l.custo }, Object.fromEntries(deps.map(d => ['d' + d.id, l => l.por[d.id] || 0]))),
+      const lista = todas.filter(l => !b || l.k.includes(b) || esN(l.nome).includes(b)).sort(estComparar(Object.assign({ sku: l => l.k, total: l => l.total, media: l => l.media || 0, cob: l => l.cob === null ? (estOrd.dir > 0 ? 2e9 : -1) : l.cob === Infinity ? 1e9 : l.cob, caminho: l => l.caminho, custo: l => l.custo, valor: l => Math.max(0, l.total) * l.custo }, Object.fromEntries(deps.map(d => ['d' + d.id, l => l.por[d.id] || 0]))),
         (a, c) => c.total * c.custo - a.total * a.custo || c.total - a.total));
       const un = todas.reduce((s, l) => s + Math.max(0, l.total), 0), valor = todas.reduce((s, l) => s + Math.max(0, l.total) * l.custo, 0), cam = todas.reduce((s, l) => s + l.caminho, 0);
       const somaDep = d => todas.reduce((s, l) => s + Math.max(0, l.por[d.id] || 0), 0);
