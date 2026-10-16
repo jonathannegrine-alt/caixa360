@@ -177,6 +177,32 @@
       return `<div class="chips" title="Período usado na venda média por dia"><span class="text-muted" style="font-size:12.5px;align-self:center;">Venda média de</span>${EST_PERIODOS.map(n => `<button class="chip ${estPer === n ? 'active' : ''}" onclick="estPeriodo(${n})">${n} dias</button>`).join('')}${vm && vm.dias < estPer ? `<span class="text-muted" style="font-size:12px;align-self:center;">(${vm.dias} dias importados)</span>` : ''}${!vm ? '<span class="text-muted" style="font-size:12px;align-self:center;">carregando vendas…</span>' : ''}</div>`;
     }
 
+    // Full: venda só do Full (RPC vendas_full_sku), por conta e SKU do anúncio, sem abrir kit (o estoque do Full também
+    // é por anúncio). Preenche x.k, x.media e x.cob em cada item; devolve { dias } ou null enquanto carrega.
+    let estFV = { chave: '', mapa: new Map(), soSku: new Map(), carregando: false };
+    function estFullVendas(itens){
+      const fim = addDias(getToday(), -1), ini = addDias(fim, -(estPer - 1)), chave = estPer + '|' + fim;
+      if(estFV.chave !== chave && !estFV.carregando){
+        estFV.carregando = true;
+        supa.rpc('vendas_full_sku', { p_de: ini, p_ate: fim }).then(({ data, error }) => {
+          if(error) throw error;
+          const m = new Map(), so = new Map();
+          (data || []).forEach(r => { const k = esN(r.sku), u = Number(r.un) || 0; m.set(String(r.ml_user_id) + '|' + k, u); so.set(k, (so.get(k) || 0) + u); });
+          estFV = { chave, mapa: m, soSku: so, carregando: false };
+          const v = document.getElementById('view-estoque'); if(v && v.classList.contains('active')) estDesenhar();
+        }).catch(() => { estFV.carregando = false; });
+      }
+      const pronto = estFV.chave === chave, imp = typeof comprasVendas !== 'undefined' && comprasVendas.importados;
+      let dias = 0; for(let i = 0; i < estPer; i++){ const d = addDias(fim, -i); if(!imp || !imp.size || imp.has(d)) dias++; }
+      itens.forEach(x => {
+        x.k = esN(x.sku);
+        const u = !pronto ? null : x._conta && !/^c\d+$/.test(String(x._conta)) ? (estFV.mapa.get(String(x._conta) + '|' + x.k) || 0) : (estFV.soSku.get(x.k) || 0);
+        const m = u === null ? null : dias ? u / dias : 0, q = Math.max(0, Number(x.aptos_venda) || 0);
+        x.media = m; x.cob = m === null ? null : m > 0 ? q / m : (q > 0 ? Infinity : null);
+      });
+      return pronto ? { dias } : null;
+    }
+
     // ----- foto do produto -----
     // A foto fica gravada (tabela sku_fotos_manual): ou é enviada pelo usuário (bucket "produtos"), ou é a do anúncio,
     // capturada uma vez e guardada. Não é buscada de novo a cada tela.
@@ -369,7 +395,10 @@
       if(dep.tipo === 'full'){
         const lojas = [];   // cada loja tem o seu depósito Full
         const itens = (Array.isArray(estoqueFullML) ? estoqueFullML.slice() : []).filter(x => !dep.ml_user_id || String(x._conta || '') === String(dep.ml_user_id));
-        const b = esN(est.busca), lista = itens.filter(x => !b || esN(x.sku).includes(b) || esN(x.titulo).includes(b)).sort((a, c) => (Number(c.total_geral) || 0) - (Number(a.total_geral) || 0));
+        const vf = estFullVendas(itens);
+        const b = esN(est.busca), lista = itens.filter(x => !b || esN(x.sku).includes(b) || esN(x.titulo).includes(b))
+          .sort(estComparar({ sku: x => x.k, disp: x => Number(x.aptos_venda) || 0, transf: x => Number(x.em_transito) || 0, nao: x => Number(x.nao_aptos) || 0, total: x => Number(x.total_geral) || 0, media: x => x.media || 0, cob: x => x.cob === null ? (estOrd.dir > 0 ? 2e9 : -1) : x.cob === Infinity ? 1e9 : x.cob },
+            (a, c) => (Number(c.total_geral) || 0) - (Number(a.total_geral) || 0)));
         const tot = itens.reduce((s, x) => s + (Number(x.total_geral) || 0), 0), disp = itens.reduce((s, x) => s + (Number(x.aptos_venda) || 0), 0), transf = itens.reduce((s, x) => s + (Number(x.em_transito) || 0), 0);
         if(typeof fotosPara === 'function') fotosPara(lista.map(x => x.sku), () => { const vv = document.getElementById('view-estoque'); if(vv && vv.classList.contains('active')) estDesenhar(); });
         host.innerHTML = cab + erro + abas + `
@@ -379,10 +408,10 @@
             <div class="kpi k-frete"><div class="kpi-label">Em transferência</div><div class="kpi-value">${esInt(transf)}</div><div class="kpi-sub">entre centros do Mercado Livre</div></div>
             <div class="kpi k-neutro"><div class="kpi-label">Atualizado</div><div class="kpi-value" style="font-size:18px;">${estoqueFullML && estoqueFullML._syncAt ? new Date(estoqueFullML._syncAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}</div><div class="kpi-sub">${estoqueFullML && estoqueFullML._fonte === 'xls' ? 'planilha importada' : 'direto do Mercado Livre'}</div></div>
           </div>
-          <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou título" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)">
+          <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou título" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)">${estPeriodoHtml(vf)}
             ${lojas.length > 1 ? `<div class="chips">${[['', 'As duas lojas']].concat(lojas.map(l => [l, (typeof contaNome === 'function' && contaNome(l)) || l])).map(([k, t]) => `<button class="chip ${est.loja === k ? 'active' : ''}" onclick="est.loja='${k}';estDesenhar();">${esEsc(t)}</button>`).join('')}</div>` : ''}</div>
-          <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:48px;"></th><th>Anúncio</th><th>Conta</th><th class="num">Disponível</th><th class="num">Em transferência</th><th class="num">Sem condição de venda</th><th class="num">Total</th></tr></thead><tbody>
-            ${lista.length ? lista.map(x => `<tr>${estFotoTd(esN(x.sku))}<td class="cp-prod" style="max-width:520px;"><b>${esEsc(x.sku)}</b><span title="${esEsc(x.titulo)}">${esEsc(x.titulo || '')}</span></td><td class="cp-forn">${esEsc((typeof contaNome === 'function' && x._conta && contaNome(x._conta)) || '—')}</td><td class="num"><b>${esInt(x.aptos_venda)}</b></td><td class="num">${esInt(x.em_transito)}</td><td class="num" title="${esEsc(x.detalhe || '')}">${esInt(x.nao_aptos)}</td><td class="num"><b>${esInt(x.total_geral)}</b></td></tr>`).join('') : '<tr><td colspan="6"><div class="vazio"><b>Sem estoque do Full carregado</b>Clique em Atualizar do Mercado Livre.</div></td></tr>'}
+          <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:48px;"></th>${estTh('sku', 'Anúncio')}<th>Conta</th>${estTh('disp', 'Disponível', 1)}${estTh('transf', 'Em transferência', 1)}${estTh('nao', 'Sem condição de venda', 1)}${estTh('total', 'Total', 1)}${estTh('media', 'Venda/dia', 1, 'Média de unidades vendidas por dia pelo Full, neste anúncio e nesta conta, no período escolhido')}${estTh('cob', 'Cobertura', 1, 'Quantos dias o disponível no Full dura no ritmo da venda média do Full. Não conta o que está em transferência nem o envio a caminho')}</tr></thead><tbody>
+            ${lista.length ? lista.map(x => `<tr>${estFotoTd(esN(x.sku))}<td class="cp-prod" style="max-width:520px;"><b>${esEsc(x.sku)}</b><span title="${esEsc(x.titulo)}">${esEsc(x.titulo || '')}</span></td><td class="cp-forn">${esEsc((typeof contaNome === 'function' && x._conta && contaNome(x._conta)) || '—')}</td><td class="num"><b>${esInt(x.aptos_venda)}</b></td><td class="num">${esInt(x.em_transito)}</td><td class="num" title="${esEsc(x.detalhe || '')}">${esInt(x.nao_aptos)}</td><td class="num"><b>${esInt(x.total_geral)}</b></td>${estMediaTd(x)}${estCobTd(x)}</tr>`).join('') : '<tr><td colspan="9"><div class="vazio"><b>Sem estoque do Full carregado</b>Clique em Atualizar do Mercado Livre.</div></td></tr>'}
           </tbody></table></div></div>`;
         return;
       }
