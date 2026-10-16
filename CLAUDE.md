@@ -224,6 +224,8 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - ETIQUETA DE ENVIO: ml-envios guarda o ZPL compactado (Storage etiquetas/<usuario>/<envio>.zpl.gz, ~1,3 KB; PDF só se o ZPL
   falhar e nas cópias anteriores a 16/10/2026). ml-venda {acao:'etiqueta', formato:'zpl'} devolve o texto; a tela reconstrói com
   zpl-renderer-js 4.0.0 (WASM pelo jsDelivr, grayscaleOutput) e monta a folha de controle com vendas_ml. O renderizador ignora ^MU (não dá para dobrar a resolução).
+- COBERTURA NO ESTOQUE (src/estoque.js): Total e galpão usam comprasVendas (vendas_ml_sku_dia, kits abertos); a aba do Full usa
+  a RPC vendas_full_sku (só logistic_type fulfillment, por conta e SKU do anúncio). Período em localStorage mk_est_periodo.
 - ml-sonda: função só para o administrador que faz GET na API do ML e devolve um resumo (estudo de endpoints).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N
