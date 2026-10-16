@@ -9,6 +9,8 @@
 //   enviar       = lote de N dias de venda quando a cobertura está abaixo de 4,6 semanas (não "completar até")
 // Envio com data marcada (pfl.envio): o estoque é projetado até o dia em que o envio fica disponível
 //   (data do envio + pfl.entrada dias de conferência), descontando o que vende até lá; a conta do lote usa esse estoque.
+// Envios programados (Estoque → Envios ao Full, "preparando"): entram no dia da data prevista + pfl.entrada; se o estoque
+//   de agora zera antes, a linha avisa a falta (faltaProg) e o estoque efetivo é o que dura até acabar de vez.
 // Estoque: o da última importação do relatório do ML; sem relatório, o do Estoque Full já carregado no sistema.
 // Importação: "Relatório de Planejamento de envios" ou "Relatório geral de estoque" (aba Resumo) → tabela full_sugestoes.
     const pflLS = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch(e){ return d; } };
@@ -78,8 +80,9 @@
       // foto de cada produto (cadastro, anúncio ou última venda)
       // envios programados ainda não lançados como saída, por SKU do anúncio
       pfl.prog = {}; pfl.progN = 0;
-      try { const e = await supa.from('estoque_envios_full').select('id,itens').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).eq('situacao', 'preparando').limit(100);
-        (e.data || []).forEach(x => { pfl.progN++; (x.itens || []).forEach(i => { const k = String(i.anuncio_sku || '').trim().toUpperCase(); if(k) pfl.prog[k] = (pfl.prog[k] || 0) + (Number(i.qtd) || 0); }); }); } catch(e){}
+      // cada um com a data prevista de saída (a previsão soma os dias de conferência para saber quando fica disponível)
+      try { const e = await supa.from('estoque_envios_full').select('id,itens,data_prevista').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).eq('situacao', 'preparando').limit(100);
+        (e.data || []).forEach(x => { pfl.progN++; (x.itens || []).forEach(i => { const k = String(i.anuncio_sku || '').trim().toUpperCase(), q = Number(i.qtd) || 0; if(k && q) (pfl.prog[k] = pfl.prog[k] || []).push({ qtd: q, data: x.data_prevista || null }); }); }); } catch(e){}
       pfl.trocas = [];
       try { const t = await supa.from('sku_trocas').select('sku_antigo, sku_novo').eq('usuario_id', usuarioAtual.id).order('sku_antigo').limit(500); pfl.trocas = t.data || []; } catch(e){}
       pfl.fotos = {};
@@ -97,10 +100,12 @@
       skus.forEach(k => {
         const b = pfl.base.find(x => x.sku === k) || { s7: 0, s7ant: 0, s30: 0, d30: 0, ano_base: 0, ano_prox: 0, ano_dias: pfl.dias }, s = sug.get(k), f = full.get(k);
         const aptas = s ? Number(s.aptas) || 0 : (f ? Number(f.aptos_venda) || 0 : 0), caminhoML = s ? Number(s.caminho) || 0 : (f ? (Number(f.em_separacao) || 0) + (Number(f.em_transito) || 0) : 0);
-        const prog = pfl.progUsar ? (pfl.prog || {})[String(k).toUpperCase()] || 0 : 0, caminho = caminhoML + prog;
+        // envios programados: dia em que cada um fica disponível = dias até a data prevista + dias de conferência (sem data: só a conferência)
+        const progs = (pfl.progUsar ? (pfl.prog || {})[String(k).toUpperCase()] || [] : []).map(p => ({ qtd: p.qtd, chega: Math.max(0, p.data ? diasDif(getToday(), p.data) : 0) + pfl.entrada })).sort((a, b) => a.chega - b.chega);
+        const prog = progs.reduce((x, p) => x + p.qtd, 0), caminho = caminhoML + prog;
         // 6 semanas de venda (a mais recente por último), como no "Histórico de vendas semanais" do Mercado Livre
         const sem = Array.isArray(b.sem) && b.sem.length === 6 ? b.sem.map(Number) : [0, 0, 0, 0, Number(b.s7ant) || 0, Number(b.s7) || 0];
-        const s7 = sem[5], s7a = sem[4], s30 = Number(b.s30) || 0, d30 = Number(b.d30) || 0, est = aptas + caminho;
+        const s7 = sem[5], s7a = sem[4], s30 = Number(b.s30) || 0, d30 = Number(b.d30) || 0;
         if(!s30 && !sem.some(x => x) && !(s && s.sugestao)) return;
         // média das 6 semanas. O Mercado Livre NÃO corrige a falta de estoque (vídeo oficial "Desmistificando Full EP 02": sem estoque as vendas
         // param e a recomendação fica menor que o potencial). Com pfl.ruptura ligado, produto zerado conta só as semanas em que vendeu.
@@ -110,6 +115,14 @@
         const base = Number(b.ano_base) || 0, prox = Number(b.ano_prox) || 0, n = Number(b.ano_dias) || pfl.dias;
         const saz = base >= 20 && prox > 0 ? Math.max(0.8, Math.min(2.5, (prox / n) / (base / 14))) : 1;
         const porSemana = media * acel * saz * reforco, porDia = porSemana / 7, previsao = porDia * pfl.dias;
+        // estoque que vale para a conta: o de agora (Full + a caminho pelo ML) vende até cada envio programado ficar disponível;
+        // se zera antes, o produto fica em falta até o envio entrar (faltaProg) e o estoque efetivo é o que dura até acabar de vez
+        let est = aptas + caminho, faltaProg = null;
+        if(progs.length && porDia > 0){
+          let t = (aptas + caminhoML) / porDia;
+          progs.forEach(p => { if(t < p.chega){ if(!faltaProg) faltaProg = { de: t, ate: p.chega }; t = p.chega; } t += p.qtd / porDia; });
+          est = t * porDia;
+        }
         // cobertura em semanas e urgência (faixas medidas na tela do ML: até 2 semanas, até 4, até 4,6; acima disso não pede envio)
         const cob = porSemana > 0 ? est / porSemana : null, urgN = cob == null ? '' : cob < 2 ? 'esta semana' : cob < 4 ? 'próxima semana' : cob < 4.6 ? 'em 2 semanas' : 'sem urgência';
         // o envio é um lote de N dias de venda (não "até completar"): só quando a cobertura está abaixo de 4,6 semanas; com menos de uma semana de estoque leva até uma semana a mais
@@ -126,7 +139,7 @@
         // demanda semanal que o ML está prevendo, tirada da sugestão dele: (sugestão − mínimo + estoque) ÷ 4
         const fML = s && Number(s.sugestao) > 0 && minimo > 0 ? (Number(s.sugestao) - minimo + est) / 4 : null, fatorML = fML != null && media > 0 ? fML / media : null;
         const acaba = porDia > 0 ? est / porDia : null;
-        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', sem, tend, urgN, cob, minimo, abaixoMin, envMin, fML, fatorML, porSemana, s7, s7a, s30, d30, aptas, caminho, caminhoML, prog, ritmo, acel, saz, porDia, previsao, enviar, enviarHoje, estCheg, zeraAntes, acaba, novo: false,
+        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', sem, tend, urgN, cob, minimo, abaixoMin, envMin, fML, fatorML, porSemana, s7, s7a, s30, d30, aptas, caminho, caminhoML, prog, faltaProg, ritmo, acel, saz, porDia, previsao, enviar, enviarHoje, estCheg, zeraAntes, acaba, novo: false,
           cod: (s && s.inventory_id) || '', ml: s ? Number(s.sugestao) || 0 : null, urg: s ? s.urgencia : '', estrela: s ? !!s.estrela : false, temEstoque: !!(s || f) });
       });
       return L.sort((a, b) => (a.acaba == null ? 9999 : a.acaba) - (b.acaba == null ? 9999 : b.acaba));
@@ -153,7 +166,7 @@
               <td style="text-align:right;" title="6 semanas, da mais antiga para a mais recente: ${l.sem.join(' · ')}">${pflN(l.s7)}${l.tend > 0 ? '<br><small style="color:var(--success,#16a34a);">+' + Math.round(l.tend * 100) + '% tendência</small>' : ''}</td><td style="text-align:right;">${pflN(l.s7a)}</td><td style="text-align:right;">${pflN(l.s30)}${l.d30 && l.d30 < 26 ? '<br><small class="text-muted">' + l.d30 + ' dias c/ venda</small>' : ''}</td>
               <td style="text-align:right;">${pflN(l.aptas)}${l.minimo ? '<br><small ' + (l.abaixoMin ? 'style="color:var(--danger);font-weight:650;" title="Abaixo do mínimo do Mercado Livre: o produto deixa de ficar distribuído pelo país e perde envio rápido."' : 'class="text-muted" title="Unidades mínimas que o Mercado Livre pede para oferecer envio rápido no país."') + '>mín. ' + pflN(l.minimo) + '</small>' : ''}${chega != null ? '<br><small class="text-muted" title="Estoque previsto (aptas mais a caminho) no dia em que o envio fica disponível, descontando o que vende até lá.">em ' + pflDia(chega) + ': ' + pflN(l.estCheg) + '</small>' : ''}</td><td style="text-align:right;">${pflN(l.caminho)}${l.prog ? `<br><small class="text-muted" title="Envio programado em Estoque → Envios ao Full (ainda não aparece no Mercado Livre)${l.caminhoML ? '; ' + pflN(l.caminhoML) + ' já a caminho pelo Mercado Livre' : ''}">${pflN(l.prog)} programado</small>` : ''}</td>
               <td style="text-align:right;" title="média de ${l.ritmo.toFixed(1).replace('.', ',')} por dia × tendência ${l.acel.toFixed(2).replace('.', ',')} × sazonalidade ${l.saz.toFixed(2).replace('.', ',')}${pfl.reforco ? ' × reforço ' + (1 + pfl.reforco / 100).toFixed(2).replace('.', ',') : ''}">${l.porDia.toFixed(1).replace('.', ',')}</td>
-              <td style="${urg ? 'color:var(--danger);font-weight:700;' : ''}">${l.acaba == null ? '—' : l.acaba < 1 ? 'zerado' : l.acaba > 120 ? 'mais de 4 meses' : pflDia(l.acaba) + ' <small class="text-muted">(' + Math.round(l.acaba) + ' d)</small>'}${l.zeraAntes && l.acaba >= 1 ? '<br><small style="color:var(--danger);">zera antes de o envio entrar</small>' : ''}</td>
+              <td style="${urg ? 'color:var(--danger);font-weight:700;' : ''}">${l.acaba == null ? '—' : l.acaba < 1 ? 'zerado' : l.acaba > 120 ? 'mais de 4 meses' : pflDia(l.acaba) + ' <small class="text-muted">(' + Math.round(l.acaba) + ' d)</small>'}${l.zeraAntes && l.acaba >= 1 ? '<br><small style="color:var(--danger);">zera antes de o envio entrar</small>' : ''}${l.faltaProg ? '<br><small style="color:var(--danger);font-weight:650;" title="O estoque de agora acaba antes de o envio programado ficar disponível (data prevista + dias de conferência). O produto fica sem estoque no Full nesse intervalo.">' + (l.faltaProg.de < 1 ? 'já zerado' : 'zera em ' + pflDia(l.faltaProg.de)) + ', envio programado entra em ' + pflDia(l.faltaProg.ate) + '</small>' : ''}</td>
               <td style="${l.enviar > 0 && ate != null && ate <= 0 ? 'color:var(--danger);font-weight:700;' : ''}">${l.enviar <= 0 || ate == null ? '—' : ate <= 0 ? 'agora' : pflDia(ate)}${l.urgN && l.enviar > 0 ? '<br><small class="text-muted">' + l.urgN + '</small>' : ''}</td>
               <td style="text-align:right;"><input type="number" min="0" value="${pflQtd(l)}" style="width:86px;text-align:right;font-weight:700;" onchange="pflQtdMudar('${k}', this.value)">${l.estrela && l.ml > 0 && pflSel(l) && pflQtd(l) < l.ml ? '<br><small style="color:var(--warning,#d97706);" title="Produto Estrela enviado na quantidade sugerida pelo Mercado Livre (ou acima) fica isento da tarifa de estoque antigo. Abaixo da sugestão, não há isenção.">abaixo da sugestão: sem isenção de estoque antigo</small>' : ''}</td><td style="text-align:right;" ${l.fML != null ? 'title="Pela sugestão, o Mercado Livre prevê ' + Math.round(l.fML) + ' por semana (' + (l.fatorML || 0).toFixed(1).replace('.', ',') + ' vez a sua média das 6 semanas)."' : ''}>${l.ml == null ? '—' : pflN(l.ml)}${l.urg ? '<br><small class="text-muted">' + pflE(l.urg) + '</small>' : ''}</td>
               <td style="text-align:right;">${l.ml == null ? '—' : (l.enviar - l.ml > 0 ? '+' : '') + pflN(l.enviar - l.ml)}</td></tr>`; }).join('') || ('<tr><td colspan="13" class="text-muted">' + (T.length ? 'Nenhum produto com esses filtros.' : 'Sem vendas pelo Full nos últimos 30 dias nesta loja.') + '</td></tr>')}
