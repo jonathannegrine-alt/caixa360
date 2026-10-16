@@ -113,6 +113,7 @@
       if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
       if(typeof esoSincronizar === 'function') try { await esoSincronizar(false); } catch(e){}
       estDesenhar();
+      if(typeof comprasCarregarVendas === 'function') comprasCarregarVendas(false).then(() => { const v = document.getElementById('view-estoque'); if(v && v.classList.contains('active')) estDesenhar(); }).catch(() => {});
       // em segundo plano: pergunta ao Mercado Livre o que já foi enviado, baixa do físico e redesenha
       if(typeof esoSincronizar === 'function') esoSincronizar(true).then(() => { const v = document.getElementById('view-estoque'); if(v && v.classList.contains('active')) estDesenhar(); }).catch(() => {});
     }
@@ -133,6 +134,47 @@
         l.disp = l.fisico - l.ocupado;
       });
       return [...mapa.values()];
+    }
+
+    // ----- venda média e cobertura -----
+    // Mesma venda da Sugestão de compras (RPC vendas_ml_sku_dia, 120 dias, todas as contas, só vendas pagas), com o kit
+    // aberto nos componentes e os SKUs equivalentes somados. Média = unidades vendidas no período ÷ dias do período já
+    // importados do ML (dia que ainda não foi importado não conta como dia sem venda). Cobertura = estoque ÷ média por dia.
+    const EST_PERIODOS = [7, 15, 30, 60, 90];
+    let estPer = (() => { try { const n = Number(localStorage.getItem('mk_est_periodo')); return EST_PERIODOS.includes(n) ? n : 30; } catch(e){ return 30; } })();
+    let estVM = { chave: '', mapa: new Map(), dias: 0 };
+    function estPeriodo(n){ estPer = n; try { localStorage.setItem('mk_est_periodo', String(n)); } catch(e){} estDesenhar(); }
+    function estVendaMedia(){
+      const cv = typeof comprasVendas !== 'undefined' ? comprasVendas : null;
+      if(!cv || !cv.dados) return null;
+      const chave = estPer + '|' + cv.em;
+      if(estVM.chave === chave) return estVM;
+      const fim = addDias(getToday(), -1), ini = addDias(fim, -(estPer - 1)), imp = cv.importados;
+      let dias = 0; for(let i = 0; i < estPer; i++){ const d = addDias(fim, -i); if(!imp || !imp.size || imp.has(d)) dias++; }
+      const kits = typeof esoKits === 'function' ? esoKits() : new Map();
+      const alias = new Map(((typeof comprasCfg !== 'undefined' && comprasCfg.equivalentes) || []).filter(e => e.de && e.para).map(e => [esN(e.de), esN(e.para)]));
+      const soma = new Map();
+      Object.keys(cv.dados).forEach(sku => {
+        const k0 = esN(sku), k = alias.get(k0) || k0, d = cv.dados[sku].d || {};
+        let q = 0; Object.keys(d).forEach(dia => { if(dia >= ini && dia <= fim) q += Number(d[dia]) || 0; });
+        if(!q) return;
+        (kits.has(k) ? kits.get(k).map(c => ({ k: esN(c.sku), m: Number(c.qtd) || 1 })) : [{ k, m: 1 }]).forEach(x => soma.set(x.k, (soma.get(x.k) || 0) + q * x.m));
+      });
+      const mapa = new Map(); soma.forEach((q, k) => mapa.set(k, dias ? q / dias : 0));
+      estVM = { chave, mapa, dias };
+      return estVM;
+    }
+    // preenche l.media e l.cob (dias; Infinity = tem estoque e não vendeu; null = sem estoque e sem venda)
+    function estComCobertura(lista, campo){
+      const vm = estVendaMedia();
+      lista.forEach(l => { const m = vm ? (vm.mapa.get(l.k) || 0) : null, q = Math.max(0, l[campo] || 0);
+        l.media = m; l.cob = m === null ? null : m > 0 ? q / m : (q > 0 ? Infinity : null); });
+      return vm;
+    }
+    const estMediaTd = l => `<td class="num">${l.media === null ? '<span class="text-muted">…</span>' : l.media ? (l.media < 10 ? l.media.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : esInt(l.media)) : '<span class="text-muted">0</span>'}</td>`;
+    const estCobTd = l => `<td class="num">${l.cob === null ? '<span class="text-muted">—</span>' : l.cob === Infinity ? '<span class="text-muted" title="Tem estoque e não vendeu no período">sem venda</span>' : `<b class="${l.cob < 7 ? 'text-danger' : l.cob < 15 ? 'text-warning' : ''}">${esInt(Math.floor(l.cob))} dia${Math.floor(l.cob) === 1 ? '' : 's'}</b>`}</td>`;
+    function estPeriodoHtml(vm){
+      return `<div class="chips" title="Período usado na venda média por dia"><span class="text-muted" style="font-size:12.5px;align-self:center;">Venda média de</span>${EST_PERIODOS.map(n => `<button class="chip ${estPer === n ? 'active' : ''}" onclick="estPeriodo(${n})">${n} dias</button>`).join('')}${vm && vm.dias < estPer ? `<span class="text-muted" style="font-size:12px;align-self:center;">(${vm.dias} dias importados)</span>` : ''}${!vm ? '<span class="text-muted" style="font-size:12px;align-self:center;">carregando vendas…</span>' : ''}</div>`;
     }
 
     // ----- foto do produto -----
@@ -345,9 +387,9 @@
         return;
       }
 
-      const todas = estLinhas(dep), b = esN(est.busca);
+      const todas = estLinhas(dep), b = esN(est.busca), vm = estComCobertura(todas, 'disp');
       const lista = todas.filter(l => (!b || l.k.includes(b) || esN(l.nome).includes(b)) && (est.so === '' || (est.so === 'zerado' ? l.fisico <= 0 : est.so === 'caminho' ? l.caminho > 0 : est.so === 'ocupado' ? l.ocupado > 0 : est.so === 'semcusto' ? !(l.custo > 0) && l.fisico > 0 : true)))
-        .sort(estComparar({ sku: l => l.k, caminho: l => l.caminho, ocupado: l => l.ocupado, disp: l => l.disp, fisico: l => l.fisico, custo: l => l.custo, valor: l => Math.max(0, l.fisico) * l.custo },
+        .sort(estComparar({ sku: l => l.k, caminho: l => l.caminho, ocupado: l => l.ocupado, disp: l => l.disp, fisico: l => l.fisico, media: l => l.media || 0, cob: l => l.cob === null ? -1 : l.cob === Infinity ? 1e9 : l.cob, custo: l => l.custo, valor: l => Math.max(0, l.fisico) * l.custo },
           (a, c) => c.fisico * c.custo - a.fisico * a.custo || c.fisico - a.fisico || a.k.localeCompare(c.k)));
       const un = todas.reduce((s, l) => s + Math.max(0, l.fisico), 0), valor = todas.reduce((s, l) => s + Math.max(0, l.fisico) * l.custo, 0);
       const cam = todas.reduce((s, l) => s + l.caminho, 0), ocp = todas.reduce((s, l) => s + l.ocupado, 0);
@@ -362,10 +404,11 @@
         </div>
         <div class="card"><div class="sku-barra">
           <input type="text" id="est-busca" placeholder="Buscar por SKU ou nome" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)">
+          ${estPeriodoHtml(vm)}
           <div class="chips">${[['', 'Todos'], ['caminho', 'Com compra a caminho'], ['ocupado', 'Com ocupado'], ['zerado', 'Zerados'], ['semcusto', 'Sem custo']].map(([k, t]) => `<button class="chip ${est.so === k ? 'active' : ''}" onclick="est.so='${k}';estDesenhar();">${t}</button>`).join('')}</div>
         </div>
         <div class="est-sel-barra"><span id="est-sel-barra" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${estSelHtml()}</span>${estLoteHtml()}</div>
-        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th><th style="width:48px;"></th>${estTh('sku', 'Produto')}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('ocupado', 'Ocupado', 1, 'Vendido ou separado, ainda não saiu')}${estTh('disp', 'Disponível', 1, 'Físico menos ocupado')}${estTh('fisico', 'Estoque físico', 1, 'O que está no depósito')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}<th></th></tr></thead><tbody>
+        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th><th style="width:48px;"></th>${estTh('sku', 'Produto')}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('ocupado', 'Ocupado', 1, 'Vendido ou separado, ainda não saiu')}${estTh('disp', 'Disponível', 1, 'Físico menos ocupado')}${estTh('fisico', 'Estoque físico', 1, 'O que está no depósito')}${estTh('media', 'Venda/dia', 1, 'Média de unidades vendidas por dia no período escolhido (todas as contas e canais, kits abertos nos componentes)')}${estTh('cob', 'Cobertura', 1, 'Quantos dias o disponível dura no ritmo da venda média. Não conta o que está a caminho')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}<th></th></tr></thead><tbody>
           ${lista.length ? lista.map(l => `<tr>
             <td><input type="checkbox" class="est-flag" data-k="${esEsc(l.k)}" style="width:auto;" ${estSel.has(l.k) ? 'checked' : ''} onchange="estMarcar(this.dataset.k, this.checked)"></td>
             ${estFotoTd(l.k)}
@@ -374,10 +417,11 @@
             <td class="num">${l.ocupado ? esInt(l.ocupado) + estSeta('ocupado', l.k) : '<span class="text-muted">—</span>'}</td>
             <td class="num ${l.disp < 0 ? 'text-danger' : ''}">${esInt(l.disp)}</td>
             <td class="num"><b class="${l.fisico < 0 ? 'text-danger' : ''}">${esInt(l.fisico)}</b></td>
+            ${estMediaTd(l)}${estCobTd(l)}
             <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td>
             <td class="num">${l.custo ? fmt(Math.max(0, l.fisico) * l.custo) : '—'}</td>
             <td style="text-align:right;"><button class="btn-out btn-sm" onclick="estMovimentos('${esEsc(l.k)}')">Movimentações</button></td>
-          </tr>`).join('') : '<tr><td colspan="10"><div class="vazio"><b>Nada nesta lista</b>Troque a busca ou o filtro.</div></td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="12"><div class="vazio"><b>Nada nesta lista</b>Troque a busca ou o filtro.</div></td></tr>'}
         </tbody></table></div></div>`;
     }
 
@@ -396,8 +440,8 @@
         if(g) l.sku = g.sku; l.nome = (s && s.titulo) || (g && g.descricao !== g.sku && g.descricao) || '';
         l.custo = (g && Number(g.custo_medio) > 0 ? Number(g.custo_medio) : 0) || (s && Number(s.custo)) || 0;
         l.total = Object.values(l.por).reduce((a, v) => a + v, 0); });
-      const b = esN(est.busca), todas = [...mapa.values()];
-      const lista = todas.filter(l => !b || l.k.includes(b) || esN(l.nome).includes(b)).sort(estComparar(Object.assign({ sku: l => l.k, total: l => l.total, caminho: l => l.caminho, custo: l => l.custo, valor: l => Math.max(0, l.total) * l.custo }, Object.fromEntries(deps.map(d => ['d' + d.id, l => l.por[d.id] || 0]))),
+      const b = esN(est.busca), todas = [...mapa.values()], vm = estComCobertura(todas, 'total');
+      const lista = todas.filter(l => !b || l.k.includes(b) || esN(l.nome).includes(b)).sort(estComparar(Object.assign({ sku: l => l.k, total: l => l.total, media: l => l.media || 0, cob: l => l.cob === null ? -1 : l.cob === Infinity ? 1e9 : l.cob, caminho: l => l.caminho, custo: l => l.custo, valor: l => Math.max(0, l.total) * l.custo }, Object.fromEntries(deps.map(d => ['d' + d.id, l => l.por[d.id] || 0]))),
         (a, c) => c.total * c.custo - a.total * a.custo || c.total - a.total));
       const un = todas.reduce((s, l) => s + Math.max(0, l.total), 0), valor = todas.reduce((s, l) => s + Math.max(0, l.total) * l.custo, 0), cam = todas.reduce((s, l) => s + l.caminho, 0);
       const somaDep = d => todas.reduce((s, l) => s + Math.max(0, l.por[d.id] || 0), 0);
@@ -410,13 +454,13 @@
           ${deps.map(d => `<div class="kpi ${d.tipo === 'full' ? 'k-frete' : 'k-mc'}" onclick="est.dep=${d.id};estDesenhar();" style="cursor:pointer;"><div class="kpi-label">${esEsc(d.nome)}</div><div class="kpi-value">${esInt(somaDep(d))} un.</div><div class="kpi-sub">${un ? Math.round(somaDep(d) / un * 100) : 0}% do total</div></div>`).join('')}
           <div class="kpi k-hoje"><div class="kpi-label">A caminho</div><div class="kpi-value">${esInt(cam)} un.</div><div class="kpi-sub">comprado e ainda não conferido</div></div>
         </div>
-        <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou nome" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)"></div>
+        <div class="card"><div class="sku-barra"><input type="text" id="est-busca" placeholder="Buscar por SKU ou nome" value="${esEsc(est.busca)}" oninput="estBuscar(this.value)">${estPeriodoHtml(vm)}</div>
         <div class="est-sel-barra"><span id="est-sel-barra" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">${estSelHtml()}</span>${estLoteHtml()}</div>
-        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th><th style="width:48px;"></th>${estTh('sku', 'Produto')}${deps.map(d => estTh('d' + d.id, esEsc(d.nome), 1)).join('')}${estTh('total', 'Total', 1)}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}</tr></thead><tbody>
+        <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th style="width:34px;"><input type="checkbox" style="width:auto;" title="Marcar todos os que estão na tela" onchange="estMarcarTodos(this.checked)"></th><th style="width:48px;"></th>${estTh('sku', 'Produto')}${deps.map(d => estTh('d' + d.id, esEsc(d.nome), 1)).join('')}${estTh('total', 'Total', 1)}${estTh('media', 'Venda/dia', 1, 'Média de unidades vendidas por dia no período escolhido (todas as contas e canais, kits abertos nos componentes)')}${estTh('cob', 'Cobertura', 1, 'Quantos dias o estoque total (galpão + Full) dura no ritmo da venda média. Não conta o que está a caminho')}${estTh('caminho', 'A caminho', 1, 'Comprado e ainda não conferido')}${estTh('custo', 'Custo médio', 1)}${estTh('valor', 'Valor', 1)}</tr></thead><tbody>
           ${lista.length ? lista.map(l => `<tr><td><input type="checkbox" class="est-flag" data-k="${esEsc(l.k)}" style="width:auto;" ${estSel.has(l.k) ? 'checked' : ''} onchange="estMarcar(this.dataset.k, this.checked)"></td>${estFotoTd(l.k)}<td class="cp-prod" style="max-width:420px;"><b>${esEsc(l.sku)}</b><span title="${esEsc(l.nome)}">${esEsc(l.nome || '')}</span></td>
             ${deps.map(d => `<td class="num">${l.por[d.id] ? esInt(l.por[d.id]) : '<span class="text-muted">—</span>'}</td>`).join('')}
-            <td class="num"><b>${esInt(l.total)}</b></td><td class="num">${l.caminho ? esInt(l.caminho) : '<span class="text-muted">—</span>'}</td>
-            <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td><td class="num">${l.custo ? fmt(Math.max(0, l.total) * l.custo) : '—'}</td></tr>`).join('') : '<tr><td colspan="12"><div class="vazio"><b>Nada nesta lista</b>Troque a busca.</div></td></tr>'}
+            <td class="num"><b>${esInt(l.total)}</b></td>${estMediaTd(l)}${estCobTd(l)}<td class="num">${l.caminho ? esInt(l.caminho) : '<span class="text-muted">—</span>'}</td>
+            <td class="num">${l.custo ? fmt(l.custo) : '<span class="badge badge-warning">sem custo</span>'}</td><td class="num">${l.custo ? fmt(Math.max(0, l.total) * l.custo) : '—'}</td></tr>`).join('') : '<tr><td colspan="14"><div class="vazio"><b>Nada nesta lista</b>Troque a busca.</div></td></tr>'}
         </tbody></table></div></div>`;
     }
 
