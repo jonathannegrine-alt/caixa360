@@ -17,6 +17,15 @@
     function pflRuptura(v){ pfl.ruptura = !!v; try { localStorage.setItem('mk_pfl_ruptura', v ? '1' : '0'); } catch(e){} pflPagina(); }
     // envios ao Full do planejamento interno (Estoque → Envios ao Full, situação "preparando"): o Mercado Livre ainda não
     // os mostra, mas as unidades vão para o Full; entram como "a caminho" (padrão ligado)
+    // atalho para Estoque → Envios ao Full; ao fechar a janela, a previsão relê os envios programados
+    async function pflEnvios(bt){
+      if(typeof esoEnvios !== 'function') return;
+      if(bt){ bt.disabled = true; bt.textContent = 'Abrindo…'; }
+      try { if(typeof esoLer === 'function') await esoLer(true); } catch(e){}
+      if(bt){ bt.disabled = false; bt.textContent = 'Envios ao Full'; }
+      esoEnvios();
+      const m = document.getElementById('modal-vml'), t = setInterval(() => { if(m && m.classList.contains('open')) return; clearInterval(t); pfl.chave = ''; pflPagina(); }, 700);
+    }
     function pflProgUsar(v){ pfl.progUsar = !!v; try { localStorage.setItem('mk_pfl_prog', v ? '1' : '0'); } catch(e){} pflPagina(); }
     // filtros de urgência, com os mesmos nomes da tela de Planejamento de envios do Mercado Livre
     const PFL_FILTROS = [['todos', 'Todos'], ['esta', 'Enviar esta semana'], ['prox', 'Enviar na próxima semana'], ['duas', 'Enviar em 2 semanas ou mais'], ['sem', 'Sem necessidade']];
@@ -165,7 +174,8 @@
           <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;font-size:12px;">
             <label class="btn-out btn btn-sm" style="cursor:pointer;">Importar relatório do Mercado Livre<input type="file" accept=".xlsx" style="display:none;" onchange="pflImportar(this)"></label>
             <button class="btn btn-sm" onclick="pflPdf(this)" title="Lista do que enviar, com foto, código do Full, SKU e quantidade, para mandar ao galpão.">Baixar PDF do envio</button>
-            <button class="btn-out btn btn-sm" onclick="pflExportar()">Planilha</button></div></div>
+            <button class="btn-out btn btn-sm" onclick="pflExportar()">Planilha</button>
+            ${typeof esoEnvios === 'function' ? `<button class="btn-out btn btn-sm" onclick="pflEnvios(this)" title="Abre Estoque → Envios ao Full: importar o PDF de preparação, marcar a data e lançar a saída">Envios ao Full</button>` : ''}</div></div>
         <div class="card-body">
           ${pfl.msg ? `<div class="alert alert-info">${pflE(pfl.msg)}</div>` : ''}
           ${semEst ? '<div class="alert alert-warning">Não achei o estoque do Full desta loja: importe o relatório do Mercado Livre (botão acima) ou abra Estoque → Full para carregar. Sem o estoque, a coluna "Enviar" mostra a previsão cheia.</div>' : ''}
