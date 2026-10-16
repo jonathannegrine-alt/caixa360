@@ -28,6 +28,27 @@
       esoEnvios();
       const m = document.getElementById('modal-vml'), t = setInterval(() => { if(m && m.classList.contains('open')) return; clearInterval(t); pfl.chave = ''; pflPagina(); }, 700);
     }
+    // produtos marcados → envio "Em preparação" em Estoque → Envios ao Full, revisado na mesma janela da importação do PDF
+    // (numero "Previsão dd/mm hh:mm"; quando o PDF oficial do ML for importado, a janela oferece substituir este envio)
+    async function pflParaEnvios(bt){
+      if(typeof esoRevisarEnvio !== 'function') return;
+      const L = pflLinhas().filter(l => pflSel(l) && pflQtd(l) > 0).sort((a, b) => a.sku.localeCompare(b.sku));
+      if(!L.length){ if(typeof toast === 'function') toast('Nenhum produto marcado com quantidade a enviar.'); return; }
+      if(bt){ bt.disabled = true; bt.textContent = 'Abrindo…'; }
+      try { if(typeof esoLer === 'function') await esoLer(false); } catch(e){}
+      if(bt){ bt.disabled = false; bt.textContent = 'Carregar nos envios ao Full'; }
+      const cad = sku => { const s = (typeof skus !== 'undefined' ? skus : []).find(x => esN(x.sku) === esN(sku)); return s ? s.sku : sku; };
+      const itens = L.map(l => ({ anuncio_sku: cad(l.sku), codigo_ml: l.cod || '', qtd: pflQtd(l) }));
+      const soma = itens.reduce((s, i) => s + i.qtd, 0), d = new Date();
+      const numero = 'Previsão ' + d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+      esoRevisarEnvio({ numero, itens, soma, totalDoc: soma, confere: true, daPrevisao: true }, 'Previsão de Full');
+      // loja e data do envio da previsão já preenchidas
+      const conta = typeof contaParam === 'function' ? contaParam() : null, sc = document.getElementById('eso-conta'), dt = document.getElementById('eso-data');
+      if(sc && conta) sc.value = String(conta);
+      if(dt && pfl.envio) dt.value = pfl.envio;
+      // ao fechar a janela (salvou ou cancelou), a previsão relê os envios programados
+      const m = document.getElementById('modal-vml'), t = setInterval(() => { if(m && m.classList.contains('open')) return; clearInterval(t); pfl.chave = ''; pflPagina(); }, 700);
+    }
     function pflProgUsar(v){ pfl.progUsar = !!v; try { localStorage.setItem('mk_pfl_prog', v ? '1' : '0'); } catch(e){} pflPagina(); }
     // filtros de urgência, com os mesmos nomes da tela de Planejamento de envios do Mercado Livre
     const PFL_FILTROS = [['todos', 'Todos'], ['esta', 'Enviar esta semana'], ['prox', 'Enviar na próxima semana'], ['duas', 'Enviar em 2 semanas ou mais'], ['sem', 'Sem necessidade']];
@@ -205,6 +226,7 @@
           <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;font-size:12px;">
             <label class="btn-out btn btn-sm" style="cursor:pointer;">Importar relatório do Mercado Livre<input type="file" accept=".xlsx" style="display:none;" onchange="pflImportar(this)"></label>
             <button class="btn btn-sm" onclick="pflPdf(this)" title="Lista do que enviar, com foto, código do Full, SKU e quantidade, para mandar ao galpão.">Baixar PDF do envio</button>
+            ${typeof esoRevisarEnvio === 'function' ? `<button class="btn-out btn btn-sm" onclick="pflParaEnvios(this)" title="Cria em Estoque → Envios ao Full um envio “Em preparação” com os produtos marcados e as quantidades de Enviar. Antes de salvar, você confere na mesma janela da importação do PDF.">Carregar nos envios ao Full</button>` : ''}
             <button class="btn-out btn btn-sm" onclick="pflExportar()">Planilha</button>
             ${typeof esoEnvios === 'function' ? `<button class="btn-out btn btn-sm" onclick="pflEnvios(this)" title="Abre Estoque → Envios ao Full: importar o PDF de preparação, marcar a data e lançar a saída">Envios ao Full</button>` : ''}</div></div>
         <div class="card-body">
