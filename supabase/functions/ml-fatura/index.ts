@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
       filtro = `&usuario_id=eq.${id}`
     }
 
-    const contas = await db(`ml_tokens?select=usuario_id,ml_user_id,access_token,refresh_token,expires_at${filtro}`).then(r => r.json()).catch(() => [])
+    const contas = await db(`ml_tokens?select=usuario_id,ml_user_id,access_token,refresh_token,expires_at,historico_desde${filtro}`).then(r => r.json()).catch(() => [])
     if (!Array.isArray(contas) || !contas.length) return resp({ ok: true, contas: [] })
     const tiposRows = await db('ml_fatura_tipos?select=sub_type,classe').then(r => r.json()).catch(() => [])
     const tipos = new Map<string, string>((Array.isArray(tiposRows) ? tiposRows : []).map((t: any) => [String(t.sub_type), String(t.classe)]))
@@ -63,6 +63,9 @@ Deno.serve(async (req: Request) => {
       if (Date.now() - inicio > 100000 || limite || usadas >= POR_CHAMADA) break
       const conta = String(t.ml_user_id), uid = String(t.usuario_id), chave = `usuario_id=eq.${uid}&ml_user_id=eq.${conta}`
       const info: any = { conta, consultas: 0 }
+      // início do histórico da conta (conta nova = 30 dias; nulo = conta antiga, sem corte): fatura e cobranças anteriores não são lidas
+      const desde: string | null = t.historico_desde ? String(t.historico_desde).slice(0, 10) : null
+      const diasCobr = desde ? Math.max(1, Math.min(COBR_DIAS, Math.ceil((Date.now() - Date.parse(desde + 'T00:00:00-03:00')) / 86400000))) : COBR_DIAS
       saida.push(info)
       try {
         let periodos: any[] = await db(`ml_fatura_periodos?${chave}&select=*&order=periodo.desc`).then(r => r.json()).catch(() => [])
@@ -72,7 +75,7 @@ Deno.serve(async (req: Request) => {
         const forcar = body?.forcar === true && body?.cron !== true && Date.now() - ultimaLista > 600000
         const precisaLista = !periodos.length || forcar || Date.now() - ultimaLista > 20 * 3600000
         const pendente = periodos.some(p => !p.completo)
-        const vendasPend: number[] = await db('rpc/vendas_ml_cobr_pendentes', { method: 'POST', body: JSON.stringify({ p_uid: uid, p_conta: conta, p_dias: COBR_DIAS, p_limite: 200 }) })
+        const vendasPend: number[] = await db('rpc/vendas_ml_cobr_pendentes', { method: 'POST', body: JSON.stringify({ p_uid: uid, p_conta: conta, p_dias: diasCobr, p_limite: 200 }) })
           .then(r => r.json()).then(x => Array.isArray(x) ? x.map((y: any) => Number(y.order_id)).filter(Boolean) : []).catch(() => [])
         if (!precisaLista && !pendente && !vendasPend.length) { info.pendentes = 0; continue }
 
@@ -101,7 +104,7 @@ Deno.serve(async (req: Request) => {
           const j = await ml(`/monthly/periods?group=ML&document_type=BILL&limit=${FATURAS}`)
           if (!j) { if (info.http === 403) info.erro = 'sem permissão de faturamento no aplicativo'; continue }
           const agora = new Date().toISOString(), antes = new Map(periodos.map(p => [String(p.periodo), p]))
-          const linhas = (j.results || []).filter((p: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(p.key))).map((p: any) => {
+          const linhas = (j.results || []).filter((p: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(p.key)) && (!desde || !p.period?.date_to || String(p.period.date_to).slice(0, 10) >= desde)).map((p: any) => {
             const a = antes.get(String(p.key)), aberta = String(p.period_status) !== 'CLOSED'
             const reler = !a || aberta || a.situacao !== 'CLOSED'      // fechou desde a última leitura: lê mais uma vez inteira
             const venc = /^\d{4}-\d{2}-\d{2}$/.test(String(p.expiration_date)) && String(p.expiration_date) < '9000' ? p.expiration_date : null

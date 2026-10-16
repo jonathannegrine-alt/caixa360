@@ -13,7 +13,7 @@ function dataBRT(offsetDias = 0): string {
 }
 
 async function getTokenML(supaUrl: string, supaKey: string, clientId: string, secret: string, userId: string, conta: string) {
-  const rows = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&select=access_token,refresh_token,expires_at,ml_user_id`, {
+  const rows = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&select=access_token,refresh_token,expires_at,ml_user_id,historico_desde`, {
     headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}`, Accept: 'application/json' }
   }).then(r => r.json())
   const token = Array.isArray(rows) ? rows[0] : null
@@ -143,8 +143,11 @@ async function processarUsuario(userId: string, supaUrl: string, supaKey: string
     .sort().reverse().slice(0, 15))
   const dezDiasAtras = dataBRT(-10)
   const janelasExtrato: { de: string; ate: string }[] = []
+  // conta nova: o extrato começa no início do histórico da conta (ml_tokens.historico_desde)
+  const desdeConta = token.historico_desde ? String(token.historico_desde).slice(0, 10) : ''
   for (let i = -90; i <= 0; i++) {
     const d = dataBRT(i)
+    if (desdeConta && d < desdeConta) continue
     const forcado = !!refazer && d >= refazer.de && d <= refazer.ate
     // No modo refazer só os dias pedidos são buscados (poupa o limite de chamadas do ML)
     if (refazer ? forcado : (d >= dezDiasAtras || !diasGravados.has(d) || diasARefazer.has(d))) janelasExtrato.push({ de: d, ate: d })

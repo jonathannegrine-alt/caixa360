@@ -183,13 +183,14 @@
       if(!contasML.length){ el.innerHTML = '<span style="color:var(--danger);font-weight:600;">Nenhuma conta conectada</span> — clique em "Conectar / Reconectar" abaixo.'; return; }
       const padrao = lojaPadraoId();
       el.innerHTML = `<div class="cfg-contas">${contasML.map(c => `
-        <div class="cfg-conta">
+        <div class="cfg-conta" data-conta="${contaEsc(c.id)}">
           <div class="cfg-conta-nome"><b>${contaEsc(c.apelido || 'Conta ' + c.id)}</b><span>nº ${c.id}${c.atualizado ? ' · acesso renovado em ' + new Date(c.atualizado).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : ''}</span></div>
           ${contasML.length > 1 ? (c.id === padrao ? '<span class="badge badge-success" title="Contas a pagar sem loja marcada (as do Olist, por exemplo) pertencem a esta loja">Loja padrão</span>'
             : `<button class="btn-out btn-sm" title="Contas a pagar sem loja marcada passam a pertencer a esta loja" onclick="lojasDefinirPadrao('${c.id}');atualizarStatusMLConfig()">Tornar padrão</button>`) : ''}
           <button class="btn-out btn-sm" style="color:var(--danger);" onclick="desconectarContaML('${c.id}', this)">Desconectar</button>
         </div>`).join('')}</div>
         ${contasML.length > 1 ? '<div class="text-muted" style="font-size:12px;margin-top:8px;">Loja padrão: é a dona das contas a pagar que chegam sem loja marcada (as que vêm do Olist, por exemplo).</div>' : ''}`;
+      if(typeof histNaConfig === 'function') histNaConfig();   // "Histórico desde…" e pedido de histórico mais antigo (historico.js)
     }
     async function desconectarContaML(id, bt){
       if(bt && bt.dataset.conf !== '1'){ bt.dataset.conf = '1'; bt.textContent = 'Confirmar'; setTimeout(() => { if(bt.isConnected){ bt.dataset.conf = ''; bt.textContent = 'Desconectar'; } }, 5000); return; }

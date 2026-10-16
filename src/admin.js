@@ -28,13 +28,13 @@
       vmlModal('Administração do sistema', '<div class="text-muted">Carregando…</div>', '<button class="btn" onclick="fecharModal(\'modal-vml\')">Fechar</button>');
       await admCarregar(); admDesenhar();
     }
-    function admAba(a){ adm.aba = a; admDesenhar(); }
+    function admAba(a){ adm.aba = a; if(a === 'historico' && typeof histAdm !== 'undefined') histAdm = null; admDesenhar(); }
     function admDesenhar(){
       const c = document.querySelector('#modal-vml .modal-body') || document.getElementById('vml-corpo') || document.querySelector('#modal-vml .modal-content'); if(!c) return;
       const d = adm.d;
       if(adm.erro || !d){ c.innerHTML = `<div class="alert alert-warning">${admE(adm.erro || 'Sem dados.')}</div>`; return; }
-      const abas = [['contas', 'Contas e cobrança'], ['cupons', 'Cupons'], ['planos', 'Planos'], ['servidor', 'Servidor'], ['retorno', 'Sugestões e erros']];
-      const corpo = adm.aba === 'cupons' ? admCupons(d) : adm.aba === 'planos' ? admPlanos(d) : adm.aba === 'servidor' ? admServidor(d) : adm.aba === 'retorno' ? admRetorno(d) : admContas(d);
+      const abas = [['contas', 'Contas e cobrança'], ['cupons', 'Cupons'], ['planos', 'Planos'], ...(typeof histAdmHtml === 'function' ? [['historico', 'Histórico pago']] : []), ['servidor', 'Servidor'], ['retorno', 'Sugestões e erros']];
+      const corpo = adm.aba === 'historico' && typeof histAdmHtml === 'function' ? histAdmHtml() : adm.aba === 'cupons' ? admCupons(d) : adm.aba === 'planos' ? admPlanos(d) : adm.aba === 'servidor' ? admServidor(d) : adm.aba === 'retorno' ? admRetorno(d) : admContas(d);
       c.innerHTML = `<div class="adm-abas">${abas.map(a => `<button class="${adm.aba === a[0] ? 'ativa' : ''}" onclick="admAba('${a[0]}')">${a[1]}</button>`).join('')}</div>${corpo}`;
     }
     function admContas(d){

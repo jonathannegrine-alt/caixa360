@@ -47,13 +47,15 @@ async function emParalelo<T>(lista: T[], conc: number, fn: (x: T) => Promise<voi
 type Ctx = { supaUrl: string; dbH: Record<string, string>; clientId: string; secret: string }
 
 // Contas ML do usuário, já com token válido (renova as expiradas). contaFiltro restringe a uma conta.
-type Conta = { mlUserId: string; apelido: string | null; accessToken: string | null; erro: string | null }
+type Conta = { mlUserId: string; apelido: string | null; accessToken: string | null; erro: string | null; desde: string | null }
+// primeiro dia que se busca desta conta: ml_tokens.historico_desde (conta nova = 30 dias; nulo = conta antiga, 365 dias)
+const inicioDe = (c: Conta) => c.desde && c.desde > diaBRT(-HISTORICO_DIAS) ? c.desde : diaBRT(-HISTORICO_DIAS)
 async function contasDe(ctx: Ctx, userId: string, contaFiltro?: string): Promise<Conta[]> {
   const rows = await fetch(`${ctx.supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${userId}${contaFiltro ? '&ml_user_id=eq.' + contaFiltro : ''}&order=updated_at.asc`, { headers: ctx.dbH })
     .then(r => r.json()).catch(() => [])
   if (!Array.isArray(rows)) return []
   return Promise.all(rows.map(async (row: any): Promise<Conta> => {
-    const base = { mlUserId: String(row.ml_user_id), apelido: row.apelido || null }
+    const base = { mlUserId: String(row.ml_user_id), apelido: row.apelido || null, desde: row.historico_desde ? String(row.historico_desde).slice(0, 10) : null }
     if (new Date(row.expires_at) > new Date()) {
       // contas conectadas antes do seletor de contas ainda não têm apelido gravado
       if (!base.apelido) {
@@ -318,7 +320,7 @@ Deno.serve(async (req) => {
           if (!conta) { resultados.push({ usuario_id: u, ml_user_id: c, error: 'conta não encontrada' }); continue }
           // hoje/ontem (se o cache venceu) + o próximo trecho do histórico ainda não importado
           const recentes = await diasPendentes(ctx, u, c, diaBRT(-1), diaBRT(), false, soRecentes ? 20 * 1000 : 10 * 60 * 1000)
-          const antigos = soRecentes ? [] : await diasPendentes(ctx, u, c, diaBRT(-HISTORICO_DIAS), diaBRT(-2), false)
+          const antigos = soRecentes ? [] : await diasPendentes(ctx, u, c, inicioDe(conta), diaBRT(-2), false)
           const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos.slice(0, DIAS_HIST_POR_VEZ)], prazoMs)
           resultados.push({ usuario_id: u, ml_user_id: c, ...r })
         } catch (e) {
@@ -359,6 +361,32 @@ Deno.serve(async (req) => {
       return resp({ success: true, anuncios: ids.length, atualizados: novas.length })
     }
 
+    // ── HISTÓRICO ANTIGO (reprocessamento) ─────────────────────────────────
+    // { acao: 'hist_orcar' | 'hist_pedir', conta, meses }  → conta no ML os pedidos do período que falta e calcula o preço.
+    // O pedido fica bloqueado até o administrador autorizar (admin_reprocesso_decidir).
+    if (body?.acao === 'hist_orcar' || body?.acao === 'hist_pedir') {
+      const c = contas.find(x => x.mlUserId === String(body?.conta || '')) || (contas.length === 1 ? contas[0] : null)
+      if (!c) return resp({ error: 'Escolha a conta.' })
+      if (!c.accessToken) return resp({ error: c.erro || 'Conta desconectada. Reconecte para pedir o histórico.' })
+      const meses = Math.min(12, Math.max(1, Math.round(Number(body?.meses) || 0)))
+      const inicioAtual = inicioDe(c), limite = diaBRT(-HISTORICO_DIAS)
+      let desde = diaBRT(-Math.round(meses * 30.4))
+      if (desde < limite) desde = limite
+      const ate = somaDia(inicioAtual, -1)
+      if (desde > ate) return resp({ error: 'A conta já tem o histórico deste período.', desde: inicioAtual })
+      const r = await mlGet(`https://api.mercadolibre.com/orders/search?seller=${c.mlUserId}&order.date_created.from=${desde}T00:00:00.000-03:00&order.date_created.to=${ate}T23:59:59.999-03:00&limit=1`, c.accessToken, prazoMs)
+      if (!r.ok) return resp({ error: 'O Mercado Livre não respondeu a contagem dos pedidos. Tente de novo em instantes.', detail: r.erro })
+      const pedidos = Number(r.data?.paging?.total) || 0
+      const valor = await fetch(`${supaUrl}/rest/v1/rpc/reprocesso_valor`, { method: 'POST', headers: ctx.dbH, body: JSON.stringify({ p_pedidos: pedidos }) }).then(x => x.json()).catch(() => null)
+      if (body.acao === 'hist_orcar') return resp({ success: true, conta: c.mlUserId, desde, ate, pedidos, valor })
+      const aberto = await fetch(`${supaUrl}/rest/v1/reprocessos?usuario_id=eq.${userId}&ml_user_id=eq.${c.mlUserId}&situacao=eq.pedido&select=id`, { headers: ctx.dbH }).then(x => x.json()).catch(() => [])
+      if (Array.isArray(aberto) && aberto.length) return resp({ error: 'Já existe um pedido de histórico desta conta aguardando autorização.' })
+      const g = await fetch(`${supaUrl}/rest/v1/reprocessos`, { method: 'POST', headers: { ...ctx.dbH, Prefer: 'return=representation' },
+        body: JSON.stringify({ usuario_id: userId, ml_user_id: c.mlUserId, desde, ate, pedidos, valor: Number(valor) || 0 }) })
+      if (!g.ok) return resp({ error: 'Não consegui gravar o pedido: ' + (await g.text()).slice(0, 160) })
+      return resp({ success: true, pedido: (await g.json())[0] })
+    }
+
     if (body?.checar === true) {
       const det = await Promise.all(contas.map(async (c) => {
         if (!c.accessToken) return { ml_user_id: c.mlUserId, apelido: c.apelido, tem_vendas: false, tem_comunicacao: false, erro: c.erro }
@@ -375,8 +403,10 @@ Deno.serve(async (req) => {
     const de = reData.test(body?.de || '') ? body.de : diaBRT()
     let ate = reData.test(body?.ate || '') ? body.ate : de
     if (ate < de) ate = de
-    const deMin = diaBRT(-HISTORICO_DIAS)
     const res: any[] = await Promise.all(contas.map(async (c) => {
+      // antes do início do histórico da conta não se busca (histórico antigo = reprocessamento autorizado pelo administrador)
+      const deMin = inicioDe(c)
+      if (ate < deMin) return { success: true, feitos: 0, vendas: 0, pendentes: 0, restantes: 0, em_cache: true, fora_do_historico: true }
       // com a tela aberta, hoje/ontem são conferidos de novo depois de 1 minuto
       const dias = await diasPendentes(ctx, userId, c.mlUserId, de < deMin ? deMin : de, ate, body?.forcar === true, 60 * 1000)
       if (dias.length === 0) return { success: true, feitos: 0, vendas: 0, pendentes: 0, restantes: 0, em_cache: true }
