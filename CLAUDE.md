@@ -22,6 +22,8 @@ gestaomk/
                         estilos de Vendas/Resumo, painel de caixa (.pc-*) e Início (.ini-*).
                         Carregado DEPOIS de style.css. Cores novas: usar var(--surface), var(--text), etc.
     tema.js           ← alternarTema()/aplicarTema() — tema salvo em localStorage mk_tema
+    rolagem.js        ← mantém a rolagem no lugar por 2,5 s depois de editar um campo ou clicar num botão de tabela
+                        (telas que se redesenham ou recarregam após salvar voltavam ao topo). Carregado logo depois de tema.js
     supabase-auth.js  ← Supabase client, auth UI, onAuthStateChange, carregarDoSupabase,
                         salvarSupabase, carregarP11Supabase, salvarP11Supabase, feedback, erros
     state.js          ← Todas as variáveis globais (let), carregarDadosExemplo
