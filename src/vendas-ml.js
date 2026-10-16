@@ -1023,10 +1023,12 @@
       if(aba) rfRankAba = aba;
       const mudouGrupo = grupo && grupo !== rfRankGrupo;
       if(grupo) rfRankGrupo = grupo;
-      const chave = rfFiltro.de + rfFiltro.ate + rfRankGrupo + contaAtiva;
+      // mesmos filtros do Resumo (SKU, título, pedido, modalidade, frete, custo); o ranking é sempre de vendas aprovadas
+      const par = { ...rfParams(), p_grupo: rfRankGrupo };
+      const chave = JSON.stringify(par);
       if(!rfRankDados || rfRankDados.chave !== chave || mudouGrupo){
         vmlModal('Ranking de produtos', '<div class="vazio">Calculando…</div>');
-        const { data, error } = await supa.rpc('vendas_ml_ranking', { p_de:rfFiltro.de, p_ate:rfFiltro.ate, p_grupo:rfRankGrupo, p_conta:contaParam() });
+        const { data, error } = await supa.rpc('vendas_ml_ranking', par);
         rfRankDados = { chave, erro: error?.message, linhas: (data || []).map(x => ({ ...x, bruto:Number(x.bruto), custo:Number(x.custo), mc:Number(x.mc), mc_pct:Number(x.mc_pct), un:Number(x.un), vendas:Number(x.vendas) })) };
       }
       const L = rfRankDados.linhas;
@@ -1050,7 +1052,9 @@
       const faixa = rfRankAba === 'cons'
         ? `<div class="rk-faixa verde"><b>R$ ${vmlNum(T.mc)}</b><span>Margem de contribuição total</span></div>`
         : `<div class="rk-faixa"><b>${T.un.toLocaleString('pt-BR')} unidades</b><span>em ${T.vd.toLocaleString('pt-BR')} vendas aprovadas</span></div>`;
-      vmlModal(`Ranking de produtos — ${ptDate(rfFiltro.de)} a ${ptDate(rfFiltro.ate)}`, `
+      const fr = rfFiltro, filtros = [fr.sku.trim() && 'SKU ' + fr.sku.trim(), fr.titulo.trim() && 'anúncio "' + fr.titulo.trim() + '"', fr.pedido.trim() && 'pedido ' + fr.pedido.trim(),
+        fr.modalidade !== 'todas' && fr.modalidade, fr.frete.length && 'frete ' + fr.frete.join(', '), fr.custo !== 'todos' && 'custo & imposto'].filter(Boolean);
+      vmlModal(`Ranking de produtos — ${ptDate(rfFiltro.de)} a ${ptDate(rfFiltro.ate)}${filtros.length ? ' · ' + vmlEsc(filtros.join(' · ')) : ''}`, `
         <div class="chips" style="margin-bottom:12px;">${abas.map(([k,l]) => `<button class="chip ${rfRankAba === k ? 'active' : ''}" onclick="rfRanking('${k}')">${l}</button>`).join('')}</div>
         ${faixa}
         <div class="d-flex" style="justify-content:space-between;align-items:center;margin:12px 0;gap:10px;flex-wrap:wrap;">
