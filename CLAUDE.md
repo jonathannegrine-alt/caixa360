@@ -234,6 +234,12 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   grava só envio ('ida': CFFE, CXDE… e estornos) e devolução ('dev': CXDED, CDSDB… e estornos) no dia da cobrança e marca
   vendas_ml_cobr_lida (relê com 7, 20 e 45 dias). Envio cancelado = sem cobrança. DRE: RPC vendas_ml_cobr_mes (ida só de venda
   cancelada); tela de Vendas: cartão da cancelada mostra o resultado negativo. Conferido com a conciliação de set/2026: 25 de 25.
+- HISTÓRICO POR CONTA (src/historico.js): ml_tokens.historico_desde = primeiro dia que ml-vendas, ml-snapshot (extrato) e ml-fatura
+  (faturas e cobranças) buscam. Conta nova = hoje − 30 (padrão da coluna); nulo = conta antiga, 365 dias. Reconectar não encolhe
+  (gatilho ml_tokens_historico usa o 1º dia já importado). Histórico mais antigo = pedido em reprocessos (ml-vendas acao
+  hist_orcar/hist_pedir conta os pedidos em orders/search paging.total; preço reprocesso_valor = R$ preco_mil por 1.000, mínimo),
+  bloqueado até admin_reprocesso_decidir (Administração → Histórico pago), que recua historico_desde. Código novo que busca
+  histórico no ML precisa respeitar historico_desde.
 - ml-sonda: função só para o administrador que faz GET na API do ML e devolve um resumo (estudo de endpoints).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N
