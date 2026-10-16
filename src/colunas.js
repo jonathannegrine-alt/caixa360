@@ -53,4 +53,11 @@
       const iniciar = () => { marcar(document); aplicar(); obs.observe(document.body, { childList: true, subtree: true }); };
       if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
       window.colunasRestaurar = () => { larguras = {}; gravar(); aplicar(); };
+      // a coluna mudou de lugar (ordenar.js): a largura guardada vai junto com ela
+      window.colunasMover = (tab, de, para) => {
+        const k = tab && chave(tab); if(!k || !larguras[k] || de === para) return;
+        const n = tab.tHead.rows[0].cells.length, idx = [...Array(n).keys()]; idx.splice(para, 0, idx.splice(de, 1)[0]);
+        const novo = {}; idx.forEach((orig, pos) => { if(larguras[k][orig] != null) novo[pos] = larguras[k][orig]; });
+        larguras[k] = novo; gravar(); aplicar();
+      };
     })();
