@@ -53,7 +53,7 @@
     }
     function pflUrg(l, f){ return f === 'esta' ? l.urgN === 'esta semana' : f === 'prox' ? l.urgN === 'próxima semana' : f === 'duas' ? l.urgN === 'em 2 semanas' : f === 'sem' ? (l.urgN === 'sem urgência' || !l.urgN) : true; }
     const PFL_ORD = { sku: l => l.sku, s7: l => l.s7, s7a: l => l.s7a, s30: l => l.s30, aptas: l => l.aptas, caminho: l => l.caminho, porDia: l => l.porDia,
-      acaba: l => l.acaba == null ? 99999 : l.acaba, ate: l => l.enviar > 0 && pflAte(l) != null ? pflAte(l) : 99999, enviar: l => pflQtd(l), ml: l => l.ml == null ? -1 : l.ml, dif: l => l.ml == null ? -99999 : l.enviar - l.ml };
+      acaba: l => l.acaba == null ? 99999 : l.acaba, ate: l => l.enviar > 0 && pflAte(l) != null ? pflAte(l) : 99999, enviar: l => pflQtd(l), galpao: l => l.galpao == null ? -1 : l.galpao, ml: l => l.ml == null ? -1 : l.ml, dif: l => l.ml == null ? -99999 : l.enviar - l.ml };
     function pflOrdena(L){ const f = PFL_ORD[pfl.ord.col] || PFL_ORD.acaba, d = pfl.ord.dir;
       return L.slice().sort((a, b) => { const x = f(a), y = f(b); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d || a.sku.localeCompare(b.sku); }); }
     function pflOrdenar(c){ pfl.ord = pfl.ord.col === c ? { col: c, dir: -pfl.ord.dir } : { col: c, dir: c === 'sku' || c === 'acaba' || c === 'ate' ? 1 : -1 }; pflLista(); }
@@ -71,6 +71,8 @@
     async function pflCarregar(chave, conta){
       pfl.erro = '';
       if(!conta){ pfl.base = []; pfl.sug = []; pfl.chave = chave; return; }
+      // estoque do galpão e o que está ocupado (vendas não enviadas, envios em preparação) para a coluna "No galpão"
+      const galpao = Promise.all([typeof estCarregar === 'function' ? estCarregar(false).catch(() => null) : null, typeof esoLer === 'function' ? esoLer(false).catch(() => null) : null]);
       const [b, r] = await Promise.all([supa.rpc('full_previsao_base', { p_conta: conta, p_dias: pfl.dias }),
         supa.from('full_sugestoes').select('referencia').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).order('referencia', { ascending: false }).limit(400)]);
       if(b.error){ pfl.erro = b.error.message; return; }
@@ -88,10 +90,25 @@
       pfl.fotos = {};
       try { const skus = [...new Set([...pfl.base.map(x => x.sku), ...pfl.sug.map(x => String(x.sku).toUpperCase())])];
         if(skus.length){ const f = await supa.rpc('sku_fotos', { p_skus: skus }); (f.data || []).forEach(x => { pfl.fotos[String(x.sku).toUpperCase()] = String(x.foto || '').replace(/^http:/, 'https:'); }); } } catch(e){}
+      await galpao;
       pfl.chave = chave;
+    }
+    // disponível no galpão (mesma conta da tela de Estoque: físico − vendas não enviadas − envios ao Full em preparação),
+    // por SKU do anúncio; kit = quantos kits dá para montar com os componentes. null = sem estoque do galpão no sistema
+    function pflGalpaoMapa(){
+      if(typeof estDepProprio !== 'function' || typeof estLinhas !== 'function') return null;
+      const dep = estDepProprio(); if(!dep) return null;
+      const m = new Map(); estLinhas(dep).forEach(l => m.set(l.k, Math.max(0, Number(l.disp) || 0)));
+      return m;
+    }
+    function pflGalpaoDe(G, sku){
+      if(!G) return null;
+      const comps = typeof esoAbrir === 'function' ? esoAbrir(sku, 1) : [{ sku, qtd: 1 }];
+      return comps.reduce((min, c) => Math.min(min, Math.floor((G.get(esN(c.sku)) || 0) / (Number(c.qtd) || 1))), Infinity);
     }
     // conta da previsão por produto
     function pflLinhas(){
+      const G = pflGalpaoMapa();
       const sug = new Map(pfl.sug.map(s => [String(s.sku).toUpperCase(), s]));
       const full = new Map((typeof estoqueFullML !== 'undefined' && Array.isArray(estoqueFullML) ? estoqueFullML : []).map(e => [String(e.sku || '').trim().toUpperCase(), e]));
       const skus = new Set([...pfl.base.map(b => b.sku), ...sug.keys()]);
@@ -139,7 +156,7 @@
         // demanda semanal que o ML está prevendo, tirada da sugestão dele: (sugestão − mínimo + estoque) ÷ 4
         const fML = s && Number(s.sugestao) > 0 && minimo > 0 ? (Number(s.sugestao) - minimo + est) / 4 : null, fatorML = fML != null && media > 0 ? fML / media : null;
         const acaba = porDia > 0 ? est / porDia : null;
-        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', sem, tend, urgN, cob, minimo, abaixoMin, envMin, fML, fatorML, porSemana, s7, s7a, s30, d30, aptas, caminho, caminhoML, prog, faltaProg, ritmo, acel, saz, porDia, previsao, enviar, enviarHoje, estCheg, zeraAntes, acaba, novo: false,
+        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', sem, tend, urgN, cob, minimo, abaixoMin, envMin, fML, fatorML, porSemana, s7, s7a, s30, d30, aptas, caminho, caminhoML, prog, faltaProg, galpao: pflGalpaoDe(G, k), ritmo, acel, saz, porDia, previsao, enviar, enviarHoje, estCheg, zeraAntes, acaba, novo: false,
           cod: (s && s.inventory_id) || '', ml: s ? Number(s.sugestao) || 0 : null, urg: s ? s.urgencia : '', estrela: s ? !!s.estrela : false, temEstoque: !!(s || f) });
       });
       return L.sort((a, b) => (a.acaba == null ? 9999 : a.acaba) - (b.acaba == null ? 9999 : b.acaba));
@@ -158,7 +175,7 @@
             ${th('porDia', 'Venda por dia', 'Quantas unidades o produto deve vender por dia: média das 6 semanas, já com a tendência e a sazonalidade. Passe o mouse no número para ver os fatores.', 1)}
             ${th('acaba', 'Acaba em', 'Dia em que o estoque do Full (aptas mais a caminho) termina, no ritmo de venda previsto. Entre parênteses, quantos dias de estoque restam.')}
             ${th('ate', 'Enviar até', 'Data-limite para o envio sair: o dia em que o estoque acaba menos os dias de antecedência que você informou acima.')}
-            ${th('enviar', 'Enviar', 'Quantidade calculada pelo sistema. Você pode trocar o número; o PDF sai com o que estiver aqui, só dos produtos marcados.', 1)}
+            ${th('galpao', 'No galpão', 'Disponível no galpão para enviar: estoque físico menos as vendas ainda não enviadas e os envios ao Full em preparação (a mesma conta da tela de Estoque). Anúncio de kit: quantos kits dá para montar com os componentes. Em vermelho quando não cobre o que a previsão manda enviar.', 1)}${th('enviar', 'Enviar', 'Quantidade calculada pelo sistema. Você pode trocar o número; o PDF sai com o que estiver aqui, só dos produtos marcados.', 1)}
             ${th('ml', 'Mercado Livre', 'Quantidade que o Mercado Livre sugeriu no último relatório importado, e a urgência que ele deu. Vale para envio feito agora, não para a data marcada.', 1)}
             ${th('dif', 'Diferença', 'Enviar do sistema menos a sugestão do Mercado Livre.', 1)}</tr></thead><tbody>
           ${F.map(l => { const urg = l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo, ate = pflAte(l), k = pflE(l.sku).split(String.fromCharCode(39)).join(String.fromCharCode(38) + "#39;");
@@ -168,8 +185,9 @@
               <td style="text-align:right;" title="média de ${l.ritmo.toFixed(1).replace('.', ',')} por dia × tendência ${l.acel.toFixed(2).replace('.', ',')} × sazonalidade ${l.saz.toFixed(2).replace('.', ',')}${pfl.reforco ? ' × reforço ' + (1 + pfl.reforco / 100).toFixed(2).replace('.', ',') : ''}">${l.porDia.toFixed(1).replace('.', ',')}</td>
               <td style="${urg ? 'color:var(--danger);font-weight:700;' : ''}">${l.acaba == null ? '—' : l.acaba < 1 ? 'zerado' : l.acaba > 120 ? 'mais de 4 meses' : pflDia(l.acaba) + ' <small class="text-muted">(' + Math.round(l.acaba) + ' d)</small>'}${l.zeraAntes && l.acaba >= 1 ? '<br><small style="color:var(--danger);">zera antes de o envio entrar</small>' : ''}${l.faltaProg ? '<br><small style="color:var(--danger);font-weight:650;" title="O estoque de agora acaba antes de o envio programado ficar disponível (data prevista + dias de conferência). O produto fica sem estoque no Full nesse intervalo.">' + (l.faltaProg.de < 1 ? 'já zerado' : 'zera em ' + pflDia(l.faltaProg.de)) + ', envio programado entra em ' + pflDia(l.faltaProg.ate) + '</small>' : ''}</td>
               <td style="${l.enviar > 0 && ate != null && ate <= 0 ? 'color:var(--danger);font-weight:700;' : ''}">${l.enviar <= 0 || ate == null ? '—' : ate <= 0 ? 'agora' : pflDia(ate)}${l.urgN && l.enviar > 0 ? '<br><small class="text-muted">' + l.urgN + '</small>' : ''}</td>
+              <td style="text-align:right;${l.galpao != null && pflQtd(l) > l.galpao ? 'color:var(--danger);font-weight:700;' : ''}">${l.galpao == null ? '—' : pflN(l.galpao)}${l.galpao != null && pflQtd(l) > l.galpao ? '<br><small>falta ' + pflN(pflQtd(l) - l.galpao) + '</small>' : ''}</td>
               <td style="text-align:right;"><input type="number" min="0" value="${pflQtd(l)}" style="width:86px;text-align:right;font-weight:700;" onchange="pflQtdMudar('${k}', this.value)">${l.estrela && l.ml > 0 && pflSel(l) && pflQtd(l) < l.ml ? '<br><small style="color:var(--warning,#d97706);" title="Produto Estrela enviado na quantidade sugerida pelo Mercado Livre (ou acima) fica isento da tarifa de estoque antigo. Abaixo da sugestão, não há isenção.">abaixo da sugestão: sem isenção de estoque antigo</small>' : ''}</td><td style="text-align:right;" ${l.fML != null ? 'title="Pela sugestão, o Mercado Livre prevê ' + Math.round(l.fML) + ' por semana (' + (l.fatorML || 0).toFixed(1).replace('.', ',') + ' vez a sua média das 6 semanas)."' : ''}>${l.ml == null ? '—' : pflN(l.ml)}${l.urg ? '<br><small class="text-muted">' + pflE(l.urg) + '</small>' : ''}</td>
-              <td style="text-align:right;">${l.ml == null ? '—' : (l.enviar - l.ml > 0 ? '+' : '') + pflN(l.enviar - l.ml)}</td></tr>`; }).join('') || ('<tr><td colspan="13" class="text-muted">' + (T.length ? 'Nenhum produto com esses filtros.' : 'Sem vendas pelo Full nos últimos 30 dias nesta loja.') + '</td></tr>')}
+              <td style="text-align:right;">${l.ml == null ? '—' : (l.enviar - l.ml > 0 ? '+' : '') + pflN(l.enviar - l.ml)}</td></tr>`; }).join('') || ('<tr><td colspan="14" class="text-muted">' + (T.length ? 'Nenhum produto com esses filtros.' : 'Sem vendas pelo Full nos últimos 30 dias nesta loja.') + '</td></tr>')}
           </tbody></table></div>`;
     }
     function pflLista(){ const el = document.getElementById('pfl-lista'); if(el) el.innerHTML = pflListaHtml(); else pflPagina(); }
@@ -330,6 +348,6 @@
     }
     function pflExportar(){
       const L = pflLinhas(), n = v => String(v).replace('.', ',');
-      const csv = ['Código Full;SKU;Produto;Vendas 7 dias;7 dias anteriores;Vendas 30 dias;No Full;A caminho;Previsto por dia;Dias até acabar;Enviar;Sugestão do Mercado Livre'].concat(L.map(l => [l.cod, l.sku, '"' + String(l.titulo).replace(/"/g, '""') + '"', l.s7, l.s7a, l.s30, l.aptas, l.caminho, n(l.porDia.toFixed(2)), l.acaba == null ? '' : Math.round(l.acaba), l.enviar, l.ml == null ? '' : l.ml].join(';'))).join('\r\n');
+      const csv = ['Código Full;SKU;Produto;Vendas 7 dias;7 dias anteriores;Vendas 30 dias;No Full;A caminho;Previsto por dia;Dias até acabar;No galpão;Enviar;Sugestão do Mercado Livre'].concat(L.map(l => [l.cod, l.sku, '"' + String(l.titulo).replace(/"/g, '""') + '"', l.s7, l.s7a, l.s30, l.aptas, l.caminho, n(l.porDia.toFixed(2)), l.acaba == null ? '' : Math.round(l.acaba), l.galpao == null ? '' : l.galpao, l.enviar, l.ml == null ? '' : l.ml].join(';'))).join('\r\n');
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = 'previsao-full-' + getToday() + '.csv'; a.click();
     }
