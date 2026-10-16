@@ -22,6 +22,9 @@ gestaomk/
                         estilos de Vendas/Resumo, painel de caixa (.pc-*) e Início (.ini-*).
                         Carregado DEPOIS de style.css. Cores novas: usar var(--surface), var(--text), etc.
     tema.js           ← alternarTema()/aplicarTema() — tema salvo em localStorage mk_tema
+    ordenar.js        ← QUALQUER tabela: clique no título ordena; arrastar o título muda a coluna de lugar (mk_col_ordem,
+                        largura vai junto via colunasMover); dois cliques voltam a ordem original. Tabela de estrutura fixa:
+                        marcar com data-sem-ordem. Título com onclick próprio continua com a ordenação dele
     rolagem.js        ← mantém a rolagem no lugar por 2,5 s depois de editar um campo ou clicar num botão de tabela
                         (telas que se redesenham ou recarregam após salvar voltavam ao topo). Carregado logo depois de tema.js
     supabase-auth.js  ← Supabase client, auth UI, onAuthStateChange, carregarDoSupabase,
@@ -218,6 +221,8 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   Antes de mexer na regra, ler docs/previsao-full-aprendizado.md (fontes, fórmula declarada pelo ML, regras já testadas
   e o que cada uma acertou) e registrar ali o resultado de cada nova calibragem.
   Envio com data marcada (pfl.envio): projeta o estoque até o dia em que o envio fica disponível. sku_trocas liga SKU antigo ao atual.
+  Envios do planejamento interno (estoque_envios_full situação 'preparando', por anuncio_sku) entram em "A caminho" (pfl.progUsar,
+  padrão ligado): o ML não os mostra antes de liberar a data; ao lançar a saída deixam de contar.
 - FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
 - ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).
