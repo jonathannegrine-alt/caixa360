@@ -222,7 +222,8 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   e o que cada uma acertou) e registrar ali o resultado de cada nova calibragem.
   Envio com data marcada (pfl.envio): projeta o estoque até o dia em que o envio fica disponível. sku_trocas liga SKU antigo ao atual.
   Envios do planejamento interno (estoque_envios_full situação 'preparando', por anuncio_sku) entram em "A caminho" (pfl.progUsar,
-  padrão ligado): o ML não os mostra antes de liberar a data; ao lançar a saída deixam de contar.
+  padrão ligado): o ML não os mostra antes de liberar a data; ao lançar a saída deixam de contar. Cada um fica disponível em
+  data_prevista + pfl.entrada; se o estoque de agora zera antes, faltaProg avisa no "Acaba em" e o estoque efetivo é o que dura até acabar.
 - FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
 - ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).
