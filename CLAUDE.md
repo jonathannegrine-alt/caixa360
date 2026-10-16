@@ -221,6 +221,9 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).
 - PÓS-VENDA NA HORA: ml-webhook (claims) chama pos-venda { cron, secret, usuario } para quem tem ativo = true; a função ignora se rodou há menos de 5 min.
 - ml-promos acao "ativas": promoções em andamento de até 120 anúncios (selo da lista Por anúncio); /items original_price não serve para isso.
+- ETIQUETA DE ENVIO: ml-envios guarda o ZPL compactado (Storage etiquetas/<usuario>/<envio>.zpl.gz, ~1,3 KB; PDF só se o ZPL
+  falhar e nas cópias anteriores a 16/10/2026). ml-venda {acao:'etiqueta', formato:'zpl'} devolve o texto; a tela reconstrói com
+  zpl-renderer-js 4.0.0 (WASM pelo jsDelivr, grayscaleOutput) e monta a folha de controle com vendas_ml. O ML não aceita ^MU.
 - ml-sonda: função só para o administrador que faz GET na API do ML e devolve um resumo (estudo de endpoints).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N
