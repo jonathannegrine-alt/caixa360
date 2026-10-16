@@ -120,13 +120,22 @@
               <td class="cp-prod" style="min-width:260px;">${p.itens.map(v => (typeof fotoLinha === 'function' ? fotoLinha(v.sku, `<b>${pdEsc(v.sku || '—')}</b> <span class="text-muted">× ${Number(v.qtd) || 1}</span><span title="${pdEsc(v.titulo)}">${pdEsc(v.titulo || '')}</span>`) : `<b>${pdEsc(v.sku)}</b> × ${Number(v.qtd) || 1}`)).join('<div style="height:6px;"></div>')}</td>
               <td class="num">${fmt(p.valor)}</td>
               <td style="white-space:normal;min-width:150px;">${pdEsc(p.comprador_nome || p.comprador_apelido || '—')}${p.cidade ? `<div class="cp-sub">${pdEsc(p.cidade)}${p.uf ? ' / ' + pdEsc(p.uf) : ''}</div>` : ''}</td>
-              <td><a href="#" onclick="event.preventDefault();if(typeof vdDetalheML==='function')vdDetalheML('${p.order_id}')">${pdEsc(p.order_id)}</a>${p.pack_id ? `<div class="cp-sub">carrinho ${pdEsc(p.pack_id)}</div>` : ''}${typeof contaNome === 'function' && contasML && contasML.length > 1 ? `<div class="cp-sub">${pdEsc(contaNome(p.ml_user_id) || '')}</div>` : ''}</td>
+              <td><a href="#" onclick="event.preventDefault();pdDetalhe('${p.order_id}')">${pdEsc(p.order_id)}</a>${p.pack_id ? `<div class="cp-sub">carrinho ${pdEsc(p.pack_id)}</div>` : ''}${typeof contaNome === 'function' && contasML && contasML.length > 1 ? `<div class="cp-sub">${pdEsc(contaNome(p.ml_user_id) || '')}</div>` : ''}</td>
               <td style="font-size:12.5px;white-space:nowrap;"><span class="text-muted">Vendido</span> ${dt(p.data_venda)}<br>${p.saiu ? `<span class="text-muted">Saiu</span> ${dt(p.enviado_em)}` : p.lim ? `<span class="${p.atrasado ? 'text-danger' : p.venceHoje ? 'text-warning' : 'text-muted'}">Enviar até</span> <b class="${p.atrasado ? 'text-danger' : ''}">${dt(p.lim)}</b>${p.atrasado ? `<div class="text-danger" style="font-weight:600;">atrasado ${p.diasAtraso ? 'há ' + p.diasAtraso + ' dia' + (p.diasAtraso > 1 ? 's' : '') : 'hoje'}</div>` : ''}` : '<span class="text-muted">prazo ainda não informado</span>'}</td>
               <td>${PD_TIPO[p.logistic_type] || pdEsc(p.logistic_type || '—')}</td>
               <td><span class="cp-sit ${cls}">${est}</span></td>
-              <td style="text-align:right;"><button class="btn-out btn-sm" onclick="if(typeof vdDetalheML==='function')vdDetalheML('${p.order_id}')">Detalhes</button></td></tr>`; }).join('')
+              <td style="text-align:right;white-space:nowrap;">${!p.cancel && p.shipping_id ? `<button class="btn-out btn-sm" onclick="if(typeof vdEtiqueta==='function')vdEtiqueta('${p.order_id}', this)" title="Abre a etiqueta do envio em PDF para imprimir">🖨 Etiqueta</button> ` : ''}<button class="btn-out btn-sm" onclick="pdDetalhe('${p.order_id}')">Detalhes</button></td></tr>`; }).join('')
             : `<tr><td colspan="8"><div class="vazio"><b>${pd.aba === 'atrasados' ? 'Nenhum pedido atrasado' : 'Nada nesta lista'}</b>${pd.aba === 'atrasados' ? 'Todos os pedidos liberados estão dentro do prazo de envio.' : 'Troque a aba ou a busca.'}</div></td></tr>`}
         </tbody></table></div>${lista.length > 400 ? `<div class="text-muted" style="padding:10px 16px;font-size:12px;">Mostrando 400 de ${lista.length}. Use a busca para achar um pedido.</div>` : ''}</div>`;
+    }
+
+    // janela de detalhes: itens do pacote + entrega, pagamento, comprador e etiqueta lidos no Mercado Livre
+    function pdDetalhe(orderId){
+      if(typeof vmlModal !== 'function' || typeof vdDetalheML !== 'function') return;
+      const p = pdPacotes().find(x => x.itens.some(v => String(v.order_id) === String(orderId)));
+      const itens = p ? p.itens.map(v => `<div class="d-flex gap-2" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">${v.thumbnail ? `<img class="v-thumb" src="${pdEsc(v.thumbnail)}" alt="">` : '<div class="v-thumb"></div>'}<div><div class="v-tit"><span class="v-qtd">${Number(v.qtd) || 1}x</span>${pdEsc(v.titulo || '')}</div><div class="text-muted">SKU: ${pdEsc(v.sku || '—')}${v.variacao ? ' · ' + pdEsc(v.variacao) : ''} · #${pdEsc(v.order_id)}</div></div></div>`).join('') : '';
+      vmlModal('Pedido #' + pdEsc(orderId), itens + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>');
+      vdDetalheML(orderId);
     }
 
     // alerta da página Início: pedidos que passaram do prazo de envio (lê os dados já carregados; carrega em segundo plano)

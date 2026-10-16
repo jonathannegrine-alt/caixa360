@@ -373,6 +373,7 @@
             ${st !== 'cancelada' && ex.envio_status && VD_ENVIO[ex.envio_status] ? `<div class="v-envio" title="${ex.rastreio ? 'Rastreio: ' + vmlEsc(ex.rastreio) : 'Situação do envio'}" onclick="vdPagamento('${v.order_id}','entrega')">${VD_ENVIO[ex.envio_status]}</div>` : ''}
             <button class="btn-out btn btn-sm v-bt-msg" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}','${v.ml_user_id || ''}')">Mensagens</button>
             <button class="btn-out btn btn-sm" onclick="vdPagamento('${v.order_id}')">Detalhes</button>
+            ${st !== 'cancelada' && ex.shipping_id && ex.logistic_type !== 'fulfillment' ? `<button class="btn-out btn btn-sm" onclick="vdEtiqueta('${v.order_id}', this)" title="Abre a etiqueta do envio em PDF para imprimir">🖨 ${ex.etiqueta_em ? 'Reimprimir etiqueta' : 'Imprimir etiqueta'}</button>` : ''}
             <a class="btn-out btn btn-sm v-bt-ml" style="text-align:center;text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${v.order_id}/detalhe" target="_blank" rel="noopener">Abrir no ML</a>
           </div>
         </div>`;
@@ -501,7 +502,8 @@
       else if(m) m.textContent = (d && (d.motivo || d.error)) || 'Não foi possível abrir a nota.';
     }
     async function vdEtiqueta(orderId, bt){
-      const msg = document.getElementById('vd-det-msg'), rot = bt.textContent; bt.disabled = true; bt.textContent = 'Buscando etiqueta…'; if(msg) msg.textContent = '';
+      const el = document.getElementById('vd-det-msg'), rot = bt.textContent; bt.disabled = true;
+      const msg = el && bt.closest('.modal') ? el : { set textContent(t){ if(t && typeof toast === 'function') toast(t); } }; bt.textContent = 'Buscando etiqueta…'; if(msg) msg.textContent = '';
       let d; try { d = await vdFuncao({ acao: 'etiqueta', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
       bt.disabled = false; bt.textContent = rot;
       if(d && d.ok && d.pdf){
