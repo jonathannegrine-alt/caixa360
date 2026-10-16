@@ -224,6 +224,9 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   Envios do planejamento interno (estoque_envios_full situação 'preparando', por anuncio_sku) entram em "A caminho" (pfl.progUsar,
   padrão ligado): o ML não os mostra antes de liberar a data; ao lançar a saída deixam de contar. Cada um fica disponível em
   data_prevista + pfl.entrada; se o estoque de agora zera antes, faltaProg avisa no "Acaba em" e o estoque efetivo é o que dura até acabar.
+  Coluna "No galpão" = estLinhas(depósito próprio).disp (kit pelos componentes, esoAbrir). Botão "Carregar nos envios ao Full"
+  (pflParaEnvios) abre esoRevisarEnvio com numero "Previsão dd/mm hh:mm"; ao importar o PDF oficial do ML, a revisão oferece
+  substituir esse envio planejado (eso-subst) em vez de criar outro.
 - FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
 - ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).
