@@ -226,6 +226,12 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   zpl-renderer-js 4.0.0 (WASM pelo jsDelivr, grayscaleOutput) e monta a folha de controle com vendas_ml. O renderizador ignora ^MU (não dá para dobrar a resolução).
 - COBERTURA NO ESTOQUE (src/estoque.js): Total e galpão usam comprasVendas (vendas_ml_sku_dia, kits abertos); a aba do Full usa
   a RPC vendas_full_sku (só logistic_type fulfillment, por conta e SKU do anúncio). Período em localStorage mk_est_periodo.
+- VENDA CANCELADA DEPOIS DE ENVIADA (vendas_ml_cobr): o ML estorna a tarifa de venda e devolve o valor ao comprador, mas fica a
+  tarifa de envio CHEIA (parte do vendedor + a do comprador, que é reembolsada a ele) e a tarifa de devolução. ml-fatura (passo 4)
+  lê GET /billing/integration/group/ML/order/details de 20 vendas canceladas por consulta (a resposta corta em 250 linhas no total),
+  grava só envio ('ida': CFFE, CXDE… e estornos) e devolução ('dev': CXDED, CDSDB… e estornos) no dia da cobrança e marca
+  vendas_ml_cobr_lida (relê com 7, 20 e 45 dias). Envio cancelado = sem cobrança. DRE: RPC vendas_ml_cobr_mes (ida só de venda
+  cancelada); tela de Vendas: cartão da cancelada mostra o resultado negativo. Conferido com a conciliação de set/2026: 25 de 25.
 - ml-sonda: função só para o administrador que faz GET na API do ML e devolve um resumo (estudo de endpoints).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N

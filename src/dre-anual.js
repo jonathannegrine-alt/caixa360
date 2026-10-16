@@ -15,6 +15,8 @@
     let dreDados = { ano:null, ml:{}, cobertura:{}, carregado:false, erro:null };
     const DRE_MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 
+    // nome da linha; com descrição, ganha o ⓘ e a explicação ao passar o mouse
+    function dreNomeLinha(l){ return l.desc ? `<span title="${dreEsc(l.desc)}" style="cursor:help;">${dreEsc(l.nome)} <small class="text-muted">ⓘ</small></span>` : dreEsc(l.nome); }
     function dreEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
     function dreNum(v){ return v ? 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) : '–'; }
 
@@ -46,11 +48,14 @@
       const conta = typeof contaParam === 'function' ? contaParam() : null;
       let qDias = supa.from('vendas_ml_dias').select('dia').eq('usuario_id', usuarioAtual.id).gte('dia', dreAno + '-01-01').lte('dia', dreAno + '-12-31').eq('completo', true).limit(2000);
       if(conta) qDias = qDias.eq('ml_user_id', conta);
-      const [ml, dias, fat] = await Promise.all([ supa.rpc('vendas_ml_por_mes', { p_ano: dreAno, p_conta: conta }), qDias, typeof ftMes === 'function' ? ftMes(dreAno, conta).catch(() => ({})) : null, typeof dsAtivo === 'function' && dsAtivo() ? dsCarregar() : null ]);
+      const [ml, dias, fat, , cobr] = await Promise.all([ supa.rpc('vendas_ml_por_mes', { p_ano: dreAno, p_conta: conta }), qDias, typeof ftMes === 'function' ? ftMes(dreAno, conta).catch(() => ({})) : null, typeof dsAtivo === 'function' && dsAtivo() ? dsCarregar() : null,
+        supa.rpc('vendas_ml_cobr_mes', { p_ano: dreAno, p_conta: conta }).then(r => r, () => ({})) ]);
       if(dreDados.chave !== chave) return;
       const porMes = {};
       (ml.data || []).forEach(r => { porMes[r.mes] = { fat:Number(r.faturamento), canc:Number(r.canceladas), imp:Number(r.imposto), frete:Number(r.frete_vendedor), custo:Number(r.custo), tarifa:Number(r.tarifa), vendas:Number(r.vendas), flex:-(Number(r.flex_repasse) || 0), flexc:Number(r.flex_custo) || 0 }; });
       if(fat && typeof ftJuntar === 'function') ftJuntar(porMes, fat);     // cobranças da fatura do ML, por mês em que aconteceram
+      // frete de ida das vendas canceladas e tarifa de devolução (lidos da fatura de cada venda), pelo mês da cobrança
+      ((cobr && cobr.data) || []).forEach(r => { const x = porMes[r.mes] = porMes[r.mes] || {}; x.ida = Number(r.ida) || 0; x.dev = Number(r.dev) || 0; });
       // dias do mês já importados do ML (para avisar mês incompleto); com várias contas, conta os dias distintos
       const cob = {}; const vistos = new Set();
       (dias.data || []).forEach(d => { const k = String(d.dia).substring(0,10); if(vistos.has(k)) return; vistos.add(k); const m = parseInt(k.substring(5,7)); cob[m] = (cob[m] || 0) + 1; });
@@ -92,7 +97,12 @@
       return out;
     }
 
-    const DRE_FLEX_RX = /flex/i;   // categoria de Contas a pagar que é o pagamento do transportador do Flex
+    // linhas das vendas canceladas depois de enviadas (vendas_ml_cobr, lidas da fatura de cada venda pela função ml-fatura)
+    const DRE_COBR = [
+      ['ida', 'Frete de ida de vendas canceladas (ML)', 'Venda cancelada depois de enviada: o Mercado Livre estorna a tarifa de venda e devolve o valor ao comprador, mas continua cobrando a tarifa de envio cheia (a sua parte e a que o comprador pagou e recebeu de volta). Já descontados os estornos de envio. Entra no mês da cobrança.'],
+      ['dev', 'Tarifa de devolução (ML)', 'Frete de volta cobrado pelo Mercado Livre quando o comprador devolve o produto. Já descontados os estornos de devolução. Entra no mês da cobrança.']
+    ];
+    const DRE_FLEX_RX = /\bflex\b/i;   // categoria de Contas a pagar que é o pagamento do transportador do Flex
     function dreMontar(){
       const ml = dreDados.ml, desp = dreDespesas();
       const val = (m, k) => (ml[m] && ml[m][k]) || 0;
@@ -108,6 +118,7 @@
       const flexCfg = Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, pagoFlex(i + 1) > 0 ? 0 : val(i + 1, 'flexc')]));
       if(Object.values(flexCfg).some(x => x)) linhasML.push({ nome: 'Entregas Flex (pela configuração)', v: flexCfg, flexCfg: true });
       if(typeof ftLinhas === 'function') linhasML.push(...ftLinhas(ml));
+      DRE_COBR.forEach(([k, nome, desc]) => { if(DRE_MESES.some((_, i) => val(i + 1, k))) linhasML.push({ nome, desc, v: Object.fromEntries(DRE_MESES.map((_, i) => [i + 1, val(i + 1, k)])) }); });
       const linhasDe = g => Object.keys(desp[g]).map(nome => ({ nome, v: desp[g][nome], grupo: dreGrupoOlist(nome) })).sort((a,b) => a.grupo.localeCompare(b.grupo) || a.nome.localeCompare(b.nome));
       const variaveis = linhasDe('variavel'), fixas = linhasDe('fixo');
       const soma = (linhas, m) => linhas.reduce((s,l) => s + (l.v[m] || 0), 0);
@@ -139,7 +150,7 @@
       const pct = v => x.validas && v ? (v / x.validas * 100).toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%' : '';
       const lin = (rot, v, va, cls, semPct, extra) => `<tr class="${cls || ''}" ${extra || ''}><td>${rot}</td><td class="num">${dreNum(v)}</td><td class="num dre-m-pct">${semPct ? '' : pct(v)}</td><td class="num dre-m-ant">${a ? dreNum(va) : '–'}</td></tr>`;
       const tem = l => (l.v[m] || 0) || (a && (l.v[m - 1] || 0));
-      const item = (l, cls) => lin(dreEsc(l.nome), l.v[m] || 0, l.v[m - 1] || 0, cls);
+      const item = (l, cls) => lin(dreNomeLinha(l), l.v[m] || 0, l.v[m - 1] || 0, cls);
       const grupos = (linhas, pref) => {
         const gs = []; linhas.filter(tem).forEach(l => { const n = l.grupo || 'Sem grupo'; let g = gs.find(z => z.n === n); if(!g){ g = { n, l: [] }; gs.push(g); } g.l.push(l); });
         return gs.map(g => { const k = pref + '|' + g.n, ab = dreAbertos.has(k), som = mm => g.l.reduce((t, l) => t + (l.v[mm] || 0), 0);
@@ -169,7 +180,7 @@
       const tot = k => D.meses.reduce((s,x) => s + x[k], 0);
       const cel = (v, cls) => `<td class="num ${cls || ''}">${dreNum(v)}</td>`;
       const linha = (rot, fn, cls, totalV) => `<tr class="${cls || ''}"><td>${rot}</td>${D.meses.map(x => cel(fn(x))).join('')}${cel(totalV)}</tr>`;
-      const linhaItem = l => `<tr><td>${dreEsc(l.nome)}</td>${D.meses.map(x => cel(l.v[x.m] || 0)).join('')}${cel(Object.values(l.v).reduce((s,v) => s + v, 0))}</tr>`;
+      const linhaItem = l => `<tr><td>${dreNomeLinha(l)}</td>${D.meses.map(x => cel(l.v[x.m] || 0)).join('')}${cel(Object.values(l.v).reduce((s,v) => s + v, 0))}</tr>`;
       // cada grupo vira uma linha com o total; clicar abre as categorias de dentro
       const comGrupo = (linhas, pref) => {
         const gs = []; linhas.forEach(l => { const n = l.grupo || 'Sem grupo'; let g = gs.find(x => x.n === n); if(!g){ g = { n, l: [] }; gs.push(g); } g.l.push(l); });
@@ -245,6 +256,7 @@
             Os percentuais são sobre as vendas válidas (faturamento sem as canceladas).
             Despesas aparecem somadas por grupo: clique num grupo para ver as categorias. Entram pelo mês de competência da conta; sem ela, pela competência padrão da categoria (em geral o mês do vencimento). ● = mês com vendas ainda sendo importadas do Mercado Livre.
             ${typeof ftRodape === 'function' ? ftRodape() : ''}
+            Venda cancelada depois de enviada: o frete de ida que ficou cobrado e a tarifa de devolução entram nas linhas próprias (passe o mouse no ⓘ), lidos da fatura de cada venda toda madrugada.
             Flex: o repasse do Mercado Livre entra como redução de custo; o transportador entra pelo que foi lançado em Contas a pagar numa categoria com “Flex” no nome e, no mês sem lançamento, pelo valor por entrega das Configurações.
             ${!dreDados.carregado ? ' Carregando vendas…' : ''}
           </div>

@@ -215,6 +215,19 @@
         const ex = await supa.from('vendas_ml').select('order_id,cidade,uf,cep,envio_status,rastreio,etiqueta_em,shipping_id,logistic_type,est_anuncio_apos,est_galpao_apos').eq('usuario_id', usuarioAtual.id).in('order_id', linhas.map(v => v.order_id));
         if(seq !== vmlSeq) return;
         (ex.data || []).forEach(r => { extra[r.order_id] = r; });
+        // venda cancelada: frete de ida e devolução que ficaram cobrados (lidos da fatura de cada venda, toda madrugada)
+        const canc = linhas.filter(v => v.situacao === 'cancelada').map(v => v.order_id);
+        if(canc.length){
+          const [cb, li] = await Promise.all([
+            supa.from('vendas_ml_cobr').select('order_id,tipo,valor').eq('usuario_id', usuarioAtual.id).in('order_id', canc),
+            supa.from('vendas_ml_cobr_lida').select('order_id').eq('usuario_id', usuarioAtual.id).in('order_id', canc) ]);
+          if(seq !== vmlSeq) return;
+          if(!cb.error && !li.error){
+            canc.forEach(id => { (extra[id] = extra[id] || {}).cobr = { ida: 0, dev: 0, lida: false }; });
+            (li.data || []).forEach(r => { if(extra[r.order_id]) extra[r.order_id].cobr.lida = true; });
+            (cb.data || []).forEach(r => { const c = extra[r.order_id] && extra[r.order_id].cobr; if(c) c[r.tipo] = Math.round((c[r.tipo] + (Number(r.valor) || 0)) * 100) / 100; });
+          }
+        }
       }
       vdDados = { linhas, total: pag.count || 0, tot: tot.data || null, carrinhos, extra, carregado:true, erro: pag.error?.message || tot.error?.message, outraLoja };
       vdDesenhar();
@@ -358,6 +371,7 @@
           </div>
 
           <div class="v-fin">
+            ${st === 'cancelada' && ex.cobr ? vdFinCancelada(ex, linha) : `
             ${linha('Recebido', 'R$ ' + vmlNum(c.faturamento), 'pos', 'Valor dos produtos + frete pago pelo comprador')}
             ${linha('Frete', c.fretePendente ? '…' : '-R$ ' + vmlNum(c.freteVend + c.freteComp), 'neg', 'Frete do comprador + frete do vendedor')}
             ${linha('Tarifa de venda', '-R$ ' + vmlNum(c.tarifa), 'neg')}
@@ -365,7 +379,7 @@
             ${linha('Líquido ML', 'R$ ' + vmlNum(c.liquidoML), 'sub')}
             ${linha('Custo', c.temCusto ? '-R$ ' + vmlNum(c.custo) : 'sem custo', c.temCusto ? 'neg' : 'neg sem-custo')}
             ${linha('Imposto', c.temImposto ? '-R$ ' + vmlNum(c.imposto) : 'sem imposto', c.temImposto ? 'neg' : 'neg sem-custo')}
-            <div class="mc" ${completo ? '' : 'title="Margem incompleta: falta custo ou imposto no cadastro do produto"'}><span>Margem${completo ? '' : ' *'}</span><span class="${!completo ? 'sem-custo' : (c.mc >= 0 ? 'mc-pos' : 'mc-neg')}">R$ ${vmlNum(c.mc)} <small>(${vmlPct(c.mcPct)})</small></span></div>
+            <div class="mc" ${completo ? '' : 'title="Margem incompleta: falta custo ou imposto no cadastro do produto"'}><span>Margem${completo ? '' : ' *'}</span><span class="${!completo ? 'sem-custo' : (c.mc >= 0 ? 'mc-pos' : 'mc-neg')}">R$ ${vmlNum(c.mc)} <small>(${vmlPct(c.mcPct)})</small></span></div>`}
           </div>
 
           <div class="v-acoes">
@@ -377,6 +391,19 @@
             <a class="btn-out btn btn-sm v-bt-ml" style="text-align:center;text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${v.order_id}/detalhe" target="_blank" rel="noopener">Abrir no ML</a>
           </div>
         </div>`;
+    }
+
+    // Resultado da venda cancelada: o valor volta ao comprador e a tarifa de venda é estornada; fica o que o ML cobrou de frete
+    function vdFinCancelada(ex, linha){
+      const k = ex.cobr, neg = v => v ? '-R$ ' + vmlNum(v) : 'R$ 0,00', res = -(k.ida + k.dev);
+      if(!k.lida && ex.envio_status !== 'cancelled') return `
+        ${linha('Recebido', 'R$ 0,00', 'pos', 'O valor da venda foi devolvido ao comprador')}
+        <div class="mc" title="As cobranças de frete e devolução desta venda são lidas da fatura do Mercado Livre toda madrugada"><span>Resultado</span><span class="sem-custo">aguardando a fatura</span></div>`;
+      return `
+        ${linha('Recebido', 'R$ 0,00', 'pos', 'O valor da venda foi devolvido ao comprador e a tarifa de venda foi estornada')}
+        ${linha('Frete de ida', neg(k.ida), 'neg', 'Tarifa de envio que ficou cobrada: a sua parte e a que o comprador pagou e recebeu de volta (já com os estornos)')}
+        ${linha('Tarifa de devolução', neg(k.dev), 'neg', 'Frete de volta cobrado pelo Mercado Livre (já com os estornos)')}
+        <div class="mc" title="O que esta venda cancelada custou. Lido da fatura do Mercado Livre; a leitura se repete por algumas semanas, porque devolução e estornos chegam depois."><span>Resultado</span><span class="${res < 0 ? 'mc-neg' : 'mc-pos'}">${res < 0 ? '-' : ''}R$ ${vmlNum(Math.abs(res))}</span></div>`;
     }
 
     function vdIr(p){ vdFiltro.pagina = p; vdCarregar(); window.scrollTo(0,0); }

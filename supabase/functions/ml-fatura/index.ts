@@ -9,6 +9,8 @@
 // Passos por conta:  1) lista de faturas (1 vez por dia)   GET /billing/integration/monthly/periods
 //                    2) resumo da fatura → tipos de cobrança que ela tem; tipo novo é sondado e classificado
 //                    3) linhas dos tipos fora das vendas, 1000 por consulta, em ordem
+//                    4) cobranças das vendas canceladas (frete de ida e devolução), 20 vendas por consulta
+//                       GET /billing/integration/group/ML/order/details → vendas_ml_cobr (DRE e tela de Vendas)
 // Fatura aberta é relida uma vez por dia; fatura fechada, uma vez só.
 
 const CORS = {
@@ -19,6 +21,12 @@ const CORS = {
 const resp = (body: object, status = 200) => new Response(JSON.stringify(body), { headers: CORS, status })
 const ML = 'https://api.mercadolibre.com/billing/integration'
 const POR_CHAMADA = 4, PAGINA = 1000, FATURAS = 12
+// cobranças de uma venda: a consulta devolve no máximo 250 linhas no total (com 50 vendas veio cortado; uma venda
+// cancelada tem até 8 linhas), por isso 20 vendas por vez. Vendas canceladas dos últimos COBR_DIAS dias.
+const COBR_LOTE = 20, COBR_DIAS = 100
+const COBR_DEV = new Set(['CDSDB', 'CXDED', 'CXDID', 'BDSDB', 'BXDED', 'BXDID'])
+const COBR_IDA = new Set(['CFFE', 'CFFI', 'CXDE', 'CXDI', 'CDSB', 'BFFE', 'BFFI', 'BXDE', 'BDSB'])
+const tipoCobr = (sub: string, txt: string) => COBR_DEV.has(sub) || /devolu/i.test(txt) ? 'dev' : (COBR_IDA.has(sub) ? 'ida' : null)
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -64,7 +72,9 @@ Deno.serve(async (req: Request) => {
         const forcar = body?.forcar === true && body?.cron !== true && Date.now() - ultimaLista > 600000
         const precisaLista = !periodos.length || forcar || Date.now() - ultimaLista > 20 * 3600000
         const pendente = periodos.some(p => !p.completo)
-        if (!precisaLista && !pendente) { info.pendentes = 0; continue }
+        const vendasPend: number[] = await db('rpc/vendas_ml_cobr_pendentes', { method: 'POST', body: JSON.stringify({ p_uid: uid, p_conta: conta, p_dias: COBR_DIAS, p_limite: 200 }) })
+          .then(r => r.json()).then(x => Array.isArray(x) ? x.map((y: any) => Number(y.order_id)).filter(Boolean) : []).catch(() => [])
+        if (!precisaLista && !pendente && !vendasPend.length) { info.pendentes = 0; continue }
 
         let token = t.access_token
         if (new Date(t.expires_at) <= new Date(Date.now() + 60000)) {
@@ -149,10 +159,36 @@ Deno.serve(async (req: Request) => {
           }
           if (info.erro) break
         }
+
+        // 4) vendas canceladas: frete de ida e devolução, cada cobrança no dia em que aconteceu
+        let lote = COBR_LOTE
+        for (let i = 0; i < vendasPend.length && !info.erro && !limite && usadas < POR_CHAMADA;) {
+          const ids = vendasPend.slice(i, i + lote)
+          const d = await ml(`/group/ML/order/details?order_ids=${ids.join(',')}&limit=250`)
+          if (!d) break
+          const R: any[] = d.results || []
+          // resposta cortada (250 linhas): refaz com metade das vendas
+          if (R.reduce((s, r) => s + (r.details || []).length, 0) >= 250 && ids.length > 1) { lote = Math.max(1, Math.floor(ids.length / 2)); continue }
+          const linhas: any[] = []
+          for (const r of R) for (const x of (r.details || [])) {
+            const c = x.charge_info || {}, sub = String(c.detail_sub_type || ''), txt = String(c.transaction_detail || '')
+            const tipo = tipoCobr(sub, txt)
+            if (!tipo || !c.detail_id || !/^\d{4}-\d{2}-\d{2}/.test(String(c.creation_date_time))) continue
+            linhas.push({ usuario_id: uid, ml_user_id: conta, detail_id: c.detail_id, order_id: r.order_id, dia: String(c.creation_date_time).slice(0, 10), tipo, sub_type: sub,
+              valor: (String(c.detail_type) === 'BONUS' ? -1 : 1) * (Number(c.detail_amount) || 0), descricao: txt.slice(0, 200) })
+          }
+          if (linhas.length) {
+            const g = await db('vendas_ml_cobr?on_conflict=usuario_id,ml_user_id,detail_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(linhas) })
+            if (!g.ok) { info.erro = 'gravação das cobranças: ' + (await g.text()).slice(0, 160); break }
+          }
+          await db('rpc/vendas_ml_cobr_marcar', { method: 'POST', body: JSON.stringify({ p_uid: uid, p_conta: conta, p_vendas: ids }) })
+          info.vendas = (info.vendas || 0) + ids.length
+          i += ids.length
+        }
         info.pendentes = periodos.filter(x => !x.completo).length
       } catch (e) { info.erro = String((e as Error)?.message || e).slice(0, 160) }
     }
-    return resp({ ok: true, contas: saida.map(({ conta, consultas, pendentes, linhas, limite, erro, http }) => ({ conta, consultas, pendentes, linhas: linhas || 0, limite: !!limite, erro: erro || null, http: http || null })) })
+    return resp({ ok: true, contas: saida.map(({ conta, consultas, pendentes, linhas, vendas, limite, erro, http }) => ({ conta, consultas, pendentes, linhas: linhas || 0, vendas: vendas || 0, limite: !!limite, erro: erro || null, http: http || null })) })
   } catch (e) {
     return resp({ error: String((e as Error)?.message || e) }, 500)
   }
