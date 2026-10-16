@@ -365,13 +365,14 @@
         doc.text('Qtd. de SKU: ' + linhas.length, 300, 40); doc.text('Total de itens: ' + esInt(linhas.reduce((s, l) => s + Math.max(0, l.fisico), 0)), 430, 40);
         doc.text('Depósito: ' + dep.nome + '   ' + agora.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }), 300, 56);
         doc.autoTable({
-          startY: 74, theme: 'grid', styles: { fontSize: 10, cellPadding: 7, valign: 'middle', lineColor: 120, lineWidth: 0.5, textColor: 20 },
+          // linha partida entre duas páginas chega ao didDrawCell sem índice válido (e atrapalha quem conta): nunca partir
+          startY: 74, theme: 'grid', rowPageBreak: 'avoid', styles: { fontSize: 10, cellPadding: 7, valign: 'middle', lineColor: 120, lineWidth: 0.5, textColor: 20 },
           headStyles: { fillColor: [235, 235, 235], textColor: 20, fontStyle: 'bold' },
           columnStyles: { 0: { cellWidth: 26, halign: 'center' }, 1: { cellWidth: 50 }, 3: { cellWidth: 60, halign: 'center' }, 4: { cellWidth: 78 }, 5: { cellWidth: 110 } },
           head: [['#', 'Foto', 'SKU', 'Estoque atual', 'Contado', 'Observações']],
           body: linhas.map((l, i) => [i + 1, '', l.sku + (l.nome ? '\n' + l.nome : ''), esInt(l.fisico), '', '']),
           didParseCell: d => { if(d.section === 'body') d.cell.styles.minCellHeight = 46; },
-          didDrawCell: d => { if(d.section === 'body' && d.column.index === 1){ const f = fotos.get(esN(linhas[d.row.index].sku)); if(f){ try { doc.addImage(f, 'JPEG', d.cell.x + 5, d.cell.y + 3, 40, 40); } catch(err){} } } }
+          didDrawCell: d => { if(d.section === 'body' && d.column.index === 1 && linhas[d.row.index]){ const f = fotos.get(esN(linhas[d.row.index].sku)); if(f){ try { doc.addImage(f, 'JPEG', d.cell.x + 5, d.cell.y + 3, 40, 40); } catch(err){} } } }
         });
         const y = Math.min(doc.lastAutoTable.finalY + 30, 800);
         doc.text('Contado por: ______________________     Data: ____/____/______', 40, y);
