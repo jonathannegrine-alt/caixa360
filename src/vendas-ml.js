@@ -493,6 +493,33 @@
       const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
+    // ETIQUETA EM ZPL (código da impressora térmica): a imagem é reconstruída aqui no navegador, sem mandar
+    // os dados do comprador a nenhum serviço de fora. Renderizador: zpl-renderer-js (Zebrash, WASM de ~7 MB,
+    // carregado só na primeira etiqueta e depois fica no cache do navegador).
+    const VD_ZPL_LIB = 'https://cdn.jsdelivr.net/npm/zpl-renderer-js@4.0.0/dist/';
+    let vdZplApi = null;
+    async function vdZplPng(zpl){
+      if(!vdZplApi) vdZplApi = import(VD_ZPL_LIB + 'index.external.esm.js').then(async m => { await m.init({ wasmUrl: VD_ZPL_LIB + 'zebrash.wasm' }); return m; }).catch(e => { vdZplApi = null; throw e; });
+      const m = await vdZplApi;
+      // tamanho da etiqueta pelo próprio código (^PW largura, ^LL altura, em pontos de 8 por mm); padrão 10 × 15 cm
+      const pw = Number((zpl.match(/^PW(d+)/) || [])[1]) || 800, ll = Number((zpl.match(/^LL(d+)/) || [])[1]) || 1200;
+      const mm = { l: Math.round(pw / 8), a: Math.round(ll / 8) };
+      return { imgs: await m.zplToBase64MultipleAsync(zpl, mm.l, mm.a, 8), mm };
+    }
+    // abre a etiqueta reconstruída numa aba própria, já no tamanho da etiqueta, pronta para imprimir ou salvar em PDF
+    function vdZplJanela(r, envio){
+      const w = window.open('', '_blank'); if(!w) return false;
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiqueta ${vmlEsc(envio)}</title><style>
+        @page{size:${r.mm.l}mm ${r.mm.a}mm;margin:0}body{margin:0;background:#888;font:14px system-ui,sans-serif}
+        .bar{position:sticky;top:0;background:#222;color:#fff;padding:10px 14px;display:flex;gap:10px;align-items:center}
+        .bar button{font:inherit;padding:6px 14px;cursor:pointer}
+        img{display:block;width:${r.mm.l}mm;height:${r.mm.a}mm;margin:12px auto;background:#fff;image-rendering:pixelated}
+        @media print{.bar{display:none}body{background:#fff}img{margin:0;page-break-after:always}}
+      </style></head><body><div class="bar"><button onclick="print()">Imprimir ou salvar em PDF</button><span>Etiqueta ${r.mm.l} × ${r.mm.a} mm · envio ${vmlEsc(envio)}</span></div>
+      ${r.imgs.map(b => '<img alt="Etiqueta" src="data:image/png;base64,' + b + '">').join('')}</body></html>`);
+      w.document.close(); return true;
+    }
+
     async function vdDanfe(orderId, bt){
       const rot = bt.textContent; bt.disabled = true; bt.textContent = 'Buscando a nota…';
       let d; try { d = await vdFuncao({ acao: 'danfe', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
@@ -510,6 +537,31 @@
         vdAbrirPdf(d.pdf);
         if(msg) msg.textContent = d.origem === 'guardada' ? 'Etiqueta aberta (cópia guardada no Caixa 360).' : 'Etiqueta aberta e cópia guardada por 12 meses.';
       } else if(msg) msg.textContent = (d && (d.motivo || d.error)) || 'Não foi possível abrir a etiqueta.';
+    }
+    // TESTE (16/10/2026) da troca PDF -> ZPL: mostra lado a lado o PDF original do ML e a etiqueta reconstruída do ZPL.
+    // Uso no console: etqComparar('<nº do envio ou do pedido>'). Retirar quando a troca estiver concluída.
+    async function etqComparar(numero){
+      const n = String(numero).replace(/D/g, '');
+      const { data } = await supa.from('vendas_ml').select('order_id,shipping_id').eq('usuario_id', usuarioAtual.id).or('shipping_id.eq.' + n + ',order_id.eq.' + n).limit(1);
+      const pedido = data && data[0] ? data[0].order_id : n;
+      vmlModal('Comparar etiqueta · ' + n, '<div class="vazio">Buscando as duas versões…</div>');
+      const [pdf, zpl] = await Promise.all([vdFuncao({ acao: 'etiqueta', pedido }), vdFuncao({ acao: 'etiqueta', pedido, formato: 'zpl' })]);
+      const corpo = document.querySelector('#modal-vml .modal-body'); if(!corpo) return;
+      corpo.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"><div><b>PDF original do ML</b><div id="etq-a"></div></div><div><b>Reconstruída do ZPL</b><div id="etq-b"></div></div></div>';
+      const a = document.getElementById('etq-a'), b = document.getElementById('etq-b');
+      try {
+        if(!pdf.ok) throw new Error(pdf.motivo || pdf.error);
+        if(!window.pdfjsLib) await new Promise((ok, erro) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload = ok; s.onerror = erro; document.head.appendChild(s); });
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const bin = atob(pdf.pdf), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        const doc = await pdfjsLib.getDocument({ data: u }).promise;
+        for(let p = 1; p <= doc.numPages; p++){ const pg = await doc.getPage(p), vp = pg.getViewport({ scale: 2 }), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; c.style.cssText = 'width:100%;border:1px solid var(--border);margin-top:6px;background:#fff'; await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise; a.appendChild(c); }
+      } catch(e){ a.innerHTML = '<div class="alert alert-warning">' + vmlEsc(String(e && e.message || e)) + '</div>'; }
+      try {
+        if(!zpl.ok) throw new Error(zpl.motivo || zpl.error);
+        const r = await vdZplPng(zpl.zpl);
+        b.innerHTML = r.imgs.map(x => '<img src="data:image/png;base64,' + x + '" style="width:100%;border:1px solid var(--border);margin-top:6px;background:#fff">').join('') + '<div class="text-muted" style="font-size:12px;">' + r.mm.l + ' × ' + r.mm.a + ' mm · ZPL ' + zpl.zpl.length + ' caracteres · ' + zpl.origem + '</div>';
+      } catch(e){ b.innerHTML = '<div class="alert alert-warning">' + vmlEsc(String(e && e.message || e)) + '</div>'; }
     }
     async function vdNotaFiscal(orderId, bt){
       const el = document.getElementById('vd-det-nf'), rot = bt.textContent; bt.disabled = true; bt.textContent = 'Consultando…';

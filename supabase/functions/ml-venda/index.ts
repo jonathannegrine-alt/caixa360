@@ -4,9 +4,13 @@
 //                                  Guarda em vendas_ml: cidade, cep, uf, rastreio e documento do comprador.
 //   { acao: 'etiqueta', pedido }   etiqueta do envio em PDF (base64). Usa a cópia guardada no depósito "etiquetas";
 //                                  se não houver, pede ao ML (só entrega enquanto o pacote não saiu) e guarda.
+//                                  Com formato: 'zpl' devolve o código da impressora térmica (texto ZPL), guardado
+//                                  compactado em etiquetas/<usuario>/<envio>.zpl.gz (~1,3 KB contra ~40 KB do PDF);
+//                                  a tela reconstrói a imagem a partir dele.
 //   { acao: 'nota',     pedido }   nota fiscal que o ML conhece: Full (emissor do ML) e coleta (nota enviada ao ML).
 //
 // O token do ML nunca sai do servidor.
+import { unzipSync, gzipSync, gunzipSync, strFromU8, strToU8 } from 'https://esm.sh/fflate@0.8.2'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -80,6 +84,19 @@ Deno.serve(async (req: Request) => {
 
     if (body?.acao === 'etiqueta') {
       if (!sid) return resp({ error: 'Esta venda não tem envio pelo Mercado Envios.' }, 400)
+      if (body?.formato === 'zpl') {
+        const cz = `etiquetas/${userId}/${sid}.zpl.gz`
+        const gz = await fetch(`${supaUrl}/storage/v1/object/${cz}`, { headers: dbH }).catch(() => null)
+        if (gz && gz.ok) return resp({ ok: true, origem: 'guardada', formato: 'zpl', zpl: strFromU8(gunzipSync(new Uint8Array(await gz.arrayBuffer()))), envio: sid })
+        const r = await fetch(`${ML}/shipment_labels?shipment_ids=${sid}&response_type=zpl2`, { headers: { Authorization: 'Bearer ' + tk } }).catch(() => null)
+        const zb = r && r.ok ? new Uint8Array(await r.arrayBuffer()) : null
+        let zpl = ''
+        if (zb && zb[0] === 0x50 && zb[1] === 0x4b) { const arq = unzipSync(zb); const nome = Object.keys(arq).find(n => /.txt$/i.test(n)); zpl = nome ? strFromU8(arq[nome]) : '' }
+        else if (zb) zpl = strFromU8(zb)
+        if (!zpl.includes('^XA')) return resp({ ok: false, motivo: 'O Mercado Livre não entregou o código da etiqueta (ZPL) deste envio.' })
+        await fetch(`${supaUrl}/storage/v1/object/${cz}`, { method: 'POST', headers: { ...dbH, 'Content-Type': 'application/gzip', 'x-upsert': 'true' }, body: gzipSync(strToU8(zpl)) }).catch(() => null)
+        return resp({ ok: true, origem: 'mercado_livre', formato: 'zpl', zpl, envio: sid })
+      }
       const caminho = `etiquetas/${userId}/${sid}.pdf`
       const guardada = await fetch(`${supaUrl}/storage/v1/object/${caminho}`, { headers: dbH }).catch(() => null)
       if (guardada && guardada.ok) return resp({ ok: true, origem: 'guardada', pdf: b64(await guardada.arrayBuffer()), envio: sid })
