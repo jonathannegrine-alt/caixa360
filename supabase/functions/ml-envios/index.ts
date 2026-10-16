@@ -5,6 +5,7 @@
 //
 //   usuário logado: {}                    confere as vendas dele
 //   cron:           { cron: true, secret } confere as de todos (a cada 15 min)
+import { unzipSync, gzipSync, strFromU8 } from 'https://esm.sh/fflate@0.8.2'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -21,8 +22,24 @@ const endDe = (s: any) => s?.destination?.shipping_address || s?.receiver_addres
 const cidadeDe = (s: any): string | null => { const c = String(endDe(s)?.city?.name || '').trim(); return c || null }
 const cepDe = (s: any): string | null => { const c = String(endDe(s)?.zip_code || '').replace(/\D/g, ''); return c || null }
 
-// Guarda uma cópia da etiqueta (PDF) no depósito "etiquetas": o ML só a entrega enquanto o pacote não saiu.
+// Guarda uma cópia da etiqueta no depósito "etiquetas": o ML só a entrega enquanto o pacote não saiu.
+// Desde 16/10/2026 guarda o código da impressora térmica (ZPL) compactado, <envio>.zpl.gz (~1,3 KB contra ~40 KB do
+// PDF); a tela reconstrói a imagem. O ML manda o ZPL num ZIP ("Etiqueta de envio.txt" + "Controle.pdf"; a folha de
+// controle a tela monta com os dados da venda). Se o ZPL não vier, guarda o PDF como antes.
 async function guardarEtiqueta(supaUrl: string, dbH: Record<string, string>, userId: string, sid: string, tk: string): Promise<boolean> {
+  const z = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${sid}&response_type=zpl2`, { headers: { Authorization: `Bearer ${tk}` } }).catch(() => null)
+  if (z && z.ok) {
+    try {
+      const zb = new Uint8Array(await z.arrayBuffer())
+      let zpl = ''
+      if (zb[0] === 0x50 && zb[1] === 0x4b) { const arq = unzipSync(zb); const nome = Object.keys(arq).find(n => /.txt$/i.test(n)); zpl = nome ? strFromU8(arq[nome]) : '' }
+      else zpl = strFromU8(zb)
+      if (zpl.includes('^XA')) {
+        const up = await fetch(`${supaUrl}/storage/v1/object/etiquetas/${userId}/${sid}.zpl.gz`, { method: 'POST', headers: { ...dbH, 'Content-Type': 'application/gzip', 'x-upsert': 'true' }, body: gzipSync(new TextEncoder().encode(zpl)) }).catch(() => null)
+        if (up && up.ok) return true
+      }
+    } catch (_) { /* cai para o PDF */ }
+  }
   const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${sid}&response_type=pdf`, { headers: { Authorization: `Bearer ${tk}` } }).catch(() => null)
   if (!r || !r.ok || !(r.headers.get('content-type') || '').includes('pdf')) return false
   const up = await fetch(`${supaUrl}/storage/v1/object/etiquetas/${userId}/${sid}.pdf`, { method: 'POST', headers: { ...dbH, 'Content-Type': 'application/pdf', 'x-upsert': 'true' }, body: await r.arrayBuffer() }).catch(() => null)
@@ -35,7 +52,7 @@ async function limparEtiquetas(supaUrl: string, dbH: Record<string, string>) {
   const velhas = await fetch(`${supaUrl}/rest/v1/vendas_ml?etiqueta_em=lt.${corte}&select=usuario_id,shipping_id&limit=200`, { headers: dbH }).then(r => r.json()).catch(() => [])
   const lista = Array.isArray(velhas) ? velhas : []
   if (!lista.length) return 0
-  const prefixes = [...new Set(lista.map((v: any) => `${v.usuario_id}/${v.shipping_id}.pdf`))]
+  const prefixes = [...new Set(lista.flatMap((v: any) => [`${v.usuario_id}/${v.shipping_id}.pdf`, `${v.usuario_id}/${v.shipping_id}.zpl.gz`]))]
   await fetch(`${supaUrl}/storage/v1/object/etiquetas`, { method: 'DELETE', headers: { ...dbH, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes }) }).catch(() => null)
   for (const v of lista) await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${v.usuario_id}&shipping_id=eq.${v.shipping_id}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ etiqueta_em: null }) }).catch(() => null)
   return prefixes.length

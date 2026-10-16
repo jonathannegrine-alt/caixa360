@@ -506,18 +506,32 @@
       const mm = { l: Math.round(pw / 8), a: Math.round(ll / 8) };
       return { imgs: await m.zplToBase64MultipleAsync(zpl, mm.l, mm.a, 8), mm };
     }
-    // abre a etiqueta reconstruída numa aba própria, já no tamanho da etiqueta, pronta para imprimir ou salvar em PDF
-    function vdZplJanela(r, envio){
-      const w = window.open('', '_blank'); if(!w) return false;
+    // escreve a etiqueta reconstruída na aba w (aberta no clique), no tamanho da etiqueta, pronta para imprimir ou salvar
+    // em PDF; depois dela vem a folha de controle (o que vai no pacote), montada com os dados da venda
+    function vdZplJanela(w, r, envio, zpl, itens){
+      const ctl = (itens || []).length ? `<div class="ctl"><h2>Controle · envio ${vmlEsc(envio)}</h2>${itens.map(v => `<div class="it"><b>${Number(v.qtd) || 1}×</b> <span>${vmlEsc(v.titulo || '')}${v.variacao ? '<br><small>' + vmlEsc(v.variacao) + '</small>' : ''}<br><small>SKU ${vmlEsc(v.sku || '—')} · venda ${vmlEsc(v.order_id)}</small></span></div>`).join('')}<p class="ok">☐ Conferido</p></div>` : '';
+      w.document.open();
       w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiqueta ${vmlEsc(envio)}</title><style>
-        @page{size:${r.mm.l}mm ${r.mm.a}mm;margin:0}body{margin:0;background:#888;font:14px system-ui,sans-serif}
-        .bar{position:sticky;top:0;background:#222;color:#fff;padding:10px 14px;display:flex;gap:10px;align-items:center}
-        .bar button{font:inherit;padding:6px 14px;cursor:pointer}
-        img{display:block;width:${r.mm.l}mm;height:${r.mm.a}mm;margin:12px auto;background:#fff;image-rendering:pixelated}
-        @media print{.bar{display:none}body{background:#fff}img{margin:0;page-break-after:always}}
-      </style></head><body><div class="bar"><button onclick="print()">Imprimir ou salvar em PDF</button><span>Etiqueta ${r.mm.l} × ${r.mm.a} mm · envio ${vmlEsc(envio)}</span></div>
-      ${r.imgs.map(b => '<img alt="Etiqueta" src="data:image/png;base64,' + b + '">').join('')}</body></html>`);
-      w.document.close(); return true;
+        @page{size:${r.mm.l}mm ${r.mm.a}mm;margin:0}*{box-sizing:border-box}body{margin:0;background:#777;font:14px system-ui,sans-serif}
+        .bar{position:sticky;top:0;background:#222;color:#fff;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+        .bar button,.bar a{font:inherit;padding:6px 14px;cursor:pointer;background:#fff;color:#111;border:0;border-radius:6px;text-decoration:none}
+        .bar label{display:flex;gap:6px;align-items:center}
+        .pg{width:${r.mm.l}mm;height:${r.mm.a}mm;margin:12px auto;background:#fff;overflow:hidden}
+        img.pg{display:block;image-rendering:pixelated}
+        .ctl{padding:6mm;font-size:12pt}.ctl h2{font-size:13pt;margin:0 0 4mm}.it{display:flex;gap:3mm;padding:2mm 0;border-bottom:1px solid #000}.ok{margin-top:5mm}
+        body.sem-ctl .ctl{display:none}
+        @media print{.bar{display:none}body{background:#fff}.pg{margin:0;page-break-after:always}}
+      </style></head><body><div class="bar"><button onclick="print()">Imprimir ou salvar em PDF</button>
+        <a download="etiqueta-${vmlEsc(envio)}.zpl" href="data:text/plain;charset=utf-8,${encodeURIComponent(zpl)}" title="Arquivo para mandar direto à impressora térmica (Zebra, Elgin, Argox…)">Baixar ZPL (térmica)</a>
+        ${ctl ? '<label><input type="checkbox" checked onchange="document.body.classList.toggle(&#39;sem-ctl&#39;, !this.checked)"> imprimir folha de controle</label>' : ''}
+        <span>${r.mm.l} × ${r.mm.a} mm</span></div>
+      ${r.imgs.map(b => '<img class="pg" alt="Etiqueta" src="data:image/png;base64,' + b + '">').join('')}${ctl ? '<div class="pg">' + ctl + '</div>' : ''}</body></html>`);
+      w.document.close();
+    }
+    function vdJanelaAguarde(){
+      const w = window.open('', '_blank');
+      if(w) w.document.write('<!doctype html><meta charset="utf-8"><title>Etiqueta</title><body style="font:15px system-ui,sans-serif;padding:24px">Montando a etiqueta…</body>');
+      return w;
     }
 
     async function vdDanfe(orderId, bt){
@@ -531,12 +545,27 @@
     async function vdEtiqueta(orderId, bt){
       const el = document.getElementById('vd-det-msg'), rot = bt.textContent; bt.disabled = true;
       const msg = el && bt.closest('.modal') ? el : { set textContent(t){ if(t && typeof toast === 'function') toast(t); } }; bt.textContent = 'Buscando etiqueta…'; if(msg) msg.textContent = '';
-      let d; try { d = await vdFuncao({ acao: 'etiqueta', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
-      bt.disabled = false; bt.textContent = rot;
-      if(d && d.ok && d.pdf){
-        vdAbrirPdf(d.pdf);
-        if(msg) msg.textContent = d.origem === 'guardada' ? 'Etiqueta aberta (cópia guardada no Caixa 360).' : 'Etiqueta aberta e cópia guardada por 12 meses.';
-      } else if(msg) msg.textContent = (d && (d.motivo || d.error)) || 'Não foi possível abrir a etiqueta.';
+      const w = vdJanelaAguarde();
+      const fim = t => { bt.disabled = false; bt.textContent = rot; if(msg) msg.textContent = t || ''; };
+      let d; try { d = await vdFuncao({ acao: 'etiqueta', pedido: orderId, formato: 'zpl' }); } catch(e){ d = { error: 'sem conexão' }; }
+      if(d && d.ok && d.zpl){
+        try {
+          const [r, it] = await Promise.all([vdZplPng(d.zpl), supa.from('vendas_ml').select('order_id,sku,titulo,variacao,qtd').eq('usuario_id', usuarioAtual.id).eq('shipping_id', d.envio)]);
+          if(!w || w.closed){ fim('O navegador bloqueou a nova aba. Permita pop-ups para o Caixa 360 e tente de novo.'); return; }
+          vdZplJanela(w, r, d.envio, d.zpl, it.data || []);
+          return fim('Etiqueta aberta em outra aba.');
+        } catch(e){ /* sem o renderizador (sem internet para a biblioteca?): tenta o PDF */ }
+      }
+      let p; try { p = await vdFuncao({ acao: 'etiqueta', pedido: orderId }); } catch(e){ p = { error: 'sem conexão' }; }
+      if(p && p.ok && p.pdf){
+        const bin = atob(p.pdf), u = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([u], { type: 'application/pdf' }));
+        if(w && !w.closed) w.location.href = url; else vdAbrirPdf(p.pdf);
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+        return fim('Etiqueta aberta em outra aba.');
+      }
+      if(w && !w.closed) w.close();
+      fim((d && d.motivo) || (p && (p.motivo || p.error)) || 'Não foi possível abrir a etiqueta.');
     }
     // TESTE (16/10/2026) da troca PDF -> ZPL: mostra lado a lado o PDF original do ML e a etiqueta reconstruída do ZPL.
     // Uso no console: etqComparar('<nº do envio ou do pedido>'). Retirar quando a troca estiver concluída.
