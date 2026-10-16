@@ -43,6 +43,8 @@
       if(!clItens.length){ toast('Marque pelo menos um produto na tabela.'); return; }
       comprasListaDesenhar();
     }
+    // redesenha a lista sem a tabela voltar ao começo
+    function clRedesenhar(){ if(typeof cpSemPular === 'function') cpSemPular(comprasListaDesenhar, document.getElementById('modal-vml'), ['.pf-tab', '.modal-body']); else comprasListaDesenhar(); }
     function comprasListaDesenhar(){
       const total = clItens.reduce((s, x) => s + x.qtd * x.preco, 0), un = clItens.reduce((s, x) => s + x.qtd, 0);
       const forns = [...new Set(clItens.map(x => x.forn).filter(Boolean))];
@@ -55,10 +57,10 @@
         <label class="pf-check" style="margin:0 0 10px;"><input type="checkbox" id="cl-preco" ${window._clSemPreco ? '' : 'checked'} onchange="window._clSemPreco=!this.checked"> Mostrar o último preço pago e o total no PDF</label>
         <div class="pf-tab" style="max-height:44vh;"><table><thead><tr><th>SKU</th><th>Produto</th><th style="text-align:right;">Quantidade</th><th style="text-align:right;">Último preço pago</th><th style="text-align:right;">Subtotal</th><th></th></tr></thead><tbody>
           ${clItens.map((x, i) => `<tr><td>${typeof fotoLinha === 'function' ? fotoLinha(x.sku, `<b>${clE(x.sku)}</b>`) : `<b>${clE(x.sku)}</b>`}</td><td style="max-width:230px;">${clE(x.nome || '—')}${x.forn ? `<div class="text-muted" style="font-size:11.5px;">${clE(x.forn)}</div>` : ''}</td>
-            <td style="text-align:right;"><input type="number" min="0" value="${x.qtd}" style="width:90px;text-align:right;" onchange="clItens[${i}].qtd = Math.max(0, Math.round(Number(this.value) || 0)); comprasListaDesenhar()"></td>
-            <td style="text-align:right;" title="${clE(x.origem)}"><input class="money-input" value="${fmtMoney(x.preco)}" style="width:100px;text-align:right;" oninput="onMoneyInput(this)" onchange="clItens[${i}].preco = parseMoney(this.value); clItens[${i}].origem = 'digitado'; comprasListaDesenhar()"><div class="text-muted" style="font-size:11px;">${clE(x.origem)}</div></td>
+            <td style="text-align:right;"><input type="number" min="0" value="${x.qtd}" style="width:90px;text-align:right;" onchange="clItens[${i}].qtd = Math.max(0, Math.round(Number(this.value) || 0)); clRedesenhar()"></td>
+            <td style="text-align:right;" title="${clE(x.origem)}"><input class="money-input" value="${fmtMoney(x.preco)}" style="width:100px;text-align:right;" oninput="onMoneyInput(this)" onchange="clItens[${i}].preco = parseMoney(this.value); clItens[${i}].origem = 'digitado'; clRedesenhar()"><div class="text-muted" style="font-size:11px;">${clE(x.origem)}</div></td>
             <td style="text-align:right;white-space:nowrap;">${fmt(x.qtd * x.preco)}</td>
-            <td><button class="ico-btn" title="Tirar da lista" onclick="clItens.splice(${i}, 1); comprasListaDesenhar()">✕</button></td></tr>`).join('')}
+            <td><button class="ico-btn" title="Tirar da lista" onclick="clItens.splice(${i}, 1); clRedesenhar()">✕</button></td></tr>`).join('')}
         </tbody><tfoot><tr><td colspan="2">${clItens.length} produtos</td><td style="text-align:right;"><b>${un.toLocaleString('pt-BR')}</b></td><td></td><td style="text-align:right;"><b>${fmt(total)}</b></td><td></td></tr></tfoot></table></div>`,
         `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn-out btn" onclick="comprasListaPlanilha()">Baixar planilha</button><button class="btn-out btn" title="Abre uma ordem de compra nova com estes itens" onclick="comprasListaOrdem()">Criar ordem de compra</button><button class="btn" onclick="comprasListaPdf(this)">Baixar PDF</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';

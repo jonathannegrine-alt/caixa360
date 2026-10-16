@@ -270,6 +270,7 @@
         const fn = CP_COLS.find(c => c[0] === comprasOrd.col)[2];
         lista.sort((a, b) => { const x = fn(a), y = fn(b); return (x < y ? -1 : x > y ? 1 : 0) * comprasOrd.dir; });
       }
+      comprasVisiveis = lista.map(l => l.k);
       const totalLista = lista.reduce((s,l) => s + l.valor, 0), unLista = lista.reduce((s,l) => s + l.sug, 0);
       const selo = s => `<span class="cp-sit cp-${cpNorm(s).replace(/\s/g,'')}">${s}</span>`;
       const d1 = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 });
@@ -338,8 +339,14 @@
         <div class="card">
           <div class="card-header"><div class="card-title">${lista.length} produto${lista.length === 1 ? '' : 's'} · ${cpInt(unLista)} unidades · ${fmt(totalLista)}</div>
             <span class="text-muted" style="font-size:12px;">Clique no título de uma coluna para ordenar e arraste a borda para mudar a largura. Altere os <b>dias desejados</b> para simular. Marque produtos para gerar a <b>lista de compras</b>.</span></div>
+          ${lista.length ? `<div class="cp-massa" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:12.5px;">
+            <span>Dias desejados para ${lista.length === 1 ? 'o produto mostrado' : `os <b>${lista.length}</b> produtos mostrados`}:</span>
+            <input type="number" min="0" step="5" id="cp-massa-dias" class="cp-dias" placeholder="ex.: 60" onkeydown="if(event.key==='Enter'){event.preventDefault();comprasSimularTodos();}">
+            <button class="btn-out btn-sm" onclick="comprasSimularTodos()">Aplicar a todos</button>
+            ${comprasVisiveis.some(k => comprasSim[k] > 0) ? `<button class="btn-out btn-sm" title="Os produtos mostrados voltam aos dias das regras de compra" onclick="comprasSimularTodos(0)">Voltar ao padrão</button>` : ''}
+          </div>` : ''}
           <div id="cp-sel-barra" class="cp-sel-barra" style="display:none;"></div>
-          <div style="overflow-x:auto;">
+          <div id="cp-rolagem" style="overflow-x:auto;">
             <table class="cp-tab">
               <thead><tr><th style="width:30px;"><input type="checkbox" title="Marcar todos da lista" onclick="event.stopPropagation();comprasMarcarTodos(this.checked)"></th>${CP_COLS.map(c => `<th class="${c[3] ? 'num' : ''} ${comprasOrd.col === c[0] ? 'ord' : ''}" title="${cpEsc(c[4])}" onclick="comprasOrdenar('${c[0]}')">${c[1]}${seta(c[0])}</th>`).join('')}<th></th></tr></thead>
               <tbody id="tbody-compras">
@@ -372,7 +379,27 @@
       cpBuscaT = setTimeout(() => { comprasDesenhar(); const i = document.getElementById('cp-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250);
     }
     function comprasLimpar(){ comprasFiltro = { sit: comprasFiltro.sit, busca:'', forn:'', fam:'', extra:'' }; comprasOrd = { col:'', dir:1 }; comprasSim = {}; comprasDesenhar(); }
-    function comprasSimular(k, v){ const n = Number(v); if(n > 0) comprasSim[k] = n; else delete comprasSim[k]; comprasDesenhar(); }
+    function comprasSimular(k, v){ const n = Number(v); if(n > 0) comprasSim[k] = n; else delete comprasSim[k]; cpSemPular(comprasDesenhar, document.getElementById('view-compras'), ['#cp-rolagem']); }
+    // mesmos dias desejados para todos os produtos mostrados na tela (com os filtros de agora); 0 = volta às regras
+    let comprasVisiveis = [];
+    function comprasSimularTodos(v){
+      const n = v === 0 ? 0 : Number((document.getElementById('cp-massa-dias') || {}).value);
+      if(v !== 0 && !(n > 0)){ if(typeof toast === 'function') toast('Digite os dias desejados.'); return; }
+      comprasVisiveis.forEach(k => { if(n > 0) comprasSim[k] = n; else delete comprasSim[k]; });
+      cpSemPular(comprasDesenhar, document.getElementById('view-compras'), ['#cp-rolagem']);
+    }
+    // Redesenha sem a página pular para o topo: guarda a rolagem da janela, dos contêineres em volta de "alvo" e dos
+    // contêineres de dentro dele (seletores em "internos"), e devolve tudo depois de desenhar.
+    function cpSemPular(desenhar, alvo, internos){
+      const pais = [];
+      for(let e = alvo && alvo.parentElement; e; e = e.parentElement) if(e.scrollTop || e.scrollLeft) pais.push([e, e.scrollTop, e.scrollLeft]);
+      const dentro = (internos || []).map(s => { const e = alvo && alvo.querySelector(s); return [s, e ? e.scrollTop : 0, e ? e.scrollLeft : 0]; });
+      const x = window.scrollX, y = window.scrollY;
+      desenhar();
+      pais.forEach(([e, t, l]) => { e.scrollTop = t; e.scrollLeft = l; });
+      dentro.forEach(([s, t, l]) => { const e = alvo && alvo.querySelector(s); if(e){ e.scrollTop = t; e.scrollLeft = l; } });
+      window.scrollTo(x, y);
+    }
     async function comprasAtualizar(btn){ if(btn){ btn.disabled = true; btn.textContent = 'Atualizando…'; } await comprasCarregarVendas(true); comprasDesenhar(); }
     // Estoque do Full pela API do Mercado Livre, de todas as contas (Edge Function ml-inventory)
     let comprasFullInfo = null, comprasFullBuscando = false;
