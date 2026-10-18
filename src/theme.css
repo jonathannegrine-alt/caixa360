@@ -1367,6 +1367,15 @@ tr.cat-linha td:first-child{border-left:5px solid color-mix(in srgb,var(--cor) 3
 .pc-an-t small{color:var(--text-muted);font-size:12px;}
 .pc-an-p{font-weight:700;white-space:nowrap;}
 .pc-seta{color:var(--text-muted);width:14px;}
+/* etiquetas do anúncio (promoção ativa, rebate): quebram linha em vez de espremer o título; no celular descem para baixo do título */
+.pc-an-tags{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;flex:0 1 auto;max-width:45%;}
+.pc-an-tags:empty{display:none;}
+.pc-an-tags .v-tag{white-space:nowrap;}
+@media (max-width:640px){
+  .pc-an-cab{flex-wrap:wrap;row-gap:6px;}
+  .pc-an-t{flex:1 1 0;}
+  .pc-an-tags{order:5;flex-basis:100%;max-width:none;justify-content:flex-start;padding-left:52px;}
+}
 .pc-promos{padding:6px 18px 16px 70px;display:flex;flex-direction:column;gap:8px;}
 .pc-promo{display:grid;grid-template-columns:minmax(220px,2fr) 1.2fr 1fr 1fr;gap:14px;align-items:center;border:1px solid var(--border);border-left:4px solid var(--border-2,#cbd5e1);border-radius:10px;padding:10px 14px;background:var(--surface);}
 .pc-promo.dentro{border-left-color:#16a34a;}
