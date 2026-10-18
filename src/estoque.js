@@ -266,7 +266,7 @@
       const u = estFotos.get(k), g = estoqueGalpao.find(x => esN(x.sku) === k), s = skus.find(x => esN(x.sku) === k);
       vmlModal('Foto — ' + esEsc((g && g.sku) || (s && s.sku) || k), `
         <div style="text-align:center;min-height:120px;">${u ? `<img src="${esEsc(u)}" alt="" style="max-width:100%;max-height:52vh;border-radius:10px;">` : '<div class="vazio"><b>Sem foto</b>Envie uma foto do produto ou use a do anúncio.</div>'}</div>
-        <div class="text-muted" style="font-size:12.5px;margin-top:10px;line-height:1.5;">A foto aparece no estoque e na folha de contagem. A do anúncio é capturada uma vez e fica guardada; ela não muda se o anúncio mudar.</div>`,
+        <div class="text-muted" style="font-size:12.5px;margin-top:10px;line-height:1.5;">A foto aparece no estoque e na folha de contagem. "Usar a foto do anúncio" busca na hora a capa atual no Mercado Livre e a guarda; se a capa mudar, clique de novo para atualizar.</div>`,
         `${u ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="estFotoRemover('${esEsc(k)}')">Remover</button>` : '<span style="margin-right:auto;"></span>'}
          <button class="btn-out" onclick="estFotoDoAnuncio('${esEsc(k)}', this)">Usar a foto do anúncio</button>
          <label class="btn" style="cursor:pointer;margin:0;">Enviar foto<input type="file" accept="image/*" aria-label="Foto do produto" style="display:none" onchange="estFotoEnviar('${esEsc(k)}', this.files[0])"></label>`);
@@ -294,10 +294,15 @@
     }
     async function estFotoDoAnuncio(k, btn){
       if(btn){ btn.disabled = true; btn.textContent = 'Buscando…'; }
-      await supa.from('sku_fotos_manual').delete().eq('usuario_id', usuarioAtual.id).eq('sku_norm', k);
-      const a = await supa.rpc('sku_fotos', { p_skus: [k] }), f = (a.data || [])[0];
-      if(!f || !f.foto){ if(typeof toast === 'function') toast('Este produto não tem anúncio com foto. Envie uma foto.'); const u = estFotos.get(k); if(u) await supa.from('sku_fotos_manual').upsert({ usuario_id: usuarioAtual.id, sku_norm: k, url: u }); if(btn){ btn.disabled = false; btn.textContent = 'Usar a foto do anúncio'; } return; }
-      const url = String(f.foto).replace('http://', 'https://');
+      // busca agora no Mercado Livre a capa atual do anúncio (função ml-vendas, acao foto_sku); se a função falhar, usa a foto já guardada
+      let d = null; try { d = (await supa.functions.invoke('ml-vendas', { body: { acao: 'foto_sku', sku: k } })).data; } catch(e){}
+      let foto = d && d.foto;
+      if(!foto && !(d && d.motivo)){ const a = await supa.rpc('sku_fotos', { p_skus: [k] }); foto = ((a.data || [])[0] || {}).foto; }
+      if(!foto){
+        if(typeof toast === 'function') toast(d && d.motivo === 'ml_sem_foto' ? 'O Mercado Livre não devolveu foto para os anúncios deste produto. Envie uma foto.' : 'Nenhum anúncio com este SKU foi encontrado. Envie uma foto.');
+        if(btn){ btn.disabled = false; btn.textContent = 'Usar a foto do anúncio'; } return;
+      }
+      const url = String(foto).replace('http://', 'https://');
       await supa.from('sku_fotos_manual').upsert({ usuario_id: usuarioAtual.id, sku_norm: k, url }); estFotos.set(k, url);
       fecharModal('modal-vml'); estDesenhar();
     }

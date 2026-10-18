@@ -342,6 +342,47 @@ Deno.serve(async (req) => {
     const contas = await contasDe(ctx, userId, body?.conta ? String(body.conta) : undefined)
     if (contas.length === 0) return resp({ conectado: false, error: 'ML não conectado. Conecte sua conta primeiro.' })
 
+    // botão "Usar a foto do anúncio" (estoque): busca AGORA no Mercado Livre a capa atual do anúncio do SKU.
+    // Anúncios do próprio SKU (cadastro de anúncios + vendas recentes) vêm antes dos kits que usam o SKU como componente;
+    // entre eles, anúncio ativo antes de pausado/encerrado. Cada anúncio é lido com o token da conta dona.
+    if (body?.acao === 'foto_sku') {
+      const k = String(body.sku || '').trim()
+      if (!k) return resp({ error: 'SKU vazio' })
+      const q = (t: string, f: string) => fetch(`${supaUrl}/rest/v1/${t}?usuario_id=eq.${userId}&${f}`, { headers: ctx.dbH }).then(r => r.json()).then(d => Array.isArray(d) ? d : []).catch(() => [])
+      const desde = new Date(Date.now() - 180 * 86400000).toISOString()
+      const doSku = async (s: string) => {
+        const e = encodeURIComponent(s)
+        const [vd, base] = await Promise.all([
+          q('vendas_ml', `sku=ilike.${e}&data_venda=gte.${desde}&select=item_id,ml_user_id&order=data_venda.desc&limit=200`),
+          q('ml_itens_base', `sku=ilike.${e}&select=item_id,ml_user_id`)])
+        return [...vd, ...base]
+      }
+      const cand: { item: string; conta: string; pr: number }[] = [], visto = new Set<string>()
+      const juntar = (linhas: any[], pr: number) => { for (const l of linhas) if (l.item_id && !visto.has(l.item_id)) { visto.add(l.item_id); cand.push({ item: String(l.item_id), conta: String(l.ml_user_id), pr }) } }
+      juntar(await doSku(k), 0)
+      if (!cand.length) {
+        const kits = await q('sku_composicao', `sku_componente=ilike.${encodeURIComponent(k)}&select=sku_comercial`)
+        for (const kt of kits.slice(0, 10)) juntar(await doSku(String(kt.sku_comercial)), 1)
+      }
+      if (!cand.length) return resp({ foto: null, motivo: 'sem_anuncio' })
+      const lidos = new Map<string, { thumb: string; ativo: boolean }>()
+      for (const c of contas) {
+        if (!c.accessToken) continue
+        const ids = cand.filter(x => x.conta === c.mlUserId).map(x => x.item).slice(0, 40)
+        for (let i = 0; i < ids.length; i += 20) {
+          const r = await mlGet(`https://api.mercadolibre.com/items?ids=${ids.slice(i, i + 20).join(',')}&attributes=id,thumbnail,status`, c.accessToken, prazoMs)
+          if (r.ok && Array.isArray(r.data)) for (const x of r.data) if (x.code === 200 && x.body?.thumbnail)
+            lidos.set(x.body.id, { thumb: String(x.body.thumbnail).replace('http://', 'https://'), ativo: x.body.status === 'active' })
+        }
+      }
+      if (!lidos.size) return resp({ foto: null, motivo: 'ml_sem_foto' })
+      const agora = new Date().toISOString()
+      await fetch(`${supaUrl}/rest/v1/vendas_fotos?on_conflict=usuario_id,item_id`, { method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify([...lidos].map(([id, v]) => ({ usuario_id: userId, item_id: id, thumbnail: v.thumb, atualizado_em: agora }))) }).catch(() => null)
+      const melhor = cand.filter(x => lidos.has(x.item)).sort((a, b) => a.pr - b.pr || Number(lidos.get(b.item)!.ativo) - Number(lidos.get(a.item)!.ativo))[0]
+      return resp({ foto: lidos.get(melhor.item)!.thumb, item_id: melhor.item })
+    }
+
     // Escopos do token de cada conta: vendas (pedidos) e comunicação (perguntas/mensagens)
     // botão "Atualizar fotos dos anúncios": relê no Mercado Livre a foto de capa dos anúncios já vendidos
     // (sem o botão, cada foto é relida sozinha a cada 7 dias, quando o anúncio vende de novo)
