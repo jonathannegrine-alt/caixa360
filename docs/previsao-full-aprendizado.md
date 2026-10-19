@@ -81,7 +81,7 @@ conta: pode cair em outras semanas.
 
 1. Importar o relatório toda segunda, de todas as contas. A cada importação, guardar o multiplicador de cada produto
    (a tela já mostra no dica da coluna "Mercado Livre") e acompanhar como ele se move até a Black Friday e depois dela.
-2. Com quatro ou mais semanas: trocar a regra 2 pela fórmula declarada, usando o multiplicador aprendido por produto.
+2. ~~Com quatro ou mais semanas: trocar a regra 2 pela fórmula declarada, usando o multiplicador aprendido por produto.~~ Em 19/10 o multiplicador mudou muito de uma semana para outra e a fórmula com ele acertou menos (69% x 83%). Reavaliar só com 4 semanas.
 3. Feito em 13/10/2026: tabela sku_trocas e quadro "Produto que trocou de SKU" na tela. Falta o usuário cadastrar J-2006-ROSA → J-2005-Rosa e medir se a sazonalidade melhora o acerto.
 4. Feito em 13/10/2026: campo "Reforço para data especial" (percentual único para todos os produtos). O ideal é por produto, com o multiplicador aprendido.
 5. Entender "de acordo com sua frequência de envio": as 4 semanas podem mudar para quem envia com outra frequência.
@@ -92,3 +92,26 @@ conta: pode cair em outras semanas.
 - Filtros com os nomes do ML (esta semana, próxima semana, 2 semanas ou mais). Contagem do sistema: 32 / 5 / 2; tela do ML no mesmo dia: 31 / 6 / 2.
 - Envio com data marcada: o estoque é projetado até a data do envio mais os dias de conferência (padrão 2) e o lote é calculado com essa sobra. A comparação com o ML continua sendo feita com a conta de hoje (80%).
 - O ML tem dois status que o sistema não reproduz: "Urgente" (zerado, "o quanto antes") e "Excedente" / "não repor por estoque antigo" (sugestão zero mesmo com cobertura baixa).
+
+## Rodada de 19/10/2026 (segunda semana MKSTORE, primeira Florevi)
+
+Conta feita fora da tela (sem a sazonalidade do ano passado), por isso os números diferem um pouco do que a tela mostra.
+
+| Loja / relatório | Produtos | Sugestão ML | Regra 2 | Proximidade | Mesma decisão |
+|---|---|---|---|---|---|
+| MKSTORE 13/10 | 52 | 8.439 | 8.214 | 81% | 47 de 52 |
+| MKSTORE 19/10 | 52 | 12.271 | 11.950 | 82% | 48 de 52 |
+| Florevi 19/10 | 13 | 979 | 530 | 51% | 10 de 13 |
+
+- **O multiplicador por produto não se repete de uma semana para a outra.** J-2010-Rosa 3,39 → 2,01; J-2012-Branco-2 2,35 → 1,47;
+  J-2001 1,21 → 0,94 (zerou no Full). Teste: fórmula declarada (mínimo + 4 semanas × multiplicador de 13/10 − estoque) aplicada em
+  19/10 deu 68% a 69%, contra 83% da regra 2 nos mesmos 15 produtos. O passo 2 dos próximos passos (trocar pela fórmula declarada
+  com multiplicador aprendido) **não se sustenta com estes dados**; a regra 2 continua.
+- A sugestão total da MKSTORE subiu 45% (8.439 → 12.271), puxada por J-2010-Branco (0 → 2.400, estoque caiu de 1.553 para 868)
+  e pelos produtos que zeraram (J-2010-Vermelho e Azul). A regra 2 subiu junto (8.214 → 11.950): o aumento é estoque, não reforço de data especial.
+- Novos status do ML no relatório: "Urgente" (zerado) e "Excedente".
+- **Florevi: produto novo.** Costelas de Adão com 1 a 2 semanas de venda: o ML usa o ritmo recente (J-V03-PED-PRT: 15 na última
+  semana, sugere 53), a regra 2 dilui nas 6 semanas (sugere 19). Contar só as semanas desde a primeira venda sobe a proximidade da
+  Florevi de 51% para 54% e não muda a MKSTORE (82%). Ganho pequeno; esperar mais semanas antes de mudar.
+- Florevi J-2026-220V: ML pede 200 com 5,4 semanas de cobertura pela média (multiplicador 2,99, venda saltou para 33 na última semana).
+- Nenhum outro usuário importou relatório até 19/10.
