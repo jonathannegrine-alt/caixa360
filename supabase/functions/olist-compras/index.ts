@@ -1,6 +1,8 @@
 // olist-compras — ordens de compra do Olist pela API v3 (aplicativo OAuth), para o Caixa 360.
 //
 //   { acao: 'ordens' }            ordens em aberto / em andamento + atendidas dos últimos 90 dias, com os itens
+//   { acao: 'ordens', tudo: true } TODAS as ordens (todas as situações, sem limite de data), para guardar o histórico
+//                                 inteiro no Caixa 360; os itens vêm em partes (faltaDetalhe > 0 = chamar de novo)
 //   { acao: 'bruto', id? }        diagnóstico: devolve a resposta crua do Olist (lista e detalhe de uma ordem)
 //   { cron: true, secret }        renova os tokens de todos os usuários (o refresh token do Olist vale só 1 dia)
 //
@@ -139,11 +141,12 @@ Deno.serve(async (req: Request) => {
     }
 
     if (acao === 'ordens') {
-      // lista: em aberto (0), em andamento (3) e atendidas (1) recentes
+      // lista: em aberto (0), em andamento (3) e atendidas (1) recentes; com tudo, todas as situações e datas
+      const tudo = !!body?.tudo
       const desde = new Date(Date.now() - 90 * 86400000).toISOString().substring(0, 10)
       const ordens = new Map<number, any>()
-      for (const filtro of ['situacao=0', 'situacao=3', `situacao=1&dataInicial=${desde}`]) {
-        for (let off = 0; off < 1000; off += 100) {
+      for (const filtro of tudo ? ['situacao=0', 'situacao=3', 'situacao=1', 'situacao=2'] : ['situacao=0', 'situacao=3', `situacao=1&dataInicial=${desde}`]) {
+        for (let off = 0; off < (tudo ? 10000 : 1000); off += 100) {
           const r = await api(`/ordem-compra?${filtro}&limit=100&offset=${off}`, a.token)
           if (r.status === 429) return resp({ error: 'O Olist bloqueou por excesso de chamadas. Tente em um minuto.', limite: true }, 429)
           const itens = Array.isArray(r.json?.itens) ? r.json.itens : null
@@ -163,7 +166,7 @@ Deno.serve(async (req: Request) => {
         let itens = g?.itens
         // busca os itens quando é nova, quando mudou de valor ou quando ainda está aberta e sem itens
         if (!g || !Array.isArray(g.itens) || !g.itens.length || num(g.total) !== total) {
-          if (buscados >= 40) continue                       // o resto fica para a próxima chamada
+          if (buscados >= (tudo ? 60 : 40)) continue                       // o resto fica para a próxima chamada
           const d = await api(`/ordem-compra/${id}`, a.token); buscados++
           if (d.status === 429) break
           if (d.status === 200) itens = itensDe(d.json)

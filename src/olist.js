@@ -269,9 +269,9 @@
       const cab = '<div style="border-top:1px solid var(--border);margin:18px 0 14px;"></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><b>Ordens de compra do Olist</b>' + (olist.v3 && !olist.v3Erro ? '<span class="badge badge-success">Autorizado</span>' : '<span class="badge badge-warning">Falta autorizar</span>') + '</div>';
       if(olist.v3 && !olist.v3Erro) return cab + `
         <div class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Autorizado em ${dt(olist.v3)}. O acesso é renovado sozinho a cada 2 horas.${olist.ordens ? ' Última busca: ' + olist.ordens + '.' : ''}</div>
-        <div class="d-flex" style="gap:8px;flex-wrap:wrap;"><button class="btn-out" onclick="olistBuscarOrdens(this)">Buscar ordens de compra agora</button><button class="btn-out" onclick="olistAutorizar(true)">Autorizar de novo</button></div>`;
+        <div class="d-flex" style="gap:8px;flex-wrap:wrap;"><button class="btn-out" onclick="olistBuscarOrdens(this)">Buscar ordens de compra agora</button><button class="btn-out" onclick="olistHistoricoOrdens(this)" title="Traz todas as ordens de compra do Olist (todas as situações e datas) e guarda no Caixa 360. Serve para manter o histórico se você deixar de usar o Olist.">Importar todo o histórico</button><button class="btn-out" onclick="olistAutorizar(true)">Autorizar de novo</button></div>`;
       return cab + `
-        ${olist.v3Erro ? '<div class="alert alert-warning">' + olEsc(olist.v3Erro) + '</div>' : ''}
+        ${olist.v3Erro ? '<div class="alert alert-warning">' + olEsc(olist.v3Erro) + (olist.clientId ? ' <button class="btn btn-sm" onclick="olistAutorizar(true)">Autorizar de novo</button>' : '') + '</div>' : ''}
         <ol style="margin:6px 0 12px 18px;font-size:13px;">
           <li>No Olist, em <b>Configurações → Aplicativos API</b>, salve o aplicativo <b>Caixa 360</b> (o formulário já está preenchido).</li>
           <li>Depois de salvar, o Olist mostra o <b>Client ID</b> e o <b>Client Secret</b>. Cole os dois aqui.</li>
@@ -306,6 +306,22 @@
         const r = await fetch(SUPA_URL + '/functions/v1/olist-compras', { method: 'POST', headers: { Authorization: 'Bearer ' + sess.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
         return await r.json().catch(() => ({ error: 'resposta inesperada (http ' + r.status + ')' }));
       } catch(e){ return { error: 'sem conexão com o servidor' }; }
+    }
+    // todas as ordens do Olist (todas as situações e datas), em partes: cada chamada traz os itens de até 60 ordens
+    async function olistHistoricoOrdens(btn){
+      if(btn){ btn.disabled = true; btn.textContent = 'Importando…'; }
+      let j = {}, voltas = 0;
+      while(voltas++ < 60){
+        j = await olistChamarCompras({ acao: 'ordens', tudo: true });
+        if(j.limite){ if(btn) btn.textContent = 'Olist pediu uma pausa, continuando em 1 min…'; await new Promise(ok => setTimeout(ok, 60000)); continue; }
+        if(j.error) break;
+        if(btn) btn.textContent = 'Importando… ' + (j.total || 0) + ' ordens' + (j.faltaDetalhe ? ', faltam ' + j.faltaDetalhe : '');
+        if(!j.faltaDetalhe) break;
+      }
+      if(j.error){ olist.erro = j.error; olist.ordens = null; }
+      else { olist.erro = ''; olist.ordens = 'histórico completo: ' + (j.total || 0) + ' ordens guardadas no Caixa 360' + (j.faltaDetalhe ? ' (faltam os itens de ' + j.faltaDetalhe + '; clique de novo)' : ''); }
+      if(typeof oc !== 'undefined') oc.carregadoEm = 0;
+      await olistStatus(); olistRenderCard();
     }
     async function olistBuscarOrdens(btn){
       if(btn){ btn.disabled = true; btn.textContent = 'Buscando…'; }
