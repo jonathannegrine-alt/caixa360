@@ -69,7 +69,9 @@
       const sub = String(p.envio_substatus || '');
       const nome = p.envio_status === 'pending' ? (sub === 'buffered' ? 'Aguardando liberação do ML' : 'Pendente')
         : sub === 'ready_to_print' ? 'Etiqueta para imprimir' : sub === 'printed' ? 'Etiqueta impressa' : sub === 'ready_for_pickup' ? 'Aguardando coleta'
-        : sub === 'in_packing_list' ? 'Na lista de coleta' : sub === 'ready_to_pack' ? 'Para embalar' : p.envio_status === 'ready_to_ship' ? 'Pronto para enviar' : (p.envio_status || 'Sem informação de envio');
+        : sub === 'in_packing_list' ? 'Na lista de coleta' : sub === 'ready_to_pack' ? 'Para embalar' : sub === 'invoice_pending' ? 'Aguardando nota fiscal'
+        : sub === 'picked_up' ? 'Coletado' : sub === 'dropped_off' ? 'Entregue na agência' : sub === 'packed' ? 'Embalado'
+        : p.envio_status === 'ready_to_ship' ? 'Pronto para enviar' : (p.envio_status || 'Sem informação de envio');
       return [nome, p.atrasado ? 'cp-urgente' : p.venceHoje ? 'cp-comprar' : 'cp-excesso'];
     }
 
