@@ -220,6 +220,8 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   relatório de planejamento ou do relatório geral de estoque). A regra fica no topo do arquivo e no rodapé da tela.
   Antes de mexer na regra, ler docs/previsao-full-aprendizado.md (fontes, fórmula declarada pelo ML, regras já testadas
   e o que cada uma acertou) e registrar ali o resultado de cada nova calibragem.
+  Importação com mais de uma loja: janela pflConfirmarLoja (o xlsx do ML não diz a loja); RPC full_conta_skus conta em quais
+  lojas os SKUs têm anúncio/venda Full e já marca a mais provável. Lista "Relatórios importados" (RPC full_relatorios, apagar por data).
   Envio com data marcada (pfl.envio): projeta o estoque até o dia em que o envio fica disponível. sku_trocas liga SKU antigo ao atual.
   Envios do planejamento interno (estoque_envios_full situação 'preparando', por anuncio_sku) entram em "A caminho" (pfl.progUsar,
   padrão ligado): o ML não os mostra antes de liberar a data; ao lançar a saída deixam de contar. Cada um fica disponível em

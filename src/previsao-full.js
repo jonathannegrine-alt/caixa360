@@ -98,6 +98,9 @@
         supa.from('full_sugestoes').select('referencia').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).order('referencia', { ascending: false }).limit(400)]);
       if(b.error){ pfl.erro = b.error.message; return; }
       pfl.base = b.data || []; pfl.refs = [...new Set((r.data || []).map(x => x.referencia))];
+      // relatórios já importados nesta loja (lista no fim da página)
+      pfl.rels = [];
+      try { const x = await supa.rpc('full_relatorios', { p_conta: conta }); pfl.rels = x.data || []; } catch(e){}
       pfl.sug = [];
       if(pfl.refs.length){ const s = await supa.from('full_sugestoes').select('*').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).eq('referencia', pfl.refs[0]).limit(2000); pfl.sug = s.data || []; }
       // foto de cada produto (cadastro, anúncio ou última venda)
@@ -242,7 +245,7 @@
             <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" ${pfl.ruptura ? 'checked' : ''} onchange="pflRuptura(this.checked)"> Corrigir falta de estoque${dc('Desligado (padrão): semana sem estoque conta como venda baixa, igual ao Mercado Livre faz; o número fica perto do dele, mas produto que ficou zerado recebe menos do que venderia. Ligado: produto zerado no Full conta só as semanas em que vendeu, mostrando o que ele venderia se não tivesse faltado.')}</label></div>
           ${chega != null ? `<div class="alert alert-info">Envio planejado para <b>${pflDataBr(pfl.envio)}</b>, disponível no Full em <b>${pflDia(chega)}</b>. As quantidades já descontam o que vai vender até lá${zeram ? '. <b>' + zeram + ' produto' + (zeram === 1 ? ' zera' : 's zeram') + ' antes de o envio entrar</b>' : ''}. <a href="#" onclick="pflParam('envio', '');return false;">Voltar para envio feito agora</a></div>` : ''}
           <div class="adm-nums"><div><small>Unidades a enviar</small><b>${pflN(totEnviar)}</b></div><div><small>Produtos que acabam em até ${pfl.prazo} dias</small><b style="${urgentes ? 'color:var(--danger)' : ''}">${urgentes}</b></div>
-            <div><small>Relatório do Mercado Livre${dc('Data do último relatório importado para esta loja. Importe toda segunda de manhã: é com esse histórico que a regra é afinada.')}</small><b>${ref ? ref.split('-').reverse().join('/') : 'nenhum'}</b></div>
+            <div><small>Relatório do Mercado Livre${dc('Data do último relatório importado para esta loja. Importe toda segunda de manhã: é com esse histórico que a regra é afinada. A lista de todos os relatórios fica no fim da página.')}</small><b>${ref ? ref.split('-').reverse().join('/') : 'nenhum'}</b>${(pfl.rels || []).length ? `<small><a href="#" onclick="pfl.relAberto = true; pflPagina(); setTimeout(() => { const d = document.getElementById('pfl-rels'); if(d) d.scrollIntoView({ behavior: 'smooth' }); }, 50); return false;">${pfl.rels.length} importado${pfl.rels.length === 1 ? '' : 's'}</a></small>` : ''}</div>
             <div><small>Proximidade com o Mercado Livre${dc('Compara o "Enviar" do sistema (para envio feito agora) com a sugestão do Mercado Livre no último relatório importado: 100% seria igual em todos os produtos. Os dias de cobertura e o reforço mudam esse número.')}</small><b>${acerto == null ? '—' : acerto.toFixed(0) + '%'}</b></div></div>
           <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;font-size:12.5px;margin-bottom:10px;row-gap:8px;column-gap:14px;">
             <input type="search" class="pfl-busca" placeholder="Buscar por nome, SKU ou código do Full" value="${pflE(pfl.busca)}" oninput="pflBuscar(this.value)">
@@ -254,6 +257,7 @@
             <div class="text-muted" style="margin:8px 0;">Quando um produto muda de SKU, as vendas antigas ficam no SKU anterior e a previsão não enxerga o ano passado. Informe aqui o SKU antigo e o atual: as vendas do antigo passam a contar para o atual nesta tela (nada muda nas vendas nem no cadastro).</div>
             <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;"><input id="pfl-tr-a" placeholder="SKU antigo" style="width:180px;"> <span>passou a ser</span> <input id="pfl-tr-n" placeholder="SKU atual" style="width:180px;"> <button class="btn btn-sm" onclick="pflTrocaAdd()">Ligar</button></div>
             ${(pfl.trocas || []).length ? '<div class="adm-tab" style="margin-top:10px;max-width:560px;"><table><thead><tr><th>SKU antigo</th><th>SKU atual</th><th></th></tr></thead><tbody>' + pfl.trocas.map(t => '<tr><td>' + pflE(t.sku_antigo) + '</td><td><b>' + pflE(t.sku_novo) + '</b></td><td style="text-align:right;"><button class="btn-out btn btn-sm" onclick="pflTrocaDel(\'' + pflE(t.sku_antigo).split(String.fromCharCode(39)).join(String.fromCharCode(38) + '#39;') + '\')">Desligar</button></td></tr>').join('') + '</tbody></table></div>' : ''}</details>
+          ${pflRelsHtml()}
         </div></div>`;
     }
     // página: carrega (quando muda a loja ou os dias de cobertura) e desenha
@@ -324,16 +328,58 @@
       pfl.msg = 'Lendo ' + arq.name + '…'; pflPagina();
       try {
         const wb = XLSX.read(await arq.arrayBuffer(), { type: 'array' }), d = pflLerPlanilha(wb);
-        if(!d){ pfl.msg = 'Não reconheci este arquivo. Use o "Relatório de Planejamento de envios" ou o "Relatório geral de estoque" baixado do Mercado Livre (Full), sem alterar.'; }
-        else {
-          const ref = d.ref || getToday(), mapa = new Map(); d.itens.forEach(i => mapa.set(i.sku, i));        // SKU repetido no arquivo: fica a última linha
-          const linhas = [...mapa.values()].map(i => ({ ...i, usuario_id: usuarioAtual.id, ml_user_id: conta, referencia: ref, origem: d.origem }));
-          let erro = null;
-          for(let k = 0; k < linhas.length && !erro; k += 300){ const r = await supa.from('full_sugestoes').upsert(linhas.slice(k, k + 300), { onConflict: 'usuario_id,ml_user_id,referencia,sku' }); erro = r.error; }
-          pfl.msg = erro ? 'Não consegui gravar: ' + erro.message : 'Relatório de ' + ref.split('-').reverse().join('/') + ' importado para ' + (typeof contaNome === 'function' ? contaNome(conta) : 'a loja') + ': ' + linhas.length + ' produtos, ' + linhas.filter(l => l.sugestao > 0).length + ' com sugestão de envio. Confira se o arquivo é mesmo desta loja.';
-        }
-      } catch(e){ pfl.msg = 'Não consegui ler o arquivo: ' + ((e && e.message) || e); }
+        if(!d){ pfl.msg = 'Não reconheci este arquivo. Use o "Relatório de Planejamento de envios" ou o "Relatório geral de estoque" baixado do Mercado Livre (Full), sem alterar.'; pflPagina(); return; }
+        const mapa = new Map(); d.itens.forEach(i => mapa.set(i.sku, i));        // SKU repetido no arquivo: fica a última linha
+        d.itens = [...mapa.values()]; d.ref = d.ref || getToday();
+        // com mais de uma loja: confirma a loja antes de gravar (o relatório do ML não diz de qual loja é)
+        if(typeof contasML !== 'undefined' && contasML.length > 1){ pfl.msg = ''; pflPagina(); return pflConfirmarLoja(d, conta); }
+        await pflGravar(d, conta);
+      } catch(e){ pfl.msg = 'Não consegui ler o arquivo: ' + ((e && e.message) || e); pflPagina(); }
+    }
+    // em quais lojas os SKUs do arquivo têm anúncio ou venda pelo Full; abre a janela com a loja mais provável já escolhida
+    async function pflConfirmarLoja(d, conta){
+      const nome = id => typeof contaNome === 'function' ? contaNome(id) : id, cont = {};
+      try { const r = await supa.rpc('full_conta_skus', { p_skus: d.itens.map(i => i.sku) }); (r.data || []).forEach(x => { cont[String(x.ml_user_id)] = Number(x.achados) || 0; }); } catch(e){}
+      const n = d.itens.length, melhor = contasML.map(c => c.id).sort((a, b) => (cont[b] || 0) - (cont[a] || 0))[0];
+      const sugerida = (cont[melhor] || 0) > (cont[conta] || 0) ? melhor : conta, outra = sugerida !== conta;
+      const jaTem = id => (id === conta ? (pfl.rels || []) : []).some(x => x.referencia === d.ref);
+      pfl.pend = d;
+      vmlModal('De qual loja é este relatório?',
+        `<p style="margin-top:0;">Relatório de <b>${pflDataBr(d.ref)}/${d.ref.slice(0, 4)}</b> com <b>${n}</b> produtos (${d.itens.filter(i => i.sugestao > 0).length} com sugestão de envio). O arquivo do Mercado Livre não diz de qual loja ele é: confira antes de gravar.</p>
+        ${outra ? `<div class="alert alert-warning"><b>Parece ser de outra loja.</b> ${cont[sugerida]} dos ${n} produtos têm anúncio ou venda pelo Full em <b>${pflE(nome(sugerida))}</b>${cont[conta] ? ' e só ' + cont[conta] : ' e nenhum'} em <b>${pflE(nome(conta))}</b>, que está selecionada agora.</div>` : ''}
+        <div style="display:grid;gap:8px;margin-top:10px;">${contasML.map(c => `<label style="display:flex;gap:10px;align-items:center;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:8px;"><input type="radio" name="pfl-loja" value="${pflE(c.id)}" ${c.id === sugerida ? 'checked' : ''}><span><b>${pflE(nome(c.id))}</b>${c.id === conta ? ' <small class="text-muted">(selecionada)</small>' : ''}<br><small class="text-muted">${cont[c.id] || 0} de ${n} produtos do arquivo têm anúncio ou venda pelo Full nesta loja${jaTem(c.id) ? ' · já tem relatório desta data, que será substituído' : ''}</small></span></label>`).join('')}</div>`,
+        `<button class="btn-out btn" onclick="pfl.pend = null; fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="pflConfirmado(this)">Importar na loja marcada</button>`);
+    }
+    async function pflConfirmado(bt){
+      const r = document.querySelector('input[name="pfl-loja"]:checked'), d = pfl.pend; if(!r || !d) return;
+      bt.disabled = true; bt.textContent = 'Gravando…';
+      pfl.pend = null; fecharModal('modal-vml');
+      await pflGravar(d, r.value);
+    }
+    async function pflGravar(d, conta){
+      const atual = typeof contaParam === 'function' ? contaParam() : null, nome = typeof contaNome === 'function' ? contaNome(conta) : 'a loja';
+      const linhas = d.itens.map(i => ({ ...i, usuario_id: usuarioAtual.id, ml_user_id: conta, referencia: d.ref, origem: d.origem }));
+      let erro = null;
+      for(let k = 0; k < linhas.length && !erro; k += 300){ const r = await supa.from('full_sugestoes').upsert(linhas.slice(k, k + 300), { onConflict: 'usuario_id,ml_user_id,referencia,sku' }); erro = r.error; }
+      pfl.msg = erro ? 'Não consegui gravar: ' + erro.message : 'Relatório de ' + pflDataBr(d.ref) + ' importado para ' + nome + ': ' + linhas.length + ' produtos, ' + linhas.filter(l => l.sugestao > 0).length + ' com sugestão de envio.'
+        + (!erro && atual && conta !== atual ? ' Para ver a previsão dessa loja, troque a loja no seletor do menu.' : '');
       pflPagina(true);
+    }
+    // relatórios já importados nesta loja
+    function pflRelsHtml(){
+      const R = pfl.rels || [];
+      return `<details id="pfl-rels" style="margin-top:14px;font-size:12.5px;" ${pfl.relAberto ? 'open' : ''} ontoggle="pfl.relAberto = this.open"><summary style="cursor:pointer;font-weight:650;">Relatórios importados nesta loja (${R.length})</summary>
+        <div class="text-muted" style="margin:8px 0;">Cada relatório do Mercado Livre fica guardado para comparar a sugestão dele com a do sistema semana a semana. A previsão usa o mais recente. Importar de novo um relatório da mesma data substitui o anterior.</div>
+        ${R.length ? '<div class="adm-tab" data-sem-ordem style="max-width:820px;"><table><thead><tr><th>Data do relatório</th><th>Tipo</th><th style="text-align:right;">Produtos</th><th style="text-align:right;">Com sugestão</th><th style="text-align:right;">Unidades sugeridas</th><th>Importado em</th><th></th></tr></thead><tbody>'
+          + R.map((x, i) => `<tr><td><b>${String(x.referencia).split('-').reverse().join('/')}</b>${i === 0 ? ' <span class="badge">em uso</span>' : ''}</td><td>${x.origem === 'estoque' ? 'Relatório geral de estoque' : 'Planejamento de envios'}</td><td style="text-align:right;">${pflN(x.produtos)}</td><td style="text-align:right;">${pflN(x.com_sugestao)}</td><td style="text-align:right;">${pflN(x.unidades)}</td><td>${x.importado_em ? new Date(x.importado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') : ''}</td><td style="text-align:right;"><button class="btn-out btn btn-sm" onclick="pflRelApagar('${pflE(x.referencia)}')">Apagar</button></td></tr>`).join('')
+          + '</tbody></table></div>' : '<div class="text-muted">Nenhum relatório importado nesta loja ainda. Use o botão “Importar relatório do Mercado Livre” no alto.</div>'}</details>`;
+    }
+    async function pflRelApagar(ref){
+      const conta = typeof contaParam === 'function' ? contaParam() : null; if(!conta) return;
+      if(!confirm('Apagar o relatório de ' + ref.split('-').reverse().join('/') + ' desta loja?')) return;
+      const r = await supa.from('full_sugestoes').delete().eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).eq('referencia', ref);
+      if(r.error){ if(typeof toast === 'function') toast('Não consegui apagar: ' + r.error.message); return; }
+      pfl.relAberto = true; pflPagina(true);
     }
     // PDF do envio: foto, código do Full (o da etiqueta), SKU, produto e quantidade
     async function pflPdf(bt){
