@@ -5,7 +5,7 @@
 //   comprasCfg.faturaDre = 'auto'  → o DRE usa a fatura; categorias marcadas como "Fatura do ML (só caixa)" saem do DRE
 //                                    nos meses em que há fatura lida (mês sem fatura continua pelo Contas a pagar)
 //                        = 'pagar' → (padrão) vale o que foi lançado em Contas a pagar; a fatura fica só para conferência
-    const FT_CLASSES = [['pub', 'Publicidade (fatura ML)'], ['full', 'Full: armazenagem e serviços (fatura ML)'], ['difal', 'DIFAL (fatura ML)'],
+    const FT_CLASSES = [['pub', 'Publicidade (fatura ML)'], ['afil', 'Comissão de afiliados (fatura ML)'], ['full', 'Full: armazenagem e serviços (fatura ML)'], ['difal', 'DIFAL (fatura ML)'],
       ['loja', 'Mensalidade da loja (fatura ML)'], ['outros', 'Outras cobranças (fatura ML)']];
     const FT_RX = /marketplace|publicidade|product ads|\bads\b|armazen|fatura (do )?mercado livre|difal|minha p[aá]gina/i;
     let ft = { sit: null, sitEm: 0 };

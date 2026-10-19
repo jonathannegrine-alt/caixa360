@@ -9,6 +9,9 @@
 // Passos por conta:  1) lista de faturas (1 vez por dia)   GET /billing/integration/monthly/periods
 //                    2) resumo da fatura → tipos de cobrança que ela tem; tipo novo é sondado e classificado
 //                    3) linhas dos tipos fora das vendas, 1000 por consulta, em ordem
+//                   3b) releitura de alguns tipos numa fatura já lida (ml_fatura_periodos.reler_tipos), ex.: CVAF,
+//                       que estava como 'venda' e não era lido. Fatura compactada volta a compactado = false no fim,
+//                       e ml_fatura_compactar soma de novo o que entrou em ml_fatura_linhas
 //                    4) cobranças das vendas canceladas (frete de ida e devolução), 20 vendas por consulta
 //                       GET /billing/integration/group/ML/order/details → vendas_ml_cobr (DRE e tela de Vendas)
 // Fatura aberta é relida uma vez por dia; fatura fechada, uma vez só.
@@ -27,6 +30,12 @@ const COBR_LOTE = 20, COBR_DIAS = 100
 const COBR_DEV = new Set(['CDSDB', 'CXDED', 'CXDID', 'BDSDB', 'BXDED', 'BXDID'])
 const COBR_IDA = new Set(['CFFE', 'CFFI', 'CXDE', 'CXDI', 'CDSB', 'BFFE', 'BFFI', 'BXDE', 'BDSB'])
 const tipoCobr = (sub: string, txt: string) => COBR_DEV.has(sub) || /devolu/i.test(txt) ? 'dev' : (COBR_IDA.has(sub) ? 'ida' : null)
+// linha da fatura → ml_fatura_linhas
+const linhaFatura = (uid: string, conta: string, periodo: string) => (c: any) => ({
+  usuario_id: uid, ml_user_id: conta, detail_id: c.detail_id, periodo, dia: String(c.creation_date_time).slice(0, 10), quando: String(c.creation_date_time).slice(0, 19),
+  sub_type: String(c.detail_sub_type || ''), valor: (String(c.detail_type) === 'BONUS' ? -1 : 1) * (Number(c.detail_amount) || 0),
+  descricao: String(c.transaction_detail || '').slice(0, 200), bonifica: c.charge_bonified_id || null })
+const linhaValida = (c: any) => c && c.detail_id && /^\d{4}-\d{2}-\d{2}/.test(String(c.creation_date_time))
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -74,7 +83,7 @@ Deno.serve(async (req: Request) => {
         // botão "Atualizar agora" da tela: relê a fatura aberta sem esperar a madrugada (no máximo uma vez a cada 10 minutos)
         const forcar = body?.forcar === true && body?.cron !== true && Date.now() - ultimaLista > 600000
         const precisaLista = !periodos.length || forcar || Date.now() - ultimaLista > 20 * 3600000
-        const pendente = periodos.some(p => !p.completo)
+        const pendente = periodos.some(p => !p.completo || (Array.isArray(p.reler_tipos) && p.reler_tipos.length))
         const vendasPend: number[] = await db('rpc/vendas_ml_cobr_pendentes', { method: 'POST', body: JSON.stringify({ p_uid: uid, p_conta: conta, p_dias: diasCobr, p_limite: 200 }) })
           .then(r => r.json()).then(x => Array.isArray(x) ? x.map((y: any) => Number(y.order_id)).filter(Boolean) : []).catch(() => [])
         if (!precisaLista && !pendente && !vendasPend.length) { info.pendentes = 0; continue }
@@ -131,8 +140,9 @@ Deno.serve(async (req: Request) => {
               const d = await ml(`/periods/key/${p.periodo}/group/ML/details?document_type=BILL&limit=1&offset=0&detail_sub_types=${encodeURIComponent(n)}`)
               if (!d) { faltou = true; break }
               const l = (d.results || [])[0]
-              const classe = l && (l.sales_info || l.shipping_info) ? 'venda' : 'outros'
               const rot = [...(b.charges || []), ...(b.bonuses || [])].find((c: any) => c.type === n)?.label
+              // comissão de afiliados aponta para a venda, mas é cobrada na fatura (não sai da venda)
+              const classe = /afiliad|seguidores/i.test(String(l?.charge_info?.transaction_detail || '') + ' ' + String(rot || '')) ? 'afil' : l && (l.sales_info || l.shipping_info) ? 'venda' : 'outros'
               tipos.set(n, classe)
               await db('ml_fatura_tipos?on_conflict=sub_type', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify([{ sub_type: n, rotulo: (l?.charge_info?.transaction_detail || (rot && rot !== n ? rot : null) || n), classe }]) })
             }
@@ -147,10 +157,7 @@ Deno.serve(async (req: Request) => {
             const d = await ml(`/periods/key/${p.periodo}/group/ML/details?document_type=BILL&limit=${PAGINA}&offset=${p.prox}&detail_sub_types=${encodeURIComponent(p.tipos.join(','))}&sort_by=ID&order_by=ASC`)
             if (!d) break
             const R: any[] = d.results || []
-            const linhas = R.map(r => r.charge_info).filter(c => c && c.detail_id && /^\d{4}-\d{2}-\d{2}/.test(String(c.creation_date_time))).map(c => ({
-              usuario_id: uid, ml_user_id: conta, detail_id: c.detail_id, periodo: p.periodo, dia: String(c.creation_date_time).slice(0, 10), quando: String(c.creation_date_time).slice(0, 19),
-              sub_type: String(c.detail_sub_type || ''), valor: (String(c.detail_type) === 'BONUS' ? -1 : 1) * (Number(c.detail_amount) || 0),
-              descricao: String(c.transaction_detail || '').slice(0, 200), bonifica: c.charge_bonified_id || null }))
+            const linhas = R.map(r => r.charge_info).filter(linhaValida).map(linhaFatura(uid, conta, p.periodo))
             if (linhas.length) {
               const g = await db('ml_fatura_linhas?on_conflict=usuario_id,ml_user_id,detail_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(linhas) })
               if (!g.ok) { info.erro = 'gravação: ' + (await g.text()).slice(0, 160); break }
@@ -161,6 +168,30 @@ Deno.serve(async (req: Request) => {
             info.linhas = (info.linhas || 0) + linhas.length
           }
           if (info.erro) break
+        }
+
+        // 3b) releitura de tipos numa fatura já lida
+        for (const p of periodos.filter(x => Array.isArray(x.reler_tipos) && x.reler_tipos.length)) {
+          if (info.erro || limite || usadas >= POR_CHAMADA) break
+          const pk = `${chave}&periodo=eq.${p.periodo}`
+          const tr = (p.reler_tipos as string[]).filter(x => tipos.get(x) !== 'venda')
+          let prox = Number(p.reler_prox) || 0, fim = !tr.length
+          while (!fim && !limite && usadas < POR_CHAMADA) {
+            const d = await ml(`/periods/key/${p.periodo}/group/ML/details?document_type=BILL&limit=${PAGINA}&offset=${prox}&detail_sub_types=${encodeURIComponent(tr.join(','))}&sort_by=ID&order_by=ASC`)
+            if (!d) break
+            const R: any[] = d.results || []
+            const linhas = R.map(r => r.charge_info).filter(linhaValida).map(linhaFatura(uid, conta, p.periodo))
+            if (linhas.length) {
+              const g = await db('ml_fatura_linhas?on_conflict=usuario_id,ml_user_id,detail_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(linhas) })
+              if (!g.ok) { info.erro = 'gravação: ' + (await g.text()).slice(0, 160); break }
+            }
+            prox += R.length
+            fim = !R.length || prox >= (Number(d.total) || 0)
+            info.linhas = (info.linhas || 0) + linhas.length
+          }
+          if (info.erro) break
+          // compactado só volta a false no fim: ml_fatura_compactar regrava o total do dia pelo que está em linhas
+          await db(`ml_fatura_periodos?${pk}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(fim ? { reler_tipos: null, reler_prox: 0, ...(p.compactado ? { compactado: false } : {}) } : { reler_prox: prox }) })
         }
 
         // 4) vendas canceladas: frete de ida e devolução, cada cobrança no dia em que aconteceu
