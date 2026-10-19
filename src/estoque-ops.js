@@ -274,7 +274,7 @@
       // a loja sai do próprio PDF: o Código ML de cada linha é o código do anúncio no estoque do Full
       const doFull = Array.isArray(estoqueFullML) ? r.itens.map(i => estoqueFullML.find(x => x.item_id === i.codigo_ml)).find(x => x && x._conta) : null;
       const contaAuto = r.conta !== undefined ? String(r.conta || '') : doFull ? String(doFull._conta) : '';
-      vmlModal(ed ? 'Editar envio ' + esEsc(r.titulo || r.numero || '') : 'Envio ao Full nº ' + esEsc(r.numero || '?'), `
+      esoTela(ed ? 'Editar envio ' + esEsc(r.titulo || r.numero || '') : 'Envio ao Full nº ' + esEsc(r.numero || '?'), `
         ${ja ? `<div class="alert alert-warning">Já existe um envio com este número (${esEsc(ja.titulo)}). Salvar vai substituir os produtos dele.</div>` : ''}
         ${r.confere ? '' : `<div class="alert alert-danger">A soma das unidades lidas (${esInt(r.soma)}) não bate com o total do documento (${esInt(r.totalDoc)}). Confira as quantidades antes de salvar.</div>`}
         <div class="form-row">
@@ -290,7 +290,7 @@
               <td style="font-size:12px;white-space:normal;">${kits.has(esN(i.anuncio_sku)) ? comp.map(c => `<b>${esInt(c.qtd)}</b> × ${esEsc(c.sku)}`).join(' &nbsp;·&nbsp; ') : '<span class="text-muted">o próprio produto</span>'}</td></tr>`; }).join('')}
         </tbody></table></div>
         <div class="d-flex" style="gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;"><button class="btn-out btn-sm" onclick="esoIncluirLinha()">+ Incluir anúncio</button><span class="text-muted" style="font-size:12px;">${ed ? '' : 'Arquivo: ' + esEsc(arquivo || '') + ' · '}${r.itens.length} anúncios · ${esInt(r.soma)} unidades. Quantidade 0 tira o anúncio do envio. Kit sai do galpão produto por produto.</span></div>`,
-        `<button class="btn-out" onclick="${ed ? 'esoEnvios()' : "fecharModal('modal-vml')"}">${ed ? 'Voltar' : 'Cancelar'}</button><button class="btn" onclick="esoSalvarEnvio(this)">Salvar envio</button>`);
+        `<button class="btn-out" onclick="${ed ? 'esoEnvios()' : 'esoFechar()'}">${ed ? 'Voltar' : 'Cancelar'}</button><button class="btn" onclick="esoSalvarEnvio(this)">Salvar envio</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '920px';
     }
 
@@ -345,23 +345,37 @@
       if(ja && ja.situacao !== 'preparando'){ alert('Este envio já teve a saída lançada; não dá para substituir.'); return; }
       const g = ja ? await supa.from('estoque_envios_full').update(reg).eq('id', ja.id) : await supa.from('estoque_envios_full').insert(reg);
       if(g.error){ alert('Não consegui salvar o envio: ' + g.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar envio'; } return; }
-      fecharModal('modal-vml'); await esoLer(true); estDesenhar();
+      await esoLer(true); estDesenhar(); esoFechar();
     }
 
     // lista dos envios (preparando / saiu / recebido)
-    // item "Envios ao Full" do menu: abre a página Estoque e, por cima, a lista de envios
-    async function esoAbrirEnvios(){
-      nav('estoque');
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      const li = document.querySelector('.nav-item[onclick="esoAbrirEnvios()"]'); if(li) li.classList.add('active');
-      try { await esoLer(true); } catch(e){}
-      esoEnvios();
+    // ---------- página Envios ao Full ----------
+    // As telas dos envios (lista, histórico, itens, conferência, importar/editar) desenham na página quando ela está
+    // aberta e, nos atalhos (Estoque, Previsão de Full), numa janela por cima, como antes.
+    function esoNaPagina(){ const v = document.getElementById('view-envios'); return !!(v && v.classList.contains('active')); }
+    function esoTela(titulo, corpo, rodape, largura){
+      if(!esoNaPagina()){
+        vmlModal(titulo, corpo, rodape);
+        const mc = document.querySelector('#modal-vml .modal-content'); if(mc && largura) mc.style.maxWidth = largura;
+        return;
+      }
+      const v = document.getElementById('view-envios');
+      v.innerHTML = `<div class="pg-head"><div><div class="pg-title">${titulo}</div><div class="pg-sub">Envios do galpão para o Full: importar o PDF do Mercado Livre, editar, dar saída e conferir o que o Full recebeu.</div></div></div>
+        <div class="card" style="padding:18px;">${corpo}${rodape ? `<div class="d-flex" style="gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px;">${rodape}</div>` : ''}</div>`;
+      window.scrollTo(0, 0);
+    }
+    function esoFechar(){ if(esoNaPagina()) esoEnvios(); else fecharModal('modal-vml'); }
+    async function esoPagina(){
+      const v = document.getElementById('view-envios'); if(!v) return;
+      v.innerHTML = '<div class="pg-head"><div><div class="pg-title">Envios ao Full</div></div></div><div class="vazio"><b>Carregando os envios…</b></div>';
+      try { if(typeof estCarregar === 'function') await estCarregar(); await esoLer(true); } catch(e){}
+      if(esoNaPagina()) esoEnvios();
     }
     function esoEnvios(){
       const dt = d => d ? ptDate(String(d).substring(0, 10)) : '—';
       const un = x => (x.itens || []).reduce((s, i) => s + (Number(i.qtd) || 0), 0);
       const sit = { preparando: ['Em preparação', 'cp-comprar'], saiu: ['Saiu do galpão', 'cp-excesso'], recebido: ['Recebido no Full', 'cp-ok'], cancelado: ['Cancelado', 'cp-semvenda'] };
-      vmlModal('Envios ao Full', `
+      esoTela('Envios ao Full', `
         <div class="chips" style="margin-bottom:12px;"><button class="chip active">Envios</button><button class="chip" onclick="esoHistorico()">Histórico e acertividade</button></div>
         <div class="d-flex" style="justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;"><div class="text-muted" style="max-width:560px;">Importe o PDF de preparação do Mercado Livre. O envio ocupa o estoque enquanto está em preparação; ao dar a saída, o galpão baixa produto por produto.</div><button class="btn" onclick="esoImportarEnvio()">Importar PDF do envio</button></div>
         <div style="overflow-x:auto;max-height:56vh;"><table class="cp-tab"><thead><tr><th>Situação</th><th>Envio</th><th>Saída prevista</th><th class="num">Anúncios</th><th class="num">Unidades</th><th></th></tr></thead><tbody>
@@ -389,7 +403,7 @@
       const ant = new Map(((x.conferencia && x.conferencia.itens) || []).map(i => [esN(i.anuncio_sku), i]));
       const itens = (x.itens || []).slice().sort((a, b) => String(a.anuncio_sku).localeCompare(String(b.anuncio_sku)));
       const cel = (sku, html) => typeof fotoLinha === 'function' ? fotoLinha(sku, html) : html;
-      vmlModal('Conferência do Full — ' + esEsc(x.titulo), `
+      esoTela('Conferência do Full — ' + esEsc(x.titulo), `
         <div class="text-muted" style="margin-bottom:10px;">Lance o que o Mercado Livre contou ao receber o envio (relatório do envio no Mercado Livre). A diferença aparece ao lado. O estoque não muda: a conferência serve para medir a acertividade dos envios.</div>
         <div class="d-flex" style="gap:8px;flex-wrap:wrap;margin-bottom:10px;"><button class="btn-out btn-sm" onclick="document.querySelectorAll('.eso-cf').forEach(i => { i.value = i.dataset.env; esoConfDif(i); })">Preencher igual ao enviado</button><span class="text-muted" style="font-size:12px;align-self:center;">depois corrija só o que o Full contou diferente</span></div>
         <div style="overflow-x:auto;max-height:50vh;"><table class="cp-tab"><thead><tr><th>Anúncio</th><th class="num">Enviado</th><th class="num">Recebido pelo Full</th><th class="num">Diferença</th></tr></thead><tbody>
@@ -419,7 +433,7 @@
       const env = conf.reduce((s, c) => s + c.r.env, 0), erro = conf.reduce((s, c) => s + c.r.erro, 0);
       const falta = conf.reduce((s, c) => s + (c.x.conferencia.itens || []).reduce((a, i) => a + Math.max(0, i.enviado - i.recebido), 0), 0), sobra = conf.reduce((s, c) => s + (c.x.conferencia.itens || []).reduce((a, i) => a + Math.max(0, i.recebido - i.enviado), 0), 0);
       const bateram = conf.filter(c => c.r.bateu).length;
-      vmlModal('Envios ao Full', `
+      esoTela('Envios ao Full', `
         <div class="chips" style="margin-bottom:12px;"><button class="chip" onclick="esoEnvios()">Envios</button><button class="chip active">Histórico e acertividade</button></div>
         <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));">
           <div class="kpi k-neutro"><div class="kpi-label">Envios que saíram</div><div class="kpi-value">${saidos.length}</div><div class="kpi-sub">${conf.length} conferidos · ${saidos.length - conf.length} aguardando</div></div>
@@ -449,7 +463,7 @@
         : '<thead><tr><th>Anúncio (SKU do Mercado Livre)</th><th class="num">Unidades</th><th>Sai do galpão</th></tr></thead><tbody>' + itens.map(i => { const comp = i.componentes || [], kit = comp.length > 1 || (comp[0] && esN(comp[0].sku) !== esN(i.anuncio_sku));
             return '<tr><td class="cp-prod">' + cel(i.anuncio_sku, '<b>' + esEsc(i.anuncio_sku) + '</b>' + (i.codigo_ml ? '<span>' + esEsc(i.codigo_ml) + '</span>' : '')) + '</td><td class="num"><b>' + esInt(i.qtd) + '</b></td><td style="font-size:12px;white-space:normal;">' + (kit ? comp.map(c => '<b>' + esInt(c.qtd) + '</b> × ' + esEsc(c.sku)).join(' &nbsp;·&nbsp; ') : '<span class="text-muted">o próprio produto</span>') + '</td></tr>'; }).join('') + '</tbody>';
       const sit = { preparando: 'Em preparação', saiu: 'Saiu do galpão', recebido: 'Recebido no Full', cancelado: 'Cancelado' }[x.situacao] || x.situacao;
-      vmlModal('Itens do envio ' + esEsc(x.titulo), `
+      esoTela('Itens do envio ' + esEsc(x.titulo), `
         <div class="text-muted" style="margin-bottom:10px;">${sit}${x.situacao === 'preparando' ? (x.ocupar === false ? ' · não ocupa o estoque' : ' · ocupando o estoque') : ''} · ${itens.length} anúncios · ${esInt(un)} unidades${unG !== un ? ' (' + esInt(unG) + ' unidades de produto, com os kits abertos)' : ''}</div>
         <div class="chips" style="margin-bottom:10px;"><button class="chip ${esoItensVer === 'anuncio' ? 'active' : ''}" onclick="esoEnvioItens(${x.id}, 'anuncio')">Por anúncio</button><button class="chip ${esoItensVer === 'produto' ? 'active' : ''}" onclick="esoEnvioItens(${x.id}, 'produto')">Por produto do galpão</button></div>
         <div style="overflow-x:auto;max-height:54vh;"><table class="cp-tab">${corpo}</table></div>`,
