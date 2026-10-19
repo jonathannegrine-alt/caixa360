@@ -275,12 +275,6 @@
       const contaAuto = doFull ? String(doFull._conta) : '';
       vmlModal('Envio ao Full nº ' + esEsc(r.numero || '?'), `
         ${ja ? `<div class="alert alert-warning">Já existe um envio com este número (${esEsc(ja.titulo)}). Salvar vai substituir os produtos dele.</div>` : ''}
-        ${!ja && !r.daPrevisao ? (() => {
-          // só envios planejados da mesma loja do PDF (loja desconhecida: todos); a opção vem desmarcada, porque substituir apaga o envio planejado
-          const pl = eso.envios.filter(x => x.situacao === 'preparando' && /^Previsão/.test(x.numero || '') && (!contaAuto || String(x.ml_user_id || '') === contaAuto));
-          return pl.length ? `<div class="alert alert-info" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><label style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0;"><input type="checkbox" id="eso-subst-ok"> Este PDF é o envio que planejei: substituir</label>
-            <select id="eso-subst" style="width:auto;">${pl.map(x => `<option value="${x.id}">${esEsc(x.titulo)} · ${esInt((x.itens || []).reduce((s, i) => s + (Number(i.qtd) || 0), 0))} un.</option>`).join('')}</select>
-            <span class="text-muted" style="font-size:12px;">Marcado, o envio planejado escolhido é apagado e este toma o lugar dele. Desmarcado (padrão), este entra como um envio a mais.</span></div>` : ''; })() : ''}
         ${r.confere ? '' : `<div class="alert alert-danger">A soma das unidades lidas (${esInt(r.soma)}) não bate com o total do documento (${esInt(r.totalDoc)}). Confira as quantidades antes de salvar.</div>`}
         <div class="form-row">
           <div class="form-group"><label class="form-label">Loja</label><select id="eso-conta">${contas.map(c => `<option value="${esEsc(c.id)}" ${String(c.id) === contaAuto ? 'selected' : ''}>${esEsc(c.apelido || c.id)}</option>`).join('') || '<option value="">—</option>'}</select></div>
@@ -309,9 +303,8 @@
       const reg = { usuario_id: usuarioAtual.id, deposito_id: dep.id, numero: r.numero || String(Date.now()), titulo: ('Full ' + (r.numero || '') + ' ' + apelido).trim(), ml_user_id: conta || null,
         data_prevista: document.getElementById('eso-data')?.value || null, ocupar: document.getElementById('eso-ocupar')?.checked !== false, itens, situacao: 'preparando' };
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
-      // mesmo número = substitui; PDF oficial do ML com "substituir o envio planejado" marcado = toma o lugar do envio da previsão
-      const subst = document.getElementById('eso-subst-ok')?.checked ? eso.envios.find(x => x.id === Number(document.getElementById('eso-subst')?.value)) : null;
-      const ja = eso.envios.find(x => x.numero === reg.numero) || subst;
+      // mesmo número = o mesmo envio importado de novo (atualiza). Envio planejado nunca é substituído: o usuário exclui à mão
+      const ja = eso.envios.find(x => x.numero === reg.numero);
       if(ja && ja.situacao !== 'preparando'){ alert('Este envio já teve a saída lançada; não dá para substituir.'); return; }
       const g = ja ? await supa.from('estoque_envios_full').update(reg).eq('id', ja.id) : await supa.from('estoque_envios_full').insert(reg);
       if(g.error){ alert('Não consegui salvar o envio: ' + g.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar envio'; } return; }
