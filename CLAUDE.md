@@ -246,6 +246,11 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - ETIQUETA DE ENVIO: ml-envios guarda o ZPL compactado (Storage etiquetas/<usuario>/<envio>.zpl.gz, ~1,3 KB; PDF só se o ZPL
   falhar e nas cópias anteriores a 16/10/2026). ml-venda {acao:'etiqueta', formato:'zpl'} devolve o texto; a tela reconstrói com
   zpl-renderer-js 4.0.0 (WASM pelo jsDelivr, grayscaleOutput) e monta a folha de controle com vendas_ml. O renderizador ignora ^MU (não dá para dobrar a resolução).
+- CONTAGEM PELA UPSELLER (investigado em 19/10/2026 no Relatório do Estoque da UpSeller): a UpSeller tira do "Estoque Atual"
+  quando o pedido vai para "Para Retirada"/"Para Enviar" (etiqueta), horas ou dias antes de o ML marcar o envio; o Caixa 360
+  baixa pelo enviado_em do ML. Por isso a planilha é lida pelo Disponível: físico = Disponível + pedidos nossos ainda sem baixa
+  (esoUpsellerFisico). Usar o Estoque Atual baixava em dobro os pedidos já despachados e ainda não marcados pelo ML.
+  ml-webhook não reescreve enviado_em (a hora de "shipped" vem depois da coleta).
 - COBERTURA NO ESTOQUE (src/estoque.js): Total e galpão usam comprasVendas (vendas_ml_sku_dia, kits abertos); a aba do Full usa
   a RPC vendas_full_sku (só logistic_type fulfillment, por conta e SKU do anúncio). Período em localStorage mk_est_periodo.
 - VENDA CANCELADA DEPOIS DE ENVIADA (vendas_ml_cobr): o ML estorna a tarifa de venda e devolve o valor ao comprador, mas fica a
