@@ -25,7 +25,7 @@ begin
       from vendas_ml v left join eqv q on q.de = lower(btrim(v.sku))
      where v.usuario_id = p_uid and v.enviado_em is not null and v.status is distinct from 'cancelled'
        and coalesce(v.logistic_type, '') <> 'fulfillment' and coalesce(btrim(v.sku), '') <> '' and coalesce(v.qtd, 0) > 0
-       and (case when p_orders is null then v.enviado_em > now() - make_interval(days => p_dias) else v.order_id::text = any(p_orders) end)
+       and (p_orders is null or v.order_id = any(p_orders::bigint[])) and (p_orders is not null or v.enviado_em > now() - make_interval(days => p_dias))
   ), comp as (
     select v.ref, v.enviado_em, v.ml_user_id, coalesce(k.sku_componente, v.sku) sku,
            v.qtd * coalesce(nullif(k.qty, 0), 1) qtd,
