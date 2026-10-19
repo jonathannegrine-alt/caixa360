@@ -33,9 +33,23 @@
     }
 
     // itensIniciais: [{ sku, qtd, valor }] (vindos da lista de compras, por exemplo)
+    // número da ordem nova: um prefixo por loja (loja padrão "C", as outras a inicial do nome: Florevi "F") e a
+    // sequência continua do maior número já usado com aquele prefixo. Ordens do Olist (id > 0) não entram na conta.
+    function ocPrefixo(loja){
+      if(!loja || typeof lojaPadraoId !== 'function' || loja === lojaPadraoId()) return 'C';
+      const ini = String((typeof lojaNome === 'function' && lojaNome(loja)) || '').normalize('NFD').replace(/[^A-Za-z]/g, '').charAt(0).toUpperCase();
+      return ini && ini !== 'C' ? ini : 'L';
+    }
+    function ocProximoNumero(loja){
+      const px = ocPrefixo(loja), re = new RegExp('^' + px + '(\\d+)$');
+      const maior = oc.ordens.filter(o => Number(o.id) < 0).reduce((m, o) => { const x = re.exec(String(o.numero || '')); return x ? Math.max(m, Number(x[1])) : m; }, 0);
+      return px + String(maior + 1).padStart(3, '0');
+    }
+    // trocar a loja de uma ordem nova troca o número
+    function ocTrocarLoja(){ if(!ocNova || ocNova.id) return; ocCriarLer(); ocNova.numero = ocProximoNumero(ocNova.loja); ocCriarDesenhar(); }
     function ocCriar(itensIniciais){
-      const locais = oc.ordens.filter(o => Number(o.id) < 0).length;
-      ocNova = { id: null, numero: 'C' + String(locais + 1).padStart(3, '0'), fornecedor: '', data: getToday(), prev: '', nforn: '', desconto: '', frete: '', condicao: '', categoria: '', loja: typeof lojaNova === 'function' ? lojaNova() : '',
+      const lj = typeof lojaNova === 'function' ? lojaNova() : '';
+      ocNova = { id: null, numero: ocProximoNumero(lj), fornecedor: '', data: getToday(), prev: '', nforn: '', desconto: '', frete: '', condicao: '', categoria: '', loja: lj,
         lancar: true, transportador: '', fretePor: '', obs: '', obsInterna: '', parcelas: [],
         itens: (Array.isArray(itensIniciais) && itensIniciais.length ? itensIniciais.map(i => ({ sku: i.sku, desc: ocNomeProduto(i.sku), qtd: i.qtd, valor: i.valor ? fmtMoney(Number(i.valor)) : '', ipi: '' })) : [{ sku: '', desc: '', qtd: '', valor: '', ipi: '' }]) };
       ocCriarDesenhar();
@@ -128,7 +142,7 @@
       const n = ocNova, forn = [...new Set(oc.ordens.map(o => o.fornecedor).concat((typeof pagTodos === 'function' ? pagTodos() : pagamentos).map(p => p.forn)).filter(Boolean))].sort().slice(0, 500);
       const prods = [...new Set([...skus.map(s => s.sku), ...estoqueGalpao.map(e => e.sku)])].filter(Boolean).sort();
       const cats = categorias.map(c => c.nome), t = ocTotais();
-      const loja = typeof lojaSelect === 'function' ? lojaSelect('ocn-loja', n.loja) : '';
+      const loja = typeof lojaSelect === 'function' ? lojaSelect('ocn-loja', n.loja).replace('<select ', n.id ? '<select ' : '<select onchange="ocTrocarLoja()" ') : '';
       const sec = tit => `<div class="oc-sec">${tit}</div>`;
       vmlModal((n.id ? 'Editar ordem de compra ' : 'Nova ordem de compra ') + ocEsc(n.numero), `
         <div class="pf-grid" style="grid-template-columns:2fr 1fr 1fr;">

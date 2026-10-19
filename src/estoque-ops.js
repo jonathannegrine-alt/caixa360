@@ -265,31 +265,58 @@
     }
 
     let esoRascunho = null;
+    // r.editId: editando um envio em preparação já salvo (r traz número, loja, data e ocupar dele)
     function esoRevisarEnvio(r, arquivo){
-      esoRascunho = r;
+      esoRascunho = r; r._arquivo = arquivo; const ed = !!r.editId;
       const kits = esoKits(), conhecidos = new Set([...kits.keys(), ...skus.map(s => esN(s.sku)), ...estoqueGalpao.map(e => esN(e.sku))]);
       const contas = typeof contasML !== 'undefined' ? contasML : [];
-      const ja = eso.envios.find(x => x.numero === r.numero);
+      const ja = ed ? null : eso.envios.find(x => x.numero === r.numero);
       // a loja sai do próprio PDF: o Código ML de cada linha é o código do anúncio no estoque do Full
       const doFull = Array.isArray(estoqueFullML) ? r.itens.map(i => estoqueFullML.find(x => x.item_id === i.codigo_ml)).find(x => x && x._conta) : null;
-      const contaAuto = doFull ? String(doFull._conta) : '';
-      vmlModal('Envio ao Full nº ' + esEsc(r.numero || '?'), `
+      const contaAuto = r.conta !== undefined ? String(r.conta || '') : doFull ? String(doFull._conta) : '';
+      vmlModal(ed ? 'Editar envio ' + esEsc(r.titulo || r.numero || '') : 'Envio ao Full nº ' + esEsc(r.numero || '?'), `
         ${ja ? `<div class="alert alert-warning">Já existe um envio com este número (${esEsc(ja.titulo)}). Salvar vai substituir os produtos dele.</div>` : ''}
         ${r.confere ? '' : `<div class="alert alert-danger">A soma das unidades lidas (${esInt(r.soma)}) não bate com o total do documento (${esInt(r.totalDoc)}). Confira as quantidades antes de salvar.</div>`}
         <div class="form-row">
+          ${ed ? `<div class="form-group"><label class="form-label">Número do envio</label><input type="text" id="eso-num" value="${esEsc(r.numero || '')}"></div>` : ''}
           <div class="form-group"><label class="form-label">Loja</label><select id="eso-conta">${contas.map(c => `<option value="${esEsc(c.id)}" ${String(c.id) === contaAuto ? 'selected' : ''}>${esEsc(c.apelido || c.id)}</option>`).join('') || '<option value="">—</option>'}</select></div>
-          <div class="form-group"><label class="form-label">Saída prevista (deixe vazio se ainda não tem vaga)</label><input type="date" id="eso-data"></div>
+          <div class="form-group"><label class="form-label">Saída prevista (deixe vazio se ainda não tem vaga)</label><input type="date" id="eso-data" value="${esEsc(r.data || '')}"></div>
         </div>
-        <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="eso-ocupar" ${esoCfg().ocuparPadrao ? 'checked' : ''} style="margin-top:3px;"><span><b>Ocupar o estoque enquanto está em preparação</b><br><span class="text-muted">Marcado, as unidades saem do "disponível" desde já. O físico só baixa quando você der a saída.</span></span></label>
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;margin-bottom:14px;"><input type="checkbox" id="eso-ocupar" ${(r.ocupar !== undefined ? r.ocupar : esoCfg().ocuparPadrao) ? 'checked' : ''} style="margin-top:3px;"><span><b>Ocupar o estoque enquanto está em preparação</b><br><span class="text-muted">Marcado, as unidades saem do "disponível" desde já. O físico só baixa quando você der a saída.</span></span></label>
         <div style="overflow-x:auto;max-height:46vh;"><table class="cp-tab"><thead><tr><th>Anúncio (SKU do Mercado Livre)</th><th class="num">Unidades</th><th>Sai do galpão</th></tr></thead><tbody>
           ${r.itens.map((i, n) => { const comp = esoAbrir(i.anuncio_sku, i.qtd, kits), ok = conhecidos.has(esN(i.anuncio_sku));
             return `<tr><td><input type="text" class="eso-sku" data-n="${n}" value="${esEsc(i.anuncio_sku)}" style="min-width:230px;${ok ? '' : 'border-color:var(--danger);'}">${ok ? '' : '<div class="text-danger" style="font-size:11px;">SKU não cadastrado: corrija ou cadastre o kit</div>'}</td>
               <td class="num"><input type="number" class="cp-dias eso-qtd" data-n="${n}" value="${i.qtd}" style="width:100px !important;"></td>
               <td style="font-size:12px;white-space:normal;">${kits.has(esN(i.anuncio_sku)) ? comp.map(c => `<b>${esInt(c.qtd)}</b> × ${esEsc(c.sku)}`).join(' &nbsp;·&nbsp; ') : '<span class="text-muted">o próprio produto</span>'}</td></tr>`; }).join('')}
         </tbody></table></div>
-        <div class="text-muted" style="font-size:12px;margin-top:8px;">Arquivo: ${esEsc(arquivo || '')} · ${r.itens.length} anúncios · ${esInt(r.soma)} unidades. Kit sai do galpão produto por produto.</div>`,
-        `<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="esoSalvarEnvio(this)">Salvar envio</button>`);
+        <div class="d-flex" style="gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;"><button class="btn-out btn-sm" onclick="esoIncluirLinha()">+ Incluir anúncio</button><span class="text-muted" style="font-size:12px;">${ed ? '' : 'Arquivo: ' + esEsc(arquivo || '') + ' · '}${r.itens.length} anúncios · ${esInt(r.soma)} unidades. Quantidade 0 tira o anúncio do envio. Kit sai do galpão produto por produto.</span></div>`,
+        `<button class="btn-out" onclick="${ed ? 'esoEnvios()' : "fecharModal('modal-vml')"}">${ed ? 'Voltar' : 'Cancelar'}</button><button class="btn" onclick="esoSalvarEnvio(this)">Salvar envio</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '920px';
+    }
+
+    // lê a tela de revisão de volta para o rascunho (antes de redesenhar)
+    function esoRascunhoLer(){
+      const r = esoRascunho; if(!r) return;
+      r.itens = r.itens.map((i, n) => ({ ...i, anuncio_sku: (document.querySelector('.eso-sku[data-n="' + n + '"]')?.value || '').trim(), qtd: Number(document.querySelector('.eso-qtd[data-n="' + n + '"]')?.value) || 0 }));
+      r.soma = r.itens.reduce((t, i) => t + i.qtd, 0);
+      const v = id => document.getElementById(id);
+      if(v('eso-num')) r.numero = v('eso-num').value.trim();
+      if(v('eso-conta')) r.conta = v('eso-conta').value;
+      if(v('eso-data')) r.data = v('eso-data').value;
+      if(v('eso-ocupar')) r.ocupar = v('eso-ocupar').checked;
+    }
+    function esoIncluirLinha(){
+      esoRascunhoLer(); const r = esoRascunho; if(!r) return;
+      r.itens.push({ anuncio_sku: '', codigo_ml: null, qtd: 0 }); if(!r.editId) r.confere = true;
+      esoRevisarEnvio(r, r._arquivo);
+      setTimeout(() => { const l = document.querySelectorAll('.eso-sku'); if(l.length) l[l.length - 1].focus(); }, 30);
+    }
+    // editar um envio em preparação: mesma tela da importação, com os dados dele
+    function esoEditarEnvio(id){
+      const x = eso.envios.find(e => e.id === id); if(!x) return;
+      if(x.situacao !== 'preparando'){ alert('Só dá para editar envio em preparação. Para mudar um envio que já saiu, desfaça a saída antes.'); return; }
+      const itens = (x.itens || []).map(i => ({ anuncio_sku: i.anuncio_sku, codigo_ml: i.codigo_ml || null, qtd: Number(i.qtd) || 0 }));
+      esoRevisarEnvio({ editId: x.id, titulo: x.titulo, numero: x.numero, conta: x.ml_user_id || '', data: x.data_prevista || '', ocupar: x.ocupar !== false, itens, totalDoc: 0, confere: true, soma: itens.reduce((t, i) => t + i.qtd, 0) });
     }
 
     async function esoSalvarEnvio(btn){
@@ -300,10 +327,20 @@
       if(!itens.length){ alert('Nenhum produto com quantidade.'); return; }
       const conta = document.getElementById('eso-conta')?.value || '', loja = (typeof contaNome === 'function' && conta && contaNome(conta)) || '';
       const apelido = /florevi/i.test(loja) ? 'Florevi' : /mk|emeka/i.test(loja) ? 'MK' : loja;
-      const reg = { usuario_id: usuarioAtual.id, deposito_id: dep.id, numero: r.numero || String(Date.now()), titulo: ('Full ' + (r.numero || '') + ' ' + apelido).trim(), ml_user_id: conta || null,
+      const num = r.editId ? ((document.getElementById('eso-num')?.value || '').trim() || r.numero) : r.numero;
+      const reg = { usuario_id: usuarioAtual.id, deposito_id: dep.id, numero: num || String(Date.now()), titulo: ('Full ' + (num || '') + ' ' + apelido).trim(), ml_user_id: conta || null,
         data_prevista: document.getElementById('eso-data')?.value || null, ocupar: document.getElementById('eso-ocupar')?.checked !== false, itens, situacao: 'preparando' };
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
       // mesmo número = o mesmo envio importado de novo (atualiza). Envio planejado nunca é substituído: o usuário exclui à mão
+      if(r.editId){
+        const atual = eso.envios.find(x => x.id === r.editId);
+        if(!atual || atual.situacao !== 'preparando'){ alert('Este envio não está mais em preparação; não dá para editar.'); if(btn){ btn.disabled = false; btn.textContent = 'Salvar envio'; } return; }
+        if(eso.envios.some(x => x.id !== r.editId && x.numero === reg.numero)){ alert('Já existe outro envio com o número ' + reg.numero + '.'); if(btn){ btn.disabled = false; btn.textContent = 'Salvar envio'; } return; }
+        reg.deposito_id = atual.deposito_id || dep.id;
+        const g = await supa.from('estoque_envios_full').update(reg).eq('id', r.editId);
+        if(g.error){ alert('Não consegui salvar o envio: ' + g.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar envio'; } return; }
+        await esoLer(true); estDesenhar(); esoEnvios(); return;
+      }
       const ja = eso.envios.find(x => x.numero === reg.numero);
       if(ja && ja.situacao !== 'preparando'){ alert('Este envio já teve a saída lançada; não dá para substituir.'); return; }
       const g = ja ? await supa.from('estoque_envios_full').update(reg).eq('id', ja.id) : await supa.from('estoque_envios_full').insert(reg);
@@ -312,6 +349,14 @@
     }
 
     // lista dos envios (preparando / saiu / recebido)
+    // item "Envios ao Full" do menu: abre a página Estoque e, por cima, a lista de envios
+    async function esoAbrirEnvios(){
+      nav('estoque');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      const li = document.querySelector('.nav-item[onclick="esoAbrirEnvios()"]'); if(li) li.classList.add('active');
+      try { await esoLer(true); } catch(e){}
+      esoEnvios();
+    }
     function esoEnvios(){
       const dt = d => d ? ptDate(String(d).substring(0, 10)) : '—';
       const un = x => (x.itens || []).reduce((s, i) => s + (Number(i.qtd) || 0), 0);
@@ -324,7 +369,7 @@
             <td class="cp-prod"><a href="#" onclick="event.preventDefault();esoEnvioItens(${x.id})" title="Ver os itens deste envio"><b>${esEsc(x.titulo)}</b></a><span>${x.situacao === 'preparando' ? (x.ocupar === false ? 'não ocupa o estoque' : 'ocupando o estoque') : x.saiu_em ? 'saiu em ' + dt(x.saiu_em) : ''}</span></td>
             <td>${x.situacao === 'preparando' ? `<input type="date" value="${x.data_prevista || ''}" onchange="esoEnvioCampo(${x.id}, 'data_prevista', this.value || null)" style="width:150px;">` : dt(x.data_prevista)}</td>
             <td class="num">${(x.itens || []).length}</td><td class="num"><b>${esInt(un(x))}</b></td>
-            <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="esoEnvioItens(${x.id})">Ver itens</button> ${x.situacao === 'preparando' ? `<button class="btn btn-sm" onclick="esoDarSaida(${x.id}, this)">Dar saída</button> <button class="btn-out btn-sm" onclick="esoEnvioCampo(${x.id}, 'ocupar', ${x.ocupar === false})">${x.ocupar === false ? 'Ocupar estoque' : 'Não ocupar'}</button> <button class="btn-out btn-sm" style="color:var(--danger);" onclick="esoExcluirEnvio(${x.id})">Excluir</button>`
+            <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="esoEnvioItens(${x.id})">Ver itens</button> ${x.situacao === 'preparando' ? `<button class="btn-out btn-sm" onclick="esoEditarEnvio(${x.id})">Editar</button> <button class="btn btn-sm" onclick="esoDarSaida(${x.id}, this)">Dar saída</button> <button class="btn-out btn-sm" onclick="esoEnvioCampo(${x.id}, 'ocupar', ${x.ocupar === false})">${x.ocupar === false ? 'Ocupar estoque' : 'Não ocupar'}</button> <button class="btn-out btn-sm" style="color:var(--danger);" onclick="esoExcluirEnvio(${x.id})">Excluir</button>`
               : x.situacao === 'saiu' ? `<button class="btn btn-sm" onclick="esoConferir(${x.id})">Lançar conferência do Full</button> <button class="btn-out btn-sm" onclick="esoDesfazerSaida(${x.id})">Desfazer saída</button>`
               : x.situacao === 'recebido' ? `<button class="btn-out btn-sm" onclick="esoConferir(${x.id})">${x.conferencia ? 'Ver conferência' : 'Lançar conferência do Full'}</button>` : ''}</td></tr>`).join('')
             : '<tr><td colspan="6"><div class="vazio"><b>Nenhum envio lançado</b>Clique em Importar PDF do envio.</div></td></tr>'}
