@@ -5,7 +5,7 @@
 //   Vence hoje   = ainda não saiu e o prazo termina hoje
 // O Full fica de fora: quem envia é o Mercado Livre.
 
-    let pd = { linhas: [], carregadoEm: 0, carregando: null, aba: 'atrasados', busca: '', erro: '' };
+    let pd = { linhas: [], carregadoEm: 0, carregando: null, aba: 'atrasados', busca: '', erro: '', sel: new Set() };
     const PD_ABAS = [['atrasados', 'Atrasados'], ['hoje', 'Vencem hoje'], ['enviar', 'Para enviar'], ['aguardando', 'Aguardando liberação'], ['enviados', 'Enviados'], ['cancelados', 'Cancelados'], ['todos', 'Todos']];
     const PD_TIPO = { cross_docking: 'Coleta', xd_drop_off: 'Agência', drop_off: 'Correios', self_service: 'Flex' };
     const pdEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -114,9 +114,11 @@
           <div class="chips">${PD_ABAS.map(([k, t]) => `<button class="chip ${pd.aba === k ? 'active' : ''}" onclick="pd.aba='${k}';pdDesenhar();">${t}<span class="n">${n(k)}</span></button>`).join('')}</div>
         </div>
         ${semPrazo && (pd.aba === 'enviar' || pd.aba === 'atrasados') ? `<div class="text-muted" style="font-size:12px;padding:0 16px 8px;">${semPrazo} pedido${semPrazo > 1 ? 's' : ''} ainda sem prazo de envio registrado: o prazo é preenchido na próxima consulta ao Mercado Livre (a cada 15 minutos).</div>` : ''}
-        <div style="overflow-x:auto;"><table class="cp-tab pd-tab"><thead><tr><th>Produtos</th><th class="num">Valor</th><th>Comprador</th><th>Pedido</th><th>Tempo</th><th>Envio</th><th>Estado</th><th></th></tr></thead><tbody>
+        ${pdBarraSel()}
+        <div style="overflow-x:auto;"><table class="cp-tab pd-tab" data-sem-ordem><thead><tr><th style="width:30px;"><input type="checkbox" title="Marcar ou desmarcar todos os pedidos da lista" ${lista.length && lista.slice(0, 400).every(p => pd.sel.has(p.k)) ? 'checked' : ''} onchange="pdMarcarTodos(this.checked)"></th><th>Produtos</th><th class="num">Valor</th><th>Comprador</th><th>Pedido</th><th>Tempo</th><th>Envio</th><th>Estado</th><th></th></tr></thead><tbody>
           ${lista.length ? lista.slice(0, 400).map(p => { const [est, cls] = pdEstado(p);
             return `<tr class="${p.atrasado ? 'pd-atrasado' : ''}">
+              <td><input type="checkbox" class="pd-marca" data-k="${pdEsc(p.k)}" ${pd.sel.has(p.k) ? 'checked' : ''} onchange="pdMarcar(this.dataset.k, this.checked)"></td>
               <td class="cp-prod" style="min-width:260px;">${p.itens.map(v => (typeof fotoLinha === 'function' ? fotoLinha(v.sku, `<b>${pdEsc(v.sku || '—')}</b> <span class="text-muted">× ${Number(v.qtd) || 1}</span><span title="${pdEsc(v.titulo)}">${pdEsc(v.titulo || '')}</span>`) : `<b>${pdEsc(v.sku)}</b> × ${Number(v.qtd) || 1}`)).join('<div style="height:6px;"></div>')}</td>
               <td class="num">${fmt(p.valor)}</td>
               <td style="white-space:normal;min-width:150px;">${pdEsc(p.comprador_nome || p.comprador_apelido || '—')}${p.cidade ? `<div class="cp-sub">${pdEsc(p.cidade)}${p.uf ? ' / ' + pdEsc(p.uf) : ''}</div>` : ''}</td>
@@ -125,8 +127,64 @@
               <td>${PD_TIPO[p.logistic_type] || pdEsc(p.logistic_type || '—')}</td>
               <td><span class="cp-sit ${cls}">${est}</span></td>
               <td style="text-align:right;white-space:nowrap;">${!p.cancel && p.shipping_id ? `<button class="btn-out btn-sm" onclick="if(typeof vdEtiqueta==='function')vdEtiqueta('${p.order_id}', this)" title="Abre a etiqueta do envio em PDF para imprimir">🖨 Etiqueta</button> ` : ''}<button class="btn-out btn-sm" onclick="pdDetalhe('${p.order_id}')">Detalhes</button></td></tr>`; }).join('')
-            : `<tr><td colspan="8"><div class="vazio"><b>${pd.aba === 'atrasados' ? 'Nenhum pedido atrasado' : 'Nada nesta lista'}</b>${pd.aba === 'atrasados' ? 'Todos os pedidos liberados estão dentro do prazo de envio.' : 'Troque a aba ou a busca.'}</div></td></tr>`}
+            : `<tr><td colspan="9"><div class="vazio"><b>${pd.aba === 'atrasados' ? 'Nenhum pedido atrasado' : 'Nada nesta lista'}</b>${pd.aba === 'atrasados' ? 'Todos os pedidos liberados estão dentro do prazo de envio.' : 'Troque a aba ou a busca.'}</div></td></tr>`}
         </tbody></table></div>${lista.length > 400 ? `<div class="text-muted" style="padding:10px 16px;font-size:12px;">Mostrando 400 de ${lista.length}. Use a busca para achar um pedido.</div>` : ''}</div>`;
+    }
+
+    // ---------- pedidos marcados: PDF para o galpão conferir ----------
+    function pdMarcados(){ return pdPacotes().filter(p => pd.sel.has(p.k)).sort((x, y) => (x.lim || 9e15) - (y.lim || 9e15) || String(x.data_venda).localeCompare(String(y.data_venda))); }
+    function pdBarraSel(){
+      const M = pdMarcados(), un = M.reduce((s, p) => s + p.itens.reduce((a, v) => a + (Number(v.qtd) || 1), 0), 0);
+      return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:0 16px 10px;font-size:12.5px;">
+        ${M.length ? `<span><b>${M.length}</b> pedido${M.length === 1 ? '' : 's'} marcado${M.length === 1 ? '' : 's'} · ${un} unidade${un === 1 ? '' : 's'}</span><a href="#" onclick="pd.sel.clear();pdDesenhar();return false;">desmarcar</a>` : '<span class="text-muted">Marque os pedidos para gerar a lista em PDF e mandar para o galpão conferir.</span>'}
+        <button class="btn btn-sm" style="margin-left:auto;" ${M.length ? '' : 'disabled'} onclick="pdPdf(this)">PDF para o galpão</button></div>`;
+    }
+    function pdMarcar(k, v){ if(v) pd.sel.add(k); else pd.sel.delete(k); pdDesenhar(); }
+    function pdMarcarTodos(v){ document.querySelectorAll('#view-pedidos .pd-marca').forEach(c => { if(v) pd.sel.add(c.dataset.k); else pd.sel.delete(c.dataset.k); }); pdDesenhar(); }
+    // uma linha por produto, com foto; os dados do pedido ficam na primeira linha dele; coluna "Conferido" em branco para marcar à mão
+    async function pdPdf(bt){
+      const M = pdMarcados(); if(!M.length){ if(typeof toast === 'function') toast('Marque os pedidos na lista.'); return; }
+      const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
+      try {
+        const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+        // fotos: cadastro/anúncio (RPC sku_fotos) ou a da própria venda
+        const skusL = [...new Set(M.flatMap(p => p.itens.map(v => String(v.sku || '').toUpperCase())).filter(Boolean))], url = {}, img = {};
+        try { const r = await supa.rpc('sku_fotos', { p_skus: skusL }); (r.data || []).forEach(x => { url[String(x.sku).toUpperCase()] = x.foto; }); } catch(e){}
+        M.forEach(p => p.itens.forEach(v => { const k = String(v.sku || '').toUpperCase(); if(!url[k] && v.thumbnail) url[k] = v.thumbnail; }));
+        await Promise.all(Object.keys(url).map(async k => { try { const b = await (await fetch(String(url[k]).replace(/^http:/, 'https:'))).blob(); img[k] = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ok(null); fr.readAsDataURL(b); }); } catch(e){} }));
+        const dt = t => t ? new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') : '—';
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+        const atr = M.filter(p => p.atrasado).length, un = M.reduce((s, p) => s + p.itens.reduce((a, v) => a + (Number(v.qtd) || 1), 0), 0);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Pedidos para conferir no galpão', 40, 44);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
+        doc.text('Gerado em ' + new Date().toLocaleString('pt-BR').slice(0, 17) + '  ·  ' + M.length + ' pedido' + (M.length === 1 ? '' : 's') + ', ' + un + ' unidade' + (un === 1 ? '' : 's') + (atr ? '  ·  ' + atr + ' atrasado' + (atr === 1 ? '' : 's') : ''), 40, 60);
+        const body = [], foto = [];
+        M.forEach(p => {
+          const [est] = pdEstado(p), n = p.itens.length;
+          const ped = p.order_id + (p.pack_id ? '\ncarrinho ' + p.pack_id : '') + '\nVendido ' + dt(p.data_venda);
+          const prazo = p.saiu ? 'Saiu ' + dt(p.enviado_em) : p.lim ? 'Enviar até ' + dt(p.lim) + (p.atrasado ? '\nATRASADO' + (p.diasAtraso ? ' há ' + p.diasAtraso + ' dia' + (p.diasAtraso > 1 ? 's' : '') : '') : '') : 'sem prazo';
+          const comp = (p.comprador_nome || p.comprador_apelido || '—') + (p.cidade ? '\n' + p.cidade + (p.uf ? ' / ' + p.uf : '') : '');
+          const envio = (PD_TIPO[p.logistic_type] || p.logistic_type || '—') + '\n' + est;
+          p.itens.forEach((v, i) => {
+            foto.push(String(v.sku || '').toUpperCase());
+            const prod = ['', v.sku || '—', String(v.titulo || '').slice(0, 80) + (v.variacao ? '\n' + v.variacao : ''), String(Number(v.qtd) || 1), ''];
+            // carrinho: os dados do pedido ocupam as linhas de todos os produtos dele (rowSpan)
+            body.push(i ? prod : [{ content: ped, rowSpan: n }, { content: prazo, rowSpan: n, styles: p.atrasado ? { textColor: [185, 28, 28], fontStyle: 'bold' } : {} }, { content: comp, rowSpan: n }, { content: envio, rowSpan: n }].concat(prod));
+          });
+        });
+        doc.autoTable({ startY: 74, margin: { left: 30, right: 30 }, head: [['Pedido', 'Prazo de envio', 'Comprador', 'Envio', 'Foto', 'SKU', 'Produto', 'Qtd', 'Conferido']], body,
+          styles: { fontSize: 8.5, cellPadding: 4, overflow: 'linebreak', valign: 'middle', minCellHeight: 40 }, headStyles: { fillColor: [40, 44, 60], textColor: 255, minCellHeight: 16 },
+          columnStyles: { 0: { cellWidth: 105 }, 1: { cellWidth: 92 }, 2: { cellWidth: 100 }, 3: { cellWidth: 82 }, 4: { cellWidth: 42 }, 5: { cellWidth: 105, fontStyle: 'bold' }, 7: { halign: 'center', cellWidth: 32, fontStyle: 'bold', fontSize: 11 }, 8: { cellWidth: 56 } },
+          // foto do produto (uma por linha da tabela) e quadrinho em branco para o galpão marcar
+          didDrawCell: d => { if(d.section !== 'body') return;
+            if(d.column.index === 4){ const u = img[foto[d.row.index]];
+              if(u){ try { doc.addImage(u, /png/i.test(u.slice(0, 30)) ? 'PNG' : /webp/i.test(u.slice(0, 30)) ? 'WEBP' : 'JPEG', d.cell.x + 3, d.cell.y + 3, 34, 34); } catch(e){} } }
+            if(d.column.index === 8){ doc.setDrawColor(120); doc.rect(d.cell.x + 20, d.cell.y + d.cell.height / 2 - 7, 14, 14); } } });
+        doc.save('pedidos_galpao_' + getToday() + '.pdf');
+      } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + ((e && e.message) || e)); }
+      if(bt){ bt.disabled = false; bt.textContent = rot; }
     }
 
     // janela de detalhes: itens do pacote + entrega, pagamento, comprador e etiqueta lidos no Mercado Livre
