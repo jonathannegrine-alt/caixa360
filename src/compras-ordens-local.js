@@ -178,6 +178,7 @@
         ${n.parcelas.length ? `<div class="pf-tab"><table><thead><tr><th>#</th><th>Vencimento</th><th style="text-align:right;">Valor</th><th></th></tr></thead><tbody>
           ${n.parcelas.map((p, k) => `<tr class="ocn-parc"><td>${k + 1}/${n.parcelas.length}</td><td><input type="date" class="ocn-pd" value="${p.data}"></td><td style="text-align:right;"><input class="ocn-pv money-input" value="${fmtMoney(Number(p.val) || 0)}" style="width:120px;text-align:right;" oninput="onMoneyInput(this)" onchange="ocCriarTotal()"></td><td><button type="button" class="ico-btn" onclick="ocCriarLer();ocNova.parcelas.splice(${k},1);ocCriarDesenhar()">✕</button></td></tr>`).join('')}
           </tbody><tfoot><tr><td colspan="2">Soma das parcelas</td><td style="text-align:right;" id="ocn-parc-soma" colspan="2"></td></tr></tfoot></table></div>` : ''}
+        ${n.id ? (() => { const o = oc.ordens.find(x => Number(x.id) === Number(n.id)); return o ? ocParcelasHtml(o) : ''; })() : ''}
 
         ${sec('Transporte e observações')}
         <div class="pf-grid">
@@ -249,6 +250,37 @@
       fecharModal('modal-vml'); ocDesenhar();
     }
 
+    // parcelas da ordem no Contas a pagar, com a situação de cada uma (paga em / em aberto):
+    //   ordem criada aqui → contas com tiny_key 'oc:<id>:<n>'; ordem do Olist → contas cuja descrição traz
+    //   "ordem de compra nº <numero>" (é assim que o Olist descreve as contas que a ordem gera).
+    //   Sem nenhuma conta ligada, devolve as parcelas planejadas da ordem com situação desconhecida (pago: null).
+    function ocParcelasDaOrdem(o){
+      const todas = (typeof pagTodos === 'function' ? pagTodos() : pagamentos).filter(p => !p.oculta), pref = 'oc:' + o.id + ':';
+      const reNum = /ordem de compra n[º°o]?\.?\s*(\d+)/i;
+      let L = todas.filter(p => String(p.tiny_key || '').startsWith(pref));
+      if(!L.length && Number(o.id) > 0 && o.numero) L = todas.filter(p => { const m = reNum.exec(p.desc || ''); return m && m[1] === String(o.numero); });
+      const ordem = p => { const m = /^(\d+)\//.exec(p.parcela || ''); return m ? Number(m[1]) : 0; };
+      if(L.length) return L.slice().sort((a, b) => ordem(a) - ordem(b) || String(a.data).localeCompare(String(b.data)))
+        .map((p, k) => ({ parc: p.parcela || (k + 1) + '/' + L.length, venc: p.data, val: Number(p.val) || 0, pago: !!p.pago, dataPaga: p.dataPaga || null, valorPago: p.valorPago != null ? Number(p.valorPago) : null }));
+      const pl = (o.extra && o.extra.parcelas) || [];
+      return pl.map((p, k) => ({ parc: (k + 1) + '/' + pl.length, venc: p.data, val: Number(p.val) || 0, pago: null }));
+    }
+    // resumo curto para a lista: "1 de 3 parcelas pagas"
+    function ocParcelasResumo(o){
+      const P = ocParcelasDaOrdem(o); if(!P.length || P.some(p => p.pago === null)) return '';
+      const pg = P.filter(p => p.pago).length;
+      return pg === P.length ? (P.length === 1 ? 'paga' : 'todas as ' + P.length + ' parcelas pagas') : pg + ' de ' + P.length + ' parcela' + (P.length === 1 ? '' : 's') + ' paga' + (pg === 1 ? '' : 's');
+    }
+    // quadro das parcelas (janela da ordem)
+    function ocParcelasHtml(o){
+      const P = ocParcelasDaOrdem(o); if(!P.length) return '';
+      const sit = p => p.pago === null ? '<span class="text-muted">não lançada no Contas a pagar</span>' : p.pago ? '<span class="badge badge-success">Paga' + (p.dataPaga ? ' em ' + ptDate(String(p.dataPaga).slice(0, 10)) : '') + '</span>' : '<span class="badge ' + (p.venc < getToday() ? 'badge-danger">Atrasada' : 'badge-warning">Em aberto') + '</span>';
+      const pago = P.filter(p => p.pago).reduce((s, p) => s + (p.valorPago != null ? p.valorPago : p.val), 0), aberto = P.filter(p => p.pago === false).reduce((s, p) => s + p.val, 0);
+      return `<div class="form-label" style="margin-top:18px;">Pagamento (Contas a pagar)</div><div class="pf-tab" style="margin-top:4px;"><table><thead><tr><th>Parcela</th><th>Vencimento</th><th style="text-align:right;">Valor</th><th>Situação</th></tr></thead><tbody>
+        ${P.map(p => `<tr><td>${ocEsc(p.parc)}</td><td>${p.venc ? ptDate(String(p.venc).slice(0, 10)) : '—'}</td><td style="text-align:right;">${fmt(p.val)}</td><td>${sit(p)}</td></tr>`).join('')}
+        </tbody>${P.some(p => p.pago !== null) ? `<tfoot><tr><td colspan="2">Pago ${fmt(pago)} · em aberto ${fmt(aberto)}</td><td colspan="2"></td></tr></tfoot>` : ''}</table></div>`;
+    }
+
     // PDF da ordem (do formulário aberto ou de uma ordem salva, inclusive do Olist)
     async function ocPdfLib(){
       const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('não consegui carregar a biblioteca de PDF')); document.head.appendChild(s); });
@@ -277,7 +309,18 @@
       const tot = [['Total dos produtos', t.produtos], t.ipi ? ['IPI', t.ipi] : null, t.frete ? ['Frete', t.frete] : null, t.desconto ? ['Desconto', -t.desconto] : null].filter(Boolean);
       tot.forEach(([r, v]) => { doc.text(r, 380, yy); doc.text('R$ ' + n2(v), 555, yy, { align: 'right' }); yy += 14; });
       doc.setFont('helvetica', 'bold'); doc.text('Total geral', 380, yy + 2); doc.text('R$ ' + n2(t.geral), 555, yy + 2, { align: 'right' }); doc.setFont('helvetica', 'normal'); yy += 24;
-      if((e.parcelas || []).length){ doc.text('Parcelas: ' + e.parcelas.map((p, k) => (k + 1) + ') ' + ptDate(p.data) + ' R$ ' + n2(p.val)).join('   '), 40, yy, { maxWidth: 515 }); yy += 28; }
+      // parcelas com a situação no Contas a pagar (paga em / em aberto); no formulário ainda não salvo, só as planejadas
+      const P = o.id != null ? ocParcelasDaOrdem(o) : (e.parcelas || []).map((p, k, a) => ({ parc: (k + 1) + '/' + a.length, venc: p.data, val: Number(p.val) || 0, pago: null }));
+      if(P.length){
+        doc.autoTable({ startY: yy, margin: { left: 40, right: 40 }, head: [['Parcela', 'Vencimento', 'Valor', 'Situação']],
+          body: P.map(p => [p.parc, p.venc ? ptDate(String(p.venc).slice(0, 10)) : '', 'R$ ' + n2(p.val), p.pago === null ? '' : p.pago ? 'Paga' + (p.dataPaga ? ' em ' + ptDate(String(p.dataPaga).slice(0, 10)) : '') : 'Em aberto']),
+          styles: { fontSize: 9.5, cellPadding: 4 }, headStyles: { fillColor: [235, 237, 243], textColor: 20 }, columnStyles: { 2: { halign: 'right' } },
+          didParseCell: d => { if(d.section === 'body' && d.column.index === 3){ const p = P[d.row.index]; if(p && p.pago) d.cell.styles.textColor = [22, 128, 61]; else if(p && p.pago === false) d.cell.styles.textColor = [180, 83, 9]; d.cell.styles.fontStyle = 'bold'; } } });
+        yy = doc.lastAutoTable.finalY + 8;
+        if(P.some(p => p.pago !== null)){ const pg = P.filter(p => p.pago).reduce((s, p) => s + (p.valorPago != null ? p.valorPago : p.val), 0), ab = P.filter(p => p.pago === false).reduce((s, p) => s + p.val, 0);
+          doc.text('Pago: R$ ' + n2(pg) + '     Em aberto: R$ ' + n2(ab), 40, yy + 6); yy += 22; }
+        else yy += 10;
+      }
       if(e.obs) doc.text(doc.splitTextToSize('Observações: ' + e.obs, 515), 40, yy);
     }
     async function ocPdf(id){
