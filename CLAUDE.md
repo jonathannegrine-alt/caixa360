@@ -229,6 +229,10 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   Coluna "No galpão" = estLinhas(depósito próprio).disp (kit pelos componentes, esoAbrir). Botão "Carregar nos envios ao Full"
   (pflParaEnvios) abre esoRevisarEnvio com numero "Previsão dd/mm hh:mm". Importar o PDF oficial do ML NUNCA substitui nem apaga
   envio planejado (decisão do usuário, 19/10/2026: ele exclui à mão o que não serve); só o mesmo número de envio é atualizado.
+- ORDENS DE COMPRA (src/compras-ordens.js + compras-ordens-local.js, tabela olist_ordens; id > 0 = Olist, id < 0 = criada aqui):
+  qualquer ordem pode ser editada (ocEditar). Ordem do Olist editada ganha extra.editada e excluída ganha extra.excluida (não
+  sai do banco); olist-compras pula as duas ao sincronizar. Lista com busca, caixas de marcar e ações em lote (PDF uma ordem
+  por página, planilha, excluir). Com ordens guardadas a tela funciona sem o Olist (ocGuardadas).
 - FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
 - ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).
