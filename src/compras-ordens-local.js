@@ -40,16 +40,20 @@
         itens: (Array.isArray(itensIniciais) && itensIniciais.length ? itensIniciais.map(i => ({ sku: i.sku, desc: ocNomeProduto(i.sku), qtd: i.qtd, valor: i.valor ? fmtMoney(Number(i.valor)) : '', ipi: '' })) : [{ sku: '', desc: '', qtd: '', valor: '', ipi: '' }]) };
       ocCriarDesenhar();
     }
-    function ocEditarLocal(id){
-      const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o || Number(o.id) >= 0) return;
-      const e = o.extra || {};
-      ocNova = { id: o.id, numero: o.numero, fornecedor: o.fornecedor || '', data: o.data || getToday(), prev: o.data_prevista_local || '', nforn: e.nforn || '', desconto: e.desconto ? fmtMoney(e.desconto) : '', frete: e.frete ? fmtMoney(e.frete) : '',
+    // editar qualquer ordem. Ordem do Olist editada aqui fica marcada (extra.editada) e a busca no Olist deixa de sobrescrevê-la
+    function ocEditar(id){
+      const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return;
+      const e = o.extra || {}, doOlist = Number(o.id) > 0 && !e.editada;
+      // ordem do Olist: a diferença entre o total e a soma dos itens entra como frete (a mais) ou desconto (a menos)
+      const prod = (o.itens || []).reduce((s, i) => s + (Number(i.qtd) || 0) * (Number(i.valor) || 0), 0), dif = doOlist ? ocR2((Number(o.total) || 0) - prod) : 0;
+      ocNova = { id: o.id, numero: o.numero, fornecedor: o.fornecedor || '', data: o.data || getToday(), prev: ocPrev(o) || '', nforn: e.nforn || '', desconto: e.desconto ? fmtMoney(e.desconto) : dif < 0 ? fmtMoney(-dif) : '', frete: e.frete ? fmtMoney(e.frete) : dif > 0 ? fmtMoney(dif) : '',
         condicao: e.condicao || '', categoria: e.categoria || '', loja: e.loja || '', lancar: !!e.lancar, transportador: e.transportador || '', fretePor: e.fretePor || '', obs: e.obs || '', obsInterna: e.obsInterna || '',
         parcelas: (e.parcelas || []).map(p => ({ data: p.data, val: p.val })),
         itens: (o.itens || []).map(i => ({ sku: i.sku, desc: i.descricao || ocNomeProduto(i.sku), qtd: i.qtd, valor: fmtMoney(Number(i.valor) || 0), ipi: i.ipi || '' })) };
       if(!ocNova.itens.length) ocNova.itens.push({ sku: '', desc: '', qtd: '', valor: '', ipi: '' });
       ocCriarDesenhar();
     }
+    const ocEditarLocal = ocEditar;
     function ocDuplicar(id){
       const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return;
       ocCriar((o.itens || []).map(i => ({ sku: i.sku, qtd: i.qtd, valor: i.valor })));
@@ -182,7 +186,7 @@
           <label class="pf-c pf-larg"><span>Observações (saem no PDF)</span><input id="ocn-obs" value="${ocEsc(n.obs)}"></label>
           <label class="pf-c pf-larg"><span>Observações internas (não saem no PDF)</span><input id="ocn-obsint" value="${ocEsc(n.obsInterna)}"></label>
         </div>`,
-        `${n.id ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${n.id}, this)">Excluir ordem</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn-out" onclick="ocPdf()">Baixar PDF</button><button class="btn" onclick="ocCriarSalvar(this)">Salvar ordem</button>`);
+        `${n.id && n.id < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${n.id}, this)">Excluir ordem</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn-out" onclick="ocPdf()">Baixar PDF</button><button class="btn" onclick="ocCriarSalvar(this)">Salvar ordem</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1000px';
       ocCriarTotal();
     }
@@ -201,14 +205,16 @@
       if(!n.fornecedor.trim()){ toast('Informe o fornecedor.'); return; }
       if(!R.itens.length){ toast('Inclua pelo menos um item com quantidade.'); return; }
       if(R.extra.lancar && !R.parcelas.length){ toast('Para lançar no Contas a pagar, gere as parcelas (condição de pagamento).'); return; }
+      if(n.id > 0) R.extra.editada = true;                     // ordem do Olist alterada aqui: a busca no Olist não sobrescreve
       const reg = { usuario_id: usuarioAtual.id, id: n.id || -Date.now(), numero: n.numero, data: n.data || getToday(), data_prevista_local: n.prev || null, situacao: 0, fornecedor: n.fornecedor.trim(), total: R.t.geral, itens: R.itens, origem: 'caixa360', extra: R.extra };
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
       const r = n.id ? await supa.from('olist_ordens').update({ data: reg.data, data_prevista_local: reg.data_prevista_local, fornecedor: reg.fornecedor, total: reg.total, itens: reg.itens, extra: reg.extra }).eq('usuario_id', usuarioAtual.id).eq('id', n.id)
                      : await supa.from('olist_ordens').insert(reg);
       if(r.error){ toast('Não consegui salvar a ordem: ' + r.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar ordem'; } return; }
       const i = oc.ordens.findIndex(x => Number(x.id) === Number(reg.id));
-      if(i >= 0) Object.assign(oc.ordens[i], reg); else oc.ordens.unshift(reg);
-      ocContasDaOrdem(reg);
+      // edição: situação e origem continuam as da ordem (uma ordem atendida do Olist não volta a "a receber")
+      if(i >= 0){ const { situacao, origem, ...mud } = reg; Object.assign(oc.ordens[i], mud); } else oc.ordens.unshift(reg);
+      ocContasDaOrdem(i >= 0 ? oc.ordens[i] : reg);
       ocNova = null;
       fecharModal('modal-vml'); ocDesenhar();
       toast('Ordem ' + reg.numero + ' salva' + (reg.extra.lancar ? ' e ' + reg.extra.parcelas.length + ' parcela(s) lançada(s) no Contas a pagar.' : '.'));
@@ -244,32 +250,88 @@
     }
 
     // PDF da ordem (do formulário aberto ou de uma ordem salva, inclusive do Olist)
+    async function ocPdfLib(){
+      const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('não consegui carregar a biblioteca de PDF')); document.head.appendChild(s); });
+      await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+    }
+    // dados de uma ordem salva para o PDF
+    function ocPdfDados(o){
+      const e = o.extra || {}, itens = o.itens || [], prod = itens.reduce((s, i) => s + (Number(i.qtd) || 0) * (Number(i.valor) || 0), 0);
+      return { o, e, itens, t: { produtos: prod, ipi: Number(e.ipi) || 0, desconto: Number(e.desconto) || 0, frete: Number(e.frete) || 0, geral: Number(o.total) || prod, qtd: itens.reduce((s, i) => s + (Number(i.qtd) || 0), 0) } };
+    }
+    // desenha uma ordem na página atual do documento
+    function ocPdfPagina(doc, { o, e, itens, t }){
+      const n2 = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20); doc.text('Ordem de compra ' + (o.numero || ''), 40, 50);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(70);
+      const linhas = ['Fornecedor: ' + (o.fornecedor || ''), 'Data da compra: ' + (o.data ? ptDate(String(o.data).slice(0, 10)) : '') + (ocPrev(o) ? '     Previsão de chegada: ' + ptDate(String(ocPrev(o)).slice(0, 10)) : '') + (e.nforn ? '     Nº no fornecedor: ' + e.nforn : ''),
+        e.condicao ? 'Condição de pagamento: ' + e.condicao : '', e.transportador || e.fretePor ? 'Transporte: ' + [e.transportador, e.fretePor].filter(Boolean).join(' · ') : ''].filter(Boolean);
+      let y = 68; linhas.forEach(l => { doc.text(l, 40, y); y += 14; });
+      doc.autoTable({ startY: y + 6, margin: { left: 40, right: 40 },
+        head: [['#', 'SKU', 'Item', 'Qtde', 'Preço un', 'Total']],
+        body: itens.map((i, k) => [k + 1, i.sku, i.descricao || '', (Number(i.qtd) || 0).toLocaleString('pt-BR'), 'R$ ' + n2(i.valor), 'R$ ' + n2((Number(i.qtd) || 0) * (Number(i.valor) || 0))]),
+        styles: { fontSize: 9.5, cellPadding: 5, overflow: 'linebreak' }, headStyles: { fillColor: [40, 44, 60], textColor: 255 },
+        columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 95, fontStyle: 'bold' }, 3: { halign: 'right', cellWidth: 55 }, 4: { halign: 'right', cellWidth: 75 }, 5: { halign: 'right', cellWidth: 85 } } });
+      let yy = doc.lastAutoTable.finalY + 18; doc.setTextColor(30);
+      const tot = [['Total dos produtos', t.produtos], t.ipi ? ['IPI', t.ipi] : null, t.frete ? ['Frete', t.frete] : null, t.desconto ? ['Desconto', -t.desconto] : null].filter(Boolean);
+      tot.forEach(([r, v]) => { doc.text(r, 380, yy); doc.text('R$ ' + n2(v), 555, yy, { align: 'right' }); yy += 14; });
+      doc.setFont('helvetica', 'bold'); doc.text('Total geral', 380, yy + 2); doc.text('R$ ' + n2(t.geral), 555, yy + 2, { align: 'right' }); doc.setFont('helvetica', 'normal'); yy += 24;
+      if((e.parcelas || []).length){ doc.text('Parcelas: ' + e.parcelas.map((p, k) => (k + 1) + ') ' + ptDate(p.data) + ' R$ ' + n2(p.val)).join('   '), 40, yy, { maxWidth: 515 }); yy += 28; }
+      if(e.obs) doc.text(doc.splitTextToSize('Observações: ' + e.obs, 515), 40, yy);
+    }
     async function ocPdf(id){
-      let o, e, itens, t;
-      if(id != null){ o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return; e = o.extra || {}; itens = o.itens || [];
-        const prod = itens.reduce((s, i) => s + (Number(i.qtd) || 0) * (Number(i.valor) || 0), 0); t = { produtos: prod, ipi: Number(e.ipi) || 0, desconto: Number(e.desconto) || 0, frete: Number(e.frete) || 0, geral: Number(o.total) || prod, qtd: itens.reduce((s, i) => s + (Number(i.qtd) || 0), 0) }; }
-      else { const R = ocMontarRegistro(); o = { numero: ocNova.numero, fornecedor: ocNova.fornecedor, data: ocNova.data, data_prevista_local: ocNova.prev }; e = R.extra; itens = R.itens; t = R.t; if(!itens.length){ toast('Inclua os itens antes de gerar o PDF.'); return; } }
+      let d;
+      if(id != null){ const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return; d = ocPdfDados(o); }
+      else { const R = ocMontarRegistro(); d = { o: { numero: ocNova.numero, fornecedor: ocNova.fornecedor, data: ocNova.data, data_prevista_local: ocNova.prev }, e: R.extra, itens: R.itens, t: R.t }; if(!d.itens.length){ toast('Inclua os itens antes de gerar o PDF.'); return; } }
       try {
-        const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('não consegui carregar a biblioteca de PDF')); document.head.appendChild(s); });
-        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
-        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), n2 = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Ordem de compra ' + (o.numero || ''), 40, 50);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(70);
-        const linhas = ['Fornecedor: ' + (o.fornecedor || ''), 'Data da compra: ' + (o.data ? ptDate(String(o.data).slice(0, 10)) : '') + (ocPrev(o) ? '     Previsão de chegada: ' + ptDate(String(ocPrev(o)).slice(0, 10)) : '') + (e.nforn ? '     Nº no fornecedor: ' + e.nforn : ''),
-          e.condicao ? 'Condição de pagamento: ' + e.condicao : '', e.transportador || e.fretePor ? 'Transporte: ' + [e.transportador, e.fretePor].filter(Boolean).join(' · ') : ''].filter(Boolean);
-        let y = 68; linhas.forEach(l => { doc.text(l, 40, y); y += 14; });
-        doc.autoTable({ startY: y + 6, margin: { left: 40, right: 40 },
-          head: [['#', 'SKU', 'Item', 'Qtde', 'Preço un', 'Total']],
-          body: itens.map((i, k) => [k + 1, i.sku, i.descricao || '', (Number(i.qtd) || 0).toLocaleString('pt-BR'), 'R$ ' + n2(i.valor), 'R$ ' + n2((Number(i.qtd) || 0) * (Number(i.valor) || 0))]),
-          styles: { fontSize: 9.5, cellPadding: 5, overflow: 'linebreak' }, headStyles: { fillColor: [40, 44, 60], textColor: 255 },
-          columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 95, fontStyle: 'bold' }, 3: { halign: 'right', cellWidth: 55 }, 4: { halign: 'right', cellWidth: 75 }, 5: { halign: 'right', cellWidth: 85 } } });
-        let yy = doc.lastAutoTable.finalY + 18; doc.setTextColor(30);
-        const tot = [['Total dos produtos', t.produtos], t.ipi ? ['IPI', t.ipi] : null, t.frete ? ['Frete', t.frete] : null, t.desconto ? ['Desconto', -t.desconto] : null].filter(Boolean);
-        tot.forEach(([r, v]) => { doc.text(r, 380, yy); doc.text('R$ ' + n2(v), 555, yy, { align: 'right' }); yy += 14; });
-        doc.setFont('helvetica', 'bold'); doc.text('Total geral', 380, yy + 2); doc.text('R$ ' + n2(t.geral), 555, yy + 2, { align: 'right' }); doc.setFont('helvetica', 'normal'); yy += 24;
-        if((e.parcelas || []).length){ doc.text('Parcelas: ' + e.parcelas.map((p, k) => (k + 1) + ') ' + ptDate(p.data) + ' R$ ' + n2(p.val)).join('   '), 40, yy, { maxWidth: 515 }); yy += 28; }
-        if(e.obs) doc.text(doc.splitTextToSize('Observações: ' + e.obs, 515), 40, yy);
-        doc.save('ordem_de_compra_' + String(o.numero || '').toLowerCase() + '.pdf');
+        await ocPdfLib();
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+        ocPdfPagina(doc, d);
+        doc.save('ordem_de_compra_' + String(d.o.numero || '').toLowerCase() + '.pdf');
       } catch(err){ toast('Não consegui gerar o PDF: ' + (err.message || err)); }
+    }
+
+    // ---------- ações com as ordens marcadas na lista ----------
+    const ocMarcadas = () => oc.ordens.filter(o => oc.sel && oc.sel.has(Number(o.id))).sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')) || Number(a.numero) - Number(b.numero));
+    // um PDF só, uma ordem por página
+    async function ocPdfVarias(bt){
+      const L = ocMarcadas(); if(!L.length){ toast('Marque as ordens na lista.'); return; }
+      const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
+      try {
+        await ocPdfLib();
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+        L.forEach((o, k) => { if(k) doc.addPage(); ocPdfPagina(doc, ocPdfDados(o)); });
+        doc.save(L.length === 1 ? 'ordem_de_compra_' + String(L[0].numero || '').toLowerCase() + '.pdf' : 'ordens_de_compra_' + getToday() + '.pdf');
+      } catch(err){ toast('Não consegui gerar o PDF: ' + (err.message || err)); }
+      if(bt){ bt.disabled = false; bt.textContent = rot; }
+    }
+    // planilha (CSV) com um item por linha
+    function ocPlanilhaVarias(){
+      const L = ocMarcadas(); if(!L.length){ toast('Marque as ordens na lista.'); return; }
+      const n = v => String((Number(v) || 0).toFixed(2)).replace('.', ','), q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+      const linhas = ['Ordem;Data;Fornecedor;Situação;SKU;Item;Qtde;Preço un;Total do item;Total da ordem'];
+      L.forEach(o => { const r = ocResumo(o); (o.itens || []).forEach(i => linhas.push([q(o.numero), o.data || '', q(o.fornecedor), r.sit, q(i.sku), q(i.descricao), Number(i.qtd) || 0, n(i.valor), n((Number(i.qtd) || 0) * (Number(i.valor) || 0)), n(o.total)].join(';'))); });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' })); a.download = 'ordens_de_compra_' + getToday() + '.csv'; a.click();
+    }
+    // excluir as marcadas: criada aqui sai do banco (e as parcelas em aberto saem do Contas a pagar);
+    // a que veio do Olist fica guardada como excluída (extra.excluida), para a busca no Olist não trazê-la de volta.
+    // Ordem com chegada lançada não é excluída.
+    async function ocExcluirVarias(bt){
+      const L = ocMarcadas(); if(!L.length){ toast('Marque as ordens na lista.'); return; }
+      const comChegada = L.filter(o => oc.receb.some(r => Number(r.ordem_id) === Number(o.id))), ok = L.filter(o => !comChegada.includes(o));
+      if(!ok.length){ toast('As ordens marcadas já têm chegada lançada. Desfaça as chegadas antes de excluir.'); return; }
+      if(bt && bt.dataset.conf !== '1'){ bt.dataset.conf = '1'; bt.textContent = 'Confirmar: excluir ' + ok.length + ' ordem' + (ok.length === 1 ? '' : 's'); setTimeout(() => { if(bt.isConnected){ bt.dataset.conf = ''; bt.textContent = 'Excluir marcadas'; } }, 6000); return; }
+      if(bt){ bt.disabled = true; bt.textContent = 'Excluindo…'; }
+      let erro = null;
+      for(const o of ok){
+        const r = Number(o.id) < 0 ? await supa.from('olist_ordens').delete().eq('usuario_id', usuarioAtual.id).eq('id', o.id)
+                                   : await supa.from('olist_ordens').update({ extra: { ...(o.extra || {}), excluida: true } }).eq('usuario_id', usuarioAtual.id).eq('id', o.id);
+        if(r.error){ erro = r.error.message; break; }
+        if(Number(o.id) < 0){ oc.ordens = oc.ordens.filter(x => x !== o); ocContasDaOrdem(o, true); } else o.extra = { ...(o.extra || {}), excluida: true };
+        oc.sel.delete(Number(o.id));
+      }
+      if(erro) toast('Não consegui excluir: ' + erro);
+      else toast(ok.length + ' ordem' + (ok.length === 1 ? ' excluída' : 's excluídas') + (comChegada.length ? '. ' + comChegada.length + ' com chegada lançada ficaram (desfaça as chegadas antes).' : '.'));
+      ocDesenhar();
     }

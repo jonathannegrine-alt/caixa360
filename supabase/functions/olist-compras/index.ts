@@ -156,13 +156,15 @@ Deno.serve(async (req: Request) => {
         }
       }
       // o que já está guardado
-      const guard = await fetch(`${supaUrl}/rest/v1/olist_ordens?usuario_id=eq.${userId}&select=id,situacao,total,itens&limit=2000`, { headers: ctx.dbH }).then(r => r.json()).catch(() => [])
+      const guard = await fetch(`${supaUrl}/rest/v1/olist_ordens?usuario_id=eq.${userId}&select=id,situacao,total,itens,extra&limit=2000`, { headers: ctx.dbH }).then(r => r.json()).catch(() => [])
       const tem = new Map<number, any>((Array.isArray(guard) ? guard : []).map((g: any) => [Number(g.id), g]))
       const gravar: any[] = []
       let buscados = 0
       for (const [id, o] of ordens) {
         const sit = o.situacao == null ? null : Number(o.situacao), total = num(o.totalPedidoCompra ?? o.totalProdutos)
         const g = tem.get(id)
+        // ordem editada ou excluída no Caixa 360: vale o que está aqui
+        if (g?.extra?.editada || g?.extra?.excluida) continue
         let itens = g?.itens
         // busca os itens quando é nova, quando mudou de valor ou quando ainda está aberta e sem itens
         if (!g || !Array.isArray(g.itens) || !g.itens.length || num(g.total) !== total) {
@@ -179,7 +181,7 @@ Deno.serve(async (req: Request) => {
         const g = await fetch(`${supaUrl}/rest/v1/olist_ordens?on_conflict=usuario_id,id`, { method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(gravar) })
         if (!g.ok) return resp({ error: 'não consegui guardar as ordens: ' + (await g.text()).slice(0, 200) }, 500)
       }
-      return resp({ ok: true, ordens: gravar.map(({ usuario_id, ...r }) => r), total: gravar.length, faltaDetalhe: ordens.size - gravar.length })
+      return resp({ ok: true, ordens: gravar.map(({ usuario_id, ...r }) => r), total: gravar.length, faltaDetalhe: [...ordens.keys()].filter(id => !gravar.some(x => x.id === id) && !(tem.get(id)?.extra?.editada || tem.get(id)?.extra?.excluida)).length })
     }
 
     return resp({ error: 'ação desconhecida' }, 400)

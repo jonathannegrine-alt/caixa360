@@ -33,7 +33,7 @@
           supa.from('olist_ordens').select('*').eq('usuario_id', usuarioAtual.id).order('id', { ascending: false }).limit(1000),
           supa.from('compras_recebimentos').select('*').eq('usuario_id', usuarioAtual.id).order('recebido_em', { ascending: false }).limit(5000),
         ]);
-        if(o.data) oc.ordens = o.data;
+        if(o.data) oc.ordens = o.data.filter(x => !(x.extra && x.extra.excluida));     // excluída aqui (ordem do Olist): fica guardada, mas some
         if(r.data) oc.receb = r.data;
         if(o.error || r.error) oc.erro = (o.error || r.error).message;
         oc.carregadoEm = Date.now();
@@ -82,22 +82,16 @@
       const host = document.getElementById('oc-olist');
       if(!host) return;
       // com uma loja escolhida no seletor, só as ordens dela (ordem do Olist ou sem loja = loja padrão)
-      const lojaSel = typeof lojaAtiva === 'function' ? lojaAtiva() : '';
-      const daLoja = o => !lojaSel || ((o.extra && o.extra.loja) || (typeof lojaPadraoId === 'function' ? lojaPadraoId() : '')) === lojaSel;
-      const lista = oc.ordens.filter(daLoja).map(o => ({ o, r: ocResumo(o) })).filter(x => x.r.sit !== 'Cancelada');
+      const lista = ocListaBase();
       const pend = lista.filter(x => x.r.sit === 'A receber' || x.r.sit === 'Parcial');
       const unCaminho = pend.reduce((s, x) => s + x.r.falta, 0), valCaminho = pend.reduce((s, x) => s + x.r.valorFalta, 0);
       const d30 = new Date(Date.now() - 30 * 86400000).toISOString();
       const rec30 = oc.receb.filter(r => r.recebido_em >= d30).reduce((s, r) => s + Number(r.qtd), 0);
-      const f = oc.filtro;
-      const mostrar = lista.filter(x => f === 'todas' ? true : f === 'pendentes' ? (x.r.sit === 'A receber' || x.r.sit === 'Parcial') : x.r.sit === f);
       const cont = s => lista.filter(x => x.r.sit === s).length;
-      const selo = s => `<span class="cp-sit ${s === 'Recebida' ? 'cp-ok' : s === 'Parcial' ? 'cp-excesso' : 'cp-comprar'}">${s}</span>`;
-      const dt = d => d ? ptDate(String(d).substring(0, 10)) : '—';
 
       host.innerHTML = `
         <div class="pg-head">
-          <div><div class="pg-title">Ordens de compra</div><div class="pg-sub">As ordens vêm do Olist. Aqui você confere a chegada da mercadoria; o que ainda não chegou conta como estoque a caminho.</div></div>
+          <div><div class="pg-title">Ordens de compra</div><div class="pg-sub">Ordens criadas aqui ou trazidas do Olist. Aqui você confere a chegada da mercadoria; o que ainda não chegou conta como estoque a caminho.</div></div>
           <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="if(typeof pepsAbrir==='function')pepsAbrir()" title="Fila de lotes de cada produto: o custo das vendas acompanha o preço de cada compra">Custo por lote</button>${typeof olist !== 'undefined' && olist.v3 ? '<button class="btn-out btn-sm" onclick="ocAtualizar(this)">Atualizar do Olist</button>' : ''}<button class="btn btn-sm" onclick="ocCriar()">+ Nova ordem</button></div>
         </div>
         ${oc.erro ? `<div class="alert alert-danger">${ocEsc(oc.erro)}</div>` : ''}
@@ -107,25 +101,62 @@
           <div class="kpi k-hoje"><div class="kpi-label">Recebimento parcial</div><div class="kpi-value">${cont('Parcial')}</div><div class="kpi-sub">chegou uma parte</div></div>
           <div class="kpi k-mc"><div class="kpi-label">Recebido em 30 dias</div><div class="kpi-value">${ocInt(rec30)} un.</div><div class="kpi-sub">conferidas aqui</div></div>
         </div>
-        <div class="card"><div class="card-body"><div class="chips">
-          ${[['pendentes', 'A receber e parciais', pend.length], ['A receber', 'A receber', cont('A receber')], ['Parcial', 'Parcial', cont('Parcial')], ['Recebida', 'Recebidas', cont('Recebida')], ['todas', 'Todas', lista.length]]
-            .map(([k, t, n]) => `<button class="chip ${f === k ? 'active' : ''}" onclick="oc.filtro='${k}';ocDesenhar();">${t}<span class="n">${n}</span></button>`).join('')}
+        <div class="card"><div class="card-body" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <input type="search" placeholder="Buscar por fornecedor, nº da ordem ou SKU (ex.: rotoplast)" value="${ocEsc(oc.busca || '')}" oninput="oc.busca = this.value; ocFiltrar()" style="flex:1 1 320px;max-width:520px;">
+          <span class="text-muted" style="font-size:12.5px;">Várias palavras: todas precisam aparecer. Para ver também as recebidas, use “Todas”.</span>
+        </div></div>
+        <div id="oc-lista">${ocListaHtml(lista)}</div>`;
+    }
+    const ocSemAc = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    // chips, barra das marcadas e tabela (redesenhados sozinhos na busca, para o campo não perder o cursor)
+    function ocListaHtml(lista){
+      const pal = ocSemAc(oc.busca).split(/\s+/).filter(Boolean);
+      const base = lista.filter(x => !pal.length || (t => pal.every(p => t.includes(p)))(ocSemAc([x.o.numero, x.o.fornecedor, ...(x.o.itens || []).map(i => i.sku + ' ' + (i.descricao || ''))].join(' '))));
+      const f = oc.filtro, sel = oc.sel || (oc.sel = new Set());
+      const mostrar = base.filter(x => f === 'todas' ? true : f === 'pendentes' ? (x.r.sit === 'A receber' || x.r.sit === 'Parcial') : x.r.sit === f);
+      const cont = s => base.filter(x => x.r.sit === s).length, pendN = base.filter(x => x.r.sit === 'A receber' || x.r.sit === 'Parcial').length;
+      const selo = s => `<span class="cp-sit ${s === 'Recebida' ? 'cp-ok' : s === 'Parcial' ? 'cp-excesso' : 'cp-comprar'}">${s}</span>`;
+      const dt = d => d ? ptDate(String(d).substring(0, 10)) : '—';
+      const marcadas = oc.ordens.filter(o => sel.has(Number(o.id)));
+      const totMost = mostrar.reduce((s, x) => s + (Number(x.o.total) || 0), 0);
+      return `<div class="card"><div class="card-body"><div class="chips">
+          ${[['pendentes', 'A receber e parciais', pendN], ['A receber', 'A receber', cont('A receber')], ['Parcial', 'Parcial', cont('Parcial')], ['Recebida', 'Recebidas', cont('Recebida')], ['todas', 'Todas', base.length]]
+            .map(([k, t, n]) => `<button class="chip ${f === k ? 'active' : ''}" onclick="oc.filtro='${k}';ocFiltrar();">${t}<span class="n">${n}</span></button>`).join('')}
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:12.5px;">
+          <span class="text-muted">${mostrar.length} ordem${mostrar.length === 1 ? '' : 's'} na lista · <b>${fmt(totMost)}</b></span>
+          <span style="margin-left:auto;">${marcadas.length ? `<b>${marcadas.length}</b> marcada${marcadas.length === 1 ? '' : 's'} · ${fmt(marcadas.reduce((s, o) => s + (Number(o.total) || 0), 0))} <a href="#" onclick="oc.sel.clear();ocFiltrar();return false;" style="margin:0 6px;">desmarcar</a>` : '<span class="text-muted">Marque as ordens para gerar o PDF, a planilha ou excluir várias de uma vez.</span>'}</span>
+          <button class="btn btn-sm" ${marcadas.length ? '' : 'disabled'} onclick="ocPdfVarias(this)">PDF das marcadas</button><button class="btn-out btn-sm" ${marcadas.length ? '' : 'disabled'} onclick="ocPlanilhaVarias()" title="Planilha com um item por linha">Planilha</button><button class="btn-out btn-sm" style="color:var(--danger);" ${marcadas.length ? '' : 'disabled'} onclick="ocExcluirVarias(this)" title="Ordem com chegada lançada não é excluída">Excluir marcadas</button>
         </div></div></div>
-        <div class="card"><div style="overflow-x:auto;"><table class="cp-tab">
-          <thead><tr><th>Situação</th><th>Ordem</th><th>Fornecedor</th><th>Produtos</th><th>Previsão de chegada</th><th>Chegada</th><th class="num">Valor da ordem</th><th></th></tr></thead>
+        <div class="card"><div style="overflow-x:auto;"><table class="cp-tab" data-sem-ordem>
+          <thead><tr><th style="width:30px;"><input type="checkbox" title="Marcar ou desmarcar todas as da lista" ${mostrar.length && mostrar.every(x => sel.has(Number(x.o.id))) ? 'checked' : ''} onchange="ocMarcarTodas(this.checked)"></th><th>Situação</th><th>Ordem</th><th>Fornecedor</th><th>Produtos</th><th>Previsão de chegada</th><th>Chegada</th><th class="num">Valor da ordem</th><th></th></tr></thead>
           <tbody>${mostrar.length ? mostrar.map(({ o, r }) => {
             const pct = r.comprado ? Math.round(r.recebido / r.comprado * 100) : 0;
             return `<tr>
+              <td><input type="checkbox" class="oc-marca" data-id="${o.id}" ${sel.has(Number(o.id)) ? 'checked' : ''} onchange="ocMarcar(${o.id}, this.checked)"></td>
               <td>${selo(r.sit)}</td>
-              <td class="cp-prod"><b>Nº ${ocEsc(o.numero || o.id)}</b><span>${dt(o.data)}${Number(o.id) < 0 ? ' · criada aqui' : ''}</span></td>
+              <td class="cp-prod"><b>Nº ${ocEsc(o.numero || o.id)}</b><span>${dt(o.data)}${Number(o.id) < 0 ? ' · criada aqui' : o.extra && o.extra.editada ? ' · editada aqui' : ''}</span></td>
               <td class="cp-forn" style="max-width:240px;">${ocEsc(o.fornecedor || '—')}</td>
               <td class="cp-prod" style="max-width:300px;"><b>${r.itens.length} ${r.itens.length === 1 ? 'produto' : 'produtos'}</b><span title="${ocEsc(r.itens.map(i => i.sku).join(', '))}">${ocEsc(r.itens.map(i => i.sku).slice(0, 4).join(', '))}${r.itens.length > 4 ? '…' : ''}</span></td>
               <td>${r.sit === 'A receber' || r.sit === 'Parcial' ? `<input type="date" value="${ocPrev(o) || ''}" onchange="ocSalvarPrevisao(${o.id}, this.value)" style="width:150px;${ocPrev(o) && ocPrev(o) < getToday() ? 'border-color:var(--danger);color:var(--danger);' : ''}" title="${ocPrev(o) && ocPrev(o) < getToday() ? 'A previsão já passou' : 'Quando a mercadoria deve chegar'}">` : dt(ocPrev(o))}</td>
               <td><div class="cp-cob"><div class="cp-cob-n"><b>${ocInt(r.recebido)}</b> de ${ocInt(r.comprado)} un.</div><div class="cp-cob-t"><span class="cp-cob-${pct >= 100 ? 'v' : pct > 0 ? 'a' : 'r'}" style="width:${Math.max(3, Math.min(100, pct))}%;"></span></div></div></td>
               <td class="num"><b>${fmt(Number(o.total) || 0)}</b></td>
-              <td style="text-align:right;">${r.sit === 'A receber' || r.sit === 'Parcial' ? `<button class="btn btn-sm" onclick="ocConferir(${o.id})">Conferir chegada</button>` : `<button class="btn-out btn-sm" onclick="ocConferir(${o.id})">Ver</button>`}</td>
-            </tr>`; }).join('') : `<tr><td colspan="8"><div class="vazio"><b>Nenhuma ordem nesta lista</b>Troque o filtro acima ou clique em Atualizar do Olist.</div></td></tr>`}</tbody>
+              <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="ocEditar(${o.id})" title="Editar a ordem: fornecedor, itens, preços, pagamento e observações">Editar</button> <button class="btn-out btn-sm" onclick="ocPdf(${o.id})" title="Baixar o PDF desta ordem">PDF</button> ${r.sit === 'A receber' || r.sit === 'Parcial' ? `<button class="btn btn-sm" onclick="ocConferir(${o.id})">Conferir chegada</button>` : `<button class="btn-out btn-sm" onclick="ocConferir(${o.id})">Ver</button>`}</td>
+            </tr>`; }).join('') : `<tr><td colspan="9"><div class="vazio"><b>Nenhuma ordem nesta lista</b>Troque o filtro ou a busca acima.</div></td></tr>`}</tbody>
         </table></div></div>`;
+    }
+    function ocListaBase(){
+      const lojaSel = typeof lojaAtiva === 'function' ? lojaAtiva() : '';
+      const daLoja = o => !lojaSel || ((o.extra && o.extra.loja) || (typeof lojaPadraoId === 'function' ? lojaPadraoId() : '')) === lojaSel;
+      return oc.ordens.filter(daLoja).map(o => ({ o, r: ocResumo(o) })).filter(x => x.r.sit !== 'Cancelada');
+    }
+    function ocFiltrar(){ const el = document.getElementById('oc-lista'); if(el) el.innerHTML = ocListaHtml(ocListaBase()); else ocDesenhar(); }
+    function ocMarcar(id, v){ const s = oc.sel || (oc.sel = new Set()); if(v) s.add(Number(id)); else s.delete(Number(id)); ocFiltrar(); }
+    // marca ou desmarca as que estão na tabela agora (filtro e busca aplicados)
+    function ocMarcarTodas(v){
+      const s = oc.sel || (oc.sel = new Set());
+      document.querySelectorAll('#oc-lista .oc-marca').forEach(c => { const id = Number(c.dataset.id); if(v) s.add(id); else s.delete(id); });
+      ocFiltrar();
     }
 
     async function ocAtualizar(btn){ if(btn){ btn.disabled = true; btn.textContent = 'Atualizando…'; } await ocCarregar(true); ocDesenhar(); }
@@ -152,7 +183,7 @@
         ${hist.length ? `<div class="form-label" style="margin-top:18px;">Chegadas já lançadas</div><table><tbody>
           ${hist.map(h => `<tr><td>${dth(h.recebido_em)}</td><td><b>${ocEsc(h.sku)}</b></td><td style="text-align:right;">${ocInt(h.qtd)} un.</td><td class="text-muted" style="font-size:12px;">${h.somou === false ? 'sem somar ao galpão' : 'somado ao galpão'}${h.obs ? ' · ' + ocEsc(h.obs) : ''}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="ocDesfazer(${h.id})">Desfazer</button></td></tr>`).join('')}
         </tbody></table>` : ''}`,
-        `${Number(o.id) < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${o.id}, this)">Excluir ordem</button><button class="btn-out" onclick="ocEditarLocal(${o.id})">Editar ordem</button>` : '<span style="margin-right:auto;"></span>'}<button class="btn-out" onclick="ocDuplicar(${o.id})" title="Abre uma ordem nova com os mesmos itens e fornecedor">Repetir compra</button><button class="btn-out" onclick="ocPdf(${o.id})">PDF</button><button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${aberta ? `<button class="btn" onclick="ocLancar(${o.id}, this)">Lançar chegada</button>` : ''}`);
+        `${Number(o.id) < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${o.id}, this)">Excluir ordem</button><button class="btn-out" onclick="ocEditar(${o.id})">Editar ordem</button>` : '<span style="margin-right:auto;"></span><button class="btn-out" onclick="ocEditar(' + o.id + ')">Editar ordem</button>'}<button class="btn-out" onclick="ocDuplicar(${o.id})" title="Abre uma ordem nova com os mesmos itens e fornecedor">Repetir compra</button><button class="btn-out" onclick="ocPdf(${o.id})">PDF</button><button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${aberta ? `<button class="btn" onclick="ocLancar(${o.id}, this)">Lançar chegada</button>` : ''}`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
     }
     function ocReceberTudo(){ document.querySelectorAll('.oc-qtd').forEach(i => { if(!i.disabled) i.value = i.dataset.falta; }); }
