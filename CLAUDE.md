@@ -148,6 +148,11 @@ Dados em `localStorage` (sync) + Supabase (async, fire-and-forget):
 `inicio` (página inicial) · `pedidos` · `dashboard` · `planilha` · `pagar` · `emprestimos` · `receber` · `simulador` · `vendas` · `resumo-fin` · `posvenda` · `perguntas` · `mensagens` · `compras` · `skus` · `estoque` · `ordens-compra` · `analise` · `resultado` · `patrimonio` · `config`  
 Cada página → `id="view-{page}"` em `index.html` e `render{Page}()` em `renders.js`
 
+Menu lateral (19/10/2026), grupos `data-sec`, um aberto por vez (toggleNavSec): ven Vendas (vendas, pedidos, resumo-fin
+"Lucro das vendas", analise, promocoes) · atd Atendimento (perguntas, mensagens, posvenda) · est Estoque e Full (skus,
+estoque, full) · cmp Compras (compras, ordens-compra, simulador) · cx Caixa (dashboard, planilha, pagar, receber,
+emprestimos) · conf Conferências (conciliacao, frete, flex) · res Resultado (resultado, patrimonio) · sis Sistema.
+
 ## Development workflow
 
 **Editar diretamente os arquivos em `gestaomk/src/` ou `gestaomk/index.html`.**  

@@ -73,11 +73,10 @@
       document.querySelectorAll('.nav-item[data-sec]').forEach(i => i.classList.toggle('sec-oculta', !abertas.includes(i.dataset.sec)));
     }
 
+    // um grupo aberto por vez: abrir um fecha os outros; clicar no aberto fecha ele
     function toggleNavSec(sec){
-      let abertas = navSecsAbertas();
-      abertas = abertas.includes(sec) ? abertas.filter(s => s !== sec) : abertas.concat(sec);
-      localStorage.setItem('mk_nav_secs', JSON.stringify(abertas));
+      const abertas = navSecsAbertas().includes(sec) ? [] : [sec];
+      try { localStorage.setItem('mk_nav_secs', JSON.stringify(abertas)); } catch(e){}
       aplicarNavSecs();
     }
-
     document.addEventListener('DOMContentLoaded', aplicarNavSecs);

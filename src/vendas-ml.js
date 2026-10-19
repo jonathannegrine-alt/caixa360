@@ -273,7 +273,7 @@
         </div>
         ${vmlAvisoPermissao()}
         ${d.erro ? `<div class="alert alert-danger">Erro ao consultar as vendas: ${vmlEsc(d.erro)}</div>` : ''}
-        ${f.cortado ? `<div class="alert alert-info">A página Vendas mostra até ${VD_MAX_DIAS} dias por vez. Para períodos maiores, use o <a onclick="nav('resumo-fin')" style="cursor:pointer;font-weight:700;text-decoration:underline;">Resumo Financeiro</a>.</div>` : ''}
+        ${f.cortado ? `<div class="alert alert-info">A página Vendas mostra até ${VD_MAX_DIAS} dias por vez. Para períodos maiores, use o <a onclick="nav('resumo-fin')" style="cursor:pointer;font-weight:700;text-decoration:underline;">Lucro das vendas</a>.</div>` : ''}
         <div id="vd-graf">${vdGraficoHtml()}</div>
 
         <div class="kpi-grid">
@@ -830,7 +830,7 @@
       el.innerHTML = `
         <div class="pg-head">
           <div>
-            <div class="pg-title">Resumo Financeiro</div>
+            <div class="pg-title">Lucro das vendas</div>
             <div class="pg-sub">Receitas, despesas e margem de contribuição das suas vendas no Mercado Livre.</div>
           </div>
           <div class="d-flex gap-1" style="align-items:center;flex-wrap:wrap;">

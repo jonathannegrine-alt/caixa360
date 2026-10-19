@@ -160,7 +160,7 @@
 
       const atalhos = [
         ['planilha','Fluxo de Caixa','Entradas e saídas dia a dia'], ['pagar','Contas a pagar','Lançar e dar baixa'],
-        ['vendas','Vendas','Pedidos com margem'], ['resumo-fin','Resumo Financeiro','Receita, custos e margem'],
+        ['vendas','Vendas','Pedidos com margem'], ['resumo-fin','Lucro das vendas','Receita, custos e margem'],
         ['estoque','Estoque','Full, galpão e reposição'], ['resultado','Resultado','DRE e comparativo mensal']
       ];
       const icoDe = p => { const n = document.querySelector(`.nav-item[onclick="nav('${p}')"] svg`); return n ? n.outerHTML : ''; };

@@ -350,7 +350,7 @@
         if(typeof vmlSemPermissao !== 'undefined' && !data.tem_vendas) vmlSemPermissao = true;
         const adiado = parseInt(localStorage.getItem('mk_ml_reconectar_adiado') || '0');
         if(Date.now() - adiado < 24 * 3600000) return;
-        const falta = [!data.tem_vendas ? 'Vendas e Resumo Financeiro' : null, !data.tem_comunicacao ? 'Perguntas e Mensagens' : null].filter(Boolean).join(' e ');
+        const falta = [!data.tem_vendas ? 'Vendas e Lucro das vendas' : null, !data.tem_comunicacao ? 'Perguntas e Mensagens' : null].filter(Boolean).join(' e ');
         vmlModal('Reconecte sua conta do Mercado Livre', `
           <div style="display:flex;gap:16px;align-items:flex-start;">
             <div class="logo-mark" style="width:46px;height:46px;border-radius:14px;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></div>
