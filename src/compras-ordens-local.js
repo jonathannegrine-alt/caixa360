@@ -33,15 +33,25 @@
     }
 
     // itensIniciais: [{ sku, qtd, valor }] (vindos da lista de compras, por exemplo)
-    // número da ordem nova: um prefixo por loja (loja padrão "C", as outras a inicial do nome: Florevi "F") e a
-    // sequência continua do maior número já usado com aquele prefixo. Ordens do Olist (id > 0) não entram na conta.
+    // número da ordem nova: um prefixo por loja, a inicial do nome (MK "M", Florevi "F"); se duas lojas começam com a
+    // mesma letra, a mais nova usa a letra seguinte do nome que ainda está livre. A sequência continua do maior número já
+    // usado com aquele prefixo; na loja padrão conta também o "C" antigo (C001…, de antes do prefixo por loja).
+    // Ordens do Olist (id > 0) não entram na conta.
     function ocPrefixo(loja){
-      if(!loja || typeof lojaPadraoId !== 'function' || loja === lojaPadraoId()) return 'C';
-      const ini = String((typeof lojaNome === 'function' && lojaNome(loja)) || '').normalize('NFD').replace(/[^A-Za-z]/g, '').charAt(0).toUpperCase();
-      return ini && ini !== 'C' ? ini : 'L';
+      const cs = typeof contasML !== 'undefined' ? contasML.map(c => c.id).sort((a, b) => Number(a) - Number(b)) : [];
+      const id = loja || (typeof lojaPadraoId === 'function' ? lojaPadraoId() : '');
+      const letras = x => [...new Set(String((typeof lojaNome === 'function' && lojaNome(x)) || '').normalize('NFD').replace(/[^A-Za-z]/g, '').toUpperCase())];
+      const usadas = new Set();
+      for(const c of (cs.includes(id) ? cs : cs.concat(id))){
+        const px = letras(c).find(l => !usadas.has(l)) || 'L';
+        if(c === id) return px;
+        usadas.add(px);
+      }
+      return 'C';
     }
     function ocProximoNumero(loja){
-      const px = ocPrefixo(loja), re = new RegExp('^' + px + '(\\d+)$');
+      const px = ocPrefixo(loja), padrao = !loja || (typeof lojaPadraoId === 'function' && loja === lojaPadraoId());
+      const re = new RegExp('^' + (padrao && px !== 'C' ? '(?:' + px + '|C)' : px) + '(\\d+)$');
       const maior = oc.ordens.filter(o => Number(o.id) < 0).reduce((m, o) => { const x = re.exec(String(o.numero || '')); return x ? Math.max(m, Number(x[1])) : m; }, 0);
       return px + String(maior + 1).padStart(3, '0');
     }
