@@ -131,17 +131,17 @@
         </tbody></table></div>${lista.length > 400 ? `<div class="text-muted" style="padding:10px 16px;font-size:12px;">Mostrando 400 de ${lista.length}. Use a busca para achar um pedido.</div>` : ''}</div>`;
     }
 
-    // ---------- pedidos marcados: PDF para o galpão conferir ----------
+    // ---------- pedidos marcados: PDF ----------
     function pdMarcados(){ return pdPacotes().filter(p => pd.sel.has(p.k)).sort((x, y) => (x.lim || 9e15) - (y.lim || 9e15) || String(x.data_venda).localeCompare(String(y.data_venda))); }
     function pdBarraSel(){
       const M = pdMarcados(), un = M.reduce((s, p) => s + p.itens.reduce((a, v) => a + (Number(v.qtd) || 1), 0), 0);
       return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:0 16px 10px;font-size:12.5px;">
-        ${M.length ? `<span><b>${M.length}</b> pedido${M.length === 1 ? '' : 's'} marcado${M.length === 1 ? '' : 's'} · ${un} unidade${un === 1 ? '' : 's'}</span><a href="#" onclick="pd.sel.clear();pdDesenhar();return false;">desmarcar</a>` : '<span class="text-muted">Marque os pedidos para gerar a lista em PDF e mandar para o galpão conferir.</span>'}
-        <button class="btn btn-sm" style="margin-left:auto;" ${M.length ? '' : 'disabled'} onclick="pdPdf(this)">PDF para o galpão</button></div>`;
+        ${M.length ? `<span><b>${M.length}</b> pedido${M.length === 1 ? '' : 's'} marcado${M.length === 1 ? '' : 's'} · ${un} unidade${un === 1 ? '' : 's'}</span><a href="#" onclick="pd.sel.clear();pdDesenhar();return false;">desmarcar</a>` : '<span class="text-muted">Marque os pedidos para gerar o PDF.</span>'}
+        <button class="btn btn-sm" style="margin-left:auto;" ${M.length ? '' : 'disabled'} onclick="pdPdf(this)">PDF</button></div>`;
     }
     function pdMarcar(k, v){ if(v) pd.sel.add(k); else pd.sel.delete(k); pdDesenhar(); }
     function pdMarcarTodos(v){ document.querySelectorAll('#view-pedidos .pd-marca').forEach(c => { if(v) pd.sel.add(c.dataset.k); else pd.sel.delete(c.dataset.k); }); pdDesenhar(); }
-    // uma linha por produto, com foto; os dados do pedido ficam na primeira linha dele; coluna "Conferido" em branco para marcar à mão
+    // uma linha por produto, com foto; os dados do pedido ocupam as linhas dele; coluna "Conferido" em branco para marcar à mão
     async function pdPdf(bt){
       const M = pdMarcados(); if(!M.length){ if(typeof toast === 'function') toast('Marque os pedidos na lista.'); return; }
       const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
@@ -157,7 +157,7 @@
         const dt = t => t ? new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') : '—';
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
         const atr = M.filter(p => p.atrasado).length, un = M.reduce((s, p) => s + p.itens.reduce((a, v) => a + (Number(v.qtd) || 1), 0), 0);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Pedidos para conferir no galpão', 40, 44);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Pedidos', 40, 44);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
         doc.text('Gerado em ' + new Date().toLocaleString('pt-BR').slice(0, 17) + '  ·  ' + M.length + ' pedido' + (M.length === 1 ? '' : 's') + ', ' + un + ' unidade' + (un === 1 ? '' : 's') + (atr ? '  ·  ' + atr + ' atrasado' + (atr === 1 ? '' : 's') : ''), 40, 60);
         const body = [], foto = [];
@@ -182,7 +182,7 @@
             if(d.column.index === 4){ const u = img[foto[d.row.index]];
               if(u){ try { doc.addImage(u, /png/i.test(u.slice(0, 30)) ? 'PNG' : /webp/i.test(u.slice(0, 30)) ? 'WEBP' : 'JPEG', d.cell.x + 3, d.cell.y + 3, 34, 34); } catch(e){} } }
             if(d.column.index === 8){ doc.setDrawColor(120); doc.rect(d.cell.x + 20, d.cell.y + d.cell.height / 2 - 7, 14, 14); } } });
-        doc.save('pedidos_galpao_' + getToday() + '.pdf');
+        doc.save('pedidos_' + getToday() + '.pdf');
       } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + ((e && e.message) || e)); }
       if(bt){ bt.disabled = false; bt.textContent = rot; }
     }
