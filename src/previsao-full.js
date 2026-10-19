@@ -400,8 +400,11 @@
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
         doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Envio ao Full' + (loja ? ' · ' + loja : ''), 40, 50);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
-        doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR') + (pfl.envio && pflDiasEnvio() != null ? '  ·  envio em ' + pflDataBr(pfl.envio) : '') + '  ·  cobertura de ' + pfl.dias + ' dias  ·  ' + L.length + ' produtos, ' + L.reduce((s, l) => s + l.enviar, 0).toLocaleString('pt-BR') + ' unidades', 40, 68);
-        doc.autoTable({ startY: 84, margin: { left: 40, right: 40 }, head: [['Foto', 'Código Full', 'SKU', 'Produto', 'Quantidade']],
+        doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR') + '  ·  cobertura de ' + pfl.dias + ' dias  ·  ' + L.length + ' produtos, ' + L.reduce((s, l) => s + l.enviar, 0).toLocaleString('pt-BR') + ' unidades', 40, 68);
+        // saída prevista: a "Data do envio" da tela; sem data, fica em aberto para preencher à mão
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(20);
+        doc.text('Saída prevista: ' + (pfl.envio && pflDiasEnvio() != null ? pfl.envio.split('-').reverse().join('/') : '____/____/________'), 40, 88);
+        doc.autoTable({ startY: 102, margin: { left: 40, right: 40 }, head: [['Foto', 'Código Full', 'SKU', 'Produto', 'Quantidade']],
           body: L.map(l => ['', l.cod || '—', l.sku, String(l.titulo || '').slice(0, 90), l.enviar.toLocaleString('pt-BR')]),
           foot: [['', '', '', L.length + ' produtos', L.reduce((s, l) => s + l.enviar, 0).toLocaleString('pt-BR')]],
           styles: { fontSize: 9.5, cellPadding: 5, overflow: 'linebreak', valign: 'middle', minCellHeight: 46 },
