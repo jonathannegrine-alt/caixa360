@@ -341,13 +341,16 @@
     }
 
     // Folha para a equipe contar: produtos marcados, na ordem da tela, com o estoque do sistema e o espaço para anotar.
-    async function estFolhaContagem(){
+    // lista (opcional): [{ k, sku, nome, fisico, outro }] já pronta, ex.: os com diferença no confronto da contagem;
+    // outroNome é o título da coluna "outro" (UpSeller)
+    async function estFolhaContagem(lista, outroNome){
       const dep = (est.dep !== 'total' && est.depositos.find(d => d.id === est.dep && d.tipo !== 'full')) || estDepProprio();
       if(!dep){ if(typeof toast === 'function') toast('Não achei o depósito do galpão.'); return; }
+      const pronta = Array.isArray(lista);
       const ordem = [...document.querySelectorAll('.est-flag')].map(c => c.dataset.k);
-      const linhas = estLinhas(dep).filter(l => estSel.has(l.k)).sort((a, b) => { const x = ordem.indexOf(a.k), y = ordem.indexOf(b.k); return (x < 0 ? 1e9 : x) - (y < 0 ? 1e9 : y); });
+      const linhas = pronta ? lista.slice() : estLinhas(dep).filter(l => estSel.has(l.k)).sort((a, b) => { const x = ordem.indexOf(a.k), y = ordem.indexOf(b.k); return (x < 0 ? 1e9 : x) - (y < 0 ? 1e9 : y); });
       // marcado na aba Total e ainda sem saldo no galpão entra com zero
-      [...estSel].filter(k => !linhas.some(l => l.k === k)).forEach(k => { const g = estoqueGalpao.find(x => esN(x.sku) === k), s = skus.find(x => esN(x.sku) === k); linhas.push({ k, sku: (g && g.sku) || (s && s.sku) || k, nome: (s && s.titulo) || '', fisico: 0 }); });
+      if(!pronta) [...estSel].filter(k => !linhas.some(l => l.k === k)).forEach(k => { const g = estoqueGalpao.find(x => esN(x.sku) === k), s = skus.find(x => esN(x.sku) === k); linhas.push({ k, sku: (g && g.sku) || (s && s.sku) || k, nome: (s && s.titulo) || '', fisico: 0 }); });
       if(!linhas.length) return;
       try {
         const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
@@ -365,7 +368,7 @@
           })));
         } catch(err){}
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), agora = new Date();
-        doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.text('Lista de Estoque', 40, 50);
+        doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.text(pronta ? 'Conferir diferenças' : 'Lista de Estoque', 40, 50);
         doc.setFontSize(10); doc.setFont(undefined, 'normal');
         doc.text('Qtd. de SKU: ' + linhas.length, 300, 40); doc.text('Total de itens: ' + esInt(linhas.reduce((s, l) => s + Math.max(0, l.fisico), 0)), 430, 40);
         doc.text('Depósito: ' + dep.nome + '   ' + agora.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }), 300, 56);
@@ -373,16 +376,17 @@
           // linha partida entre duas páginas chega ao didDrawCell sem índice válido (e atrapalha quem conta): nunca partir
           startY: 74, theme: 'grid', rowPageBreak: 'avoid', styles: { fontSize: 10, cellPadding: 7, valign: 'middle', lineColor: 120, lineWidth: 0.5, textColor: 20 },
           headStyles: { fillColor: [235, 235, 235], textColor: 20, fontStyle: 'bold' },
-          columnStyles: { 0: { cellWidth: 26, halign: 'center' }, 1: { cellWidth: 50 }, 3: { cellWidth: 60, halign: 'center' }, 4: { cellWidth: 78 }, 5: { cellWidth: 110 } },
-          head: [['#', 'Foto', 'SKU', 'Estoque atual', 'Contado', 'Observações']],
-          body: linhas.map((l, i) => [i + 1, '', l.sku + (l.nome ? '\n' + l.nome : ''), esInt(l.fisico), '', '']),
+          columnStyles: pronta ? { 0: { cellWidth: 26, halign: 'center' }, 1: { cellWidth: 50 }, 3: { cellWidth: 52, halign: 'center' }, 4: { cellWidth: 52, halign: 'center' }, 5: { cellWidth: 62 }, 6: { cellWidth: 90 } }
+            : { 0: { cellWidth: 26, halign: 'center' }, 1: { cellWidth: 50 }, 3: { cellWidth: 60, halign: 'center' }, 4: { cellWidth: 78 }, 5: { cellWidth: 110 } },
+          head: [pronta ? ['#', 'Foto', 'SKU', 'Caixa 360', outroNome || 'Outro', 'Contado', 'Observações'] : ['#', 'Foto', 'SKU', 'Estoque atual', 'Contado', 'Observações']],
+          body: linhas.map((l, i) => pronta ? [i + 1, '', l.sku + (l.nome ? '\n' + l.nome : ''), esInt(l.fisico), esInt(l.outro), '', ''] : [i + 1, '', l.sku + (l.nome ? '\n' + l.nome : ''), esInt(l.fisico), '', '']),
           didParseCell: d => { if(d.section === 'body') d.cell.styles.minCellHeight = 46; },
           didDrawCell: d => { if(d.section === 'body' && d.column.index === 1 && linhas[d.row.index]){ const f = fotos.get(esN(linhas[d.row.index].sku)); if(f){ try { doc.addImage(f, 'JPEG', d.cell.x + 5, d.cell.y + 3, 40, 40); } catch(err){} } } }
         });
         const y = Math.min(doc.lastAutoTable.finalY + 30, 800);
         doc.text('Contado por: ______________________     Data: ____/____/______', 40, y);
         doc.text('Obs.:', 40, y + 24);
-        doc.save('contagem_de_estoque_' + getToday() + '.pdf');
+        doc.save((pronta ? 'conferir_diferencas_' : 'contagem_de_estoque_') + getToday() + '.pdf');
       } catch(err){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + err.message); }
     }
 

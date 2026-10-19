@@ -79,9 +79,12 @@ async function envioMudou(conta: string, recurso: string) {
     const saiu = ['shipped', 'delivered', 'not_delivered'].includes(status) || !!hist.date_shipped
     const campos: Record<string, unknown> = { envio_status: status }
     const quando = hist.date_shipped || hist.date_delivered || (saiu ? (s.last_updated || new Date().toISOString()) : null)
-    if (saiu && quando) campos.enviado_em = quando
     if (s.tracking_number) campos.rastreio = String(s.tracking_number)
-    await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${t.usuario_id}&ml_user_id=eq.${conta}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify(campos) }).catch(() => null)
+    const alvo = `${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${t.usuario_id}&ml_user_id=eq.${conta}&shipping_id=eq.${sid}`
+    await fetch(alvo, { method: 'PATCH', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify(campos) }).catch(() => null)
+    // enviado_em só é gravado uma vez: a hora da coleta (ml-envios) não pode ser trocada depois pela de "shipped",
+    // que vem mais tarde; o estoque baixa pela comparação dessa hora com a da contagem (esoBaixarVendas)
+    if (saiu && quando) await fetch(alvo + '&enviado_em=is.null', { method: 'PATCH', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify({ enviado_em: quando }) }).catch(() => null)
   }
 }
 

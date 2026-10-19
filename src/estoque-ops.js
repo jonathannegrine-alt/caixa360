@@ -547,14 +547,34 @@
           if(arms.length > 1){ arm = (prompt('A planilha tem mais de um armazém:\n' + arms.join('\n') + '\n\nDigite o que corresponde a "' + dep.nome + '":', arms[0]) || '').trim(); if(!arm) return; }
           const mapa = new Map();
           rows.forEach(r => { const sku = String(r.SKU || '').trim(); if(!sku || (arm && String(r['Armazém'] || '').trim() !== arm) || String(r[colQ]).trim() === '') return;
-            const k = esN(sku), a = mapa.get(k) || { sku, real: 0, custo: 0, titulo: String(r['Título'] || r['Produto'] || '').trim() }; a.real += Number(r[colQ]) || 0; if(upseller && Number(r['Custo Médio']) > 0) a.custo = Number(r['Custo Médio']); mapa.set(k, a); });
+            const k = esN(sku), a = mapa.get(k) || { sku, real: 0, custo: 0, titulo: String(r['Título'] || r['Produto'] || '').trim() }; a.real += Number(r[colQ]) || 0; if(upseller && Number(r['Custo Médio']) > 0) a.custo = Number(r['Custo Médio']);
+            if(upseller && 'Disponível' in r){ a.disp = (a.disp || 0) + (Number(r['Disponível']) || 0); a.atualUps = (a.atualUps || 0) + (Number(r[colQ]) || 0); }
+            mapa.set(k, a); });
           // hora em que a planilha da UpSeller foi tirada vem no nome: Lista_de_Estoque_MMDDHHMMSS (horário UTC)
           const m = upseller && (f.name.match(/_(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.xlsx?$/i) || f.name.match(/Lista_de_Estoque_(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/i));
           const quando = m ? new Date().getFullYear() + '-' + m[1] + '-' + m[2] + 'T' + m[3] + ':' + m[4] : new Date().toISOString().substring(0, 16);
-          esoContagemRevisar([...mapa.values()], upseller ? 'Planilha da UpSeller' : 'Planilha modelo', f.name, quando);
+          const itens = [...mapa.values()], seguir = () => esoContagemRevisar(itens, upseller ? 'Planilha da UpSeller' : 'Planilha modelo', f.name, quando);
+          if(itens.some(i => i.disp !== undefined)) esoLer(true).then(() => esoUpsellerFisico(itens, quando)).then(seguir).catch(err => alert('Não consegui ler os pedidos: ' + err.message)); else seguir();
         } catch(err){ alert('Não consegui ler a planilha: ' + err.message); } }; rd.readAsArrayBuffer(f); };
       inp.onchange = () => (typeof impGuarda === 'function' ? impGuarda(arq || inp.files[0], ["contagem_modelo","upseller_estoque"], true) : Promise.resolve(true)).then(ok => { if(ok) _ler(); });
       if(arq) inp.onchange(); else inp.click();
+    }
+    // A UpSeller tira o produto do "Estoque Atual" quando o pedido vai para "Para Retirada" (etiqueta emitida), antes de
+    // o Mercado Livre registrar a coleta; o Caixa 360 baixa na coleta. Usar o Estoque Atual fazia os pedidos que estavam
+    // esperando a coleta na hora da planilha serem baixados duas vezes (investigado em 19/10/2026: J-2028, J-2011…).
+    // O Disponível não depende de quando cada sistema baixa (é o físico menos tudo o que ainda não saiu), então:
+    // físico = Disponível da UpSeller + pedidos nossos que ainda não tinham saído na hora da planilha.
+    // "Ainda não tinham saído" = sem envio, ou com envio depois da hora da planilha e ainda sem baixa no Caixa 360 (são
+    // os que esoBaixarVendas vai baixar). Envios ao Full em preparação não entram: a UpSeller não os reserva.
+    async function esoUpsellerFisico(itens, quando){
+      const t = new Date(String(quando) + ':00Z').getTime(), kits = esoKits(), oc = new Map(), dep = estDepProprio(), feitas = new Set();
+      if(dep){
+        const mv = await supa.from('estoque_mov').select('ref,sku_norm').eq('usuario_id', usuarioAtual.id).eq('deposito_id', dep.id).eq('motivo', 'venda').gte('criado_em', new Date(Date.now() - 40 * 86400000).toISOString()).limit(20000);
+        (mv.data || []).forEach(m => feitas.add(m.ref + '|' + m.sku_norm));
+      }
+      (eso.vendas || []).filter(v => v.sku && v.status !== 'cancelled' && (!v.enviado_em || new Date(v.enviado_em).getTime() > t))
+        .forEach(v => esoAbrir(v.sku, Number(v.qtd) || 0, kits).forEach(c => { const k = esN(c.sku); if(v.enviado_em && feitas.has(String(v.order_id) + '|' + k)) return; oc.set(k, (oc.get(k) || 0) + c.qtd); }));
+      itens.forEach(i => { if(i.disp === undefined) return; i.ocup = oc.get(esN(i.sku)) || 0; i.real = i.disp + i.ocup; });
     }
     function esoContagemDigitar(){
       const dep = est.depositos.find(d => d.id === esoCtDep);
@@ -573,19 +593,34 @@
       const dep = est.depositos.find(d => d.id === esoCtDep);
       if(!itens.length){ alert('Nenhum produto com quantidade.'); return; }
       const lista = itens.map(i => ({ ...i, sistema: estSaldoDe(dep.id, i.sku) })).map(i => ({ ...i, dif: i.real - i.sistema })).sort((a, b) => Math.abs(b.dif) - Math.abs(a.dif));
-      esoCont = { lista, origem, arquivo, quando, dep: dep.id };
-      const difs = lista.filter(i => i.dif !== 0), sobra = difs.filter(i => i.dif > 0).reduce((s, i) => s + i.dif, 0), falta = difs.filter(i => i.dif < 0).reduce((s, i) => s - i.dif, 0);
+      esoCont = { lista, origem, arquivo, quando, dep: dep.id, soDif: false };
+      esoContagemDesenhar();
+    }
+    function esoContagemFiltro(){ if(!esoCont) return; const o = document.getElementById('eso-ct-obs'); if(o) esoCont.obs = o.value; esoCont.soDif = !esoCont.soDif; esoContagemDesenhar(); }
+    // PDF dos produtos com diferença, para o galpão conferir
+    function esoContagemPdf(){
+      const c = esoCont; if(!c || typeof estFolhaContagem !== 'function') return;
+      const L = c.lista.filter(i => i.dif !== 0);
+      if(!L.length){ if(typeof toast === 'function') toast('Nenhum produto com diferença.'); return; }
+      estFolhaContagem(L.map(i => ({ k: esN(i.sku), sku: i.sku, nome: i.titulo || ((skus.find(x => esN(x.sku) === esN(i.sku)) || {}).titulo) || '', fisico: i.sistema, outro: i.real })), c.origem === 'Planilha da UpSeller' ? 'UpSeller' : 'Contado antes');
+    }
+    function esoContagemDesenhar(){
+      const c = esoCont; if(!c) return;
+      const dep = est.depositos.find(d => d.id === c.dep), lista = c.lista, ups = lista.some(i => i.disp !== undefined);
+      const difs = lista.filter(i => i.dif !== 0), ver = c.soDif ? difs : lista, sobra = difs.filter(i => i.dif > 0).reduce((s, i) => s + i.dif, 0), falta = difs.filter(i => i.dif < 0).reduce((s, i) => s - i.dif, 0);
       vmlModal('Confronto da contagem — ' + esEsc(dep.nome), `
         <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));">
           <div class="kpi k-neutro"><div class="kpi-label">Produtos contados</div><div class="kpi-value">${lista.length}</div></div>
-          <div class="kpi ${difs.length ? 'k-hoje' : 'k-mc'}"><div class="kpi-label">Com diferença</div><div class="kpi-value">${difs.length}</div></div>
+          <div class="kpi ${difs.length ? 'k-hoje' : 'k-mc'}" onclick="esoContagemFiltro()" style="cursor:pointer;${c.soDif ? 'outline:2px solid var(--primary);' : ''}" title="${c.soDif ? 'Mostrar todos' : 'Mostrar só os com diferença'}"><div class="kpi-label">Com diferença ${c.soDif ? '(filtrando)' : ''}</div><div class="kpi-value">${difs.length}</div></div>
           <div class="kpi k-mc"><div class="kpi-label">Contado a mais</div><div class="kpi-value">+${esInt(sobra)}</div></div>
           <div class="kpi k-atraso"><div class="kpi-label">Contado a menos</div><div class="kpi-value">−${esInt(falta)}</div></div>
         </div>
+        ${ups ? '<div class="text-muted" style="font-size:12px;margin:-4px 0 10px;">Planilha da UpSeller: o contado é o <b>Disponível</b> da UpSeller mais os pedidos que ainda não tinham saído na hora da planilha. A UpSeller tira do Estoque Atual quando a etiqueta é emitida (antes da coleta), e o Caixa 360 só na coleta; pelo Disponível os dois falam da mesma coisa.</div>' : ''}
+        <div class="d-flex" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">${c.soDif ? '<span class="text-muted" style="font-size:12.5px;">Mostrando só os ' + difs.length + ' com diferença. <a class="fx-link" style="color:var(--primary);cursor:pointer;" onclick="esoContagemFiltro()">Mostrar todos</a></span>' : ''}<button class="btn-out btn-sm" style="margin-left:auto;" onclick="esoContagemPdf()" ${difs.length ? '' : 'disabled'}>PDF dos com diferença</button></div>
         <div style="overflow-x:auto;max-height:40vh;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">No Caixa 360</th><th class="num">Contado</th><th class="num">Diferença</th></tr></thead><tbody>
-          ${lista.map(i => `<tr><td>${typeof fotoLinha === 'function' ? fotoLinha(i.sku, `<b>${esEsc(i.sku)}</b>`) : `<b>${esEsc(i.sku)}</b>`}</td><td class="num">${esInt(i.sistema)}</td><td class="num">${esInt(i.real)}</td><td class="num ${i.dif > 0 ? 'text-success' : i.dif < 0 ? 'text-danger' : 'text-muted'}"><b>${i.dif > 0 ? '+' : ''}${esInt(i.dif)}</b></td></tr>`).join('')}
+          ${ver.map(i => `<tr><td>${typeof fotoLinha === 'function' ? fotoLinha(i.sku, `<b>${esEsc(i.sku)}</b>`) : `<b>${esEsc(i.sku)}</b>`}</td><td class="num">${esInt(i.sistema)}</td><td class="num">${esInt(i.real)}</td><td class="num ${i.dif > 0 ? 'text-success' : i.dif < 0 ? 'text-danger' : 'text-muted'}"><b>${i.dif > 0 ? '+' : ''}${esInt(i.dif)}</b></td></tr>`).join('')}
         </tbody></table></div>
-        <div class="form-group" style="margin-top:12px;"><label class="form-label">Observação</label><input type="text" id="eso-ct-obs" placeholder="Ex.: contagem enviada pelo galpão em 10/10" value="${esEsc(arquivo || '')}"></div>`,
+        <div class="form-group" style="margin-top:12px;"><label class="form-label">Observação</label><input type="text" id="eso-ct-obs" placeholder="Ex.: contagem enviada pelo galpão em 10/10" value="${esEsc(c.obs !== undefined ? c.obs : (c.arquivo || ''))}"></div>`,
         `<button class="btn-out" onclick="esoContagens()">Cancelar</button><button class="btn-out" onclick="esoContagemSalvar(false, this)">Só guardar a comparação</button><button class="btn" onclick="esoContagemSalvar(true, this)">Ajustar o estoque para o contado</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
     }
