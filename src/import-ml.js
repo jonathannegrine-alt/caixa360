@@ -2,13 +2,18 @@
     function exportarCSV(){
       const esc = s => (String(s||'')).replace(/;/g,'|');
       const n2 = v => (Number(v)||0).toFixed(2).replace('.',',');
-      const header = 'data;desc;forn;val;cat;pago;tipo;parcela;valorPago;data_paga;desconto;juros';
+      // identificadores no fim (a importação lê pelo nome da coluna): id da conta no banco, família (as parcelas da mesma
+      // compra/série/empréstimo têm a mesma), origem (olist:<id>, oc:<ordem>:<n>…) e a ordem de compra que gerou a conta
+      const ordemDe = p => { const k = String(p.tiny_key || ''); if(k.startsWith('oc:')){ const id = k.split(':')[1], o = typeof oc !== 'undefined' ? oc.ordens.find(x => String(x.id) === id) : null; return o ? o.numero : id; }
+        const m = /ordem de compra n[º°o]?\.?\s*(\d+)/i.exec(p.desc || ''); return m ? m[1] : ''; };
+      const header = 'data;desc;forn;val;cat;pago;tipo;parcela;valorPago;data_paga;desconto;juros;id;familia;fonte;origem;ordem_compra';
       const linhas = pagamentos.map(p => [
         p.data||'', esc(p.desc), esc(p.forn),
         n2(p.val), esc(p.cat), p.pago?'sim':'nao',
         p.tipo||'unico', p.parcela||'',
-        n2(p.valorPago), p.data_paga||'',
-        n2(p.desconto), n2(p.juros)
+        n2(p.valorPago), p.dataPaga||p.data_paga||'',
+        n2(p.desconto), n2(p.juros),
+        p.id||'', esc(p.grupo_id), p.fonte||'', esc(p.tiny_key), ordemDe(p)
       ].join(';'));
       const csv = header + '\n' + linhas.join('\n');
       const BOM = '\uFEFF';
