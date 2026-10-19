@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Caixa 360** — SPA de fluxo de caixa para e-commerce integrado com Mercado Livre.  
 Produção: https://jonathannegrine-alt.github.io/caixa360/  
 Repositório: https://github.com/jonathannegrine-alt/caixa360  
-Clone local: `G:\Meu Drive\1. NEGÓCIOS\E-commerce\App Financeiro Claude\gestaomk\`
+Clone local: `H:\Meu Drive\1. NEGÓCIOS\E-commerce\App Financeiro Claude\gestaomk\`
 
 ## Architecture
 
@@ -151,7 +151,7 @@ Cada página → `id="view-{page}"` em `index.html` e `render{Page}()` em `rende
 ## Development workflow
 
 **Editar diretamente os arquivos em `gestaomk/src/` ou `gestaomk/index.html`.**  
-O `index.html` pai em `G:\Meu Drive\1. NEGÓCIOS\E-commerce\App Financeiro Claude\index.html` é backup obsoleto — não editar.
+O `index.html` pai em `H:\Meu Drive\1. NEGÓCIOS\E-commerce\App Financeiro Claude\index.html` é backup obsoleto — não editar.
 
 **Validar JS antes de deployar:**
 ```
@@ -160,7 +160,7 @@ node --check src/nome-do-arquivo.js
 
 **Deploy:**
 ```
-cd "G:\Meu Drive\1. NEGÓCIOS\E-commerce\App Financeiro Claude\gestaomk"
+cd "H:\Meu Drive\1. NEGÓCIOS\E-commerce\App Financeiro Claude\gestaomk"
 git add src/ index.html
 git commit -m "descrição"
 git push origin main
