@@ -75,10 +75,13 @@ async function envioMudou(conta: string, recurso: string) {
     const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: { Authorization: `Bearer ${t.access_token}`, 'x-format-new': 'true' } }).catch(() => null)
     if (!r || !r.ok) continue
     const s: any = await r.json().catch(() => null); if (!s || !s.status) continue
-    const hist = s.status_history || {}, status = String(s.status)
-    const saiu = ['shipped', 'delivered', 'not_delivered'].includes(status) || !!hist.date_shipped
-    const campos: Record<string, unknown> = { envio_status: status }
-    const quando = hist.date_shipped || hist.date_delivered || (saiu ? (s.last_updated || new Date().toISOString()) : null)
+    const hist = s.status_history || s.date_history || {}, status = String(s.status), sub = String(s.substatus || '')
+    let saiu = ['shipped', 'delivered', 'not_delivered'].includes(status) || !!hist.date_shipped
+    const campos: Record<string, unknown> = { envio_status: status, envio_substatus: s.substatus ? sub : null }
+    let quando = hist.date_shipped || hist.date_delivered || (saiu ? (s.last_updated || new Date().toISOString()) : null)
+    // coleta bipada (ou pacote deixado na agência): o pacote saiu do galpão, mesmo com o status ainda "ready_to_ship".
+    // O aviso chega na hora do bipe; "shipped" só vem quando o pacote passa no centro do ML (às vezes no dia seguinte)
+    if (!saiu && status === 'ready_to_ship' && ['picked_up', 'dropped_off', 'in_hub'].includes(sub)) { saiu = true; quando = s.last_updated || new Date().toISOString() }
     if (s.tracking_number) campos.rastreio = String(s.tracking_number)
     const alvo = `${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${t.usuario_id}&ml_user_id=eq.${conta}&shipping_id=eq.${sid}`
     await fetch(alvo, { method: 'PATCH', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify(campos) }).catch(() => null)

@@ -87,8 +87,9 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
   const desde = new Date(Date.now() - DIAS * 86400000).toISOString()
   let conferidos = 0, enviados = 0, etiquetas = 0
   for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
-    // vendas do galpão ainda sem envio registrado (canceladas ficam de fora)
-    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&data_venda=gte.${desde}&enviado_em=is.null&shipping_id=not.is.null&status=neq.cancelled&or=(logistic_type.is.null,logistic_type.neq.fulfillment)&select=shipping_id,etiqueta_em&order=data_venda.desc&limit=3000`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    // vendas do galpão ainda sem envio registrado (canceladas ficam de fora). Mais antigas primeiro: com mais de
+    // MAX_ENVIOS pendentes, as antigas ficavam dias sem conferir (venda de 29/09 despachada em 01/10 só baixou em 15/10)
+    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&data_venda=gte.${desde}&enviado_em=is.null&shipping_id=not.is.null&status=neq.cancelled&or=(logistic_type.is.null,logistic_type.neq.fulfillment)&select=shipping_id,etiqueta_em&order=data_venda.asc&limit=3000`, { headers: dbH }).then(r => r.json()).catch(() => [])
     const ids = [...new Set((Array.isArray(vendas) ? vendas : []).map((v: any) => String(v.shipping_id)))].slice(0, MAX_ENVIOS)
     const comEtiqueta = new Set((Array.isArray(vendas) ? vendas : []).filter((v: any) => v.etiqueta_em).map((v: any) => String(v.shipping_id)))
     await emLotes(ids, 6, async sid => {
@@ -97,7 +98,7 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       const s = await r.json().catch(() => null); if (!s) return
       conferidos++
       const status = String(s.status || '')
-      const hist = s.status_history || {}
+      const hist = s.status_history || s.date_history || {}
       // enviado = saiu do vendedor (shipped / delivered / not_delivered) — a data vem do histórico
       let saiu = ['shipped', 'delivered', 'not_delivered'].includes(status) || !!hist.date_shipped
       let quando = hist.date_shipped || hist.date_delivered || (saiu ? (s.last_updated || new Date().toISOString()) : null)
