@@ -10,17 +10,24 @@
     const ocEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const ocInt = n => Math.round(Number(n) || 0).toLocaleString('pt-BR');
 
+    // há ordens guardadas no banco (importadas do Olist ou criadas aqui)? então a tela nova vale mesmo sem o Olist
+    async function ocGuardadas(){
+      if(oc.temGuardadas !== undefined || typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      const g = await supa.from('olist_ordens').select('id', { count: 'exact', head: true }).eq('usuario_id', usuarioAtual.id);
+      oc.temGuardadas = !g.error && (g.count || 0) > 0;
+    }
     // lê do banco; com forcar=true (ou dados com mais de 10 min) pede ao Olist a lista atualizada antes
     async function ocCarregar(forcar){
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return false;
       if(typeof olist === 'undefined') return false;
       if(olist.conectado === null) await olistStatus();
-      if(!olist.v3) return false;
+      // sem o aplicativo do Olist (nunca autorizado ou desconectado) só lê o que já está guardado: as ordens importadas continuam aparecendo
+      if(!olist.v3){ await ocGuardadas(); if(!oc.temGuardadas) return false; }
       if(oc.buscando) return true;
       if(!forcar && oc.carregadoEm && Date.now() - oc.carregadoEm < 10 * 60 * 1000) return true;
       oc.buscando = true; oc.erro = '';
       try {
-        const j = await olistChamarCompras({ acao: 'ordens' });
+        const j = olist.v3 ? await olistChamarCompras({ acao: 'ordens' }) : {};
         if(j.error) oc.erro = j.error;
         const [o, r] = await Promise.all([
           supa.from('olist_ordens').select('*').eq('usuario_id', usuarioAtual.id).order('id', { ascending: false }).limit(1000),
@@ -53,15 +60,16 @@
       oc.ordens.forEach(o => { const r = ocResumo(o); if(r.sit === 'A receber' || r.sit === 'Parcial') r.itens.forEach(i => { if(i.falta > 0) m.set(ocN(i.sku), (m.get(ocN(i.sku)) || 0) + i.falta); }); });
       return m;
     }
-    function ocTemDados(){ return typeof olist !== 'undefined' && !!olist.v3 && oc.carregadoEm > 0; }
+    function ocTemDados(){ return typeof olist !== 'undefined' && (!!olist.v3 || !!oc.temGuardadas) && oc.carregadoEm > 0; }
 
     async function ocRender(){
       const view = document.getElementById('view-ordens-compra');
       if(!view) return;
       if(typeof olist !== 'undefined' && olist.conectado === null) await olistStatus();
       let host = document.getElementById('oc-olist');
-      const usar = typeof olist !== 'undefined' && !!olist.v3;
-      // sem o aplicativo do Olist autorizado, fica a tela antiga
+      await ocGuardadas();
+      const usar = typeof olist !== 'undefined' && (!!olist.v3 || !!oc.temGuardadas);
+      // sem o aplicativo do Olist autorizado e sem ordens guardadas, fica a tela antiga
       [...view.children].forEach(el => { if(el.id !== 'oc-olist') el.style.display = usar ? 'none' : (el.dataset.ocAntes || ''); });
       if(!usar){ if(host) host.remove(); if(typeof renderOrdensCompra === 'function') renderOrdensCompra(); return; }
       if(!host){ host = document.createElement('div'); host.id = 'oc-olist'; view.appendChild(host); }
@@ -90,7 +98,7 @@
       host.innerHTML = `
         <div class="pg-head">
           <div><div class="pg-title">Ordens de compra</div><div class="pg-sub">As ordens vêm do Olist. Aqui você confere a chegada da mercadoria; o que ainda não chegou conta como estoque a caminho.</div></div>
-          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="if(typeof pepsAbrir==='function')pepsAbrir()" title="Fila de lotes de cada produto: o custo das vendas acompanha o preço de cada compra">Custo por lote</button><button class="btn-out btn-sm" onclick="ocAtualizar(this)">Atualizar do Olist</button><button class="btn btn-sm" onclick="ocCriar()">+ Nova ordem</button></div>
+          <div class="d-flex gap-1" style="flex-wrap:wrap;"><button class="btn-out btn-sm" onclick="if(typeof pepsAbrir==='function')pepsAbrir()" title="Fila de lotes de cada produto: o custo das vendas acompanha o preço de cada compra">Custo por lote</button>${typeof olist !== 'undefined' && olist.v3 ? '<button class="btn-out btn-sm" onclick="ocAtualizar(this)">Atualizar do Olist</button>' : ''}<button class="btn btn-sm" onclick="ocCriar()">+ Nova ordem</button></div>
         </div>
         ${oc.erro ? `<div class="alert alert-danger">${ocEsc(oc.erro)}</div>` : ''}
         <div class="kpi-grid k4i">
