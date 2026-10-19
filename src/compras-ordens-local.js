@@ -36,7 +36,7 @@
     function ocCriar(itensIniciais){
       const locais = oc.ordens.filter(o => Number(o.id) < 0).length;
       ocNova = { id: null, numero: 'C' + String(locais + 1).padStart(3, '0'), fornecedor: '', data: getToday(), prev: '', nforn: '', desconto: '', frete: '', condicao: '', categoria: '', loja: typeof lojaNova === 'function' ? lojaNova() : '',
-        lancar: !(typeof olist !== 'undefined' && olist.conectado && (!lojaNova || lojaNova() === lojaPadraoId())), transportador: '', fretePor: '', obs: '', obsInterna: '', parcelas: [],
+        lancar: true, transportador: '', fretePor: '', obs: '', obsInterna: '', parcelas: [],
         itens: (Array.isArray(itensIniciais) && itensIniciais.length ? itensIniciais.map(i => ({ sku: i.sku, desc: ocNomeProduto(i.sku), qtd: i.qtd, valor: i.valor ? fmtMoney(Number(i.valor)) : '', ipi: '' })) : [{ sku: '', desc: '', qtd: '', valor: '', ipi: '' }]) };
       ocCriarDesenhar();
     }
@@ -206,6 +206,10 @@
       if(!n.fornecedor.trim()){ toast('Informe o fornecedor.'); return; }
       if(!R.itens.length){ toast('Inclua pelo menos um item com quantidade.'); return; }
       if(R.extra.lancar && !R.parcelas.length){ toast('Para lançar no Contas a pagar, gere as parcelas (condição de pagamento).'); return; }
+      // ordem do Olist cujas parcelas já estão no Contas a pagar (vieram do Olist): lançar de novo duplicaria as contas
+      if(R.extra.lancar && n.id > 0){ const o = oc.ordens.find(x => Number(x.id) === Number(n.id)), P = o ? ocParcelasDaOrdem(o) : [];
+        if(P.some(p => p.pago !== null) && !(typeof pagTodos === 'function' ? pagTodos() : pagamentos).some(p => String(p.tiny_key || '').startsWith('oc:' + n.id + ':'))){
+          toast('As parcelas desta ordem já estão no Contas a pagar (vieram do Olist). Desmarque "Lançar as parcelas no Contas a pagar" para não duplicar.'); return; } }
       if(n.id > 0) R.extra.editada = true;                     // ordem do Olist alterada aqui: a busca no Olist não sobrescreve
       const reg = { usuario_id: usuarioAtual.id, id: n.id || -Date.now(), numero: n.numero, data: n.data || getToday(), data_prevista_local: n.prev || null, situacao: 0, fornecedor: n.fornecedor.trim(), total: R.t.geral, itens: R.itens, origem: 'caixa360', extra: R.extra };
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
