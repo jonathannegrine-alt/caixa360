@@ -169,7 +169,12 @@
     // Baixa do físico pelas vendas ENVIADAS depois do último acerto do produto (carga ou contagem).
     // O horário do acerto vem da referência "planilha-AAAA-MM-DDTHH:MM" (hora em que a planilha foi tirada) ou,
     // sem ela, da hora em que a movimentação foi gravada. Cada pedido baixa uma vez só (ref = nº do pedido).
+    // Desde 19/10/2026 o banco baixa sozinho quando a venda ganha enviado_em (gatilho estoque_baixa_upd, função
+    // estoque_baixar_vendas, mesma regra daqui). A tela só pede a ele que confira os últimos 12 dias; o código abaixo
+    // fica de reserva para o caso de a função não existir.
     async function esoBaixarVendas(){
+      const rpc = await supa.rpc('estoque_baixar_minhas', { p_dias: 12 }).catch(e => ({ error: e }));
+      if(!rpc.error) return Number(rpc.data) || 0;
       const dep = estDepProprio(); if(!dep) return 0;
       const desde = new Date(Date.now() - 40 * 86400000).toISOString();
       const mv = await supa.from('estoque_mov').select('sku_norm,motivo,ref,criado_em').eq('usuario_id', usuarioAtual.id).eq('deposito_id', dep.id).in('motivo', ['carga_inicial', 'contagem', 'venda']).gte('criado_em', desde).limit(20000);
