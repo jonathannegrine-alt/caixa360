@@ -87,6 +87,7 @@
     }
 
     function recalcularSimulador(){
+      if(typeof simCompras !== 'undefined' && simCompras.length){ simRelatorio(); return; }
       if(_simParcelasState.length > 0){ recalcularSimParcelado(); return; }
       const res = document.getElementById('sim-resultado');
       if(!res || simPlanilhaDados.length === 0) return;
@@ -465,98 +466,103 @@
       salvar(); renderPagar(); recalc();
     }
 
-    // ===== VÁRIAS COMPRAS JUNTAS =====
-    // Cada compra: valor, dia da compra e prazos em dias a partir desse dia ("0 15" = metade no dia e metade em 15 dias).
-    // O valor é dividido igualmente entre os prazos (a última parcela leva os centavos). Todas as parcelas entram juntas na
-    // coluna "Compra simulada" da planilha de dias, que mostra o saldo do caixa com e sem as compras.
-    let simMulti = null;
-    // simulações salvas (tabela simulacoes): a aberta fica em simSalvaId; Salvar grava por cima dela ou cria outra
-    let simSalvas = null, simSalvaId = null;
+    // ===== SIMULAÇÃO COM VÁRIAS COMPRAS =====
+    // Cada "Simular" do formulário acrescenta a compra na simulação aberta (simCompras) e limpa o formulário para a próxima.
+    // O relatório (viável/arriscado, parcelas e planilha de dias) soma todas as compras. A simulação é salva sozinha na
+    // tabela simulacoes (Simulação 1, 2, 3…); dá para abrir uma salva, começar outra e excluir.
+    let simCompras = [], simSalvaId = null, simSalvas = null;
     async function simSalvasLer(){
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
       const r = await supa.from('simulacoes').select('*').eq('usuario_id', usuarioAtual.id).order('atualizado_em', { ascending: false });
-      simSalvas = r.data || [];
+      simSalvas = (r.data || []).filter(x => Array.isArray(x.compras) && x.compras.every(c => Array.isArray(c.parcelas)));
     }
-    function simMultiPadrao(){ const h = getToday(); return [{ desc: 'Compra 1', valor: '', data: h, prazos: '0 15' }, { desc: 'Compra 2', valor: '', data: h, prazos: '0 15 30' }]; }
-    function simMultiCard(){
+    // barra acima do formulário: simulação aberta e as salvas
+    function simBarra(){
       const view = document.getElementById('view-simulador'); if(!view) return;
-      if(!simMulti) simMulti = simMultiPadrao();
-      if(simSalvas === null){ simSalvas = []; simSalvasLer().then(simMultiCard); }
-      const aberta = simSalvas.find(x => x.id === simSalvaId);
-      let card = document.getElementById('sim-multi-card');
-      if(!card){ card = document.createElement('div'); card.id = 'sim-multi-card'; card.className = 'card'; const pri = view.querySelector('.card'); if(pri) pri.insertAdjacentElement('beforebegin', card); else view.appendChild(card); }
+      document.getElementById('sim-multi-card')?.remove();
+      if(simSalvas === null){ simSalvas = []; simSalvasLer().then(simBarra); }
+      let bar = document.getElementById('sim-barra');
+      if(!bar){ bar = document.createElement('div'); bar.id = 'sim-barra'; bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;'; const pri = view.querySelector('.card'); if(pri) pri.insertAdjacentElement('beforebegin', bar); else view.appendChild(bar); }
       const e = x => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-      card.innerHTML = `<div class="card-header" style="flex-wrap:wrap;gap:8px;"><div class="card-title">Várias compras juntas${aberta ? ' — ' + e(aberta.nome) : ''}</div>
-          <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
-            <select onchange="simAbrir(this.value)" style="width:auto;"><option value="">${simSalvas.length ? 'Abrir simulação salva…' : 'Nenhuma simulação salva'}</option>${simSalvas.map(x => `<option value="${x.id}" ${x.id === simSalvaId ? 'selected' : ''}>${e(x.nome)} · ${new Date(x.atualizado_em).toLocaleDateString('pt-BR')}</option>`).join('')}</select>
-            <button class="btn-out btn-sm" onclick="simSalvar(false)">${aberta ? 'Salvar' : 'Salvar simulação'}</button>
-            ${aberta ? '<button class="btn-out btn-sm" onclick="simSalvar(true)">Salvar como nova</button><button class="btn-out btn-sm" onclick="simNova()">Nova</button><button class="btn-out btn-sm" style="color:var(--danger);" onclick="simExcluir()">Excluir</button>' : ''}
-          </div></div>
-        <div class="card-body">
-          <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Compra</th><th class="num">Valor (R$)</th><th>Dia da compra</th><th>Prazos (dias) <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Dias a partir do dia da compra, separados por espaço. "0 15" = metade no dia e metade 15 dias depois; "0 15 30" = três parcelas iguais.</span></span></th><th>Parcelas</th><th></th></tr></thead><tbody>
-            ${simMulti.map((c, i) => { const P = simMultiParcelas(c); return `<tr>
-              <td><input value="${e(c.desc)}" onchange="simMulti[${i}].desc=this.value" style="min-width:120px;"></td>
-              <td class="num"><input class="money-input" value="${e(c.valor)}" placeholder="0,00" oninput="onMoneyInput(this)" onchange="simMulti[${i}].valor=this.value;simMultiCard()" style="width:120px;text-align:right;"></td>
-              <td><input type="date" value="${e(c.data)}" onchange="simMulti[${i}].data=this.value;simMultiCard()"></td>
-              <td><input value="${e(c.prazos)}" placeholder="0 15 30" onchange="simMulti[${i}].prazos=this.value;simMultiCard()" style="width:120px;font-family:monospace;"></td>
-              <td style="font-size:12px;white-space:normal;">${P.length ? P.map(p => ptDate(p.data) + ' · <b>' + fmt(p.valor) + '</b>').join('<br>') : '<span class="text-muted">—</span>'}</td>
-              <td>${simMulti.length > 1 ? `<button class="ico-btn" title="Tirar esta compra" onclick="simMulti.splice(${i},1);simMultiCard()">✕</button>` : ''}</td></tr>`; }).join('')}
-          </tbody></table></div>
-          <div class="d-flex gap-1" style="margin-top:10px;flex-wrap:wrap;">
-            <button class="btn-out btn-sm" onclick="simMulti.push({ desc: 'Compra ' + (simMulti.length + 1), valor: '', data: getToday(), prazos: '0 30' });simMultiCard()">+ Outra compra</button>
-            <button class="btn btn-sm" onclick="simMultiSimular()">Simular juntas</button>
-          </div>
-        </div>`;
+      const aberta = simSalvas.find(x => x.id === simSalvaId);
+      bar.innerHTML = `<span style="font-size:13px;">${aberta ? 'Simulação aberta: <b>' + e(aberta.nome) + '</b> (' + simCompras.length + ' compra' + (simCompras.length === 1 ? '' : 's') + ')' : '<span class="text-muted">Cada "Simular" acrescenta a compra na simulação e ela fica salva.</span>'}</span>
+        <select onchange="simAbrir(this.value)" style="width:auto;margin-left:auto;"><option value="">${simSalvas.length ? 'Abrir simulação salva…' : 'Nenhuma simulação salva'}</option>${simSalvas.map(x => `<option value="${x.id}" ${x.id === simSalvaId ? 'selected' : ''}>${e(x.nome)} · ${(x.compras || []).length} compra(s) · ${new Date(x.atualizado_em).toLocaleDateString('pt-BR')}</option>`).join('')}</select>
+        ${aberta ? '<button class="btn-out btn-sm" onclick="simRenomear()">Renomear</button><button class="btn-out btn-sm" onclick="simNova()">Nova simulação</button><button class="btn-out btn-sm" style="color:var(--danger);" onclick="simExcluir()">Excluir</button>' : ''}`;
     }
-    function simMultiParcelas(c){
-      const valor = parseMoney(String(c.valor || '')) || 0, dias = String(c.prazos || '').split(/[\s,;\/]+/).map(Number).filter(n => isFinite(n) && n >= 0);
-      if(!valor || !dias.length || !c.data) return [];
-      const cada = Math.floor(valor / dias.length * 100) / 100;
-      return dias.map((d, k) => ({ data: addDias(c.data, d), valor: k === dias.length - 1 ? Math.round((valor - cada * (dias.length - 1)) * 100) / 100 : cada }));
+    async function simGravar(){
+      if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      const agora = new Date().toISOString();
+      if(simSalvaId){ await supa.from('simulacoes').update({ compras: simCompras, atualizado_em: agora }).eq('id', simSalvaId); }
+      else {
+        const nums = (simSalvas || []).map(x => Number((String(x.nome).match(/^Simulação (\d+)$/) || [])[1]) || 0);
+        const r = await supa.from('simulacoes').insert({ usuario_id: usuarioAtual.id, nome: 'Simulação ' + (Math.max(0, ...nums) + 1), compras: simCompras, atualizado_em: agora }).select().single();
+        if(!r.error) simSalvaId = r.data.id;
+      }
+      await simSalvasLer(); simBarra();
     }
-    function simMultiSimular(){
-      const todas = simMulti.flatMap(c => simMultiParcelas(c).map(p => ({ ...p, desc: c.desc })));
-      if(!todas.length){ alert('Preencha o valor, o dia e os prazos de pelo menos uma compra.'); return; }
-      const hoje = getToday(), ult = todas.map(p => p.data).sort().pop(), precisa = diasDif(hoje, ult) + 5;
-      simDias = precisa <= 30 ? 30 : precisa <= 60 ? 60 : 90;
-      const porDia = {}; todas.forEach(p => { if(p.data >= hoje) porDia[p.data] = Math.round(((porDia[p.data] || 0) + p.valor) * 100) / 100; });
-      _simParcelasState = [];
+    // chamada pelo simular(): compra já resolvida em parcelas [{ data, valor }]
+    function simAdicionar(valor, parcelas, como){
+      simCompras.push({ desc: 'Compra ' + (simCompras.length + 1), valor, como: como || '', parcelas });
+      ['sim-valor', 'sim-data'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+      simRelatorio(); simGravar();
+      if(typeof toast === 'function') toast('Compra ' + simCompras.length + ' acrescentada. Preencha a próxima, se quiser.');
+    }
+    function simTirar(i){ simCompras.splice(i, 1); simCompras.forEach((c, k) => { if(/^Compra \d+$/.test(c.desc)) c.desc = 'Compra ' + (k + 1); }); if(simCompras.length) simRelatorio(); else { const r = document.getElementById('sim-resultado'); if(r) r.innerHTML = ''; } simGravar(); }
+    function simParcelaMudar(i, k, campo, v){
+      const p = simCompras[i] && simCompras[i].parcelas[k]; if(!p) return;
+      if(campo === 'data') p.data = v; else p.valor = parseMoney(v) || 0;
+      simCompras[i].valor = Math.round(simCompras[i].parcelas.reduce((s, x) => s + x.valor, 0) * 100) / 100;
+      simRelatorio(); simGravar();
+    }
+    // relatório de todas as compras: o mesmo da compra única (situação, parcelas, planilha de dias)
+    function simRelatorio(){
+      const res = document.getElementById('sim-resultado'); if(!res || !simCompras.length) return;
+      const hoje = getToday(), porDia = {};
+      simCompras.forEach(c => c.parcelas.forEach(p => { porDia[p.data] = Math.round(((porDia[p.data] || 0) + p.valor) * 100) / 100; }));
+      const ult = Object.keys(porDia).sort().pop() || hoje, precisa = Math.max(0, diasDif(hoje, ult)) + 14;
+      if(simDias < precisa) simDias = precisa <= 30 ? 30 : precisa <= 60 ? 60 : 90;
+      let saldo = saldoAtual, min = saldo, critica = hoje; const acum = {};
       simPlanilhaDados = [];
-      for(let i = 0; i < simDias; i++){ const data = addDias(hoje, i), e = getEntrada(data); simPlanilhaDados.push({ data, conf: e.conf, proj: e.proj, pag: getPag(data), compra: porDia[data] || 0 }); }
-      // resumo: total, menor saldo com as compras e primeiro dia abaixo da reserva
-      let saldo = saldoAtual, menor = Infinity, diaMenor = '', risco = '';
-      simPlanilhaDados.forEach(d => { saldo += (simModoProj === 'conf' ? d.conf : d.conf + d.proj) - d.pag - d.compra; if(saldo < menor){ menor = saldo; diaMenor = d.data; } if(!risco && saldo < reservaMinima) risco = d.data; });
-      const total = todas.reduce((s, p) => s + p.valor, 0), fora = todas.filter(p => p.data < hoje);
-      const res = document.getElementById('sim-resultado'); if(!res) return;
-      res.innerHTML = `<div class="alert ${risco ? 'alert-danger' : 'alert-success'}" style="line-height:1.6;">
-          <b>${simMulti.filter(c => simMultiParcelas(c).length).length} compras, ${fmt(total)} em ${todas.length} parcelas.</b>
-          Menor saldo com as compras: <b>${fmt(menor)}</b> em ${ptDate(diaMenor)}.
-          ${risco ? 'O caixa fica abaixo da reserva mínima (' + fmt(reservaMinima) + ') a partir de <b>' + ptDate(risco) + '</b>.' : 'O caixa não fica abaixo da reserva mínima (' + fmt(reservaMinima) + ') no período.'}
-          ${fora.length ? '<br><span class="text-muted">' + fora.length + ' parcela(s) antes de hoje ficaram de fora.</span>' : ''}</div>` + gerarHTMLPlanilhaSimulador();
-      res.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    async function simSalvar(comoNova){
-      const aberta = !comoNova && simSalvas && simSalvas.find(x => x.id === simSalvaId);
-      let nome = aberta ? aberta.nome : '';
-      if(!aberta){ const n = (simSalvas || []).length + 1; nome = prompt('Nome da simulação:', 'Simulação ' + n); if(!nome || !nome.trim()) return; nome = nome.trim(); }
-      const reg = { usuario_id: usuarioAtual.id, nome, compras: simMulti, atualizado_em: new Date().toISOString() };
-      const r = aberta ? await supa.from('simulacoes').update(reg).eq('id', aberta.id).select().single() : await supa.from('simulacoes').insert(reg).select().single();
-      if(r.error){ alert('Não consegui salvar: ' + r.error.message); return; }
-      simSalvaId = r.data.id; await simSalvasLer(); simMultiCard();
-      if(typeof toast === 'function') toast('Simulação "' + nome + '" salva.');
+      for(let i = 0; i < simDias; i++){
+        const data = addDias(hoje, i), e = getEntrada(data);
+        simPlanilhaDados.push({ data, conf: e.conf, proj: e.proj, pag: getPag(data), compra: porDia[data] || 0 });
+        saldo += (simModoProj === 'conf' ? e.conf : e.conf + e.proj) - getPag(data) - (porDia[data] || 0);
+        acum[data] = saldo; if(saldo < min){ min = saldo; critica = data; }
+      }
+      _simParcelasState = [];
+      const total = simCompras.reduce((s, c) => s + c.valor, 0), viavel = min >= reservaMinima;
+      const badge = viavel
+        ? `<div class="alert alert-info">✅ ${simCompras.length > 1 ? simCompras.length + ' compras VIÁVEIS juntas' : 'Compra VIÁVEL'} (${fmt(total)}). Menor saldo no período: <strong class="text-success">${fmt(min)}</strong> (em ${ptDate(critica)})</div>`
+        : `<div class="alert alert-warning">⚠️ ${simCompras.length > 1 ? 'As ' + simCompras.length + ' compras juntas ficam ARRISCADAS' : 'Compra ARRISCADA'} (${fmt(total)}). Saldo mais baixo: <strong class="text-danger">${fmt(min)}</strong> em ${ptDate(critica)}<div style="margin-top:4px;font-size:11px;">Reserva mínima: ${fmt(reservaMinima)} · Faltam ${fmt(Math.abs(min - reservaMinima))} para cobrir a reserva</div></div>`;
+      const th = 'padding:6px 8px;background:#f9fafb;border:1px solid #e5e5e5;font-size:11px;text-align:left;', td = 'padding:5px 8px;border:1px solid #e5e5e5;font-size:12px;';
+      let tab = `<div style="margin:12px 0;"><div style="font-size:12px;color:#666;margin-bottom:6px;">Compras desta simulação · total <strong>${fmt(total)}</strong> · altere a data ou o valor de uma parcela, se precisar:</div>
+        <table style="width:100%;border-collapse:collapse;"><thead><tr><th style="${th}">Compra</th><th style="${th}">Parcela</th><th style="${th}">Data</th><th style="${th}">Valor (R$)</th><th style="${th}">Saldo após</th><th style="${th}">Status</th><th style="${th}"></th></tr></thead><tbody>`;
+      simCompras.forEach((c, i) => c.parcelas.forEach((p, k) => { const ap = acum[p.data] !== undefined ? acum[p.data] : min, ok = ap >= reservaMinima;
+        tab += `<tr style="${ok ? '' : 'background:#fff5f5;'}">
+          ${k === 0 ? `<td style="${td};font-weight:600;vertical-align:top;" rowspan="${c.parcelas.length}">${c.desc}<div style="font-weight:400;color:#888;font-size:11px;">${fmt(c.valor)}${c.como ? ' · ' + c.como : ''}</div></td>` : ''}
+          <td style="${td}">${k + 1}/${c.parcelas.length}</td>
+          <td style="${td};padding:2px 4px;"><input type="date" value="${p.data}" style="border:1px solid #e5e5e5;border-radius:4px;padding:3px 6px;font-size:12px;" onchange="simParcelaMudar(${i},${k},'data',this.value)"></td>
+          <td style="${td};padding:2px 4px;"><input type="text" value="${fmtMoney(p.valor)}" style="border:1px solid #e5e5e5;border-radius:4px;padding:3px 6px;font-size:12px;width:110px;" oninput="onMoneyInput(this)" onchange="simParcelaMudar(${i},${k},'valor',this.value)"></td>
+          <td style="${td};font-weight:600;color:${ok ? 'var(--success)' : 'var(--danger)'};">${fmt(ap)}</td>
+          <td style="${td}">${ok ? '<span style="color:var(--success);font-size:11px;">✅ ok</span>' : '<span style="color:var(--danger);font-size:11px;">⚠️ risco</span>'}</td>
+          ${k === 0 ? `<td style="${td};vertical-align:top;" rowspan="${c.parcelas.length}"><button class="ico-btn" title="Tirar esta compra da simulação" onclick="simTirar(${i})">✕</button></td>` : ''}</tr>`; }));
+      tab += '</tbody></table></div>';
+      res.innerHTML = badge + tab + gerarHTMLPlanilhaSimulador();
     }
     function simAbrir(id){
       if(!id) return;
-      const x = (simSalvas || []).find(s => String(s.id) === String(id)); if(!x) return;
-      simSalvaId = x.id; simMulti = JSON.parse(JSON.stringify(x.compras || [])); if(!simMulti.length) simMulti = simMultiPadrao();
-      simMultiCard(); simMultiSimular();
+      const x = (simSalvas || []).find(z => String(z.id) === String(id)); if(!x) return;
+      simSalvaId = x.id; simCompras = JSON.parse(JSON.stringify(x.compras || []));
+      simBarra(); if(simCompras.length) simRelatorio(); else { const r = document.getElementById('sim-resultado'); if(r) r.innerHTML = ''; }
     }
-    function simNova(){ simSalvaId = null; simMulti = simMultiPadrao(); simMultiCard(); const res = document.getElementById('sim-resultado'); if(res) res.innerHTML = ''; }
+    function simNova(){ simSalvaId = null; simCompras = []; simBarra(); const r = document.getElementById('sim-resultado'); if(r) r.innerHTML = ''; }
+    async function simRenomear(){
+      const x = (simSalvas || []).find(z => z.id === simSalvaId); if(!x) return;
+      const nome = prompt('Nome da simulação:', x.nome); if(!nome || !nome.trim()) return;
+      await supa.from('simulacoes').update({ nome: nome.trim() }).eq('id', x.id); await simSalvasLer(); simBarra();
+    }
     async function simExcluir(){
-      const x = (simSalvas || []).find(s => s.id === simSalvaId); if(!x) return;
+      const x = (simSalvas || []).find(z => z.id === simSalvaId); if(!x) return;
       if(!confirm('Excluir a simulação "' + x.nome + '"?')) return;
-      const r = await supa.from('simulacoes').delete().eq('id', x.id);
-      if(r.error){ alert('Não consegui excluir: ' + r.error.message); return; }
-      await simSalvasLer(); simNova();
+      await supa.from('simulacoes').delete().eq('id', x.id); await simSalvasLer(); simNova();
     }

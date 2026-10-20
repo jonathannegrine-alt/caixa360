@@ -635,7 +635,7 @@
     
     function renderFormSimulador(){
       document.getElementById('sim-parcelado').style.display = tipoSimulador === 'parcelado' ? 'block' : 'none';
-      if(typeof simMultiCard === 'function') simMultiCard();
+      if(typeof simBarra === 'function') simBarra();
     }
     
     function simular(){
@@ -645,8 +645,12 @@
       const data = document.getElementById('sim-data').value;
       const resultado = document.getElementById('sim-resultado');
 
-      // Modo parcelado com valor preenchido → sugerir melhores datas por parcela
+      // Modo parcelado com valor preenchido: parcelas nos dias informados (a partir de hoje) → entra na simulação
       if(tipoSimulador === 'parcelado' && valor > 0){
+        const txt = (document.getElementById('sim-parcelas-txt').value || '').trim(), dias = txt.split(/[\s,]+/).map(Number).filter(n => !isNaN(n) && n >= 0);
+        if(!dias.length){ resultado.innerHTML = '<div class="alert alert-warning">Informe os intervalos das parcelas (ex: 30 60 90).</div>'; return; }
+        const cada = Math.floor(valor / dias.length * 100) / 100;
+        if(typeof simAdicionar === 'function'){ simAdicionar(valor, dias.map((d, k) => ({ data: addDias(getToday(), d), valor: k === dias.length - 1 ? Math.round((valor - cada * (dias.length - 1)) * 100) / 100 : cada })), 'parcelas ' + dias.join('/')); return; }
         simularParcelado(valor);
         return;
       }
@@ -657,6 +661,7 @@
       // Caso 1: Só valor → encontrar melhor data
       if(valor > 0 && !data){
         const melhorData = encontrarMelhorData(valor);
+        if(melhorData && typeof simAdicionar === 'function'){ simAdicionar(valor, [{ data: melhorData, valor }], 'melhor data'); return; }
         if(melhorData){
           const det = simularDetalhado(valor, melhorData);
           resultado.innerHTML = `<div class="alert alert-info" style="margin-bottom:10px;">
@@ -683,6 +688,7 @@
       
       // Caso 3: Valor + data → verificar viabilidade
       if(valor > 0 && data){
+        if(typeof simAdicionar === 'function'){ simAdicionar(valor, [{ data, valor }], 'à vista'); return; }
         const det = simularDetalhado(valor, data);
         const viavel = det.minSaldo >= reservaMinima;
         const diff = Math.abs(det.minSaldo - reservaMinima);
