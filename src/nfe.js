@@ -5,7 +5,7 @@
 // Página "Notas de compra" (grupo Compras): lista por loja, com o fornecedor do cadastro quando o CNPJ bate.
 // Ver nota (nfeVer): itens, totais e duplicatas; nota completa tem "Baixar XML" (Storage nfe/<usuario>/<chave>.xml.gz) e
 // "PDF da nota" (espelho no estilo do DANFE, montado do XML com jsPDF; não é o layout oficial ponto a ponto).
-// Ciência e importar a compra vêm na próxima etapa.
+// Ciência da operação (nfeCiencia): função nfe acao 'ciencia' registra o evento 210210 e baixa a nota completa pela chave.
 
     let nfe = { certs: [], dist: [], notas: [], lidoEm: 0, busca: '', mes: '', sit: '' };
     const nfeEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -114,11 +114,12 @@
       const L = nfe.notas.filter(n => (!vez || (n.loja || pad) === vez) && (!nfe.mes || String(n.emissao || '').startsWith(nfe.mes))
         && (!nfe.sit || String(n.situacao) === nfe.sit)
         && (!q || [n.emit_nome, n.emit_cnpj, n.chave, (fornDe(n.emit_cnpj) || {}).nome, (fornDe(n.emit_cnpj) || {}).grupo].join(' ').toLowerCase().includes(q.replace(/[./-]/g, '')) || String(n.emit_nome || '').toLowerCase().includes(q)));
+      nfe.listaAtual = L;
       const ok = L.filter(n => Number(n.situacao) !== 3), sit = { 1: ['Autorizada', 'cp-ok'], 2: ['Denegada', 'cp-urgente'], 3: ['Cancelada', 'cp-semvenda'] };
       const dist = nfe.dist.filter(d => !vez || nfe.certs.some(c => c.cnpj === d.cnpj && (c.loja || pad) === vez));
       el.innerHTML = `
         <div class="pg-head"><div><div class="pg-title">Notas de compra</div><div class="pg-sub">Notas fiscais emitidas para o CNPJ ${vez && typeof contaNome === 'function' ? 'da ' + nfeEsc(contaNome(vez)) : 'das suas lojas'}, consultadas na SEFAZ e guardadas aqui. Só consulta: nada é lançado sozinho.</div></div>
-          <div class="d-flex gap-1">${nfe.certs.length ? '<button class="btn-out btn-sm" onclick="nfeConsultarAgora(this)">Consultar agora</button>' : ''}</div></div>
+          <div class="d-flex gap-1">${L.some(n => !n.completa && Number(n.situacao) !== 3) ? `<button class="btn-out btn-sm" onclick="nfeCienciaLista(this)" title="Registra a Ciência da operação nas notas em resumo desta lista e baixa as notas completas">Dar ciência nas notas em resumo (${L.filter(n => !n.completa && Number(n.situacao) !== 3).length})</button>` : ''}${nfe.certs.length ? '<button class="btn-out btn-sm" onclick="nfeConsultarAgora(this)">Consultar agora</button>' : ''}</div></div>
         ${!nfe.certs.length ? `<div class="alert alert-warning">Nenhum certificado cadastrado. Envie o certificado A1 de cada loja em <a href="#" onclick="event.preventDefault();cfgAbaAtiva='nfe';nav('config')">Configurações → Notas fiscais</a>.</div>` : ''}
         <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));">
           <div class="kpi k-neutro"><div class="kpi-label">Notas</div><div class="kpi-value">${ok.length}</div><div class="kpi-sub"><span>${L.length - ok.length} cancelada${L.length - ok.length === 1 ? '' : 's'}</span></div></div>
@@ -178,8 +179,8 @@
             ${itens.map(i => `<tr><td>${nfeEsc(i.codigo)}</td><td style="white-space:normal;">${nfeEsc(i.descricao)}</td><td>${nfeEsc(i.ncm || '')}</td><td>${nfeEsc(i.cfop || '')}</td><td class="num">${num(i.qtd)}</td><td>${nfeEsc(i.unidade || '')}</td><td class="num">${fmt(Number(i.valor_un) || 0)}</td><td class="num"><b>${fmt(Number(i.valor) || 0)}</b></td></tr>`).join('')}
           </tbody></table></div>
           ${dups.length ? `<div class="form-label" style="margin-top:12px;">Duplicatas</div><div style="display:flex;gap:8px;flex-wrap:wrap;">${dups.map(d => `<span class="cp-sit cp-comprar">${nfeEsc(d.numero || '')} · ${d.vencimento ? ptDate(d.vencimento) : '—'} · ${fmt(Number(d.valor) || 0)}</span>`).join('')}</div>` : '<div class="text-muted" style="margin-top:10px;font-size:12.5px;">Sem duplicatas na nota (pagamento à vista ou combinado fora da nota).</div>'}`
-        : '<div class="alert alert-warning">Esta nota chegou só como <b>resumo</b>: a SEFAZ libera os itens depois da Ciência da operação (próxima etapa).</div>'}`,
-        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${n.completa ? `<button class="btn-out" onclick="nfeBaixarXml('${nfeEsc(chave)}', this)">Baixar XML</button><button class="btn" onclick="nfePdf('${nfeEsc(chave)}', this)">PDF da nota</button>` : ''}`);
+        : `<div class="alert alert-warning">Esta nota chegou só como <b>resumo</b>. A SEFAZ libera os itens depois da <b>Ciência da operação</b>: um aviso de que você sabe que a nota existe (não aceita nem recusa a nota e não tem efeito fiscal).${n.ciencia_em ? '<br>Ciência registrada em ' + new Date(n.ciencia_em).toLocaleString('pt-BR') + '; a nota completa chega em alguns minutos ou na próxima consulta.' : ''}</div>`}`,
+        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${!n.completa && Number(n.situacao) !== 3 ? `<button class="btn" onclick="nfeCiencia(['${nfeEsc(chave)}'], this)">${n.ciencia_em ? 'Tentar baixar de novo' : 'Dar ciência e baixar a nota'}</button>` : ''}${n.completa ? `<button class="btn-out" onclick="nfeBaixarXml('${nfeEsc(chave)}', this)">Baixar XML</button><button class="btn" onclick="nfePdf('${nfeEsc(chave)}', this)">PDF da nota</button>` : ''}`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '980px';
     }
     async function nfeBaixarXml(chave, bt){
@@ -257,4 +258,28 @@
         doc.save('nfe_' + q(ide, 'nNF') + '_' + (q(emit, 'xFant') || q(emit, 'xNome')).toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30) + '.pdf');
       } catch(e){ alert('Não consegui gerar o PDF: ' + (e.message || e)); }
       finally { if(bt){ bt.disabled = false; bt.textContent = 'PDF da nota'; } }
+    }
+
+    // Ciência da operação + nota completa (várias de uma vez: até 60 por chamada)
+    async function nfeCiencia(chaves, bt){
+      if(bt){ bt.disabled = true; bt.textContent = 'Registrando na SEFAZ…'; }
+      const res = {};
+      try {
+        for(let i = 0; i < chaves.length; i += 60){
+          const r = await supa.functions.invoke('nfe', { body: { acao: 'ciencia', chaves: chaves.slice(i, i + 60) } });
+          if(r.error || (r.data && r.data.error)) throw new Error((r.data && r.data.error) || r.error.message);
+          Object.assign(res, (r.data && r.data.resultado) || {});
+        }
+      } catch(e){ alert('Não consegui registrar a Ciência: ' + e.message); if(bt){ bt.disabled = false; bt.textContent = 'Tentar de novo'; } return; }
+      const ok = Object.values(res).filter(x => x.ok).length, comp = Object.values(res).filter(x => x.completa).length, erros = Object.entries(res).filter(([, x]) => !x.ok);
+      nfe.lidoEm = 0; await nfeLer(true); nfeDesenhar();
+      if(chaves.length === 1 && res[chaves[0]] && res[chaves[0]].ok){ nfeVer(chaves[0]); if(!res[chaves[0]].completa && typeof toast === 'function') toast('Ciência registrada. A SEFAZ ainda não liberou a nota completa; ela chega em alguns minutos ou na próxima consulta.'); return; }
+      fecharModal('modal-vml');
+      alert('Ciência registrada em ' + ok + ' de ' + chaves.length + ' nota(s); ' + comp + ' já vieram completas.' + (ok > comp ? '\nAs outras chegam completas em alguns minutos ou na próxima consulta.' : '') + (erros.length ? '\n\nNão deu certo em ' + erros.length + ':\n' + erros.slice(0, 5).map(([k, x]) => '…' + k.slice(-8) + ': ' + (x.erro || '')).join('\n') : ''));
+    }
+    function nfeCienciaLista(bt){
+      const L = (nfe.listaAtual || []).filter(n => !n.completa && Number(n.situacao) !== 3);
+      if(!L.length) return;
+      if(!confirm('Registrar a Ciência da operação em ' + L.length + ' nota(s) desta lista e baixar as notas completas?\n\nA Ciência só avisa a SEFAZ que você sabe que a nota existe: não aceita nem recusa a nota e não tem efeito fiscal. Fica registrada na nota.')) return;
+      nfeCiencia(L.map(n => n.chave), bt);
     }

@@ -4,6 +4,8 @@
 //   tela (JWT)  { acao: 'certificado', loja, pfx (base64), senha }  guarda o A1 cifrado e já faz a 1ª consulta
 //               { acao: 'remover', cnpj }                          apaga o certificado (as notas ficam)
 //               { acao: 'consultar' }                              consulta agora (respeita a espera da SEFAZ)
+//               { acao: 'ciencia', chaves: [...] }                 Ciência da operação (evento 210210, assinado) e, em
+//                                                                  seguida, baixa a nota completa pela chave (consChNFe)
 //   cron        { cron: true, secret }                             consulta todos os CNPJs (4 vezes por dia)
 //
 // Certificado: .pfx e senha cifrados com AES-GCM (chave NFE_CERT_KEY, só aqui).
@@ -60,6 +62,7 @@ function lerPfx(pfx: Uint8Array, senha: string) {
     cnpj, titular: cn.replace(/:\d{14}$/, '').trim(), validade: folha.validity.notAfter as Date,
     certPem: [folha, ...certs.filter((c: any) => c !== folha)].map((c: any) => forge.pki.certificateToPem(c)).join(''),
     keyPem: forge.pki.privateKeyInfoToPem(forge.pki.wrapRsaPrivateKey(forge.pki.privateKeyToAsn1(key))),
+    chave: key, certB64: forge.util.encode64(forge.asn1.toDer(forge.pki.certificateToAsn1(folha)).getBytes()),
   }
 }
 function clienteTls(certPem: string, keyPem: string) {
@@ -84,6 +87,39 @@ function envelope(cnpj: string, ultNSU: string, uf = UF_AUTOR) {
   return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg>${dist}</nfeDadosMsg></nfeDistDFeInteresse></soap12:Body></soap12:Envelope>`
 }
 
+// ---------- evento: Ciência da operação (210210) ----------
+const URL_EVENTO = 'https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx'
+const ACAO_EVENTO = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento'
+const NS_NFE = 'http://www.portalfiscal.inf.br/nfe', NS_DS = 'http://www.w3.org/2000/09/xmldsig#'
+// hora de Brasília (-03:00), um minuto para trás (a SEFAZ recusa evento "no futuro")
+const dhBrasilia = () => new Date(Date.now() - 3 * 3600000 - 60000).toISOString().slice(0, 19) + '-03:00'
+const sha1b64 = (s: string) => { const md = forge.md.sha1.create(); md.update(s, 'utf8'); return forge.util.encode64(md.digest().getBytes()) }
+// Assinatura do infEvento. O digest é do infEvento canônico, que leva o xmlns herdado do <evento>; o SignedInfo canônico
+// leva o xmlns herdado do <Signature>. No documento final os dois aparecem sem o xmlns repetido.
+function assinar(infCorpo: string, id: string, c: any) {
+  const digest = sha1b64('<infEvento xmlns="' + NS_NFE + '" Id="' + id + '">' + infCorpo + '</infEvento>')
+  const si = '<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></CanonicalizationMethod><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></SignatureMethod>'
+    + '<Reference URI="#' + id + '"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></Transform><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></Transform></Transforms>'
+    + '<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></DigestMethod><DigestValue>' + digest + '</DigestValue></Reference>'
+  const md = forge.md.sha1.create(); md.update('<SignedInfo xmlns="' + NS_DS + '">' + si + '</SignedInfo>', 'utf8')
+  const valor = forge.util.encode64(c.chave.sign(md))
+  return '<Signature xmlns="' + NS_DS + '"><SignedInfo>' + si + '</SignedInfo><SignatureValue>' + valor + '</SignatureValue><KeyInfo><X509Data><X509Certificate>' + c.certB64 + '</X509Certificate></X509Data></KeyInfo></Signature>'
+}
+function eventoCiencia(cnpj: string, chave: string, c: any) {
+  const id = 'ID210210' + chave + '01'
+  const corpo = '<cOrgao>91</cOrgao><tpAmb>1</tpAmb><CNPJ>' + cnpj + '</CNPJ><chNFe>' + chave + '</chNFe><dhEvento>' + dhBrasilia() + '</dhEvento><tpEvento>210210</tpEvento><nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento>'
+    + '<detEvento versao="1.00"><descEvento>Ciencia da Operacao</descEvento></detEvento>'
+  return '<evento xmlns="' + NS_NFE + '" versao="1.00"><infEvento Id="' + id + '">' + corpo + '</infEvento>' + assinar(corpo, id, c) + '</evento>'
+}
+function envelopeEvento(eventos: string[]) {
+  const env = '<envEvento xmlns="' + NS_NFE + '" versao="1.00"><idLote>' + String(Date.now()).slice(-15) + '</idLote>' + eventos.join('') + '</envEvento>'
+  return '<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">' + env + '</nfeDadosMsg></soap12:Body></soap12:Envelope>'
+}
+function envelopeChave(cnpj: string, chave: string, uf = UF_AUTOR) {
+  const dist = '<distDFeInt xmlns="' + NS_NFE + '" versao="1.01"><tpAmb>1</tpAmb><cUFAutor>' + uf + '</cUFAutor><CNPJ>' + cnpj + '</CNPJ><consChNFe><chNFe>' + chave + '</chNFe></consChNFe></distDFeInt>'
+  return '<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"><nfeDadosMsg>' + dist + '</nfeDadosMsg></nfeDistDFeInteresse></soap12:Body></soap12:Envelope>'
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   try {
@@ -100,6 +136,9 @@ Deno.serve(async (req: Request) => {
       if (!u.ok) return resp({ error: 'Sessão inválida — faça login novamente.' }, 401)
       uid = String((await u.json()).id)
     }
+
+    // tipos de documento recebidos e a primeira falha de gravação (vão na resposta, para conferir)
+    const tipos: Record<string, number> = {}; let falhaGravar = ''
 
     // ----- guardar certificado -----
     if (body?.acao === 'certificado') {
@@ -128,10 +167,68 @@ Deno.serve(async (req: Request) => {
       return resp({ ok: true })
     }
 
+    // ----- Ciência da operação + nota completa -----
+    if (body?.acao === 'ciencia') {
+      if (!uid) return resp({ error: 'só pela tela' }, 400)
+      const pedidas = [...new Set((Array.isArray(body.chaves) ? body.chaves : []).map((x: unknown) => String(x).replace(/\D/g, '')).filter((x: string) => x.length === 44))].slice(0, 60)
+      if (!pedidas.length) return resp({ error: 'Nenhuma nota.' })
+      const notas = await db(`nfe_recebidas?usuario_id=eq.${uid}&chave=in.(${pedidas.join(',')})&select=chave,cnpj_dest,completa,situacao`).then(r => r.json()).catch(() => [])
+      const porCnpj = new Map<string, string[]>()
+      ;(Array.isArray(notas) ? notas : []).forEach((n: any) => { if (!porCnpj.has(n.cnpj_dest)) porCnpj.set(n.cnpj_dest, []); porCnpj.get(n.cnpj_dest)!.push(n.chave) })
+      const resultado: Record<string, any> = {}
+      for (const [cnpj, chaves] of porCnpj) {
+        const [cert] = await db(`nfe_certificados?usuario_id=eq.${uid}&cnpj=eq.${cnpj}&select=*`).then(r => r.json())
+        if (!cert) { chaves.forEach(k => resultado[k] = { erro: 'sem certificado deste CNPJ' }); continue }
+        const cx = conexao(cert, await decifrar(cert.pfx), new TextDecoder().decode(await decifrar(cert.senha)))
+        try {
+          // até 20 eventos por lote
+          for (let i = 0; i < chaves.length; i += 20) {
+            const lote = chaves.slice(i, i + 20)
+            const r = await cx.postar(URL_EVENTO, ACAO_EVENTO, envelopeEvento(lote.map(k => eventoCiencia(cnpj, k, cx.pem))))
+            if (!r.ok) { lote.forEach(k => resultado[k] = { erro: 'SEFAZ: ' + r.txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 160) }); continue }
+            const ret = tag(r.txt, 'retEnvEvento')
+            if (tag(ret, 'cStat') !== '128') { lote.forEach(k => resultado[k] = { erro: tag(ret, 'cStat') + ' ' + tag(ret, 'xMotivo') }); continue }
+            todas(ret, 'retEvento').forEach(e => { const inf = tag(e, 'infEvento'), k = tag(inf, 'chNFe'), st = tag(inf, 'cStat')
+              // 135/136 registrado; 573 = a Ciência já existia (feita por outro sistema): vale igual
+              resultado[k] = ['135', '136', '573'].includes(st) ? { ok: true, status: st + ' ' + tag(inf, 'xMotivo') } : { erro: st + ' ' + tag(inf, 'xMotivo') } })
+          }
+          const agora = new Date().toISOString()
+          for (const k of chaves.filter(k => resultado[k]?.ok)) {
+            await db(`nfe_recebidas?usuario_id=eq.${uid}&chave=eq.${k}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ciencia_em: agora, atualizado_em: agora }) })
+            // nota completa pela chave (às vezes a SEFAZ leva alguns minutos para liberar: aí vem na consulta diária)
+            const d = await cx.postar(URL_DIST, 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse', envelopeChave(cnpj, k, String(cert.uf || UF_AUTOR)))
+            const ret = tag(d.txt, 'retDistDFeInt')
+            for (const [, nsu, schema, conteudo] of [...ret.matchAll(/<docZip NSU="(\d+)" schema="([^"]+)">([^<]+)<\/docZip>/g)]) await guardarDoc(uid, cnpj, cert.loja, nsu, schema, await gunzip(conteudo))
+            resultado[k].completa = /procNFe/.test(ret)
+            if (!resultado[k].completa) resultado[k].aviso = tag(ret, 'cStat') + ' ' + tag(ret, 'xMotivo')
+          }
+        } catch (e) { chaves.forEach(k => { if (!resultado[k]) resultado[k] = { erro: String((e as Error)?.message || e).slice(0, 160) } }) }
+        finally { cx.close() }
+      }
+      return resp({ ok: true, resultado })
+    }
+
+    // conexão com a SEFAZ usando o certificado de um CNPJ: pelo intermediário (padrão) ou direto
+    function conexao(cert: any, pfxBytes: Uint8Array, senhaTxt: string) {
+      const proxy = Deno.env.get('NFE_PROXY_URL'), proxyChave = Deno.env.get('NFE_PROXY_CHAVE') || ''
+      const pem = lerPfx(pfxBytes, senhaTxt), client = proxy ? null : clienteTls(pem.certPem, pem.keyPem)
+      const postar = async (url: string, acao: string, xml: string) => {
+        if (proxy) {
+          const r = await fetch(proxy.replace(/\/$/, '') + '/soap', { method: 'POST', signal: AbortSignal.timeout(55000), headers: { 'Content-Type': 'application/json', 'x-chave': proxyChave },
+            body: JSON.stringify({ url, acao, xml, cert: pem.certPem, key: pem.keyPem }) })
+          const j = await r.json().catch(() => ({}))
+          if (!r.ok) return { ok: false, status: r.status, txt: 'intermediário: ' + (j.erro || r.status) }
+          if (j.erro) return { ok: false, status: 0, txt: String(j.erro) }
+          return { ok: j.status >= 200 && j.status < 300, status: j.status, txt: String(j.corpo || '') }
+        }
+        const r = await fetch(url, { method: 'POST', client, signal: AbortSignal.timeout(40000), body: xml, headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="' + acao + '"' } } as any)
+        return { ok: r.ok, status: r.status, txt: await r.text() }
+      }
+      return { pem, postar, close: () => { try { client && client.close() } catch { /* */ } } }
+    }
+
     // ----- consultar -----
     const certs = await db(`nfe_certificados?select=usuario_id,cnpj${uid ? '&usuario_id=eq.' + uid : ''}`).then(r => r.json()).catch(() => [])
-    // tipos de documento recebidos e a primeira falha de gravação (vão na resposta, para conferir)
-    const tipos: Record<string, number> = {}; let falhaGravar = ''
     const out: any[] = []
     for (const c of (Array.isArray(certs) ? certs : [])) out.push(await consultar(String(c.usuario_id), String(c.cnpj)))
     return resp({ ok: true, cnpjs: out, tipos, falhaGravar })
