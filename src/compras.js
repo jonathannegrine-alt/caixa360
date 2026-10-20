@@ -248,6 +248,24 @@
       ];
     }
 
+    // Quadros do topo: somam os produtos marcados; sem nenhum marcado, os da lista com os filtros de agora
+    let comprasListaAtual = null;
+    function comprasKpisHtml(){
+      const C = comprasCalc; if(!C) return '';
+      const marc = typeof comprasSel !== 'undefined' ? C.linhas.filter(l => comprasSel[l.k]) : [];
+      const L = marc.length ? marc : (comprasListaAtual || C.linhas), todos = !marc.length && L.length === C.linhas.length;
+      const estoqueValor = L.reduce((s,l) => s + (l.it.galpao + l.it.transito + l.it.full) * (l.custo || 0), 0), custoDia = L.reduce((s,l) => s + l.cons * (l.custo || 0), 0);
+      const dias = custoDia ? estoqueValor / custoDia : null, sugerido = L.reduce((s,l) => s + l.valor, 0), urgentes = L.filter(l => l.sit === 'URGENTE').length;
+      const de = marc.length ? `Somando os <b>${marc.length}</b> produto${marc.length === 1 ? '' : 's'} marcado${marc.length === 1 ? '' : 's'}` : todos ? 'Somando todos os produtos' : `Somando os <b>${L.length}</b> produto${L.length === 1 ? '' : 's'} dos filtros`;
+      return `<div class="text-muted" style="font-size:12px;margin:0 0 6px;">${de}</div><div class="kpi-grid">
+          <div class="kpi k-venda"><div class="kpi-label">Compra sugerida</div><div class="kpi-value">${fmt(sugerido)}</div><div class="kpi-sub"><span><b>${L.filter(l => l.sug > 0).length}</b> produtos</span><span style="color:var(--danger)"><b style="color:inherit">${urgentes}</b> urgentes</span></div></div>
+          <div class="kpi k-frete"><div class="kpi-label">Estoque a custo</div><div class="kpi-value">${fmt(estoqueValor)}</div><div class="kpi-sub"><span>${dias != null ? `<b>${cpInt(dias)}</b> dias de venda` : 'sem venda para medir'}</span></div></div>
+          <div class="kpi k-custo"><div class="kpi-label" title="Estoque a custo × juros ao mês das regras">Custo de carregar o estoque</div><div class="kpi-value">${fmt(estoqueValor * C.taxa)}</div><div class="kpi-sub"><span>por mês, a <b>${(C.taxa * 100).toLocaleString('pt-BR')}%</b> a.m.</span></div></div>
+          <div class="kpi k-tarifa"><div class="kpi-label">Custo das vendas</div><div class="kpi-value">${fmt(custoDia * 30)}</div><div class="kpi-sub"><span>por mês (<b>${fmt(custoDia)}</b> por dia)</span></div></div>
+        </div>`;
+    }
+    function comprasKpisAtualizar(){ const el = document.getElementById('cp-kpis'); if(el) el.innerHTML = comprasKpisHtml(); }
+
     function comprasDesenhar(){
       const el = document.getElementById('view-compras');
       if(!el || !el.classList.contains('active')) return;
@@ -271,6 +289,7 @@
         lista.sort((a, b) => { const x = fn(a), y = fn(b); return (x < y ? -1 : x > y ? 1 : 0) * comprasOrd.dir; });
       }
       comprasVisiveis = lista.map(l => l.k);
+      comprasListaAtual = lista;
       const totalLista = lista.reduce((s,l) => s + l.valor, 0), unLista = lista.reduce((s,l) => s + l.sug, 0);
       const selo = s => `<span class="cp-sit cp-${cpNorm(s).replace(/\s/g,'')}">${s}</span>`;
       const d1 = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 });
@@ -313,12 +332,7 @@
             </div>`).join('')}</div>` : ''}
         </div>
 
-        <div class="kpi-grid">
-          <div class="kpi k-venda"><div class="kpi-label">Compra sugerida</div><div class="kpi-value">${fmt(g.sugerido)}</div><div class="kpi-sub"><span><b>${C.linhas.filter(l => l.sug > 0).length}</b> produtos</span><span style="color:var(--danger)"><b style="color:inherit">${g.urgentes}</b> urgentes</span></div></div>
-          <div class="kpi k-frete"><div class="kpi-label">Estoque a custo</div><div class="kpi-value">${fmt(g.estoqueValor)}</div><div class="kpi-sub"><span>${g.dias != null ? `<b>${cpInt(g.dias)}</b> dias de venda` : 'sem venda para medir'}</span></div></div>
-          <div class="kpi k-custo"><div class="kpi-label" title="Estoque a custo × juros ao mês das regras">Custo de carregar o estoque</div><div class="kpi-value">${fmt(g.jurosMes)}</div><div class="kpi-sub"><span>por mês, a <b>${(C.taxa * 100).toLocaleString('pt-BR')}%</b> a.m.</span></div></div>
-          <div class="kpi k-tarifa"><div class="kpi-label">Custo das vendas</div><div class="kpi-value">${fmt(g.custoDia * 30)}</div><div class="kpi-sub"><span>por mês (<b>${fmt(g.custoDia)}</b> por dia)</span></div></div>
-        </div>
+        <div id="cp-kpis">${comprasKpisHtml()}</div>
 
         <div class="card"><div class="card-body cp-filtros">
           <div class="chips">
@@ -495,12 +509,18 @@
           <select onchange="cpEd.padrao.base=this.value">${bases(p.base || 'AUTO')}</select>
           <small><b>Automático</b> usa os últimos 30 dias de venda normal. Se o produto é estável e a venda caiu um pouco, faz a média com os 90 dias, para não comprar de menos por causa de uma queda passageira ("sobe rápido, desce devagar"). Em qualquer opção, dias seguidos sem venda por falta de estoque ficam fora da média.</small></div>`;
 
+      // sugestões do campo "Produto ou família": cada produto (com o nome) e cada família terminada em *
+      const cpProds = new Map();
+      ((comprasCalc && comprasCalc.linhas) || []).forEach(l => { if(l.it.sku) cpProds.set(cpNorm(l.it.sku), { sku: l.it.sku, nome: l.it.nome || '' }); });
+      (typeof skus !== 'undefined' ? skus : []).forEach(x => { if(x.sku && !cpProds.has(cpNorm(x.sku))) cpProds.set(cpNorm(x.sku), { sku: x.sku, nome: x.titulo || '' }); });
+      const cpFams = new Map(); [...cpProds.values()].forEach(p => { const fm = cpFamilia(p.sku); if(fm) cpFams.set(fm, (cpFams.get(fm) || 0) + 1); });
+      const cpLista = `<datalist id="cpp-prods">${[...cpFams.entries()].sort().map(([fm, n]) => `<option value="${v(fm)}*" label="Família ${v(fm)} (${n} produto${n === 1 ? '' : 's'})">`).join('')}${[...cpProds.values()].sort((a, b) => a.sku.localeCompare(b.sku)).map(p => `<option value="${v(p.sku)}" label="${v(p.nome)}">`).join('')}</datalist>`;
       if(cpEdAba === 'produto') corpo = `
         <div class="cpp-ajuda">Exceções à regra geral. Preencha só o que for diferente; o que ficar em branco segue a regra geral. Para valer para uma família inteira, termine com <b>*</b>: <b>J-2010*</b> vale para todo produto que começa com J-2010. Se duas linhas servem para o mesmo produto, vale a mais específica.</div>
-        <div style="overflow-x:auto;"><table class="cpp-tab"><thead><tr><th>Produto ou família</th><th title="Dias de estoque desejados">Dias desejados</th><th title="Prazo de entrega em dias">Prazo</th><th title="Tamanho da caixa">Múltiplo</th><th title="Preencha para ignorar o histórico e usar este número de vendas por dia">Venda por dia fixa</th><th>Como medir a venda</th><th>Observação</th><th></th></tr></thead><tbody>
-          ${(c.regras || []).map((r, i) => `<tr><td>${inp('regras', i, 'pat', r.pat, 'type="text" placeholder="J-2010*" style="min-width:130px;"')}</td><td>${inp('regras', i, 'cob', r.cob, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'prazo', r.prazo, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'mult', r.mult, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'manual', r.manual, 'type="text" placeholder="—"')}</td>
+        <div style="overflow-x:auto;"><table class="cpp-tab"><thead><tr><th>Produto ou família ${typeof dica === 'function' ? dica('Digite para pesquisar pelo SKU ou pelo nome. Para a regra valer para a família inteira, coloque * no fim: J-2010* vale para todos os produtos que começam com J-2010.', true) : ''}</th><th title="Dias de estoque desejados">Dias desejados</th><th title="Prazo de entrega em dias">Prazo</th><th title="Tamanho da caixa">Múltiplo</th><th title="Preencha para ignorar o histórico e usar este número de vendas por dia">Venda por dia fixa</th><th>Como medir a venda</th><th>Observação</th><th></th></tr></thead><tbody>
+          ${(c.regras || []).map((r, i) => `<tr><td>${inp('regras', i, 'pat', r.pat, 'type="search" list="cpp-prods" placeholder="Pesquisar produto ou J-2010*" style="min-width:200px;"')}</td><td>${inp('regras', i, 'cob', r.cob, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'prazo', r.prazo, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'mult', r.mult, 'type="number" placeholder="geral"')}</td><td>${inp('regras', i, 'manual', r.manual, 'type="text" placeholder="—"')}</td>
             <td><select onchange="cpEdSet('regras',${i},'base',this.value)"><option value="">Regra geral</option>${bases(r.base)}</select></td><td>${inp('regras', i, 'obs', r.obs, 'type="text" style="min-width:220px;"')}</td><td>${del('regras', i)}</td></tr>`).join('') || '<tr><td colspan="8" class="text-muted" style="padding:16px;text-align:center;">Nenhuma exceção: todos os produtos seguem a regra geral.</td></tr>'}
-        </tbody></table></div>${mais('regras', 'Adicionar produto ou família')}`;
+        </tbody></table></div>${cpLista}${mais('regras', 'Adicionar produto ou família')}`;
 
       if(cpEdAba === 'saz') corpo = `
         <div class="cpp-ajuda">Ajusta a venda prevista de cada mês. <b>1</b> é um mês normal, <b>1,25</b> vende 25% a mais, <b>0,7</b> vende 30% a menos. A linha <b>PADRAO</b> vale para todos os produtos. As outras linhas valem para um produto ou família (use * no fim, ou no começo: <b>*-Rosa</b>); o mês que ficar em branco segue o PADRAO.</div>

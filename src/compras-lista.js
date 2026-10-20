@@ -15,6 +15,7 @@
       comprasSelBarra();
     }
     function comprasSelBarra(){
+      if(typeof comprasKpisAtualizar === 'function') comprasKpisAtualizar();   // quadros do topo somam os marcados
       const el = document.getElementById('cp-sel-barra'); if(!el) return;
       const ks = Object.keys(comprasSel), linhas = (comprasCalc ? comprasCalc.linhas : []).filter(l => comprasSel[l.k]);
       if(!ks.length){ el.style.display = 'none'; return; }
