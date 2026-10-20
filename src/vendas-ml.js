@@ -895,7 +895,7 @@
               <div><label>Custo &amp; imposto</label>${sel('custo', g.custo, [['todos','Todos'],['sem-custo','Somente vendas sem custo'],['sem-imposto','Somente vendas sem imposto'],['sem-um','Sem custo ou sem imposto'],['sem-ambos','Sem custo e sem imposto']])}</div>
             </div>
             <div class="chips" style="margin-top:14px;">
-              ${[['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Mês atual'],['12m','12 meses']].map(([k,l]) => `<button class="chip" onclick="rfAtalho('${k}')">${l}</button>`).join('')}
+              ${[['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Mês atual'],['12m','12 meses']].map(([k,l]) => { const p = vmlAtalho(k); return `<button class="chip ${p.de === g.de && p.ate === g.ate ? 'active' : ''}" onclick="rfAtalho('${k}')">${l}</button>`; }).join('')}
             </div>
             <div class="d-flex" style="margin-top:14px;gap:12px;align-items:center;justify-content:flex-end;flex-wrap:wrap;">
               <span id="rf-pend" class="text-muted" style="font-size:12px;${rfPend ? '' : 'display:none;'}">Filtros alterados. Clique em Buscar para atualizar.</span>
