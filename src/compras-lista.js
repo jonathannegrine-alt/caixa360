@@ -86,15 +86,22 @@
         doc.text('Data: ' + ptDate(getToday()) + (para ? '     Para: ' + para : ''), 40, y);
         if(obs){ y += 15; doc.text(doc.splitTextToSize('Obs.: ' + obs, 515), 40, y); y += 12 * (doc.splitTextToSize('Obs.: ' + obs, 515).length - 1); }
         const total = itens.reduce((s, x) => s + x.qtd * x.preco, 0), un = itens.reduce((s, x) => s + x.qtd, 0);
+        // foto do produto na 2ª coluna (mesma rotina da folha de contagem)
+        if(bt) bt.textContent = 'Buscando fotos…';
+        const fotos = typeof fotosParaPdf === 'function' ? await fotosParaPdf(itens.map(x => x.sku)) : new Map();
+        const fotoDe = i => itens[i] ? fotos.get(String(itens[i].sku).trim().toLowerCase()) : null;
         doc.autoTable({
+          rowPageBreak: 'avoid',
           startY: y + 14, margin: { left: 40, right: 40 },
-          head: [comPreco ? ['#', 'SKU', 'Produto', 'Quantidade', 'Último preço pago', 'Subtotal'] : ['#', 'SKU', 'Produto', 'Quantidade']],
-          body: itens.map((x, i) => comPreco ? [i + 1, x.sku, x.nome || '', x.qtd.toLocaleString('pt-BR'), x.preco ? 'R$ ' + n2(x.preco) : '—', x.preco ? 'R$ ' + n2(x.qtd * x.preco) : '—'] : [i + 1, x.sku, x.nome || '', x.qtd.toLocaleString('pt-BR')]),
-          foot: [comPreco ? ['', '', itens.length + ' produtos', un.toLocaleString('pt-BR'), '', 'R$ ' + n2(total)] : ['', '', itens.length + ' produtos', un.toLocaleString('pt-BR')]],
-          styles: { fontSize: 9.5, cellPadding: 5, overflow: 'linebreak' },
+          head: [comPreco ? ['#', 'Foto', 'SKU', 'Produto', 'Quantidade', 'Último preço pago', 'Subtotal'] : ['#', 'Foto', 'SKU', 'Produto', 'Quantidade']],
+          body: itens.map((x, i) => comPreco ? [i + 1, '', x.sku, x.nome || '', x.qtd.toLocaleString('pt-BR'), x.preco ? 'R$ ' + n2(x.preco) : '—', x.preco ? 'R$ ' + n2(x.qtd * x.preco) : '—'] : [i + 1, '', x.sku, x.nome || '', x.qtd.toLocaleString('pt-BR')]),
+          foot: [comPreco ? ['', '', '', itens.length + ' produtos', un.toLocaleString('pt-BR'), '', 'R$ ' + n2(total)] : ['', '', '', itens.length + ' produtos', un.toLocaleString('pt-BR')]],
+          styles: { fontSize: 9.5, cellPadding: 5, overflow: 'linebreak', valign: 'middle' },
           headStyles: { fillColor: [40, 44, 60], textColor: 255 }, footStyles: { fillColor: [235, 237, 243], textColor: 20, fontStyle: 'bold' },
-          columnStyles: comPreco ? { 0: { cellWidth: 24 }, 1: { cellWidth: 95, fontStyle: 'bold' }, 3: { halign: 'right', cellWidth: 62 }, 4: { halign: 'right', cellWidth: 84 }, 5: { halign: 'right', cellWidth: 80 } } : { 0: { cellWidth: 24 }, 1: { cellWidth: 120, fontStyle: 'bold' }, 3: { halign: 'right', cellWidth: 80 } },
-          didParseCell: d => { if(d.section !== 'body' && d.column.index >= 3) d.cell.styles.halign = 'right'; },
+          columnStyles: comPreco ? { 0: { cellWidth: 22 }, 1: { cellWidth: 48 }, 2: { cellWidth: 88, fontStyle: 'bold' }, 4: { halign: 'right', cellWidth: 58 }, 5: { halign: 'right', cellWidth: 72 }, 6: { halign: 'right', cellWidth: 72 } } : { 0: { cellWidth: 22 }, 1: { cellWidth: 48 }, 2: { cellWidth: 115, fontStyle: 'bold' }, 4: { halign: 'right', cellWidth: 75 } },
+          didParseCell: d => { if(d.section === 'body') d.cell.styles.minCellHeight = 46; if(d.section !== 'body' && d.column.index >= 4) d.cell.styles.halign = 'right'; },
+          // linha partida entre páginas chega aqui sem índice válido: só desenha a foto quando o produto existe
+          didDrawCell: d => { if(d.section === 'body' && d.column.index === 1){ const f = fotoDe(d.row.index); if(f){ try { doc.addImage(f, 'JPEG', d.cell.x + 4, d.cell.y + 3, 40, 40); } catch(err){} } } },
         });
         doc.save(titulo.toLowerCase().replace(/[^a-z0-9à-ú]+/gi, '_').replace(/^_|_$/g, '') + '_' + getToday() + '.pdf');
       } catch(e){ toast('Não consegui gerar o PDF: ' + (e.message || e)); }

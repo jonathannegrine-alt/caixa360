@@ -340,6 +340,22 @@
       return '<label class="btn-out btn-sm" style="cursor:pointer;margin:0 0 0 auto;" title="Escolha várias fotos de uma vez. O nome de cada arquivo precisa ser o SKU do produto.">Fotos em lote<input type="file" accept="image/*" multiple aria-label="Fotos dos produtos em lote" style="display:none" onchange="estFotosLote(this)"></label>';
     }
 
+    // Fotos dos produtos para PDF: Map(sku em minúsculas → imagem JPEG 120×120 em data URL). Vem do anúncio da venda mais
+    // recente (RPC sku_fotos; produto só de kit usa a foto do kit). Foto que não carrega em 6 s fica de fora.
+    async function fotosParaPdf(lista){
+      const fotos = new Map();
+      try {
+        const rf = await supa.rpc('sku_fotos', { p_skus: [...new Set(lista.filter(Boolean))] });
+        await Promise.all((rf.data || []).map(x => new Promise(ok => {
+          const im = new Image(); im.crossOrigin = 'anonymous';
+          im.onload = () => { try { const c = document.createElement('canvas'); c.width = c.height = 120; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 120, 120);
+            const r = Math.min(120 / im.width, 120 / im.height), w = im.width * r, h = im.height * r; g.drawImage(im, (120 - w) / 2, (120 - h) / 2, w, h); fotos.set(esN(x.sku), c.toDataURL('image/jpeg', 0.8)); } catch(err){} ok(); };
+          im.onerror = () => ok(); im.src = String(x.foto).replace('http://', 'https://'); setTimeout(ok, 6000);
+        })));
+      } catch(err){}
+      return fotos;
+    }
+
     // Folha para a equipe contar: produtos marcados, na ordem da tela, com o estoque do sistema e o espaço para anotar.
     // lista (opcional): [{ k, sku, nome, fisico, outro }] já pronta, ex.: os com diferença no confronto da contagem;
     // outroNome é o título da coluna "outro" (UpSeller)
@@ -356,17 +372,7 @@
         const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
         await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
         await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
-        // foto do anúncio de cada produto (vem da venda mais recente; produto só de kit usa a foto do kit)
-        const fotos = new Map();
-        try {
-          const rf = await supa.rpc('sku_fotos', { p_skus: linhas.map(l => l.sku) });
-          await Promise.all((rf.data || []).map(x => new Promise(ok => {
-            const im = new Image(); im.crossOrigin = 'anonymous';
-            im.onload = () => { try { const c = document.createElement('canvas'); c.width = c.height = 120; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 120, 120);
-              const r = Math.min(120 / im.width, 120 / im.height), w = im.width * r, h = im.height * r; g.drawImage(im, (120 - w) / 2, (120 - h) / 2, w, h); fotos.set(x.sku, c.toDataURL('image/jpeg', 0.8)); } catch(err){} ok(); };
-            im.onerror = () => ok(); im.src = String(x.foto).replace('http://', 'https://'); setTimeout(ok, 6000);
-          })));
-        } catch(err){}
+        const fotos = await fotosParaPdf(linhas.map(l => l.sku));
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' }), agora = new Date();
         doc.setFontSize(18); doc.setFont(undefined, 'bold'); doc.text(pronta ? 'Conferir diferenças' : 'Lista de Estoque', 40, 50);
         doc.setFontSize(10); doc.setFont(undefined, 'normal');
