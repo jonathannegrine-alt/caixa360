@@ -635,6 +635,7 @@
     
     function renderFormSimulador(){
       document.getElementById('sim-parcelado').style.display = tipoSimulador === 'parcelado' ? 'block' : 'none';
+      if(typeof simMultiCard === 'function') simMultiCard();
     }
     
     function simular(){

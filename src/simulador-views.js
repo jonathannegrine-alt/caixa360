@@ -464,3 +464,60 @@
       idxs.sort((a,b) => b-a).forEach(i => pagamentos.splice(i,1));
       salvar(); renderPagar(); recalc();
     }
+
+    // ===== VÁRIAS COMPRAS JUNTAS =====
+    // Cada compra: valor, dia da compra e prazos em dias a partir desse dia ("0 15" = metade no dia e metade em 15 dias).
+    // O valor é dividido igualmente entre os prazos (a última parcela leva os centavos). Todas as parcelas entram juntas na
+    // coluna "Compra simulada" da planilha de dias, que mostra o saldo do caixa com e sem as compras.
+    let simMulti = null;
+    function simMultiPadrao(){ const h = getToday(); return [{ desc: 'Compra 1', valor: '', data: h, prazos: '0 15' }, { desc: 'Compra 2', valor: '', data: h, prazos: '0 15 30' }]; }
+    function simMultiCard(){
+      const view = document.getElementById('view-simulador'); if(!view) return;
+      if(!simMulti) simMulti = simMultiPadrao();
+      let card = document.getElementById('sim-multi-card');
+      if(!card){ card = document.createElement('div'); card.id = 'sim-multi-card'; card.className = 'card'; const pri = view.querySelector('.card'); if(pri) pri.insertAdjacentElement('beforebegin', card); else view.appendChild(card); }
+      const e = x => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      card.innerHTML = `<div class="card-header"><div class="card-title">Várias compras juntas</div><span class="text-muted" style="font-size:12px;">simule mais de uma compra e veja o caixa com todas elas</span></div>
+        <div class="card-body">
+          <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Compra</th><th class="num">Valor (R$)</th><th>Dia da compra</th><th>Prazos (dias) <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Dias a partir do dia da compra, separados por espaço. "0 15" = metade no dia e metade 15 dias depois; "0 15 30" = três parcelas iguais.</span></span></th><th>Parcelas</th><th></th></tr></thead><tbody>
+            ${simMulti.map((c, i) => { const P = simMultiParcelas(c); return `<tr>
+              <td><input value="${e(c.desc)}" onchange="simMulti[${i}].desc=this.value" style="min-width:120px;"></td>
+              <td class="num"><input class="money-input" value="${e(c.valor)}" placeholder="0,00" oninput="onMoneyInput(this)" onchange="simMulti[${i}].valor=this.value;simMultiCard()" style="width:120px;text-align:right;"></td>
+              <td><input type="date" value="${e(c.data)}" onchange="simMulti[${i}].data=this.value;simMultiCard()"></td>
+              <td><input value="${e(c.prazos)}" placeholder="0 15 30" onchange="simMulti[${i}].prazos=this.value;simMultiCard()" style="width:120px;font-family:monospace;"></td>
+              <td style="font-size:12px;white-space:normal;">${P.length ? P.map(p => ptDate(p.data) + ' · <b>' + fmt(p.valor) + '</b>').join('<br>') : '<span class="text-muted">—</span>'}</td>
+              <td>${simMulti.length > 1 ? `<button class="ico-btn" title="Tirar esta compra" onclick="simMulti.splice(${i},1);simMultiCard()">✕</button>` : ''}</td></tr>`; }).join('')}
+          </tbody></table></div>
+          <div class="d-flex gap-1" style="margin-top:10px;flex-wrap:wrap;">
+            <button class="btn-out btn-sm" onclick="simMulti.push({ desc: 'Compra ' + (simMulti.length + 1), valor: '', data: getToday(), prazos: '0 30' });simMultiCard()">+ Outra compra</button>
+            <button class="btn btn-sm" onclick="simMultiSimular()">Simular juntas</button>
+          </div>
+        </div>`;
+    }
+    function simMultiParcelas(c){
+      const valor = parseMoney(String(c.valor || '')) || 0, dias = String(c.prazos || '').split(/[\s,;\/]+/).map(Number).filter(n => isFinite(n) && n >= 0);
+      if(!valor || !dias.length || !c.data) return [];
+      const cada = Math.floor(valor / dias.length * 100) / 100;
+      return dias.map((d, k) => ({ data: addDias(c.data, d), valor: k === dias.length - 1 ? Math.round((valor - cada * (dias.length - 1)) * 100) / 100 : cada }));
+    }
+    function simMultiSimular(){
+      const todas = simMulti.flatMap(c => simMultiParcelas(c).map(p => ({ ...p, desc: c.desc })));
+      if(!todas.length){ alert('Preencha o valor, o dia e os prazos de pelo menos uma compra.'); return; }
+      const hoje = getToday(), ult = todas.map(p => p.data).sort().pop(), precisa = diasDif(hoje, ult) + 5;
+      simDias = precisa <= 30 ? 30 : precisa <= 60 ? 60 : 90;
+      const porDia = {}; todas.forEach(p => { if(p.data >= hoje) porDia[p.data] = Math.round(((porDia[p.data] || 0) + p.valor) * 100) / 100; });
+      _simParcelasState = [];
+      simPlanilhaDados = [];
+      for(let i = 0; i < simDias; i++){ const data = addDias(hoje, i), e = getEntrada(data); simPlanilhaDados.push({ data, conf: e.conf, proj: e.proj, pag: getPag(data), compra: porDia[data] || 0 }); }
+      // resumo: total, menor saldo com as compras e primeiro dia abaixo da reserva
+      let saldo = saldoAtual, menor = Infinity, diaMenor = '', risco = '';
+      simPlanilhaDados.forEach(d => { saldo += (simModoProj === 'conf' ? d.conf : d.conf + d.proj) - d.pag - d.compra; if(saldo < menor){ menor = saldo; diaMenor = d.data; } if(!risco && saldo < reservaMinima) risco = d.data; });
+      const total = todas.reduce((s, p) => s + p.valor, 0), fora = todas.filter(p => p.data < hoje);
+      const res = document.getElementById('sim-resultado'); if(!res) return;
+      res.innerHTML = `<div class="alert ${risco ? 'alert-danger' : 'alert-success'}" style="line-height:1.6;">
+          <b>${simMulti.filter(c => simMultiParcelas(c).length).length} compras, ${fmt(total)} em ${todas.length} parcelas.</b>
+          Menor saldo com as compras: <b>${fmt(menor)}</b> em ${ptDate(diaMenor)}.
+          ${risco ? 'O caixa fica abaixo da reserva mínima (' + fmt(reservaMinima) + ') a partir de <b>' + ptDate(risco) + '</b>.' : 'O caixa não fica abaixo da reserva mínima (' + fmt(reservaMinima) + ') no período.'}
+          ${fora.length ? '<br><span class="text-muted">' + fora.length + ' parcela(s) antes de hoje ficaram de fora.</span>' : ''}</div>` + gerarHTMLPlanilhaSimulador();
+      res.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
