@@ -80,28 +80,47 @@
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
         const titulo = (document.getElementById('cl-titulo').value || 'Lista de compras').trim(), para = (document.getElementById('cl-para').value || '').trim(), obs = (document.getElementById('cl-obs').value || '').trim();
         const n2 = v => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const M = 40;
         doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text(titulo, 40, 50);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90);
         let y = 68;
         doc.text('Data: ' + ptDate(getToday()) + (para ? '     Para: ' + para : ''), 40, y);
         if(obs){ y += 15; doc.text(doc.splitTextToSize('Obs.: ' + obs, 515), 40, y); y += 12 * (doc.splitTextToSize('Obs.: ' + obs, 515).length - 1); }
         const total = itens.reduce((s, x) => s + x.qtd * x.preco, 0), un = itens.reduce((s, x) => s + x.qtd, 0);
-        // foto do produto na 2ª coluna (mesma rotina da folha de contagem)
+        // foto do produto (mesma rotina da folha de contagem)
         if(bt) bt.textContent = 'Buscando fotos…';
         const fotos = typeof fotosParaPdf === 'function' ? await fotosParaPdf(itens.map(x => x.sku)) : new Map();
         const fotoDe = i => itens[i] ? fotos.get(String(itens[i].sku).trim().toLowerCase()) : null;
+        // colunas: # · foto · produto (SKU em negrito e o nome embaixo) · quantidade · preço · subtotal
+        const cab = comPreco ? ['#', '', 'Produto', 'Qtd.', 'Último preço', 'Subtotal'] : ['#', '', 'Produto', 'Qtd.'];
+        const P = 2;   // coluna do produto
         doc.autoTable({
-          rowPageBreak: 'avoid',
-          startY: y + 14, margin: { left: 40, right: 40 },
-          head: [comPreco ? ['#', 'Foto', 'SKU', 'Produto', 'Quantidade', 'Último preço pago', 'Subtotal'] : ['#', 'Foto', 'SKU', 'Produto', 'Quantidade']],
-          body: itens.map((x, i) => comPreco ? [i + 1, '', x.sku, x.nome || '', x.qtd.toLocaleString('pt-BR'), x.preco ? 'R$ ' + n2(x.preco) : '—', x.preco ? 'R$ ' + n2(x.qtd * x.preco) : '—'] : [i + 1, '', x.sku, x.nome || '', x.qtd.toLocaleString('pt-BR')]),
-          foot: [comPreco ? ['', '', '', itens.length + ' produtos', un.toLocaleString('pt-BR'), '', 'R$ ' + n2(total)] : ['', '', '', itens.length + ' produtos', un.toLocaleString('pt-BR')]],
-          styles: { fontSize: 9.5, cellPadding: 5, overflow: 'linebreak', valign: 'middle' },
-          headStyles: { fillColor: [40, 44, 60], textColor: 255 }, footStyles: { fillColor: [235, 237, 243], textColor: 20, fontStyle: 'bold' },
-          columnStyles: comPreco ? { 0: { cellWidth: 22 }, 1: { cellWidth: 48 }, 2: { cellWidth: 88, fontStyle: 'bold' }, 4: { halign: 'right', cellWidth: 58 }, 5: { halign: 'right', cellWidth: 72 }, 6: { halign: 'right', cellWidth: 72 } } : { 0: { cellWidth: 22 }, 1: { cellWidth: 48 }, 2: { cellWidth: 115, fontStyle: 'bold' }, 4: { halign: 'right', cellWidth: 75 } },
-          didParseCell: d => { if(d.section === 'body') d.cell.styles.minCellHeight = 46; if(d.section !== 'body' && d.column.index >= 4) d.cell.styles.halign = 'right'; },
-          // linha partida entre páginas chega aqui sem índice válido: só desenha a foto quando o produto existe
-          didDrawCell: d => { if(d.section === 'body' && d.column.index === 1){ const f = fotoDe(d.row.index); if(f){ try { doc.addImage(f, 'JPEG', d.cell.x + 4, d.cell.y + 3, 40, 40); } catch(err){} } } },
+          startY: y + 14, margin: { left: M, right: M }, theme: 'plain', rowPageBreak: 'avoid',
+          head: [cab],
+          body: itens.map((x, i) => { const r = [i + 1, '', x.sku + '\n' + (x.nome || ''), x.qtd.toLocaleString('pt-BR')]; if(comPreco) r.push(x.preco ? 'R$ ' + n2(x.preco) : '—', x.preco ? 'R$ ' + n2(x.qtd * x.preco) : '—'); return r; }),
+          foot: [comPreco ? ['', '', itens.length + (itens.length === 1 ? ' produto' : ' produtos'), un.toLocaleString('pt-BR'), '', 'R$ ' + n2(total)] : ['', '', itens.length + (itens.length === 1 ? ' produto' : ' produtos'), un.toLocaleString('pt-BR')]],
+          styles: { font: 'helvetica', fontSize: 9.5, cellPadding: { top: 6, bottom: 6, left: 6, right: 6 }, valign: 'middle', textColor: [40, 44, 56], overflow: 'linebreak', lineColor: [230, 232, 238], lineWidth: { bottom: 0.6 } },
+          headStyles: { fontStyle: 'bold', fontSize: 8.5, textColor: [110, 115, 130], fillColor: [246, 247, 250], lineWidth: { bottom: 0.8 }, lineColor: [210, 214, 224] },
+          footStyles: { fontStyle: 'bold', fontSize: 10, textColor: [28, 31, 42], fillColor: [246, 247, 250], lineWidth: { top: 1 }, lineColor: [40, 44, 56] },
+          columnStyles: Object.assign({ 0: { cellWidth: 20, halign: 'center', textColor: [150, 155, 168] }, 1: { cellWidth: 52 }, 3: { cellWidth: 56, halign: 'right' } },
+            comPreco ? { 4: { cellWidth: 74, halign: 'right' }, 5: { cellWidth: 84, halign: 'right', fontStyle: 'bold' } } : {}),
+          didParseCell: d => {
+            if(d.column.index >= 3) d.cell.styles.halign = 'right';
+            if(d.section === 'body') d.cell.styles.minCellHeight = 52;
+          },
+          // o produto é desenhado à mão (SKU em negrito, nome menor embaixo); a altura da linha já foi calculada com o texto
+          willDrawCell: d => { if(d.section === 'body' && d.column.index === P){ d.cell._t = d.cell.text; d.cell.text = []; } },
+          didDrawCell: d => {
+            if(d.section !== 'body') return;
+            const it = itens[d.row.index]; if(!it) return;   // linha partida entre páginas chega sem índice válido
+            if(d.column.index === 1){ const fo = fotoDe(d.row.index); if(fo){ try { doc.addImage(fo, 'JPEG', d.cell.x + (d.cell.width - 40) / 2, d.cell.y + (d.cell.height - 40) / 2, 40, 40); } catch(err){} } }
+            if(d.column.index === P){
+              const larg = d.cell.width - 12, nome = it.nome ? doc.setFontSize(8.5) && doc.splitTextToSize(it.nome, larg) : [];
+              const alt = 12 + nome.length * 10.5; let yy = d.cell.y + (d.cell.height - alt) / 2 + 9;
+              doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(28, 31, 42); doc.text(String(it.sku), d.cell.x + 6, yy);
+              doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110, 115, 130); nome.forEach(l => { yy += 10.5; doc.text(l, d.cell.x + 6, yy); });
+            }
+          },
         });
         doc.save(titulo.toLowerCase().replace(/[^a-z0-9à-ú]+/gi, '_').replace(/^_|_$/g, '') + '_' + getToday() + '.pdf');
       } catch(e){ toast('Não consegui gerar o PDF: ' + (e.message || e)); }
