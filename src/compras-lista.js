@@ -99,7 +99,7 @@
         doc.autoTable({
           startY: y + 14, margin: { left: M, right: M }, theme: 'plain', rowPageBreak: 'avoid',
           head: [cab],
-          body: itens.map((x, i) => { const r = [i + 1, '', (varDe(x.sku) || x.nome || x.sku) + '\n' + (varDe(x.sku) ? (x.nome || '') : ''), x.qtd.toLocaleString('pt-BR')]; if(comPreco) r.push(x.preco ? 'R$ ' + n2(x.preco) : '—', x.preco ? 'R$ ' + n2(x.qtd * x.preco) : '—'); return r; }),
+          body: itens.map((x, i) => { const r = [i + 1, '', (varDe(x.sku) || x.nome || '') + '\n' + (varDe(x.sku) ? (x.nome || '') : ''), x.qtd.toLocaleString('pt-BR')]; if(comPreco) r.push(x.preco ? 'R$ ' + n2(x.preco) : '—', x.preco ? 'R$ ' + n2(x.qtd * x.preco) : '—'); return r; }),
           foot: [comPreco ? ['', '', itens.length + (itens.length === 1 ? ' produto' : ' produtos'), un.toLocaleString('pt-BR'), '', 'R$ ' + n2(total)] : ['', '', itens.length + (itens.length === 1 ? ' produto' : ' produtos'), un.toLocaleString('pt-BR')]],
           styles: { font: 'helvetica', fontSize: 9.5, cellPadding: { top: 6, bottom: 6, left: 6, right: 6 }, valign: 'middle', textColor: [40, 44, 56], overflow: 'linebreak', lineColor: [230, 232, 238], lineWidth: { bottom: 0.6 } },
           headStyles: { fontStyle: 'bold', fontSize: 8.5, textColor: [110, 115, 130], fillColor: [246, 247, 250], lineWidth: { bottom: 0.8 }, lineColor: [210, 214, 224] },
@@ -118,9 +118,10 @@
             if(d.column.index === 1){ const fo = fotoDe(d.row.index); if(fo){ try { doc.addImage(fo, 'JPEG', d.cell.x + (d.cell.width - 40) / 2, d.cell.y + (d.cell.height - 40) / 2, 40, 40); } catch(err){} } }
             if(d.column.index === P){
               const larg = d.cell.width - 12, cor = varDe(it.sku), nome = it.nome && cor ? doc.setFontSize(8.5) && doc.splitTextToSize(it.nome, larg) : [];
-              doc.setFont('helvetica', 'bold'); doc.setFontSize(10); const tit = doc.splitTextToSize(cor || it.nome || String(it.sku), larg);
+              // sem variação: nenhum código, só o nome do produto em texto normal
+              doc.setFont('helvetica', cor ? 'bold' : 'normal'); doc.setFontSize(cor ? 10 : 9.5); const tit = doc.splitTextToSize(cor || it.nome || '', larg);
               const alt = tit.length * 12 + nome.length * 10.5; let yy = d.cell.y + (d.cell.height - alt) / 2 + 9;
-              doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(28, 31, 42); tit.forEach((l, n) => { if(n) yy += 12; doc.text(l, d.cell.x + 6, yy); });
+              doc.setFont('helvetica', cor ? 'bold' : 'normal'); doc.setFontSize(cor ? 10 : 9.5); doc.setTextColor(28, 31, 42); tit.forEach((l, n) => { if(n) yy += 12; doc.text(l, d.cell.x + 6, yy); });
               doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110, 115, 130); nome.forEach(l => { yy += 10.5; doc.text(l, d.cell.x + 6, yy); });
             }
           },
