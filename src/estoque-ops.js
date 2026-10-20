@@ -504,9 +504,19 @@
       await estLerSaldo(); await esoLer(true); estDesenhar(); esoEnvios();
     }
     // unidades que saíram do galpão e o Mercado Livre ainda não recebeu, por produto (para a Sugestão de compras)
+    // Só a parte que o Mercado Livre ainda não mostra: a API do Full já conta o envio como "em trânsito/pendente" quando o
+    // registra (e a Sugestão de compras soma esse total); sem este desconto o mesmo envio contava duas vezes. Envio que
+    // saiu há mais de 15 dias sem conferência não conta mais (já foi recebido e está nas unidades do Full).
     function esoACaminhoDoFull(){
-      const m = new Map();
-      eso.envios.filter(x => x.situacao === 'saiu').forEach(x => esoMovsDoEnvio(x, 1).forEach(c => m.set(esN(c.sku), (m.get(esN(c.sku)) || 0) + c.qtd)));
+      const m = new Map(), limite = Date.now() - 15 * 86400000;
+      const fml = typeof estoqueFullML !== 'undefined' && Array.isArray(estoqueFullML) ? estoqueFullML : [];
+      eso.envios.filter(x => x.situacao === 'saiu' && (!x.saiu_em || Date.parse(x.saiu_em) > limite)).forEach(x => (x.itens || []).forEach(i => {
+        const q = Number(i.qtd) || 0; if(!q) return;
+        const ml = fml.filter(f => esN(f.sku) === esN(i.anuncio_sku) && (!x.ml_user_id || !f._conta || String(f._conta) === String(x.ml_user_id)))
+          .reduce((s, f) => s + (Number(f.em_transito) || 0) + (Number(f.pendente) || 0) + (Number(f.em_separacao) || 0), 0);
+        const parte = Math.max(0, q - ml) / q; if(!parte) return;
+        (i.componentes || []).forEach(c => { const k = esN(c.sku); m.set(k, (m.get(k) || 0) + (Number(c.qtd) || 0) * parte); });
+      }));
       return m;
     }
 

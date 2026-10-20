@@ -109,6 +109,11 @@
       // cada um com a data prevista de saída (a previsão soma os dias de conferência para saber quando fica disponível)
       try { const e = await supa.from('estoque_envios_full').select('id,itens,data_prevista').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).eq('situacao', 'preparando').limit(100);
         (e.data || []).forEach(x => { pfl.progN++; (x.itens || []).forEach(i => { const k = String(i.anuncio_sku || '').trim().toUpperCase(), q = Number(i.qtd) || 0; if(k && q) (pfl.prog[k] = pfl.prog[k] || []).push({ qtd: q, data: x.data_prevista || null }); }); }); } catch(e){}
+      // envios que JÁ SAÍRAM do galpão (últimos 20 dias, ainda sem conferência do recebimento): o relatório importado antes da
+      // saída não os tem, e o Mercado Livre só mostra "a caminho" quando registra o envio. Ver pflSaiuDe.
+      pfl.saiu = {};
+      try { const e = await supa.from('estoque_envios_full').select('id,itens,saiu_em').eq('usuario_id', usuarioAtual.id).eq('ml_user_id', conta).eq('situacao', 'saiu').gte('saiu_em', new Date(Date.now() - 20 * 86400000).toISOString()).limit(100);
+        (e.data || []).forEach(x => (x.itens || []).forEach(i => { const k = String(i.anuncio_sku || '').trim().toUpperCase(), q = Number(i.qtd) || 0; if(k && q) (pfl.saiu[k] = pfl.saiu[k] || []).push({ qtd: q, em: x.saiu_em }); })); } catch(e){}
       pfl.trocas = [];
       try { const t = await supa.from('sku_trocas').select('sku_antigo, sku_novo').eq('usuario_id', usuarioAtual.id).order('sku_antigo').limit(500); pfl.trocas = t.data || []; } catch(e){}
       pfl.fotos = {};
@@ -130,6 +135,14 @@
       const comps = typeof esoAbrir === 'function' ? esoAbrir(sku, 1) : [{ sku, qtd: 1 }];
       return comps.reduce((min, c) => Math.min(min, Math.floor((G.get(esN(c.sku)) || 0) / (Number(c.qtd) || 1))), Infinity);
     }
+    // unidades de envios que já saíram e que os números do Mercado Livre ainda não mostram:
+    //  - com relatório importado: as saídas DEPOIS da importação (o relatório é uma foto daquela hora);
+    //  - sem relatório (estoque pela API): o que passa do "a caminho" que a API já mostra (não conta duas vezes).
+    function pflSaiuDe(k, s, caminhoML){
+      const L = (pfl.saiu || {})[k] || []; if(!L.length) return 0;
+      if(s){ const foto = s.importado_em ? Date.parse(s.importado_em) : 0; return L.filter(p => !foto || Date.parse(p.em) > foto).reduce((x, p) => x + p.qtd, 0); }
+      return Math.max(0, L.reduce((x, p) => x + p.qtd, 0) - caminhoML);
+    }
     // conta da previsão por produto
     function pflLinhas(){
       const G = pflGalpaoMapa();
@@ -143,7 +156,10 @@
         const aptas = s ? Number(s.aptas) || 0 : (f ? Number(f.aptos_venda) || 0 : 0), caminhoML = s ? Number(s.caminho) || 0 : (f ? (Number(f.em_separacao) || 0) + (Number(f.em_transito) || 0) : 0);
         // envios programados: dia em que cada um fica disponível = dias até a data prevista + dias de conferência (sem data: só a conferência)
         const progs = (pfl.progUsar ? (pfl.prog || {})[String(k).toUpperCase()] || [] : []).map(p => ({ qtd: p.qtd, chega: Math.max(0, p.data ? diasDif(getToday(), p.data) : 0) + pfl.entrada })).sort((a, b) => a.chega - b.chega);
-        const prog = progs.reduce((x, p) => x + p.qtd, 0), caminho = caminhoML + prog;
+        // envio que já saiu e o ML ainda não mostra: fica disponível depois dos dias de conferência do Full
+        const saiu = pflSaiuDe(String(k).toUpperCase(), s, caminhoML);
+        if(saiu) progs.unshift({ qtd: saiu, chega: pfl.entrada });
+        const prog = progs.reduce((x, p) => x + p.qtd, 0) - saiu, caminho = caminhoML + saiu + prog;
         // 6 semanas de venda (a mais recente por último), como no "Histórico de vendas semanais" do Mercado Livre
         const sem = Array.isArray(b.sem) && b.sem.length === 6 ? b.sem.map(Number) : [0, 0, 0, 0, Number(b.s7ant) || 0, Number(b.s7) || 0];
         const s7 = sem[5], s7a = sem[4], s30 = Number(b.s30) || 0, d30 = Number(b.d30) || 0;
@@ -180,7 +196,7 @@
         // demanda semanal que o ML está prevendo, tirada da sugestão dele: (sugestão − mínimo + estoque) ÷ 4
         const fML = s && Number(s.sugestao) > 0 && minimo > 0 ? (Number(s.sugestao) - minimo + est) / 4 : null, fatorML = fML != null && media > 0 ? fML / media : null;
         const acaba = porDia > 0 ? est / porDia : null;
-        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', sem, tend, urgN, cob, minimo, abaixoMin, envMin, fML, fatorML, porSemana, s7, s7a, s30, d30, aptas, caminho, caminhoML, prog, faltaProg, galpao: pflGalpaoDe(G, k), ritmo, acel, saz, porDia, previsao, enviar, enviarHoje, estCheg, zeraAntes, acaba, novo: false,
+        L.push({ sku: k, titulo: (s && s.produto) || b.titulo || '', sem, tend, urgN, cob, minimo, abaixoMin, envMin, fML, fatorML, porSemana, s7, s7a, s30, d30, aptas, caminho, caminhoML, prog, saiu, faltaProg, galpao: pflGalpaoDe(G, k), ritmo, acel, saz, porDia, previsao, enviar, enviarHoje, estCheg, zeraAntes, acaba, novo: false,
           cod: (s && s.inventory_id) || '', ml: s ? Number(s.sugestao) || 0 : null, urg: s ? s.urgencia : '', estrela: s ? !!s.estrela : false, temEstoque: !!(s || f) });
       });
       return L.sort((a, b) => (a.acaba == null ? 9999 : a.acaba) - (b.acaba == null ? 9999 : b.acaba));
@@ -205,7 +221,7 @@
           ${F.map(l => { const urg = l.enviar > 0 && l.acaba != null && l.acaba <= pfl.prazo, ate = pflAte(l), k = pflE(l.sku).split(String.fromCharCode(39)).join(String.fromCharCode(38) + "#39;");
             return `<tr><td><input type="checkbox" ${pflSel(l) ? 'checked' : ''} onchange="pflMarcar('${k}', this.checked)"></td><td><div style="display:flex;gap:10px;align-items:center;min-width:250px;">${(pfl.fotos || {})[l.sku] ? `<img src="${pflE(pfl.fotos[l.sku])}" loading="lazy" alt="" style="width:42px;height:42px;object-fit:cover;border-radius:8px;flex:none;border:1px solid var(--border);">` : '<span style="width:42px;height:42px;border-radius:8px;flex:none;background:var(--surface-3);"></span>'}<div><b>${pflE(l.sku)}</b>${l.estrela ? ' <span class="badge">estrela</span>' : ''}<small class="text-muted pfl-tit" title="${pflE(l.titulo)}">${l.cod ? pflE(l.cod) + ' · ' : ''}${pflE(l.titulo)}</small></div></div></td>
               <td style="text-align:right;" title="6 semanas, da mais antiga para a mais recente: ${l.sem.join(' · ')}">${pflN(l.s7)}${l.tend > 0 ? '<br><small style="color:var(--success,#16a34a);">+' + Math.round(l.tend * 100) + '% tendência</small>' : ''}</td><td style="text-align:right;">${pflN(l.s7a)}</td><td style="text-align:right;">${pflN(l.s30)}${l.d30 && l.d30 < 26 ? '<br><small class="text-muted">' + l.d30 + ' dias c/ venda</small>' : ''}</td>
-              <td style="text-align:right;">${pflN(l.aptas)}${l.minimo ? '<br><small ' + (l.abaixoMin ? 'style="color:var(--danger);font-weight:650;" title="Abaixo do mínimo do Mercado Livre: o produto deixa de ficar distribuído pelo país e perde envio rápido."' : 'class="text-muted" title="Unidades mínimas que o Mercado Livre pede para oferecer envio rápido no país."') + '>mín. ' + pflN(l.minimo) + '</small>' : ''}${chega != null ? '<br><small class="text-muted" title="Estoque previsto (aptas mais a caminho) no dia em que o envio fica disponível, descontando o que vende até lá.">em ' + pflDia(chega) + ': ' + pflN(l.estCheg) + '</small>' : ''}</td><td style="text-align:right;">${pflN(l.caminho)}${l.prog ? `<br><small class="text-muted" title="Envio programado em Estoque → Envios ao Full (ainda não aparece no Mercado Livre)${l.caminhoML ? '; ' + pflN(l.caminhoML) + ' já a caminho pelo Mercado Livre' : ''}">${pflN(l.prog)} programado</small>` : ''}</td>
+              <td style="text-align:right;">${pflN(l.aptas)}${l.minimo ? '<br><small ' + (l.abaixoMin ? 'style="color:var(--danger);font-weight:650;" title="Abaixo do mínimo do Mercado Livre: o produto deixa de ficar distribuído pelo país e perde envio rápido."' : 'class="text-muted" title="Unidades mínimas que o Mercado Livre pede para oferecer envio rápido no país."') + '>mín. ' + pflN(l.minimo) + '</small>' : ''}${chega != null ? '<br><small class="text-muted" title="Estoque previsto (aptas mais a caminho) no dia em que o envio fica disponível, descontando o que vende até lá.">em ' + pflDia(chega) + ': ' + pflN(l.estCheg) + '</small>' : ''}</td><td style="text-align:right;">${pflN(l.caminho)}${l.prog ? `<br><small class="text-muted" title="Envio programado em Estoque → Envios ao Full (ainda não aparece no Mercado Livre)${l.caminhoML ? '; ' + pflN(l.caminhoML) + ' já a caminho pelo Mercado Livre' : ''}">${pflN(l.prog)} programado</small>` : ''}${l.saiu ? `<br><small class="text-muted" title="Envio que já saiu do galpão (Estoque → Envios ao Full) e que o Mercado Livre ainda não mostra; fica disponível depois dos dias de conferência">${pflN(l.saiu)} já saiu</small>` : ''}</td>
               <td style="text-align:right;" title="média de ${l.ritmo.toFixed(1).replace('.', ',')} por dia × tendência ${l.acel.toFixed(2).replace('.', ',')} × sazonalidade ${l.saz.toFixed(2).replace('.', ',')}${pfl.reforco ? ' × reforço ' + (1 + pfl.reforco / 100).toFixed(2).replace('.', ',') : ''}">${l.porDia.toFixed(1).replace('.', ',')}</td>
               <td style="${urg ? 'color:var(--danger);font-weight:700;' : ''}">${l.acaba == null ? '—' : l.acaba < 1 ? 'zerado' : l.acaba > 120 ? 'mais de 4 meses' : pflDia(l.acaba) + ' <small class="text-muted">(' + Math.round(l.acaba) + ' d)</small>'}${l.zeraAntes && l.acaba >= 1 ? '<br><small style="color:var(--danger);">zera antes de o envio entrar</small>' : ''}${l.faltaProg ? '<br><small style="color:var(--danger);font-weight:650;" title="O estoque de agora acaba antes de o envio programado ficar disponível (data prevista + dias de conferência). O produto fica sem estoque no Full nesse intervalo.">' + (l.faltaProg.de < 1 ? 'já zerado' : 'zera em ' + pflDia(l.faltaProg.de)) + ', envio programado entra em ' + pflDia(l.faltaProg.ate) + '</small>' : ''}</td>
               <td style="${l.enviar > 0 && ate != null && ate <= 0 ? 'color:var(--danger);font-weight:700;' : ''}">${l.enviar <= 0 || ate == null ? '—' : ate <= 0 ? 'agora' : pflDia(ate)}${l.urgN && l.enviar > 0 ? '<br><small class="text-muted">' + l.urgN + '</small>' : ''}</td>
