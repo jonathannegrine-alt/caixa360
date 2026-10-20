@@ -127,7 +127,8 @@
           ${`<div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;"><div class="seg">${[30, 60, 90].map(d => `<button class="btn-toggle ${!an.de && an.dias === d ? 'active' : ''}" onclick="anDias(${d})">${d} dias</button>`).join('')}</div>
             <input type="date" id="an-de" value="${anPeriodo().de}" max="${getToday()}" onchange="anDatas()" title="Data inicial" style="width:auto;"><span class="text-muted">até</span><input type="date" id="an-ate" value="${anPeriodo().ate}" max="${getToday()}" onchange="anDatas()" title="Data final" style="width:auto;"></div>`}
         </div>
-        <div class="chips" style="margin-bottom:14px;">${abas.map(([k, t]) => `<button class="chip ${an.aba === k ? 'active' : ''}" onclick="anAba('${k}')">${t}</button>`).join('')}</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;"><div class="chips">${abas.map(([k, t]) => `<button class="chip ${an.aba === k ? 'active' : ''}" onclick="anAba('${k}')">${t}</button>`).join('')}</div>
+          <button class="btn-out btn-sm" style="margin-left:auto;" title="Baixa em PDF as tabelas desta aba, na ordem e com os filtros da tela" onclick="anPdf(this)">Baixar PDF</button></div>
         ${an.erro ? `<div class="alert alert-danger">Não consegui carregar: ${anE(an.erro)}</div>` : ''}
         ${corpo}`;
     }
@@ -401,4 +402,37 @@
           { k: 'acos', t: 'ACOS', num: 1, fmt: l => pc(l.acos) }, { k: 'venda_total', t: 'Venda total', num: 1, fmt: l => fmt(l.venda_total) }, { k: 'tacos', t: 'TACOS', num: 1, fmt: l => pc(l.tacos) }
         ], 'investimento')}
         <div class="text-muted" style="font-size:12px;padding:12px 18px;">ACOS = investimento ÷ vendas que vieram da publicidade. TACOS = investimento ÷ tudo que o próprio anúncio vendeu no período (com e sem publicidade): mostra o peso real do ADS no produto. As vendas por publicidade incluem as indiretas, que são de outros anúncios seus comprados depois do clique; por isso a venda total do anúncio usa só as diretas mais as orgânicas.</div></div>`;
+    }
+
+    // PDF das tabelas da aba aberta (como estão na tela: ordem, filtros, período). Foto e botões ficam de fora.
+    async function anPdf(bt){
+      const host = document.getElementById('an-host'), tabs = host ? [...host.querySelectorAll('table')].filter(t => t.offsetParent !== null && t.querySelector('tbody tr')) : [];
+      if(!tabs.length){ if(typeof toast === 'function') toast('Esta aba não tem tabela para exportar.'); return; }
+      if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
+      try {
+        const carrega = src => new Promise((ok, erro) => { if(document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => erro(new Error('sem conexão')); document.head.appendChild(s); });
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await carrega('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+        const nomeAba = (host.querySelector('.chips .chip.active') || {}).textContent || 'Análise', p = anPeriodo();
+        const conta = typeof contaAtiva !== 'undefined' && contaAtiva && typeof contaNome === 'function' ? contaNome(contaAtiva) : 'Todas as contas';
+        const larga = tabs.some(t => t.querySelectorAll('thead th').length > 7);
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4', orientation: larga ? 'landscape' : 'portrait' });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('Análise de vendas — ' + nomeAba.trim(), 40, 46);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(90);
+        doc.text('Período: ' + ptDate(p.de) + ' a ' + ptDate(p.ate) + '     ' + conta, 40, 62); doc.setTextColor(0);
+        let y = 74;
+        tabs.forEach((t, i) => {
+          // título do bloco (cabeçalho do cartão onde a tabela está), quando houver mais de uma tabela
+          const tit = tabs.length > 1 ? ((t.closest('.card') || {}).querySelector ? ((t.closest('.card').querySelector('.card-title') || {}).textContent || '') : '') : '';
+          if(tit){ doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text(tit.trim(), 40, y + 12); y += 18; }
+          doc.autoTable({ html: t, startY: y + 4, margin: { left: 40, right: 40 }, rowPageBreak: 'avoid',
+            styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak', valign: 'middle' },
+            headStyles: { fillColor: [40, 44, 60], textColor: 255 },
+            // tira as setas de ordenação do título e alinha à direita as colunas numéricas da tela
+            didParseCell: d => { if(d.section === 'head') d.cell.text = d.cell.text.map(x => x.replace(/[▾▴]/g, '').trim()); const el = d.cell.raw; if(el && el.classList && el.classList.contains('num')) d.cell.styles.halign = 'right'; } });
+          y = doc.lastAutoTable.finalY + 16;
+        });
+        doc.save('analise_' + nomeAba.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_') + '_' + p.de + '_' + p.ate + '.pdf');
+      } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + (e.message || e)); }
+      finally { if(bt){ bt.disabled = false; bt.textContent = 'Baixar PDF'; } }
     }
