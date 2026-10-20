@@ -35,6 +35,11 @@ const linhaFatura = (uid: string, conta: string, periodo: string) => (c: any) =>
   usuario_id: uid, ml_user_id: conta, detail_id: c.detail_id, periodo, dia: String(c.creation_date_time).slice(0, 10), quando: String(c.creation_date_time).slice(0, 19),
   sub_type: String(c.detail_sub_type || ''), valor: (String(c.detail_type) === 'BONUS' ? -1 : 1) * (Number(c.detail_amount) || 0),
   descricao: String(c.transaction_detail || '').slice(0, 200), bonifica: c.charge_bonified_id || null })
+// comissão de afiliados (classe 'afil'): guarda também a venda e o anúncio (vendas_ml_afil), para o Lucro real por anúncio
+const afilDe = (uid: string, conta: string, R: any[], tipos: Map<string, string>) => R.filter(r => r && r.charge_info && tipos.get(String(r.charge_info.detail_sub_type || '')) === 'afil' && /^\d{4}-\d{2}-\d{2}/.test(String(r.charge_info.creation_date_time)))
+  .map(r => { const c = r.charge_info, s0 = Array.isArray(r.sales_info) ? r.sales_info[0] : null, i0 = Array.isArray(r.items_info) ? r.items_info[0] : null
+    return { usuario_id: uid, ml_user_id: conta, detail_id: c.detail_id, order_id: Number((s0 && s0.order_id) || (i0 && i0.order_id)) || null, item_id: i0 && i0.item_id ? String(i0.item_id) : null,
+      dia: String(c.creation_date_time).slice(0, 10), sub_type: String(c.detail_sub_type || ''), valor: (String(c.detail_type) === 'BONUS' ? -1 : 1) * (Number(c.detail_amount) || 0) } })
 const linhaValida = (c: any) => c && c.detail_id && /^\d{4}-\d{2}-\d{2}/.test(String(c.creation_date_time))
 
 Deno.serve(async (req: Request) => {
@@ -162,6 +167,8 @@ Deno.serve(async (req: Request) => {
               const g = await db('ml_fatura_linhas?on_conflict=usuario_id,ml_user_id,detail_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(linhas) })
               if (!g.ok) { info.erro = 'gravação: ' + (await g.text()).slice(0, 160); break }
             }
+            const af = afilDe(uid, conta, R, tipos)
+            if (af.length) await db('vendas_ml_afil?on_conflict=usuario_id,ml_user_id,detail_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(af) })
             p.prox += R.length
             if (!R.length || p.prox >= (Number(d.total) || 0)) p.completo = true
             await db(`ml_fatura_periodos?${pk}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ prox: p.prox, completo: p.completo, lido_em: new Date().toISOString(), ...(p.completo ? { lido_ok: true } : {}) }) })
@@ -185,6 +192,8 @@ Deno.serve(async (req: Request) => {
               const g = await db('ml_fatura_linhas?on_conflict=usuario_id,ml_user_id,detail_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(linhas) })
               if (!g.ok) { info.erro = 'gravação: ' + (await g.text()).slice(0, 160); break }
             }
+            const af = afilDe(uid, conta, R, tipos)
+            if (af.length) await db('vendas_ml_afil?on_conflict=usuario_id,ml_user_id,detail_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(af) })
             prox += R.length
             fim = !R.length || prox >= (Number(d.total) || 0)
             info.linhas = (info.linhas || 0) + linhas.length

@@ -15,17 +15,20 @@
     const gsAnuncio = (l, extra) => `<div class="an-anuncio">${gsFoto(l)}<div class="cp-prod" style="max-width:320px;"><b>${anE(l.titulo || l.item_id)}</b><span>${anE(l.sku || '')}${l.sku ? ' · ' : ''}${anE(l.item_id)}${extra || ''}</span></div></div>`;
 
     async function gsCarregar(chave, conta, p){
-      if(gs.chave !== chave) gs = { chave, lucro: null, ads: null, adsErro: '', degrau: null, rupt: null, filtro: 'todos' };
+      if(gs.chave !== chave) gs = { chave, lucro: null, ads: null, adsErro: '', extras: null, degrau: null, rupt: null, filtro: 'todos' };
       try {
         if(an.aba === 'lucro' && !gs.lucro){
           const sd = await supa.auth.getSession(), s = sd && sd.data && sd.data.session;
-          const [l, a] = await Promise.all([
+          const [l, a, x] = await Promise.all([
             supa.rpc('vendas_ml_lucro_mlb', { p_de: p.de, p_ate: p.ate, p_conta: conta }),
-            an.ads ? Promise.resolve(an.ads) : fetch(SUPA_URL + '/functions/v1/ml-ads', { method: 'POST', headers: { Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ de: p.de, ate: p.ate, conta: conta || undefined }) }).then(x => x.json()).catch(() => ({ error: 'sem conexão com o servidor' }))
+            an.ads ? Promise.resolve(an.ads) : fetch(SUPA_URL + '/functions/v1/ml-ads', { method: 'POST', headers: { Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ de: p.de, ate: p.ate, conta: conta || undefined }) }).then(x => x.json()).catch(() => ({ error: 'sem conexão com o servidor' })),
+            // afiliados e devoluções por anúncio (custos medidos por venda; o que só daria para estimar fica de fora)
+            supa.rpc('vendas_ml_lucro_extras', { p_de: p.de, p_ate: p.ate, p_conta: conta })
           ]);
           if(gs.chave !== chave) return;
           if(l.error) throw l.error;
           gs.lucro = l.data || []; if(a.error){ gs.adsErro = a.error; gs.ads = { anuncios: [] }; } else gs.ads = a;
+          gs.extras = x && !x.error ? (x.data || []) : [];
         }
         if(an.aba === 'degrau' && !gs.degrau){
           if(typeof frTabela === 'function') await frTabela();
@@ -43,16 +46,21 @@
     // ---------- lucro real por anúncio ----------
     function gsLucroLinhas(){
       const inv = new Map(); ((gs.ads && gs.ads.anuncios) || []).forEach(a => inv.set(a.item_id, { v: (inv.get(a.item_id) || { v: 0 }).v + (Number(a.investimento) || 0), foto: a.foto, titulo: a.titulo }));
-      const L = (gs.lucro || []).map(r => { const a = inv.get(r.item_id) || { v: 0 }; inv.delete(r.item_id); return { ...r, bruto: Number(r.bruto), mc: Number(r.mc), ads: a.v, foto: a.foto, lucro: Number(r.mc) - a.v }; });
-      // anúncio com gasto de publicidade e nenhuma venda no período
-      inv.forEach((a, id) => { if(a.v > 0) L.push({ item_id: id, titulo: a.titulo, foto: a.foto, un: 0, vendas: 0, bruto: 0, mc: 0, sem_custo: 0, canceladas: 0, canc_bruto: 0, ads: a.v, lucro: -a.v }); });
-      L.forEach(l => { l.pct = l.bruto > 0 ? l.lucro / l.bruto * 100 : (l.lucro < 0 ? -999 : 0); l.mcPct = l.bruto > 0 ? l.mc / l.bruto * 100 : 0; l.cancPct = (Number(l.vendas) + Number(l.canceladas)) > 0 ? l.canceladas / (Number(l.vendas) + Number(l.canceladas)) * 100 : 0; });
-      return L.filter(l => l.bruto > 0 || l.ads > 0);
+      const ext = new Map(); (gs.extras || []).forEach(x => { const e = ext.get(x.item_id) || { afil: 0, dev: 0 }; e.afil += Number(x.afil) || 0; e.dev += Number(x.dev) || 0; ext.set(x.item_id, e); });
+      const L = (gs.lucro || []).map(r => { const a = inv.get(r.item_id) || { v: 0 }, x = ext.get(r.item_id) || { afil: 0, dev: 0 }; inv.delete(r.item_id); ext.delete(r.item_id);
+        return { ...r, bruto: Number(r.bruto), mc: Number(r.mc), ads: a.v, afil: x.afil, dev: x.dev, foto: a.foto, lucro: Number(r.mc) - a.v - x.afil - x.dev }; });
+      // anúncio com gasto (publicidade, afiliados ou devolução) e nenhuma venda no período
+      inv.forEach((a, id) => { if(a.v > 0){ const x = ext.get(id) || { afil: 0, dev: 0 }; ext.delete(id); L.push({ item_id: id, titulo: a.titulo, foto: a.foto, un: 0, vendas: 0, bruto: 0, mc: 0, sem_custo: 0, canceladas: 0, canc_bruto: 0, ads: a.v, afil: x.afil, dev: x.dev, lucro: -a.v - x.afil - x.dev }); } });
+      ext.forEach((x, id) => { if(x.afil || x.dev) L.push({ item_id: id, titulo: id, un: 0, vendas: 0, bruto: 0, mc: 0, sem_custo: 0, canceladas: 0, canc_bruto: 0, ads: 0, afil: x.afil, dev: x.dev, lucro: -x.afil - x.dev }); });
+      L.forEach(l => { const pc = v => l.bruto > 0 ? v / l.bruto * 100 : 0; l.pct = l.bruto > 0 ? l.lucro / l.bruto * 100 : (l.lucro < 0 ? -999 : 0); l.mcPct = pc(l.mc); l.tacos = pc(l.ads); l.afilPct = pc(l.afil); l.devPct = pc(l.dev);
+        l.cancPct = (Number(l.vendas) + Number(l.canceladas)) > 0 ? l.canceladas / (Number(l.vendas) + Number(l.canceladas)) * 100 : 0; });
+      return L.filter(l => l.bruto > 0 || l.ads > 0 || l.afil || l.dev);
     }
     function gsLucro(){
       if(gs.erro && !gs.lucro) return anVazio('Não consegui calcular: ' + anE(gs.erro));
       if(!gs.lucro) return anVazio('Calculando o lucro por anúncio e lendo a publicidade no Mercado Livre…');
-      const min = gsMin(), L = gsLucroLinhas(), T = L.reduce((s, l) => { s.b += l.bruto; s.mc += l.mc; s.ads += l.ads; return s; }, { b: 0, mc: 0, ads: 0 });
+      const min = gsMin(), L = gsLucroLinhas(), T = L.reduce((s, l) => { s.b += l.bruto; s.mc += l.mc; s.ads += l.ads; s.afil += l.afil || 0; s.dev += l.dev || 0; return s; }, { b: 0, mc: 0, ads: 0, afil: 0, dev: 0 });
+      const T_luc = T.mc - T.ads - T.afil - T.dev;
       const prej = L.filter(l => l.lucro < 0), abaixo = L.filter(l => l.lucro >= 0 && l.pct < min);
       try { localStorage.setItem('mk_lucro_alerta', JSON.stringify({ em: Date.now(), prej: prej.length, abaixo: abaixo.length, min, perda: prej.reduce((s, l) => s - l.lucro, 0) })); } catch(e){}
       const vis = gs.filtro === 'prej' ? prej : gs.filtro === 'abaixo' ? abaixo : L;
@@ -60,8 +68,9 @@
       return `
         <div class="kpi-grid k4i">
           ${anKpi('k-venda', 'Margem das vendas', fmt(T.mc), anP(T.mc, T.b) + ' de ' + fmt(T.b) + ' vendidos')}
-          ${anKpi('k-atraso', 'Publicidade', fmt(T.ads), anP(T.ads, T.b, 2) + ' do faturamento')}
-          ${anKpi('k-mc', 'Lucro depois da publicidade', fmt(T.mc - T.ads), anP(T.mc - T.ads, T.b) + ' do faturamento')}
+          ${anKpi('k-atraso', 'Publicidade (TACOS)', fmt(T.ads), anP(T.ads, T.b, 2) + ' do faturamento')}
+          ${anKpi('k-frete', 'Afiliados e devoluções', fmt(T.afil + T.dev), 'afiliados ' + fmt(T.afil) + ' · devoluções ' + fmt(T.dev))}
+          ${anKpi('k-mc', 'Lucro real', fmt(T_luc), anP(T_luc, T.b) + ' do faturamento')}
           ${anKpi('k-hoje', 'Anúncios para olhar', (prej.length + abaixo.length).toLocaleString('pt-BR'), prej.length + ' no prejuízo · ' + abaixo.length + ' abaixo de ' + anN(min, min % 1 ? 1 : 0) + '%')}
         </div>
         ${gs.adsErro ? `<div class="alert alert-warning">Não consegui ler a publicidade (${anE(gs.adsErro)}). Os números abaixo estão sem o desconto do ADS.</div>` : ''}
@@ -72,12 +81,14 @@
           { k: 'titulo', t: 'Anúncio', fmt: l => gsAnuncio(l, Number(l.sem_custo) > 0 ? ' · <span class="text-danger" title="Há vendas deste anúncio sem custo cadastrado: a margem está maior do que a real">sem custo em ' + l.sem_custo + ' vendas</span>' : '') },
           { k: 'un', t: 'Un.', num: 1, fmt: l => anN(l.un) }, { k: 'bruto', t: 'Vendido', num: 1, fmt: l => fmt(l.bruto) },
           { k: 'mc', t: 'Margem', num: 1, fmt: l => fmt(l.mc) + ' <small class="text-muted">' + anN(l.mcPct, 1) + '%</small>' },
-          { k: 'ads', t: 'Publicidade', num: 1, fmt: l => l.ads ? fmt(l.ads) : '<span class="text-muted">—</span>' },
+          { k: 'ads', t: 'Publicidade', num: 1, fmt: l => l.ads ? fmt(l.ads) + ' <small class="text-muted" title="TACOS: publicidade sobre o faturamento do anúncio">' + anN(l.tacos, 1) + '%</small>' : '<span class="text-muted">—</span>' },
+          { k: 'afil', t: 'Afiliados', num: 1, fmt: l => l.afil ? fmt(l.afil) + ' <small class="text-muted">' + anN(l.afilPct, 1) + '%</small>' : '<span class="text-muted">—</span>' },
+          { k: 'dev', t: 'Devoluções', num: 1, fmt: l => l.dev ? fmt(l.dev) + ' <small class="text-muted">' + anN(l.devPct, 1) + '%</small>' : '<span class="text-muted">—</span>' },
           { k: 'lucro', t: 'Lucro', num: 1, fmt: l => `<b style="color:${cor(l)}">${fmt(l.lucro)}</b>` },
           { k: 'pct', t: '% do vendido', num: 1, fmt: l => `<b style="color:${cor(l)}">${l.pct <= -999 ? 'sem venda' : anN(l.pct, 1) + '%'}</b>` },
           { k: 'cancPct', t: 'Canceladas', num: 1, fmt: l => Number(l.canceladas) ? anN(l.canceladas) + ' <small class="text-muted">' + anN(l.cancPct, 1) + '%</small>' : '<span class="text-muted">—</span>' }
         ], 'lucro')}
-        <div class="text-muted" style="font-size:12px;padding:12px 18px;">Margem = venda menos tarifa, frete, imposto e custo do produto. Lucro = margem menos o que o anúncio gastou em publicidade no período. Armazenagem do Full e devoluções não estão aqui: aparecem na Conciliação.</div></div>`;
+        <div class="text-muted" style="font-size:12px;padding:12px 18px;">Margem = venda menos tarifa, frete, imposto e custo do produto. Lucro = margem − publicidade − comissão de afiliados − devoluções (tarifa de devolução e frete de ida das vendas canceladas), pelo dia da cobrança. O % pequeno é sobre o faturamento do anúncio (na publicidade, é o TACOS). Armazenagem, coleta e retirada do Full ficam de fora: o Mercado Livre não informa por produto.</div></div>`;
     }
 
     // ---------- degrau do frete ----------
