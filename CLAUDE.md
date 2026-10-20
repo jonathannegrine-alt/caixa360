@@ -242,6 +242,12 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   (loja = ml_user_id, vazio = padrão). Casa contas a pagar (p.forn) e ordens (olist_ordens.fornecedor) pelo nome, razão
   social, fantasia ou apelidos (fnChave: sem acento, pontuação e LTDA/ME/EPP). CNPJ: BrasilAPI (/api/cnpj/v1) + IE pela
   publica.cnpj.ws (3/min), chamadas do navegador. Junta Comercial não tem consulta pública.
+- NOTAS RECEBIDAS (src/nfe.js + função nfe, cron nfe-dist 4x/dia): Distribuição de DF-e da SEFAZ (Ambiente Nacional,
+  SOAP 1.2, TLS com o certificado A1 do cliente via Deno.createHttpClient com http2:false — o AN recusa HTTP/2).
+  Certificado por loja em nfe_certificados, .pfx e senha cifrados com AES-GCM (secret NFE_CERT_KEY); a tabela não tem
+  política para authenticated (tela usa a RPC nfe_certificados_meus). nfe_dist guarda ult_nsu e esperar_ate (cStat 137
+  ou ultNSU = maxNSU → esperar 1 h; consultar antes dá 656). Notas em nfe_recebidas; XML completo em Storage nfe/.
+  Só consulta. Ciência da operação (evento 210210, XML assinado) e importar a compra ficam para a etapa seguinte.
 - FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
 - ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).

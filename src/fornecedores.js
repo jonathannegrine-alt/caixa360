@@ -265,7 +265,7 @@
       const r = e.id ? await supa.from('fornecedores').update(reg).eq('id', e.id) : await supa.from('fornecedores').insert(reg);
       if(r.error){ alert('Não consegui salvar: ' + r.error.message); if(bt){ bt.disabled = false; bt.textContent = 'Salvar'; } return; }
       fecharModal('modal-vml'); if(typeof toast === 'function') toast('Fornecedor salvo.');
-      await fnLer(true); fnDesenhar();
+      await fnLer(true); fnDesenhar(); if(typeof nfeDesenhar === 'function') nfeDesenhar();
     }
     async function fnExcluir(id){
       const f = fn.lista.find(x => x.id === id); if(!f) return;

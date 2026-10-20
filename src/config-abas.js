@@ -7,6 +7,7 @@
       ['fin',    'Financeiro',     ['parâmetros financeiros', 'categorias de despesa', 'olist']],
       ['estoque','Estoque',        ['motor de reposição', 'reposição']],
       ['dados',  'Dados',          ['backup', 'importar xls', 'tiny']],
+      ['nfe',    'Notas fiscais',  ['notas fiscais']],
       ['ia',     'IA',             ['conectar sua ia']],
       ['conta',  'Conta',          ['minha conta', 'feedbacks', 'zona de perigo']],
     ];
