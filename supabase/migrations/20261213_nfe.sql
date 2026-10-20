@@ -79,3 +79,7 @@ select cron.schedule('nfe-dist', '13 10,14,18,22 * * *', replace((select command
 insert into storage.buckets (id, name, public) values ('nfe', 'nfe', false) on conflict (id) do nothing;
 
 select 1 ok;
+
+-- a função nfe grava com service_role: sem este grant dava 42501 ao guardar o certificado
+grant select, insert, update, delete on public.nfe_certificados, public.nfe_dist, public.nfe_recebidas, public.fornecedores to service_role;
+

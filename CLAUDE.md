@@ -282,6 +282,8 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
 - ml-webhook também trata: items (ml_itens_base.situacao/estoque/preco), fbm_stock_operations (aviso 'full'),
   orders_feedback (aviso 'avaliacao' só para nota negativa ou neutra).
 - Outras funções novas: ml-ads (anúncios pagos), ml-envios também grava vendas_ml.uf (estado do comprador).
+- TABELA NOVA gravada por função de borda: dar `grant select, insert, update, delete ... to service_role` na migration.
+  Neste projeto o service_role não recebe acesso sozinho (deu 42501 em vendas_fotos e em nfe_certificados).
 - VÁRIAS CONTAS ML POR USUÁRIO: ml_tokens tem PK (usuario_id, ml_user_id). Todo PATCH/DELETE em ml_tokens e toda
   gravação em liberacoes/extrato_historico/snapshots_ml/vendas_ml/vendas_ml_dias precisa do ml_user_id.
 - Custo por venda: vendas_ml.custo_unit/imposto_pct ficam gravados (RPC vendas_ml_carimbar); mudar o cadastro
