@@ -109,10 +109,11 @@
     function ocCriarSku(k){
       ocCriarLer(); const i = ocNova.itens[k]; if(!i || !i.sku) return;
       // nome digitado no campo SKU (tem espaço e não é um SKU conhecido): acha pelo nome ou passa o texto para o Item
-      if(/\s/.test(i.sku) && !(window._ocProds || []).some(p => ocN(p.sku) === ocN(i.sku))){
+      // (SKU novo, que não bate com nenhum nome, continua como SKU)
+      if(!(window._ocProds || []).some(p => ocN(p.sku) === ocN(i.sku))){
         const achou = ocAcharProd(i.sku);
         if(achou.length === 1){ i.sku = achou[0].sku; i.desc = achou[0].nome; }
-        else { if(!i.desc) i.desc = i.sku; i.sku = ''; ocCriarDesenhar(); return; }
+        else if(achou.length > 1 || /\s/.test(i.sku)){ if(!i.desc) i.desc = i.sku; i.sku = ''; ocCriarDesenhar(); toast(achou.length > 1 ? achou.length + ' produtos com essas palavras: escolha na lista ou digite também a cor.' : 'Nenhum produto com esse nome: o item fica sem SKU para vincular depois.'); return; }
       }
       const nome = ocNomeProduto(i.sku), preco = ocUltimoPreco().get(ocN(i.sku)) || Number((skus.find(s => ocN(s.sku) === ocN(i.sku)) || {}).custo) || 0;
       if(nome && !i.desc) i.desc = nome;
@@ -130,10 +131,23 @@
     function ocCriarNome(k){
       ocCriarLer(); const i = ocNova.itens[k]; if(!i || i.sku || !i.desc) return;
       const achou = ocAcharProd(i.desc);
-      if(achou.length !== 1) return;
+      if(achou.length !== 1){ ocCriarDesenhar(); if(achou.length > 1) toast(achou.length + ' produtos com essas palavras: escolha na lista ou digite também a cor.'); return; }
       i.sku = achou[0].sku; i.desc = achou[0].nome;
       const preco = ocUltimoPreco().get(ocN(i.sku)) || Number((skus.find(s => ocN(s.sku) === ocN(i.sku)) || {}).custo) || 0;
       if(preco && !ocNum(i.valor)) i.valor = fmtMoney(preco);
+      ocCriarDesenhar();
+    }
+    // valor de uma parcela alterado: as parcelas que o usuário não mexeu dividem o que falta para o total da ordem
+    // (a última fica com a sobra dos centavos). As alteradas ficam guardadas em ocNova.parcFixas até gerar de novo.
+    function ocParcAjustar(k){
+      ocCriarLer(); const P = ocNova.parcelas, fix = new Set((ocNova.parcFixas || []).concat(k));
+      ocNova.parcFixas = [...fix];
+      const livres = P.map((p, i) => i).filter(i => !fix.has(i));
+      if(livres.length){
+        const resto = ocR2(ocTotais().geral - P.reduce((s, p, i) => s + (fix.has(i) ? Number(p.val) || 0 : 0), 0));
+        if(resto >= 0){ const v = Math.floor(resto / livres.length * 100) / 100; livres.forEach((i, n) => { P[i].val = n === livres.length - 1 ? ocR2(resto - v * (livres.length - 1)) : v; }); }
+        else toast('As parcelas alteradas já passam do total da ordem.');
+      }
       ocCriarDesenhar();
     }
     function ocCriarTotal(){
@@ -157,6 +171,7 @@
       });
       if(!datas.length){ toast('Escreva a condição: prazos em dias (30 60), número de parcelas (3x) ou os dois (15 +2x). Para pagamento à vista use 0.'); return; }
       const v = Math.floor(t.geral / datas.length * 100) / 100;
+      ocNova.parcFixas = [];
       ocNova.parcelas = datas.map((d, i) => ({ data: d, val: i === datas.length - 1 ? ocR2(t.geral - v * (datas.length - 1)) : v }));
       ocCriarDesenhar();
     }
@@ -228,7 +243,7 @@
         </div>
         <div class="text-muted" style="font-size:12px;margin-top:4px;">Prazos em dias a contar da data da compra (30 60), número de parcelas mensais (3x) ou os dois (15 +2x). Depois de gerar, altere datas e valores à vontade.${typeof olist !== 'undefined' && olist.conectado ? ' Se esta compra também for lançada no Olist, deixe "Lançar no Contas a pagar" desmarcado para não duplicar.' : ''}</div>
         ${n.parcelas.length ? `<div class="pf-tab"><table><thead><tr><th>#</th><th>Vencimento</th><th style="text-align:right;">Valor</th><th></th></tr></thead><tbody>
-          ${n.parcelas.map((p, k) => `<tr class="ocn-parc"><td>${k + 1}/${n.parcelas.length}</td><td><input type="date" class="ocn-pd" value="${p.data}"></td><td style="text-align:right;"><input class="ocn-pv money-input" value="${fmtMoney(Number(p.val) || 0)}" style="width:120px;text-align:right;" oninput="onMoneyInput(this)" onchange="ocCriarTotal()"></td><td><button type="button" class="ico-btn" onclick="ocCriarLer();ocNova.parcelas.splice(${k},1);ocCriarDesenhar()">✕</button></td></tr>`).join('')}
+          ${n.parcelas.map((p, k) => `<tr class="ocn-parc"><td>${k + 1}/${n.parcelas.length}</td><td><input type="date" class="ocn-pd" value="${p.data}"></td><td style="text-align:right;"><input class="ocn-pv money-input" value="${fmtMoney(Number(p.val) || 0)}" style="width:120px;text-align:right;" oninput="onMoneyInput(this)" onchange="ocParcAjustar(${k})"></td><td><button type="button" class="ico-btn" onclick="ocCriarLer();ocNova.parcelas.splice(${k},1);ocNova.parcFixas=[];ocCriarDesenhar()">✕</button></td></tr>`).join('')}
           </tbody><tfoot><tr><td colspan="2">Soma das parcelas</td><td style="text-align:right;" id="ocn-parc-soma" colspan="2"></td></tr></tfoot></table></div>` : ''}
         ${n.id ? (() => { const o = oc.ordens.find(x => Number(x.id) === Number(n.id)); return o ? ocParcelasHtml(o) : ''; })() : ''}
 
