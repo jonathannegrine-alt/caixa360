@@ -118,8 +118,9 @@
             if(d.column.index === 1){ const fo = fotoDe(d.row.index); if(fo){ try { doc.addImage(fo, 'JPEG', d.cell.x + (d.cell.width - 40) / 2, d.cell.y + (d.cell.height - 40) / 2, 40, 40); } catch(err){} } }
             if(d.column.index === P){
               const larg = d.cell.width - 12, cor = varDe(it.sku), nome = it.nome && cor ? doc.setFontSize(8.5) && doc.splitTextToSize(it.nome, larg) : [];
-              const alt = 12 + nome.length * 10.5; let yy = d.cell.y + (d.cell.height - alt) / 2 + 9;
-              doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(28, 31, 42); doc.text(doc.splitTextToSize(cor || it.nome || String(it.sku), larg)[0], d.cell.x + 6, yy);
+              doc.setFont('helvetica', 'bold'); doc.setFontSize(10); const tit = doc.splitTextToSize(cor || it.nome || String(it.sku), larg);
+              const alt = tit.length * 12 + nome.length * 10.5; let yy = d.cell.y + (d.cell.height - alt) / 2 + 9;
+              doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(28, 31, 42); tit.forEach((l, n) => { if(n) yy += 12; doc.text(l, d.cell.x + 6, yy); });
               doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110, 115, 130); nome.forEach(l => { yy += 10.5; doc.text(l, d.cell.x + 6, yy); });
             }
           },
