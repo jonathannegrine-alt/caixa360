@@ -283,6 +283,9 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   hist_orcar/hist_pedir conta os pedidos em orders/search paging.total; preço reprocesso_valor = R$ preco_mil por 1.000, mínimo),
   bloqueado até admin_reprocesso_decidir (Administração → Histórico pago), que recua historico_desde. Código novo que busca
   histórico no ML precisa respeitar historico_desde.
+- VENDA PAGA DIAS DEPOIS (pagamento recusado e refeito): ml-vendas busca pelo dia da CRIAÇÃO e só refaz hoje/ontem. ml-webhook
+  (orders_v2) lê o pedido e, se foi criado antes de ontem e não está gravado com o mesmo status, chama ml-vendas { cron, conta,
+  dias:[dia] }; o cron também relê 1 dia de D-2 a D-10 sincronizado há mais de 6 h (diasRevisar). Caso real: fatura Flex 43624.
 - ml-sonda: função só para o administrador que faz GET na API do ML e devolve um resumo (estudo de endpoints).
 - mercado_resumo: resumo por mês e produto com a conta trocada por número (estudo de sazonalidade; só administração).
 - ml-opinioes: /reviews/item/{id} só responde com o token da conta dona do anúncio (403 com outra); ?rating=N

@@ -36,6 +36,27 @@ async function sincronizar(conta: string) {
   }).catch(() => null)
 }
 
+// venda de um dia já fechado (criada antes de ontem e paga agora, ou mudou depois): relê o dia da criação dela.
+// A sincronização normal só refaz hoje e ontem; sem isto, venda com pagamento aprovado dias depois ficava de fora.
+const diaVisto = new Map<string, number>()
+async function vendaAntiga(conta: string, recurso: string) {
+  const m = recurso.match(/\/orders\/(\d{10,20})/); if (!m) return
+  const { supaUrl, dbH, toks } = await tokens(conta); if (!toks.length) return
+  const r = await fetch(`https://api.mercadolibre.com/orders/${m[1]}`, { headers: { Authorization: `Bearer ${toks[0].access_token}` } }).catch(() => null)
+  if (!r || !r.ok) return
+  const o: any = await r.json().catch(() => null); if (!o || !o.date_created || o.status === 'payment_required') return
+  const dia = new Date(new Date(o.date_created).getTime() - 3 * 3600000).toISOString().substring(0, 10)
+  const ontem = new Date(Date.now() - 27 * 3600000).toISOString().substring(0, 10)
+  if (dia >= ontem) return
+  // já gravada com o mesmo status: nada a fazer
+  const tem = await fetch(`${supaUrl}/rest/v1/vendas_ml?ml_user_id=eq.${conta}&order_id=eq.${m[1]}&select=status&limit=1`, { headers: dbH }).then(x => x.json()).catch(() => [])
+  if (Array.isArray(tem) && tem[0] && tem[0].status === o.status) return
+  const k = conta + '|' + dia; if (Date.now() - (diaVisto.get(k) || 0) < 60000) return
+  diaVisto.set(k, Date.now())
+  await fetch(`${supaUrl}/functions/v1/ml-vendas`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cron: true, secret: Deno.env.get('CRON_SECRET') || '', conta, dias: [dia] }) }).catch(() => null)
+}
+
 // reclamação nova: aciona o Pós-venda na hora para os donos da conta que ligaram a automação (a função pos-venda
 // confere de novo e ignora se rodou há menos de 5 minutos). Quem não ligou continua só com o aviso.
 async function posVendaJa(conta: string) {
@@ -132,6 +153,7 @@ Deno.serve(async (req) => {
         ultimo.set(conta, agora)
         EdgeRuntime.waitUntil(sincronizar(conta))
       }
+      if (topico === 'orders_v2') EdgeRuntime.waitUntil(vendaAntiga(conta, String(b?.resource || '')))
     }
     else if ((topico === 'questions' || topico === 'messages') && /^\d{4,20}$/.test(conta)) {
       EdgeRuntime.waitUntil(avisar(conta, topico, String(b?.resource || '')))

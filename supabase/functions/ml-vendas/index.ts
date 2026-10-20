@@ -270,6 +270,15 @@ async function diasPendentes(ctx: Ctx, userId: string, conta: string, de: string
   return lista
 }
 
+// Dias já fechados (D-2 a D-10) relidos há mais de 6 h. Venda criada num dia e paga dias depois (pagamento
+// recusado e refeito) só aparece na busca depois de paga, e a busca é pelo dia da criação: sem esta revisão ela não entrava.
+async function diasRevisar(ctx: Ctx, userId: string, conta: string) {
+  const de = diaBRT(-10), ate = diaBRT(-2)
+  const rows = await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&dia=gte.${de}&dia=lte.${ate}&select=dia,sincronizado_em&order=sincronizado_em.asc&limit=20`, { headers: ctx.dbH })
+    .then(r => r.json()).catch(() => [])
+  return (Array.isArray(rows) ? rows : []).filter((r: any) => Date.now() - new Date(r.sincronizado_em).getTime() > 6 * 3600000).map((r: any) => String(r.dia).substring(0, 10))
+}
+
 async function sincronizarLista(ctx: Ctx, userId: string, conta: Conta, dias: string[], prazoMs: number): Promise<any> {
   if (!conta.accessToken) return { error: conta.erro || 'Conta sem token' }
   let feitos = 0, vendas = 0, pendentes = 0
@@ -307,6 +316,8 @@ Deno.serve(async (req) => {
       const tokens = await fetch(`${supaUrl}/rest/v1/ml_tokens?select=usuario_id,ml_user_id`, { headers: ctx.dbH }).then(r => r.json())
       // { conta, recentes: true } = chamada do ml-webhook: só hoje/ontem daquela conta, sem mexer no histórico
       const soConta = body?.conta ? String(body.conta) : null, soRecentes = body?.recentes === true
+      // { conta, dias: ['AAAA-MM-DD'] } = ml-webhook avisou de venda criada num dia já fechado (paga depois): relê esse dia
+      const diasPedidos: string[] = soConta && Array.isArray(body?.dias) ? body.dias.map((d: unknown) => String(d)).filter((d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= diaBRT(-HISTORICO_DIAS) && d <= diaBRT()).slice(0, 3) : []
       const pares: { u: string; c: string }[] = (Array.isArray(tokens) ? tokens.map((t: any) => ({ u: t.usuario_id, c: String(t.ml_user_id) })) : [])
         .filter(x => !soConta || x.c === soConta)
       // Uma conta por vez e poucos dias de histórico por execução: com várias contas em paralelo importando
@@ -320,8 +331,10 @@ Deno.serve(async (req) => {
           if (!conta) { resultados.push({ usuario_id: u, ml_user_id: c, error: 'conta não encontrada' }); continue }
           // hoje/ontem (se o cache venceu) + o próximo trecho do histórico ainda não importado
           const recentes = await diasPendentes(ctx, u, c, diaBRT(-1), diaBRT(), false, soRecentes ? 20 * 1000 : 10 * 60 * 1000)
+          if (diasPedidos.length) { const r = await sincronizarLista(ctx, u, conta, diasPedidos, prazoMs); resultados.push({ usuario_id: u, ml_user_id: c, dias: diasPedidos, ...r }); continue }
           const antigos = soRecentes ? [] : await diasPendentes(ctx, u, c, inicioDe(conta), diaBRT(-2), false)
-          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos.slice(0, DIAS_HIST_POR_VEZ)], prazoMs)
+          const revisar = soRecentes ? [] : (await diasRevisar(ctx, u, c)).filter(d => !antigos.includes(d)).slice(0, 1)
+          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos.slice(0, DIAS_HIST_POR_VEZ), ...revisar], prazoMs)
           resultados.push({ usuario_id: u, ml_user_id: c, ...r })
         } catch (e) {
           resultados.push({ usuario_id: u, ml_user_id: c, error: String(e) })
