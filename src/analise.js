@@ -432,7 +432,7 @@
             didParseCell: d => { const el = d.cell.raw;
               // texto como aparece na tela (SKU e nome em linhas separadas), sem setas de ordenação e sem quebrar o R$ do valor
               if(el && el.innerText != null) d.cell.text = el.innerText.split('\n').map(x => x.replace(/[▾▴]/g, '').trim()).filter(Boolean).map(x => x.replace(/R\$ /g, 'R$\u00A0'));
-              if(el && el.classList && el.classList.contains('num')) d.cell.styles.halign = 'right'; } });
+              if(el && el.classList && el.classList.contains('num')){ d.cell.styles.halign = 'right'; d.cell.styles.minCellWidth = 64; } } });
           y = doc.lastAutoTable.finalY + 16;
         });
         doc.save('analise_' + nomeAba.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_') + '_' + p.de + '_' + p.ate + '.pdf');
