@@ -253,6 +253,9 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   https://nfe-proxy-979020764791.southamerica-east1.run.app; secrets NFE_PROXY_URL/NFE_PROXY_CHAVE no Supabase e
   PROXY_CHAVE no Secret Manager). Deploy: gcloud run deploy nfe-proxy --source servicos/nfe-proxy --region
   southamerica-east1 (gcloud em %LOCALAPPDATA%\Google\Cloud SDK). Orçamento com alerta de R$ 5 na conta de faturamento.
+  O .pfx é convertido em PEM na função nfe (node-forge abre .pfx antigos RC2/3DES que o OpenSSL 3 recusa). cUFAutor vem de
+  nfe_certificados.uf (UF do CNPJ pela BrasilAPI). Cron nfe-dist 1x/dia (07:13) + nfe-dist-continua a cada 10 min só
+  enquanto ult_nsu < max_nsu (CNPJ grande tem ~1.200 eventos/dia; a 1ª carga da MK tinha ~106 mil documentos).
 - FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
 - ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).

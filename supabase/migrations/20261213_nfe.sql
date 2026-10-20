@@ -83,3 +83,13 @@ select 1 ok;
 -- a função nfe grava com service_role: sem este grant dava 42501 ao guardar o certificado
 grant select, insert, update, delete on public.nfe_certificados, public.nfe_dist, public.nfe_recebidas, public.fornecedores to service_role;
 
+
+-- UF (código IBGE) do CNPJ de cada certificado: a Distribuição pede cUFAutor
+alter table public.nfe_certificados add column if not exists uf text;
+-- 1 consulta por dia (07:13 de Brasília); a mesma execução repete enquanto houver mais de 50 documentos
+select cron.alter_job((select jobid from cron.job where jobname='nfe-dist'), schedule := '13 10 * * *');
+
+
+-- continuação: a cada 10 min, só enquanto algum CNPJ tiver fila (ult_nsu < max_nsu) e a SEFAZ não pediu espera
+select cron.schedule('nfe-dist-continua', '*/10 * * * *', 'select case when exists (select 1 from public.nfe_dist where max_nsu is not null and ult_nsu < max_nsu and (esperar_ate is null or esperar_ate < now())) then (' || rtrim(replace((select command from cron.job where jobname = 'nfe-dist'), 'SELECT ', 'select '), ';') || ') end');
+

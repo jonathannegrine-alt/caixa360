@@ -2,8 +2,9 @@
 // Por que existe: a SEFAZ só pede o certificado do cliente DEPOIS de abrir a conexão (renegociação TLS), e o servidor
 // de funções do Supabase (Deno/rustls) não aceita renegociação. O Node (OpenSSL) aceita.
 //
-// O que faz: recebe { url, acao, xml, pfx (base64), senha }, faz o POST SOAP 1.2 com o certificado e devolve
+// O que faz: recebe { url, acao, xml, cert, key } (PEM; ou pfx em base64 + senha), faz o POST SOAP 1.2 com o certificado e devolve
 // { status, corpo }. Não guarda nada e não grava log do conteúdo. Só aceita endereços *.fazenda.gov.br.
+// O Caixa 360 manda cert/key já em PEM: .pfx antigo (RC2/3DES) não abre no OpenSSL 3 do Node ("Unsupported PKCS12").
 // Acesso: cabeçalho x-chave igual ao segredo PROXY_CHAVE (Secret Manager do Google; a mesma chave fica no Supabase).
 const http = require('http'), https = require('https'), crypto = require('crypto');
 
@@ -16,16 +17,19 @@ function igual(a, b){
 }
 function responder(res, status, obj){ res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); }
 
-function soap({ url, acao, xml, pfx, senha }){
+function soap({ url, acao, xml, pfx, senha, cert, key }){
   return new Promise((ok) => {
     const u = new URL(url);
-    const req = https.request({
+    const cred = cert && key ? { cert, key } : { pfx: Buffer.from(pfx, 'base64'), passphrase: senha };
+    let req;
+    try { req = https.request({
       method: 'POST', hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search,
-      pfx: Buffer.from(pfx, 'base64'), passphrase: senha,
+      ...cred,
       maxVersion: 'TLSv1.2',          // a renegociação (pedido do certificado) só existe até o TLS 1.2
       timeout: 45000,
       headers: { 'Content-Type': 'application/soap+xml; charset=utf-8' + (acao ? '; action="' + acao + '"' : ''), 'Content-Length': Buffer.byteLength(xml) },
-    }, (r) => { const partes = []; r.on('data', p => partes.push(p)); r.on('end', () => ok({ status: r.statusCode, corpo: Buffer.concat(partes).toString('utf8') })); });
+    }, (r) => { const partes = []; r.on('data', p => partes.push(p)); r.on('end', () => ok({ status: r.statusCode, corpo: Buffer.concat(partes).toString('utf8') })); }); }
+    catch(e){ return ok({ status: 0, erro: 'certificado: ' + String(e && e.message || e).slice(0, 200) }); }
     req.on('timeout', () => req.destroy(new Error('tempo esgotado falando com a SEFAZ')));
     req.on('error', (e) => ok({ status: 0, erro: String(e && e.message || e).slice(0, 300) }));
     req.end(xml);
@@ -43,7 +47,7 @@ http.createServer((req, res) => {
     let b; try { b = JSON.parse(Buffer.concat(partes).toString('utf8')); } catch { return responder(res, 400, { erro: 'JSON inválido' }); }
     let host = ''; try { host = new URL(String(b.url || '')).hostname; } catch {}
     if(!/^https:/.test(String(b.url || '')) || !/(^|\.)fazenda\.gov\.br$/.test(host)) return responder(res, 400, { erro: 'endereço não permitido' });
-    if(!b.xml || !b.pfx) return responder(res, 400, { erro: 'faltou xml ou certificado' });
-    responder(res, 200, await soap({ url: String(b.url), acao: b.acao ? String(b.acao) : '', xml: String(b.xml), pfx: String(b.pfx), senha: String(b.senha || '') }));
+    if(!b.xml || !(b.pfx || (b.cert && b.key))) return responder(res, 400, { erro: 'faltou xml ou certificado' });
+    responder(res, 200, await soap({ url: String(b.url), acao: b.acao ? String(b.acao) : '', xml: String(b.xml), pfx: String(b.pfx || ''), senha: String(b.senha || ''), cert: b.cert ? String(b.cert) : '', key: b.key ? String(b.key) : '' }));
   });
-}).listen(Number(process.env.PORT) || 8080);
+}).on('clientError', (e, s) => { try { s.end('HTTP/1.1 400 Bad Request\r\n\r\n'); } catch {} }).listen(Number(process.env.PORT) || 8080);
