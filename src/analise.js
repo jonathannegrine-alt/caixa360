@@ -104,14 +104,14 @@
     function anAba(a){ an.aba = a; an.busca = ''; if(typeof gs !== 'undefined') gs.filtro = 'todos'; anRender(); }
     function anDias(d){ an.dias = d; an.de = ''; an.ate = ''; anRender(); }
     function anOrdenar(col){ const o = an.ord[an.aba] || {}; an.ord[an.aba] = { col, desc: o.col === col ? !o.desc : true }; anDesenhar(); }
-    // tabela ordenável: cols = [{ k, t, num, fmt(linha), val(linha) }]
-    function anTabela(linhas, cols, padrao){
+    // tabela ordenável: cols = [{ k, t, num, fmt(linha), val(linha) }]; clique(linha) = onclick da linha (opcional)
+    function anTabela(linhas, cols, padrao, clique){
       const o = an.ord[an.aba] || { col: padrao, desc: true };
       const c = cols.find(x => x.k === o.col) || cols[0];
       const val = l => c.val ? c.val(l) : l[c.k];
       const ord = linhas.slice().sort((a, b) => { const x = val(a), y = val(b); const r = typeof x === 'string' || typeof y === 'string' ? String(x || '').localeCompare(String(y || '')) : (Number(x) || 0) - (Number(y) || 0); return o.desc ? -r : r; });
       return `<div style="overflow-x:auto;"><table class="cp-tab an-tab"><thead><tr>${cols.map(x => `<th class="${x.num ? 'num' : ''} an-th" onclick="anOrdenar('${x.k}')">${x.t}${o.col === x.k ? (o.desc ? ' ▾' : ' ▴') : ''}</th>`).join('')}</tr></thead><tbody>
-        ${ord.length ? ord.map(l => `<tr>${cols.map(x => `<td class="${x.num ? 'num' : ''}">${x.fmt ? x.fmt(l) : anE(l[x.k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="text-muted" style="text-align:center;padding:22px;">Nada no período.</td></tr>`}
+        ${ord.length ? ord.map(l => `<tr${clique ? ' style="cursor:pointer;" title="Ver as vendas" onclick="' + clique(l) + '"' : ''}>${cols.map(x => `<td class="${x.num ? 'num' : ''}">${x.fmt ? x.fmt(l) : anE(l[x.k])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="text-muted" style="text-align:center;padding:22px;">Nada no período.</td></tr>`}
       </tbody></table></div>`;
     }
     const anKpi = (cls, rot, val, sub) => `<div class="kpi ${cls}"><div class="kpi-label">${rot}</div><div class="kpi-value">${val}</div><div class="kpi-sub">${sub || ''}</div></div>`;
@@ -248,7 +248,7 @@
           { k: 'pedidos', t: 'Pedidos', num: 1, fmt: l => anN(l.pedidos) }, { k: 'un', t: 'Unidades', num: 1, fmt: l => anN(l.un) },
           { k: 'bruto', t: 'Faturamento', num: 1, fmt: l => '<b>' + fmt(l.bruto) + '</b>' },
           { k: 'primeira', t: 'Primeira compra', fmt: l => ptDate(String(l.primeira).slice(0, 10)) }, { k: 'ultima', t: 'Última compra', fmt: l => ptDate(String(l.ultima).slice(0, 10)) }
-        ], 'pedidos')}</div>`;
+        ], 'pedidos', l => "anComprador('" + anE(String(l.comprador_id || '')).replace(/'/g, '&#39;') + "')")}</div>`;
     }
 
     function anCompExtras(top){
@@ -438,4 +438,26 @@
         doc.save('analise_' + nomeAba.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_') + '_' + p.de + '_' + p.ate + '.pdf');
       } catch(e){ if(typeof toast === 'function') toast('Não consegui gerar o PDF: ' + (e.message || e)); }
       finally { if(bt){ bt.disabled = false; bt.textContent = 'Baixar PDF'; } }
+    }
+
+    // vendas de um comprador (clique na linha em Compradores): todas as compras dele, da mais nova para a mais antiga
+    async function anComprador(id){
+      if(!id) return;
+      vmlModal('Compras do cliente', '<div class="vazio"><b>Carregando…</b></div>');
+      const r = await supa.from('vendas_ml_calc').select('order_txt,pack_txt,data_venda,situacao,titulo,sku,variacao,qtd,bruto,mc,mc_pct,thumbnail,comprador_apelido,comprador_nome,ml_user_id,envio')
+        .eq('usuario_id', usuarioAtual.id).eq('comprador_id', id).order('data_venda', { ascending: false }).limit(500);
+      if(r.error){ vmlModal('Compras do cliente', '<div class="alert alert-danger">' + anE(r.error.message) + '</div>'); return; }
+      const L = r.data || [], c = L[0] || {}, ok = L.filter(v => !/cancel/i.test(String(v.situacao || ''))), p = anPeriodo();
+      const tot = ok.reduce((s, v) => s + (Number(v.bruto) || 0), 0), un = ok.reduce((s, v) => s + (Number(v.qtd) || 0), 0), noPer = ok.filter(v => String(v.data_venda).slice(0, 10) >= p.de && String(v.data_venda).slice(0, 10) <= p.ate).length;
+      const pedidos = new Set(ok.map(v => v.pack_txt || v.order_txt)).size;
+      vmlModal('Compras de ' + anE(c.comprador_apelido || id), `
+        <div class="text-muted" style="margin-bottom:10px;">${c.comprador_nome ? anE(c.comprador_nome) + ' · ' : ''}${pedidos} pedido${pedidos === 1 ? '' : 's'} · ${anN(un)} unidade${un === 1 ? '' : 's'} · <b>${fmt(tot)}</b> no total${noPer ? ' · ' + noPer + ' no período da análise' : ''}${L.length - ok.length ? ' · ' + (L.length - ok.length) + ' cancelada' + (L.length - ok.length === 1 ? '' : 's') : ''}</div>
+        <div style="overflow-x:auto;max-height:56vh;"><table class="cp-tab"><thead><tr><th>Data</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Valor</th><th class="num">Margem</th><th>Situação</th><th>Venda</th></tr></thead><tbody>
+          ${L.map(v => `<tr><td style="white-space:nowrap;">${new Date(v.data_venda).toLocaleDateString('pt-BR')}</td>
+            <td class="cp-prod">${typeof fotoLinha === 'function' ? fotoLinha(v.sku, '<b>' + anE(v.sku || '') + '</b><span>' + anE(v.titulo || '') + (v.variacao ? ' · ' + anE(v.variacao) : '') + '</span>') : anE(v.titulo || '')}</td>
+            <td class="num">${anN(v.qtd)}</td><td class="num"><b>${fmt(Number(v.bruto) || 0)}</b></td>
+            <td class="num">${v.mc == null ? '—' : fmt(Number(v.mc)) + '<div class="cp-sub">' + anN(Number(v.mc_pct) || 0, 1) + '%</div>'}</td>
+            <td>${anE(v.situacao || '')}</td><td style="font-size:12px;">${anE(v.pack_txt || v.order_txt || '')}</td></tr>`).join('') || '<tr><td colspan="7" class="text-muted">Nenhuma venda.</td></tr>'}
+        </tbody></table></div>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '980px';
     }

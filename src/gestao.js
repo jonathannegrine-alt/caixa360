@@ -81,6 +81,14 @@
     }
 
     // ---------- degrau do frete ----------
+    // custo de uma unidade do anúncio: cadastro do produto (ou custo médio do galpão); kit = soma dos componentes
+    function gsCustoUn(sku){
+      const n = x => String(x || '').trim().toLowerCase(), um = k => { const s = (typeof skus !== 'undefined' ? skus : []).find(x => n(x.sku) === k), e = (typeof estoqueGalpao !== 'undefined' ? estoqueGalpao : []).find(x => n(x.sku) === k);
+        return (s && Number(s.custo) > 0 ? Number(s.custo) : 0) || (e && Number(e.custo_medio) > 0 ? Number(e.custo_medio) : 0); };
+      const comps = typeof esoAbrir === 'function' ? esoAbrir(sku, 1) : [{ sku, qtd: 1 }];
+      let t = 0; for(const c of comps){ const v = um(n(c.sku)); if(!v) return null; t += v * (Number(c.qtd) || 1); }
+      return t || null;
+    }
     function gsDegrauLinhas(){
       const t = typeof fr !== 'undefined' && fr.tab ? fr.tab[frVersaoHoje()] : null; if(!t) return null;
       const out = [];
@@ -90,10 +98,14 @@
         const novoFrete = t.v[linha][faixa - 1], novoPreco = GS_DEGRAUS[faixa - 1] - 0.01, baixa = preco - novoPreco;
         if(novoFrete == null || !(novoFrete < frete)) return;
         const fica = 1 - (Number(r.tarifa_pct) || 0) / 100 - (Number(r.imposto_pct) || 0) / 100, ganho = (frete - novoFrete) - baixa * fica;
-        out.push({ ...r, preco, frete, novoPreco, novoFrete, baixa, ganho, mes: ganho * Number(r.un30 || 0), un30: Number(r.un30 || 0) });
+        // margem de contribuição por venda nos dois preços: preço − tarifa − imposto − frete − custo
+        const custo = gsCustoUn(r.sku), mcHoje = custo == null ? null : preco * fica - frete - custo, mcNovo = custo == null ? null : novoPreco * fica - novoFrete - custo;
+        out.push({ ...r, preco, frete, novoPreco, novoFrete, baixa, ganho, mes: ganho * Number(r.un30 || 0), un30: Number(r.un30 || 0), custo, mcHoje, mcNovo,
+          pctHoje: mcHoje == null ? null : mcHoje / preco * 100, pctNovo: mcNovo == null ? null : mcNovo / novoPreco * 100 });
       });
       return out;
     }
+    const gsPct = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
     function gsDegrau(){
       if(gs.erro && !gs.degrau) return anVazio('Não consegui calcular: ' + anE(gs.erro));
       if(!gs.degrau) return anVazio('Lendo os preços e fretes das últimas vendas…');
@@ -114,11 +126,13 @@
           { k: 'preco', t: 'Preço de venda', num: 1, fmt: l => fmt(l.preco) }, { k: 'frete', t: 'Frete hoje', num: 1, fmt: l => fmt(l.frete) },
           { k: 'novoPreco', t: 'Baixando para', num: 1, fmt: l => '<b>' + fmt(l.novoPreco) + '</b> <small class="text-muted">-' + fmt(l.baixa) + '</small>' },
           { k: 'novoFrete', t: 'Frete passa a', num: 1, fmt: l => fmt(l.novoFrete) + ' <small class="text-muted">-' + fmt(l.frete - l.novoFrete) + '</small>' },
+          { k: 'pctNovo', t: 'Margem de contribuição', num: 1, val: l => l.pctNovo == null ? -999 : l.pctNovo, fmt: l => l.pctHoje == null ? '<span class="text-muted" title="Produto sem custo no cadastro">sem custo</span>'
+              : `${gsPct(l.pctHoje)} → <b style="color:${l.pctNovo >= l.pctHoje ? 'var(--success,#16a34a)' : 'var(--danger)'}">${gsPct(l.pctNovo)}</b><br><small class="text-muted">${fmt(l.mcHoje)} → ${fmt(l.mcNovo)} por venda</small>` },
           { k: 'ganho', t: 'Sobra por venda', num: 1, fmt: l => `<b style="color:${l.ganho > 0 ? 'var(--success,#16a34a)' : 'var(--danger)'}">${fmt(l.ganho)}</b>` },
           { k: 'un30', t: 'Un. em 30 dias', num: 1, fmt: l => anN(l.un30) },
           { k: 'mes', t: 'Por mês', num: 1, fmt: l => `<b style="color:${l.mes > 0 ? 'var(--success,#16a34a)' : 'var(--danger)'}">${fmt(l.mes)}</b>` }
         ], 'mes')}
-        <div class="text-muted" style="font-size:12px;padding:12px 18px;">O frete é definido pela faixa do preço de venda (R$ 19, 49, 79, 100, 120, 150 e 200). "Preço de venda" e "Frete hoje" são os que mais se repetiram nas vendas de 1 unidade dos últimos 14 dias. "Sobra por venda" = o que o frete cai menos o que você deixa de receber ao baixar o preço, já descontando tarifa e imposto. O preço de venda é o que o comprador paga: se o anúncio está em promoção, o ajuste é no preço da promoção.</div></div>`;
+        <div class="text-muted" style="font-size:12px;padding:12px 18px;">O frete é definido pela faixa do preço de venda (R$ 19, 49, 79, 100, 120, 150 e 200). "Preço de venda" e "Frete hoje" são os que mais se repetiram nas vendas de 1 unidade dos últimos 14 dias. "Sobra por venda" = o que o frete cai menos o que você deixa de receber ao baixar o preço, já descontando tarifa e imposto. "Margem de contribuição" = preço − tarifa − imposto − frete − custo do produto, no preço de hoje → no preço baixando. O preço de venda é o que o comprador paga: se o anúncio está em promoção, o ajuste é no preço da promoção.</div></div>`;
     }
 
     // ---------- venda perdida ----------
