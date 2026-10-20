@@ -248,6 +248,11 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   política para authenticated (tela usa a RPC nfe_certificados_meus). nfe_dist guarda ult_nsu e esperar_ate (cStat 137
   ou ultNSU = maxNSU → esperar 1 h; consultar antes dá 656). Notas em nfe_recebidas; XML completo em Storage nfe/.
   Só consulta. Ciência da operação (evento 210210, XML assinado) e importar a compra ficam para a etapa seguinte.
+  A SEFAZ pede o certificado por RENEGOCIAÇÃO TLS e o Deno/rustls do Supabase não aceita (conexão derrubada): o POST
+  vai pelo intermediário servicos/nfe-proxy (Node 24, Google Cloud Run, projeto caixa360-nfe, região southamerica-east1,
+  https://nfe-proxy-979020764791.southamerica-east1.run.app; secrets NFE_PROXY_URL/NFE_PROXY_CHAVE no Supabase e
+  PROXY_CHAVE no Secret Manager). Deploy: gcloud run deploy nfe-proxy --source servicos/nfe-proxy --region
+  southamerica-east1 (gcloud em %LOCALAPPDATA%\Google\Cloud SDK). Orçamento com alerta de R$ 5 na conta de faturamento.
 - FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
 - ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).

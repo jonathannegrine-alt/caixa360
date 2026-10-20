@@ -6,8 +6,11 @@
 //               { acao: 'consultar' }                              consulta agora (respeita a espera da SEFAZ)
 //   cron        { cron: true, secret }                             consulta todos os CNPJs (4 vezes por dia)
 //
-// Certificado: .pfx e senha cifrados com AES-GCM (chave NFE_CERT_KEY, só aqui). A conexão com a SEFAZ usa TLS com o
-// certificado do cliente (Deno.createHttpClient, HTTP/1.1: o Ambiente Nacional recusa HTTP/2).
+// Certificado: .pfx e senha cifrados com AES-GCM (chave NFE_CERT_KEY, só aqui).
+// Conexão: a SEFAZ pede o certificado do cliente por RENEGOCIAÇÃO TLS (depois de abrir a conexão), e o Deno/rustls
+// daqui não aceita renegociação (conexão derrubada). Por isso o POST vai pelo intermediário nfe-proxy (Node no Google
+// Cloud Run, servicos/nfe-proxy), com o certificado decifrado só na hora e a chave NFE_PROXY_CHAVE. Sem NFE_PROXY_URL
+// configurado, tenta direto (Deno.createHttpClient), o que só serve se a SEFAZ um dia deixar de renegociar.
 // Regras da SEFAZ (NT 2014.002): pede-se "tudo depois do último NSU", 50 documentos por vez, últimos 90 dias. Quando
 // não há mais nada (cStat 137 ou ultNSU = maxNSU) é preciso esperar 1 hora; consultar antes dá 656 (consumo indevido).
 // Documentos: resNFe (resumo, sem Ciência), procNFe (nota completa, depois da Ciência), resEvento/procEventoNFe
@@ -137,16 +140,31 @@ Deno.serve(async (req: Request) => {
         let [dist] = await db(`nfe_dist?usuario_id=eq.${usuario}&cnpj=eq.${cnpj}&select=*`).then(r => r.json())
         if (!dist) dist = { ult_nsu: '000000000000000' }
         if (dist.esperar_ate && Date.parse(dist.esperar_ate) > Date.now()) return { ...info, espera: dist.esperar_ate }
-        const c = lerPfx(await decifrar(cert.pfx), new TextDecoder().decode(await decifrar(cert.senha)))
-        const client = clienteTls(c.certPem, c.keyPem)
+        const pfxBytes = await decifrar(cert.pfx), senhaTxt = new TextDecoder().decode(await decifrar(cert.senha))
+        const proxy = Deno.env.get('NFE_PROXY_URL'), proxyChave = Deno.env.get('NFE_PROXY_CHAVE') || ''
+        const client = proxy ? null : (() => { const c = lerPfx(pfxBytes, senhaTxt); return clienteTls(c.certPem, c.keyPem) })()
+        const pfxB64 = proxy ? b64(pfxBytes) : ''
+        const ACAO_DIST = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse'
+        // POST SOAP: pelo intermediário (padrão) ou direto
+        const postar = async (xml: string) => {
+          if (proxy) {
+            const r = await fetch(proxy.replace(/\/$/, '') + '/soap', { method: 'POST', signal: AbortSignal.timeout(55000), headers: { 'Content-Type': 'application/json', 'x-chave': proxyChave },
+              body: JSON.stringify({ url: URL_DIST, acao: ACAO_DIST, xml, pfx: pfxB64, senha: senhaTxt }) })
+            const j = await r.json().catch(() => ({}))
+            if (!r.ok) return { ok: false, status: r.status, txt: 'intermediário: ' + (j.erro || r.status) }
+            if (j.erro) return { ok: false, status: 0, txt: j.erro }
+            return { ok: j.status >= 200 && j.status < 300, status: j.status, txt: String(j.corpo || '') }
+          }
+          const r = await fetch(URL_DIST, { method: 'POST', client, signal: AbortSignal.timeout(40000), body: xml,
+            headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="' + ACAO_DIST + '"' } } as any)
+          return { ok: r.ok, status: r.status, txt: await r.text() }
+        }
         let ult = String(dist.ult_nsu || '0'), max = String(dist.max_nsu || ''), esperar: string | null = null, status = ''
         try {
           while (info.chamadas < MAX_CHAMADAS) {
             info.chamadas++
-            const r = await fetch(URL_DIST, { method: 'POST', client, signal: AbortSignal.timeout(40000), body: envelope(cnpj, ult),
-              headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"' } } as any)
-            const txt = await r.text()
-            if (!r.ok) { status = 'http ' + r.status + ': ' + txt.slice(0, 160); break }
+            const r = await postar(envelope(cnpj, ult)), txt = r.txt
+            if (!r.ok) { status = 'http ' + r.status + ': ' + txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 160); break }
             const ret = tag(txt, 'retDistDFeInt'), cStat = tag(ret, 'cStat'), xMotivo = tag(ret, 'xMotivo')
             status = cStat + ' ' + xMotivo
             if (cStat === '656') { esperar = new Date(Date.now() + ESPERA).toISOString(); break }
@@ -158,7 +176,7 @@ Deno.serve(async (req: Request) => {
             if (nMax) max = nMax
             if (cStat === '137' || !docs.length || (max && ult >= max)) { esperar = new Date(Date.now() + ESPERA).toISOString(); break }
           }
-        } finally { try { client.close() } catch { /* */ } }
+        } finally { try { client && client.close() } catch { /* */ } }
         await db(`nfe_dist?usuario_id=eq.${usuario}&cnpj=eq.${cnpj}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
           body: JSON.stringify({ ult_nsu: ult, max_nsu: max || null, esperar_ate: esperar, consultado_em: new Date().toISOString(), status: status.slice(0, 200) }) })
         info.status = status; info.ult_nsu = ult; info.max_nsu = max
