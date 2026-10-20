@@ -42,6 +42,7 @@
         return { sku: l.it.sku, nome: l.it.nome || '', forn: l.it.forn || '', qtd: Math.max(0, Math.round(l.sug)) || 0, preco: p ? p.valor : (Number(l.custo) || 0), origem: p ? 'ordem ' + (p.ordem || '') + (p.data ? ' de ' + ptDate(String(p.data).slice(0, 10)) : '') : (l.custo ? 'custo cadastrado (sem ordem de compra)' : 'sem preço') };
       }).sort((a, b) => a.forn.localeCompare(b.forn) || a.sku.localeCompare(b.sku));
       if(!clItens.length){ toast('Marque pelo menos um produto na tabela.'); return; }
+      clListaId = null; clListaNome = '';   // lista nova (vinda das marcações), ainda não salva
       comprasListaDesenhar();
     }
     // redesenha a lista sem a tabela voltar ao começo
@@ -49,7 +50,7 @@
     function comprasListaDesenhar(){
       const total = clItens.reduce((s, x) => s + x.qtd * x.preco, 0), un = clItens.reduce((s, x) => s + x.qtd, 0);
       const forns = [...new Set(clItens.map(x => x.forn).filter(Boolean))];
-      vmlModal('Lista de compras', `
+      vmlModal(clListaNome ? 'Lista de compras — ' + clE(clListaNome) : 'Lista de compras', `
         <div class="pf-grid" style="margin-bottom:12px;">
           <label class="pf-c"><span>Título da lista</span><input id="cl-titulo" value="${clE(window._clTitulo || 'Lista de compras')}" oninput="window._clTitulo=this.value"></label>
           <label class="pf-c"><span>Para (opcional)</span><input id="cl-para" value="${clE(window._clPara || (forns.length === 1 ? forns[0] : ''))}" placeholder="Fornecedor ou pessoa" oninput="window._clPara=this.value"></label>
@@ -63,7 +64,7 @@
             <td style="text-align:right;white-space:nowrap;">${fmt(x.qtd * x.preco)}</td>
             <td><button class="ico-btn" title="Tirar da lista" onclick="clItens.splice(${i}, 1); clRedesenhar()">✕</button></td></tr>`).join('')}
         </tbody><tfoot><tr><td colspan="2">${clItens.length} produtos</td><td style="text-align:right;"><b>${un.toLocaleString('pt-BR')}</b></td><td></td><td style="text-align:right;"><b>${fmt(total)}</b></td><td></td></tr></tfoot></table></div>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn-out btn" onclick="comprasListaPlanilha()">Baixar planilha</button><button class="btn-out btn" title="Abre uma ordem de compra nova com estes itens" onclick="comprasListaOrdem()">Criar ordem de compra</button><button class="btn" onclick="comprasListaPdf(this)">Baixar PDF</button>`);
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn-out btn" onclick="clSalvar(this)">${clListaId ? 'Salvar lista' : 'Salvar lista'}</button><button class="btn-out btn" onclick="comprasListaPlanilha()">Baixar planilha</button><button class="btn-out btn" title="Abre uma ordem de compra nova com estes itens" onclick="comprasListaOrdem()">Criar ordem de compra</button><button class="btn" onclick="comprasListaPdf(this)">Baixar PDF</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
     }
 
@@ -125,4 +126,50 @@
       if(typeof ocCriar !== 'function') return;
       ocCriar(itens);
       if(forns.length === 1){ ocNova.fornecedor = forns[0]; ocCriarDesenhar(); }
+    }
+
+    // ---------- listas salvas (tabela listas_compra) ----------
+    // "Salvar lista" grava os itens e os campos do PDF; a lista aberta (clListaId) é atualizada por cima.
+    // Sugestão de compras → "Listas salvas" abre, gera PDF/ordem ou exclui.
+    let clListaId = null, clListaNome = '';
+    async function clSalvar(bt){
+      const titulo = (document.getElementById('cl-titulo') || {}).value || '', para = (document.getElementById('cl-para') || {}).value || '', obs = (document.getElementById('cl-obs') || {}).value || '';
+      let nome = clListaNome;
+      if(!clListaId){
+        const sug = (para ? para + ' · ' : '') + ptDate(getToday());
+        nome = prompt('Nome da lista:', sug); if(!nome || !nome.trim()) return; nome = nome.trim();
+      }
+      if(bt){ bt.disabled = true; bt.textContent = 'Salvando…'; }
+      const reg = { usuario_id: usuarioAtual.id, nome, itens: clItens, titulo: titulo || null, para: para || null, obs: obs || null, atualizado_em: new Date().toISOString() };
+      const r = clListaId ? await supa.from('listas_compra').update(reg).eq('id', clListaId).select().single() : await supa.from('listas_compra').insert(reg).select().single();
+      if(bt){ bt.disabled = false; bt.textContent = 'Salvar lista'; }
+      if(r.error){ alert('Não consegui salvar a lista: ' + r.error.message); return; }
+      clListaId = r.data.id; clListaNome = nome; clRedesenhar();
+      if(typeof toast === 'function') toast('Lista "' + nome + '" salva.');
+    }
+    async function clListasAbrir(){
+      const r = await supa.from('listas_compra').select('*').eq('usuario_id', usuarioAtual.id).order('atualizado_em', { ascending: false });
+      if(r.error){ alert('Não consegui ler as listas: ' + r.error.message); return; }
+      const L = r.data || [];
+      window._clListas = L;
+      vmlModal('Listas de compra salvas', L.length ? `<div class="pf-tab" style="max-height:56vh;"><table><thead><tr><th>Lista</th><th>Para</th><th style="text-align:right;">Produtos</th><th style="text-align:right;">Unidades</th><th style="text-align:right;">Total</th><th>Salva em</th><th></th></tr></thead><tbody>
+        ${L.map(x => { const it = x.itens || [], un = it.reduce((s, i) => s + (Number(i.qtd) || 0), 0), tot = it.reduce((s, i) => s + (Number(i.qtd) || 0) * (Number(i.preco) || 0), 0);
+          return `<tr><td><b>${clE(x.nome)}</b></td><td>${clE(x.para || '—')}</td><td style="text-align:right;">${it.length}</td><td style="text-align:right;">${un.toLocaleString('pt-BR')}</td><td style="text-align:right;">${fmt(tot)}</td><td>${new Date(x.atualizado_em).toLocaleDateString('pt-BR')}</td>
+            <td style="text-align:right;white-space:nowrap;"><button class="btn btn-sm" onclick="clListaAbrir(${x.id})">Abrir</button> <button class="btn-out btn-sm" style="color:var(--danger);" onclick="clListaExcluir(${x.id})">Excluir</button></td></tr>`; }).join('')}
+      </tbody></table></div>` : '<div class="vazio"><b>Nenhuma lista salva</b>Marque produtos na Sugestão de compras, gere a lista e clique em "Salvar lista".</div>');
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
+    }
+    function clListaAbrir(id){
+      const x = (window._clListas || []).find(z => z.id === id); if(!x) return;
+      clItens = JSON.parse(JSON.stringify(x.itens || [])); clListaId = x.id; clListaNome = x.nome;
+      window._clTitulo = x.titulo || ''; window._clPara = x.para || ''; window._clObs = x.obs || '';
+      comprasListaDesenhar();
+    }
+    async function clListaExcluir(id){
+      const x = (window._clListas || []).find(z => z.id === id); if(!x) return;
+      if(!confirm('Excluir a lista "' + x.nome + '"?')) return;
+      const r = await supa.from('listas_compra').delete().eq('id', id);
+      if(r.error){ alert('Não consegui excluir: ' + r.error.message); return; }
+      if(clListaId === id){ clListaId = null; clListaNome = ''; }
+      clListasAbrir();
     }

@@ -315,6 +315,7 @@
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
             <button class="btn-out btn-sm" onclick="comprasAtualizar(this)">Atualizar vendas</button>
             <button class="btn-out btn-sm" onclick="comprasParametros()">Regras de compra</button>
+            <button class="btn-out btn-sm" onclick="clListasAbrir()">Listas salvas</button>
             <button class="btn btn-sm" onclick="comprasExportar()">Exportar planilha</button>
           </div>
         </div>
