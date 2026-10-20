@@ -53,6 +53,7 @@
       else if(page === 'promocoes'){ if(typeof pmRender === 'function') pmRender(); }
       else if(page === 'emprestimos'){ if(typeof renderEmprestimos === 'function') renderEmprestimos(); }
       else if(page === 'patrimonio'){ renderPatrimonio(); if(typeof renderBalanco === 'function') renderBalanco(); }
+      else if(page === 'fornecedores'){ if(typeof fnRender === 'function') fnRender(); }
       else if(page === 'ordens-compra'){ if(typeof ocRender === 'function') ocRender(); else renderOrdensCompra(); }
       else if(page === 'vendas') renderVendas();
       else if(page === 'resumo-fin') renderResumoFin();

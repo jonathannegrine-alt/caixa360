@@ -238,6 +238,10 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   qualquer ordem pode ser editada (ocEditar). Ordem do Olist editada ganha extra.editada e excluída ganha extra.excluida (não
   sai do banco); olist-compras pula as duas ao sincronizar. Lista com busca, caixas de marcar e ações em lote (PDF uma ordem
   por página, planilha, excluir). Com ordens guardadas a tela funciona sem o Olist (ocGuardadas).
+- FORNECEDORES (src/fornecedores.js, página 'fornecedores' no grupo Compras, tabela fornecedores): cadastro por loja
+  (loja = ml_user_id, vazio = padrão). Casa contas a pagar (p.forn) e ordens (olist_ordens.fornecedor) pelo nome, razão
+  social, fantasia ou apelidos (fnChave: sem acento, pontuação e LTDA/ME/EPP). CNPJ: BrasilAPI (/api/cnpj/v1) + IE pela
+  publica.cnpj.ws (3/min), chamadas do navegador. Junta Comercial não tem consulta pública.
 - FOTO EM TABELA: toda lista de produto usa fotoLinha(sku, html) / fotoCel(sku) de src/estoque.js (busca e preenche a foto sozinha).
 - ÚLTIMO ACESSO (admin): maior entre login, auth.sessions e assinaturas.ultimo_acesso (gravado por assinatura_acesso ao abrir).
 - assinaturas.valor_combinado = valor negociado (vale no lugar do calculado); crédito de IA pré-pago = pos_venda_cfg.credito, recarga por admin_ia_recarga (histórico em ia_recargas).
