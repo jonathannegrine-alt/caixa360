@@ -93,3 +93,8 @@ select cron.alter_job((select jobid from cron.job where jobname='nfe-dist'), sch
 -- continuação: a cada 10 min, só enquanto algum CNPJ tiver fila (ult_nsu < max_nsu) e a SEFAZ não pediu espera
 select cron.schedule('nfe-dist-continua', '*/10 * * * *', 'select case when exists (select 1 from public.nfe_dist where max_nsu is not null and ult_nsu < max_nsu and (esperar_ate is null or esperar_ate < now())) then (' || rtrim(replace((select command from cron.job where jobname = 'nfe-dist'), 'SELECT ', 'select '), ';') || ') end');
 
+
+-- o usuário lê (baixa) o XML das próprias notas: nfe/<usuario>/<chave>.xml.gz
+drop policy if exists nfe_xml_ler on storage.objects;
+create policy nfe_xml_ler on storage.objects for select to authenticated using (bucket_id = 'nfe' and (storage.foldername(name))[1] = auth.uid()::text);
+
