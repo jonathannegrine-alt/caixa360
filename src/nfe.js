@@ -208,7 +208,7 @@
         const campo = (x, y, w, h, tit, val, opt) => { doc.setDrawColor(0); doc.setLineWidth(0.5); doc.rect(x, y, w, h);
           doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(60); doc.text(tit.toUpperCase(), x + 3, y + 8);
           doc.setFont('helvetica', opt && opt.bold ? 'bold' : 'normal'); doc.setFontSize((opt && opt.tam) || 8.5); doc.setTextColor(0);
-          const l = doc.splitTextToSize(String(val || ''), w - 6); doc.text(l.slice(0, (opt && opt.linhas) || 2), opt && opt.dir ? x + w - 3 : x + 3, y + 18, opt && opt.dir ? { align: 'right' } : undefined); };
+          const l = doc.splitTextToSize(String(val || ''), w - 6); doc.text(l.slice(0, (opt && opt.linhas) || 2), opt && opt.dir ? x + w - 3 : x + 3, y + 18, Object.assign({ lineHeightFactor: 1.1 }, opt && opt.dir ? { align: 'right' } : {})); };
         let y = M;
         // emitente + identificação
         doc.rect(M, y, W * 0.55, 78); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(doc.splitTextToSize(q(emit, 'xNome'), W * 0.55 - 10).slice(0, 2), M + 5, y + 16);
@@ -225,7 +225,7 @@
         // destinatário
         doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text('DESTINATÁRIO', M, y + 7); y += 10;
         campo(M, y, W * 0.6, 26, 'Nome / razão social', dest ? q(dest, 'xNome') : ''); campo(M + W * 0.6, y, W * 0.22, 26, 'CNPJ / CPF', dest ? doc_(q(dest, 'CNPJ') || q(dest, 'CPF')) : ''); campo(M + W * 0.82, y, W * 0.18, 26, 'Emissão', new Date(q(ide, 'dhEmi')).toLocaleDateString('pt-BR')); y += 28;
-        campo(M, y, W * 0.82, 26, 'Endereço', end(ed)); campo(M + W * 0.82, y, W * 0.18, 26, 'IE', dest ? q(dest, 'IE') : ''); y += 30;
+        campo(M, y, W * 0.82, 36, 'Endereço', end(ed), { tam: 8 }); campo(M + W * 0.82, y, W * 0.18, 36, 'IE', dest ? q(dest, 'IE') : ''); y += 40;
         // duplicatas
         const dups = [...inf.getElementsByTagName('dup')];
         if(dups.length){ doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text('FATURA / DUPLICATAS', M, y + 7); y += 10;
