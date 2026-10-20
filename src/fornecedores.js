@@ -6,8 +6,11 @@
 // Nomes que aparecem nas contas/ordens e ainda não têm cadastro ficam numa lista à parte, para cadastrar ou juntar.
 // CNPJ: consulta pública da Receita pela BrasilAPI (razão social, situação, endereço, CNAE, sócios, capital…) e a
 // inscrição estadual pela publica.cnpj.ws (limite de 3 consultas por minuto; se falhar, o resto continua).
+// Grupo: vários CNPJs do mesmo fornecedor (ex.: QX Flores) somam juntos com "Agrupar por grupo"; a ficha do grupo junta
+// contas, ordens e produtos de todos. Fator da nota (fator_nf): custo real = valor na nota × fator, para fornecedor que
+// emite a nota abaixo do valor pago (usado ao importar a compra pela nota).
 
-    let fn = { lista: [], ordens: [], lidoEm: 0, busca: '', aba: 'cadastrados', ed: null };
+    let fn = { lista: [], ordens: [], lidoEm: 0, busca: '', aba: 'cadastrados', ed: null, agrupar: true };
     const fnEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     // chave para casar nomes: minúsculo, sem acento, sem pontuação e sem o tipo da empresa no fim
     const fnChave = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ')
@@ -74,7 +77,7 @@
     function fnDesenhar(){
       const el = document.getElementById('view-fornecedores'); if(!el || !el.classList.contains('active')) return;
       const R = fnResumo(), q = fnChave(fn.busca), vez = fnLojaVez();
-      const filtra = x => !q || fnChave([x.nome, x.razao_social, x.fantasia, x.cnpj, ...(x.apelidos || [])].join(' ')).includes(q) || fnDig(x.cnpj).includes(fnDig(fn.busca) || '#');
+      const filtra = x => !q || fnChave([x.nome, x.grupo, x.razao_social, x.fantasia, x.cnpj, ...(x.apelidos || [])].join(' ')).includes(q) || fnDig(x.cnpj).includes(fnDig(fn.busca) || '#');
       const lin = R.linhas.filter(r => filtra(r.f)).sort((a, b) => (b.pago12 + b.aberto) - (a.pago12 + a.aberto) || String(a.f.nome).localeCompare(String(b.f.nome)));
       const sem = R.sem.filter(s => !q || fnChave(s.nome).includes(q));
       const tot = k => lin.reduce((s, r) => s + r[k], 0);
@@ -91,18 +94,36 @@
         </div>
         <div class="card"><div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
           <div class="chips"><button class="chip ${fn.aba === 'cadastrados' ? 'active' : ''}" onclick="fn.aba='cadastrados';fnDesenhar()">Cadastrados<span class="n">${lin.length}</span></button><button class="chip ${fn.aba === 'sem' ? 'active' : ''}" onclick="fn.aba='sem';fnDesenhar()">Sem cadastro<span class="n">${sem.length}</span></button></div>
-          <input type="search" id="fn-busca" placeholder="Buscar por nome ou CNPJ" value="${fnEsc(fn.busca)}" oninput="fnBuscar(this.value)" style="max-width:280px;">
+          <input type="search" id="fn-busca" placeholder="Buscar por nome, grupo ou CNPJ" value="${fnEsc(fn.busca)}" oninput="fnBuscar(this.value)" style="max-width:280px;">
+          ${fn.aba === 'cadastrados' ? `<label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;"><input type="checkbox" ${fn.agrupar ? 'checked' : ''} onchange="fn.agrupar=this.checked;fnDesenhar()"> Agrupar por grupo</label>` : ''}
         </div></div>
         <div class="card"><div style="overflow-x:auto;">${fn.aba === 'sem' ? fnTabelaSem(sem) : fnTabela(lin)}</div></div>`;
     }
     let fnBuscaT = null;
     function fnBuscar(v){ fn.busca = v; clearTimeout(fnBuscaT); fnBuscaT = setTimeout(() => { fnDesenhar(); const i = document.getElementById('fn-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); }
 
+    // várias linhas (CNPJs de um grupo) viram uma só, com os totais somados
+    function fnJuntarLinhas(L){
+      return { f: L[0].f, membros: L, pago12: L.reduce((s, r) => s + r.pago12, 0), aberto: L.reduce((s, r) => s + r.aberto, 0), vencido: L.reduce((s, r) => s + r.vencido, 0),
+        contas: L.flatMap(r => r.contas), ordens: L.flatMap(r => r.ordens), ultima: L.map(r => r.ultima).sort().pop() || '' };
+    }
     function fnTabela(lin){
       const dt = d => d ? ptDate(String(d).slice(0, 10)) : '—';
+      if(fn.agrupar && lin.length){
+        const g = new Map(), soltos = [];
+        lin.forEach(r => { const k = String(r.f.grupo || '').trim(); if(!k){ soltos.push(r); return; } const c = fnLojaDe(r.f) + '|' + k.toLowerCase(); if(!g.has(c)) g.set(c, []); g.get(c).push(r); });
+        const grupos = [...g.values()].map(fnJuntarLinhas);
+        lin = [...grupos, ...soltos].sort((a, b) => (b.pago12 + b.aberto) - (a.pago12 + a.aberto) || String(a.f.grupo || a.f.nome).localeCompare(String(b.f.grupo || b.f.nome)));
+      }
       if(!lin.length) return '<div class="vazio"><b>Nenhum fornecedor cadastrado' + (fn.busca ? ' com essa busca' : '') + '</b>Use "+ Novo fornecedor" ou a aba "Sem cadastro", que mostra os nomes que já aparecem nas contas e nas ordens.</div>';
       return `<table class="cp-tab"><thead><tr><th>Fornecedor</th><th>CNPJ</th><th>Cidade</th><th>Condição / prazo</th><th class="num">Pago 12 meses</th><th class="num">Em aberto</th><th class="num">Ordens</th><th>Última compra</th><th></th></tr></thead><tbody>
-        ${lin.map(r => { const f = r.f; return `<tr><td class="cp-prod"><a href="#" onclick="event.preventDefault();fnVer(${f.id})"><b>${fnEsc(f.nome)}</b></a>${fnLojaTag(fnLojaDe(f))}<span>${fnEsc(f.razao_social && f.razao_social !== f.nome ? f.razao_social : (f.contato || ''))}</span></td>
+        ${lin.map(r => { const f = r.f;
+          if(r.membros){ const ref = "'g:" + encodeURIComponent(fnLojaDe(f) + '|' + f.grupo).replace(/'/g, '%27') + "'";
+            return `<tr><td class="cp-prod"><a href="#" onclick="event.preventDefault();fnVer(${ref})"><b>${fnEsc(f.grupo)}</b></a>${fnLojaTag(fnLojaDe(f))} <span class="badge badge-info" style="font-size:10.5px;">grupo</span><span>${r.membros.map(m => fnEsc(m.f.nome)).join(' · ')}</span></td>
+              <td>${r.membros.length} CNPJ${r.membros.length === 1 ? '' : 's'}</td><td>${fnEsc([...new Set(r.membros.map(m => [m.f.cidade, m.f.uf].filter(Boolean).join('/')).filter(Boolean))].join(', ')) || '<span class="text-muted">—</span>'}</td><td><span class="text-muted">—</span></td>
+              <td class="num">${fmt(r.pago12)}</td><td class="num ${r.vencido ? 'text-danger' : ''}">${r.aberto ? fmt(r.aberto) : '<span class="text-muted">—</span>'}</td><td class="num">${r.ordens.length || '<span class="text-muted">—</span>'}</td><td>${dt(r.ultima)}</td>
+              <td style="text-align:right;"><button class="btn-out btn-sm" onclick="fnVer(${ref})">Ver</button></td></tr>`; }
+          return `<tr><td class="cp-prod"><a href="#" onclick="event.preventDefault();fnVer(${f.id})"><b>${fnEsc(f.nome)}</b></a>${fnLojaTag(fnLojaDe(f))}${f.grupo ? ' <span class="text-muted" style="font-size:11.5px;">(' + fnEsc(f.grupo) + ')</span>' : ''}<span>${fnEsc(f.razao_social && f.razao_social !== f.nome ? f.razao_social : (f.contato || ''))}</span></td>
           <td style="white-space:nowrap;">${fnEsc(fnCnpjFmt(f.cnpj)) || '<span class="text-muted">—</span>'}${f.situacao && !/ativa/i.test(f.situacao) ? ' <span class="badge badge-warning">' + fnEsc(f.situacao) + '</span>' : ''}</td>
           <td>${fnEsc([f.cidade, f.uf].filter(Boolean).join('/')) || '<span class="text-muted">—</span>'}</td>
           <td>${fnEsc(f.condicao || '')}${f.prazo_dias ? (f.condicao ? ' · ' : '') + f.prazo_dias + ' dias' : ''}${!f.condicao && !f.prazo_dias ? '<span class="text-muted">—</span>' : ''}</td>
@@ -163,6 +184,10 @@
           ${campo('condicao', 'Condição de pagamento', e.condicao, 'placeholder="Ex.: 30/60/90 dias"')}
           ${campo('prazo_dias', 'Prazo de entrega (dias)', e.prazo_dias, 'type="number" min="0"')}
         </div>
+        <div class="pf-grid" style="grid-template-columns:1fr 1fr;">
+          <label class="pf-c"><span>Grupo ${typeof dica === 'function' ? dica('Para fornecedor com vários CNPJs (ex.: QX Flores): dê o mesmo nome de grupo a todos. Na lista, com "Agrupar por grupo", eles somam juntos.', true) : ''}</span><input id="fne-grupo" list="fne-grupos" value="${v(e.grupo)}" placeholder="Ex.: QX Flores"><datalist id="fne-grupos">${[...new Set(fn.lista.map(x => x.grupo).filter(Boolean))].sort().map(x => `<option value="${v(x)}">`).join('')}</datalist></label>
+          <label class="pf-c"><span>Fator da nota ${typeof dica === 'function' ? dica('Quando o fornecedor emite a nota com valor menor do que você paga. O custo real dos produtos é o valor da nota multiplicado por este número (ex.: 2,5). Em branco ou 1 = o valor da nota já é o real. Usado ao importar a compra pela nota.', true) : ''}</span><input id="fne-fator_nf" type="number" min="0" step="0.01" value="${v(e.fator_nf)}" placeholder="1"></label>
+        </div>
         <label class="pf-c"><span>Outros nomes ${typeof dica === 'function' ? dica('Outros jeitos de escrever este fornecedor nas contas a pagar e nas ordens de compra, separados por vírgula. As contas e ordens com esses nomes passam a contar para este cadastro.', true) : ''}</span><input id="fne-apelidos" value="${v((e.apelidos || []).join(', '))}" placeholder="Ex.: Fornecedor X, FORNECEDOR X LTDA"></label>
         <label class="pf-c"><span>Observações</span><input id="fne-obs" value="${v(e.obs)}"></label>
         ${R ? fnReceitaHtml(R, e.receita_em) : ''}`,
@@ -191,6 +216,8 @@
       ['nome', 'razao_social', 'fantasia', 'ie', 'contato', 'telefone', 'email', 'situacao', 'endereco', 'cidade', 'uf', 'cep', 'condicao', 'obs'].forEach(k => { const x = g(k); if(x !== undefined) e[k] = x; });
       const c = g('cnpj'); if(c !== undefined) e.cnpj = fnDig(c);
       const p = g('prazo_dias'); if(p !== undefined) e.prazo_dias = p === '' ? null : Math.max(0, Math.round(Number(p) || 0));
+      const gr = g('grupo'); if(gr !== undefined) e.grupo = gr;
+      const fa = g('fator_nf'); if(fa !== undefined) e.fator_nf = fa === '' || Number(fa) === 1 ? null : (Number(String(fa).replace(',', '.')) > 0 ? Number(String(fa).replace(',', '.')) : null);
       const ap = g('apelidos'); if(ap !== undefined) e.apelidos = [...new Set(ap.split(',').map(x => x.trim()).filter(Boolean))];
       const lj = document.getElementById('fne-loja'); if(lj) e.loja = lj.value === fnLojaPad() ? '' : lj.value;
     }
@@ -232,7 +259,7 @@
       if(cnpj && fn.lista.some(f => f.id !== e.id && fnDig(f.cnpj) === cnpj && (f.loja || null) === loja)){ alert('Já existe um fornecedor com este CNPJ nesta loja.'); return; }
       const reg = { usuario_id: usuarioAtual.id, loja, nome: e.nome, apelidos: e.apelidos || [], cnpj, razao_social: e.razao_social || null, fantasia: e.fantasia || null, ie: e.ie || null,
         situacao: e.situacao || null, contato: e.contato || null, telefone: e.telefone || null, email: e.email || null, endereco: e.endereco || null, cidade: e.cidade || null, uf: e.uf || null,
-        cep: e.cep || null, condicao: e.condicao || null, prazo_dias: e.prazo_dias == null ? null : e.prazo_dias, obs: e.obs || null, receita: e.receita || null, receita_em: e.receita_em || null,
+        cep: e.cep || null, grupo: e.grupo || null, fator_nf: e.fator_nf || null, condicao: e.condicao || null, prazo_dias: e.prazo_dias == null ? null : e.prazo_dias, obs: e.obs || null, receita: e.receita || null, receita_em: e.receita_em || null,
         atualizado_em: new Date().toISOString() };
       if(bt){ bt.disabled = true; bt.textContent = 'Salvando…'; }
       const r = e.id ? await supa.from('fornecedores').update(reg).eq('id', e.id) : await supa.from('fornecedores').insert(reg);
@@ -250,7 +277,10 @@
 
     // ---------- ficha: contas, ordens e produtos ----------
     function fnVer(id, aba){
-      const r = fnResumo().linhas.find(x => x.f.id === id); if(!r) return;
+      const todas = fnResumo().linhas, grp = typeof id === 'string' && id.startsWith('g:') ? decodeURIComponent(id.slice(2)) : null;
+      const r = grp ? (() => { const L = todas.filter(x => x.f.grupo && fnLojaDe(x.f) + '|' + x.f.grupo === grp); return L.length ? fnJuntarLinhas(L) : null; })() : todas.find(x => x.f.id === id);
+      if(!r) return;
+      const ref = grp ? "'g:" + encodeURIComponent(grp).replace(/'/g, '%27') + "'" : id;
       const f = r.f, a = aba || 'contas', dt = d => d ? ptDate(String(d).slice(0, 10)) : '—', hoje = getToday();
       let corpo = '';
       if(a === 'contas'){
@@ -268,16 +298,17 @@
         const L = [...m.values()].sort((x, y) => String(y.data).localeCompare(String(x.data)));
         corpo = L.length ? `<table class="cp-tab"><thead><tr><th>Produto</th><th class="num">Comprado</th><th class="num">Último preço</th><th>Em</th></tr></thead><tbody>${L.map(x => `<tr><td class="cp-prod">${typeof fotoLinha === 'function' ? fotoLinha(x.sku, '<b>' + fnEsc(x.sku) + '</b><span>' + fnEsc(x.desc) + '</span>') : '<b>' + fnEsc(x.sku) + '</b><span>' + fnEsc(x.desc) + '</span>'}</td><td class="num">${x.qtd.toLocaleString('pt-BR')}</td><td class="num">${x.preco ? fmt(x.preco) : '—'}</td><td>${dt(x.data)}</td></tr>`).join('')}</tbody></table>` : '<div class="vazio"><b>Nenhum produto comprado nas ordens</b></div>';
       }
-      const linha = [fnCnpjFmt(f.cnpj), [f.cidade, f.uf].filter(Boolean).join('/'), f.telefone, f.email, f.contato].filter(Boolean).map(fnEsc).join(' · ');
-      vmlModal(fnEsc(f.nome) + fnLojaTag(fnLojaDe(f)), `
-        <div class="text-muted" style="margin-bottom:8px;">${linha || 'Sem dados de contato'}${f.condicao || f.prazo_dias ? '<br>Condição: <b>' + fnEsc(f.condicao || '—') + '</b>' + (f.prazo_dias ? ' · prazo de entrega <b>' + f.prazo_dias + ' dias</b>' : '') : ''}</div>
+      const linha = grp ? r.membros.map(m => '<a href="#" onclick="event.preventDefault();fnVer(' + m.f.id + ')">' + fnEsc(m.f.nome) + '</a>' + (m.f.cnpj ? ' <span class="text-muted">' + fnEsc(fnCnpjFmt(m.f.cnpj)) + '</span>' : '')).join(' · ')
+        : [fnCnpjFmt(f.cnpj), [f.cidade, f.uf].filter(Boolean).join('/'), f.telefone, f.email, f.contato].filter(Boolean).map(fnEsc).join(' · ');
+      vmlModal((grp ? 'Grupo ' + fnEsc(f.grupo) : fnEsc(f.nome)) + fnLojaTag(fnLojaDe(f)), `
+        <div class="text-muted" style="margin-bottom:8px;">${linha || 'Sem dados de contato'}${!grp && f.fator_nf ? '<br>Fator da nota: <b>' + String(f.fator_nf).replace('.', ',') + '</b>' : ''}${!grp && (f.condicao || f.prazo_dias) ? '<br>Condição: <b>' + fnEsc(f.condicao || '—') + '</b>' + (f.prazo_dias ? ' · prazo de entrega <b>' + f.prazo_dias + ' dias</b>' : '') : ''}</div>
         <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));">
           <div class="kpi k-venda"><div class="kpi-label">Pago em 12 meses</div><div class="kpi-value">${fmt(r.pago12)}</div></div>
           <div class="kpi k-hoje"><div class="kpi-label">Em aberto</div><div class="kpi-value">${fmt(r.aberto)}</div></div>
           <div class="kpi k-atraso"><div class="kpi-label">Vencido</div><div class="kpi-value">${fmt(r.vencido)}</div></div>
         </div>
-        <div class="chips" style="margin-bottom:10px;">${[['contas', 'Contas a pagar', r.contas.length], ['ordens', 'Ordens de compra', r.ordens.length], ['produtos', 'Produtos', null]].map(([k, t, n]) => `<button class="chip ${a === k ? 'active' : ''}" onclick="fnVer(${f.id}, '${k}')">${t}${n != null ? '<span class="n">' + n + '</span>' : ''}</button>`).join('')}</div>
+        <div class="chips" style="margin-bottom:10px;">${[['contas', 'Contas a pagar', r.contas.length], ['ordens', 'Ordens de compra', r.ordens.length], ['produtos', 'Produtos', null]].map(([k, t, n]) => `<button class="chip ${a === k ? 'active' : ''}" onclick="fnVer(${ref}, '${k}')">${t}${n != null ? '<span class="n">' + n + '</span>' : ''}</button>`).join('')}</div>
         <div style="overflow-x:auto;max-height:46vh;">${corpo}</div>`,
-        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button><button class="btn" onclick="fnEditar(${f.id})">Editar cadastro</button>`);
+        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${grp ? '' : `<button class="btn" onclick="fnEditar(${f.id})">Editar cadastro</button>`}`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
     }

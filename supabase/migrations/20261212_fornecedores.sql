@@ -35,3 +35,10 @@ create policy fornecedores_dono on public.fornecedores for all to authenticated
 grant select, insert, update, delete on public.fornecedores to authenticated;
 
 select 1 ok;
+
+-- grupo: vários CNPJs do mesmo fornecedor (ex.: QX Flores) somam juntos na lista e na ficha
+alter table public.fornecedores add column if not exists grupo text;
+
+-- fator da nota: custo real = valor na nota × fator (fornecedor que emite a nota abaixo do valor pago)
+alter table public.fornecedores add column if not exists fator_nf numeric;
+
