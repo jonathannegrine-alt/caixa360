@@ -73,7 +73,7 @@
       ocNova = { id: o.id, numero: o.numero, fornecedor: o.fornecedor || '', data: o.data || getToday(), prev: ocPrev(o) || '', nforn: e.nforn || '', desconto: e.desconto ? fmtMoney(e.desconto) : dif < 0 ? fmtMoney(-dif) : '', frete: e.frete ? fmtMoney(e.frete) : dif > 0 ? fmtMoney(dif) : '',
         condicao: e.condicao || '', categoria: e.categoria || '', loja: e.loja || '', lancar: !!e.lancar, transportador: e.transportador || '', fretePor: e.fretePor || '', obs: e.obs || '', obsInterna: e.obsInterna || '',
         parcelas: (e.parcelas || []).map(p => ({ data: p.data, val: p.val })),
-        itens: (o.itens || []).map(i => ({ sku: i.sku, desc: i.descricao || ocNomeProduto(i.sku), qtd: i.qtd, valor: fmtMoney(Number(i.valor) || 0), ipi: i.ipi || '' })) };
+        itens: (o.itens || []).map(i => ({ sku: i.sku, desc: i.descricao || ocNomeProduto(i.sku), qtd: i.qtd, valor: fmtMoney(Number(i.valor) || 0), ipi: i.ipi || '' })), nfe: e.nfe || null };
       if(!ocNova.itens.length) ocNova.itens.push({ sku: '', desc: '', qtd: '', valor: '', ipi: '' });
       ocCriarDesenhar();
     }
@@ -222,7 +222,7 @@
       const itens = n.itens.map(i => ({ sku: i.sku, descricao: i.desc || ocNomeProduto(i.sku), qtd: Number(i.qtd) || 0, valor: ocNum(i.valor), ipi: ocNum(i.ipi) || undefined })).filter(i => i.sku && i.qtd > 0);
       const parcelas = n.parcelas.filter(p => p.data && Number(p.val) > 0);
       return { itens, t, parcelas, extra: { nforn: n.nforn.trim() || null, desconto: t.desconto || 0, frete: t.frete || 0, ipi: t.ipi || 0, condicao: n.condicao.trim() || null, categoria: n.categoria || null, loja: n.loja || null, lancar: !!n.lancar,
-        transportador: n.transportador.trim() || null, fretePor: n.fretePor || null, obs: n.obs.trim() || null, obsInterna: n.obsInterna.trim() || null, parcelas } };
+        transportador: n.transportador.trim() || null, fretePor: n.fretePor || null, obs: n.obs.trim() || null, obsInterna: n.obsInterna.trim() || null, parcelas, nfe: n.nfe || null } };
     }
 
     async function ocCriarSalvar(btn){
@@ -247,6 +247,8 @@
       ocNova = null;
       fecharModal('modal-vml'); ocDesenhar();
       toast('Ordem ' + reg.numero + ' salva' + (reg.extra.lancar ? ' e ' + reg.extra.parcelas.length + ' parcela(s) lançada(s) no Contas a pagar.' : '.'));
+      // ordem criada pela importação de uma nota (Notas de compra): a nota fica marcada como importada
+      if(reg.extra.nfe && typeof nfeMarcarImportada === 'function') nfeMarcarImportada(reg.extra.nfe, { ordem: reg.numero, ordem_id: reg.id, como: 'nova' });
     }
 
     // parcelas da ordem no Contas a pagar: refaz as em aberto; as já pagas ficam como estão

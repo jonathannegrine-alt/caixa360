@@ -5,6 +5,10 @@
 // Página "Notas de compra" (grupo Compras): lista por loja, com o fornecedor do cadastro quando o CNPJ bate.
 // Ver nota (nfeVer): itens, totais e duplicatas; nota completa tem "Baixar XML" (Storage nfe/<usuario>/<chave>.xml.gz) e
 // "PDF da nota" (espelho no estilo do DANFE, montado do XML com jsPDF; não é o layout oficial ponto a ponto).
+// Importar compra (nfeImportar): nota completa → ordem de compra nova (fluxo normal da ordem: revisa e salva, e as parcelas
+// vão para o Contas a pagar) ou ligada a uma ordem que já existe. Código do fornecedor → SKU fica em nfe_mapa; código que
+// serve para várias cores ("vários SKUs") só pode ser ligado a uma ordem, que já tem as quantidades por SKU.
+// Custo do produto = valor na nota × fator ÷ unidades por item (fator do cadastro do fornecedor, editável em cada nota).
 // Ciência da operação (nfeCiencia): função nfe acao 'ciencia' registra o evento 210210 e baixa a nota completa pela chave.
 
     let nfe = { certs: [], dist: [], notas: [], lidoEm: 0, busca: '', mes: '', sit: '' };
@@ -136,7 +140,7 @@
             return `<tr><td style="white-space:nowrap;"><a href="#" onclick="event.preventDefault();nfeVer('${nfeEsc(n.chave)}')">${n.emissao ? new Date(n.emissao).toLocaleDateString('pt-BR') : '—'}</a></td>
               <td class="cp-prod"><b>${nfeEsc(f ? f.nome : n.emit_nome)}</b><span>${f ? (f.grupo ? 'Grupo ' + nfeEsc(f.grupo) : nfeEsc(n.emit_nome)) : '<a href="#" onclick="event.preventDefault();nfeCadastrarForn(\'' + nfeEsc(n.chave) + '\')">cadastrar fornecedor</a>'}</span></td>
               <td style="white-space:nowrap;">${nfeEsc(nfeCnpj(n.emit_cnpj))}</td><td class="num"><b>${fmt(Number(n.valor) || 0)}</b></td>
-              <td><span class="cp-sit ${s[1]}">${s[0]}</span></td><td>${n.completa ? 'Completa' : '<span class="text-muted">Resumo</span>'}</td>
+              <td><span class="cp-sit ${s[1]}">${s[0]}</span></td><td>${n.importada ? '<span class="cp-sit cp-ok" title="Compra importada na ordem ' + nfeEsc(n.importada.ordem || '') + '">Importada</span>' : n.completa ? 'Completa' : '<span class="text-muted">Resumo</span>'}</td>
               <td><span class="text-muted" style="font-size:11.5px;cursor:pointer;" title="Copiar a chave" onclick="navigator.clipboard&&navigator.clipboard.writeText('${nfeEsc(n.chave)}');if(typeof toast==='function')toast('Chave copiada')">${nfeEsc(n.chave.slice(0, 6) + '…' + n.chave.slice(-6))}</span></td>
               <td style="text-align:right;"><button class="btn-out btn-sm" onclick="nfeVer('${nfeEsc(n.chave)}')">Ver nota</button></td></tr>`; }).join('')
             : `<tr><td colspan="8"><div class="vazio"><b>${nfe.notas.length ? 'Nenhuma nota com esses filtros' : 'Nenhuma nota ainda'}</b>${nfe.notas.length ? '' : (nfe.certs.length ? 'A primeira consulta à SEFAZ pode levar alguns minutos para trazer os últimos 90 dias.' : 'Cadastre o certificado A1 para começar.')}</div></td></tr>`}
@@ -171,7 +175,7 @@
         <div class="text-muted" style="margin-bottom:10px;line-height:1.6;">
           Emitente: <b>${nfeEsc(n.emit_nome || '')}</b> · CNPJ ${nfeEsc(nfeCnpj(n.emit_cnpj))}${n.emit_ie ? ' · IE ' + nfeEsc(n.emit_ie) : ''}<br>
           Emissão: <b>${n.emissao ? new Date(n.emissao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</b> · Situação: <b>${sit}</b> · Valor: <b>${fmt(Number(n.valor) || 0)}</b><br>
-          Chave: <span style="font-family:monospace;font-size:12px;">${chaveFmt}</span>
+          Chave: <span style="font-family:monospace;font-size:12px;">${chaveFmt}</span>${n.importada ? '<br><b class="text-success">Compra importada</b> na ordem <b>' + nfeEsc(n.importada.ordem || '') + '</b>' + (n.importada.em ? ' em ' + new Date(n.importada.em).toLocaleDateString('pt-BR') : '') : ''}
         </div>
         ${n.completa ? `
           <div class="form-label">Itens (${itens.length})</div>
@@ -180,7 +184,7 @@
           </tbody></table></div>
           ${dups.length ? `<div class="form-label" style="margin-top:12px;">Duplicatas</div><div style="display:flex;gap:8px;flex-wrap:wrap;">${dups.map(d => `<span class="cp-sit cp-comprar">${nfeEsc(d.numero || '')} · ${d.vencimento ? ptDate(d.vencimento) : '—'} · ${fmt(Number(d.valor) || 0)}</span>`).join('')}</div>` : '<div class="text-muted" style="margin-top:10px;font-size:12.5px;">Sem duplicatas na nota (pagamento à vista ou combinado fora da nota).</div>'}`
         : `<div class="alert alert-warning">Esta nota chegou só como <b>resumo</b>. A SEFAZ libera os itens depois da <b>Ciência da operação</b>: um aviso de que você sabe que a nota existe (não aceita nem recusa a nota e não tem efeito fiscal).${n.ciencia_em ? '<br>Ciência registrada em ' + new Date(n.ciencia_em).toLocaleString('pt-BR') + '; a nota completa chega em alguns minutos ou na próxima consulta.' : ''}</div>`}`,
-        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${!n.completa && Number(n.situacao) !== 3 ? `<button class="btn" onclick="nfeCiencia(['${nfeEsc(chave)}'], this)">${n.ciencia_em ? 'Tentar baixar de novo' : 'Dar ciência e baixar a nota'}</button>` : ''}${n.completa ? `<button class="btn-out" onclick="nfeBaixarXml('${nfeEsc(chave)}', this)">Baixar XML</button><button class="btn" onclick="nfePdf('${nfeEsc(chave)}', this)">PDF da nota</button>` : ''}`);
+        `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${!n.completa && Number(n.situacao) !== 3 ? `<button class="btn" onclick="nfeCiencia(['${nfeEsc(chave)}'], this)">${n.ciencia_em ? 'Tentar baixar de novo' : 'Dar ciência e baixar a nota'}</button>` : ''}${n.completa && !n.importada ? `<button class="btn" onclick="nfeImportar('${nfeEsc(chave)}')">Importar compra</button>` : ''}${n.completa ? `<button class="btn-out" onclick="nfeBaixarXml('${nfeEsc(chave)}', this)">Baixar XML</button><button class="btn" onclick="nfePdf('${nfeEsc(chave)}', this)">PDF da nota</button>` : ''}`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '980px';
     }
     async function nfeBaixarXml(chave, bt){
@@ -282,4 +286,114 @@
       if(!L.length) return;
       if(!confirm('Registrar a Ciência da operação em ' + L.length + ' nota(s) desta lista e baixar as notas completas?\n\nA Ciência só avisa a SEFAZ que você sabe que a nota existe: não aceita nem recusa a nota e não tem efeito fiscal. Fica registrada na nota.')) return;
       nfeCiencia(L.map(n => n.chave), bt);
+    }
+
+    // ---------- importar a compra pela nota ----------
+    async function nfeMarcarImportada(chave, info){
+      const r = await supa.from('nfe_recebidas').update({ importada: { ...info, em: new Date().toISOString() }, atualizado_em: new Date().toISOString() }).eq('usuario_id', usuarioAtual.id).eq('chave', chave);
+      if(r.error && typeof toast === 'function') toast('A ordem foi salva, mas não consegui marcar a nota como importada: ' + r.error.message);
+      nfe.lidoEm = 0;
+    }
+    const nfeNum = v => { const n = Number(String(v == null ? '' : v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; };
+    async function nfeImportar(chave){
+      const r = await supa.from('nfe_recebidas').select('*').eq('usuario_id', usuarioAtual.id).eq('chave', chave).single();
+      if(r.error || !r.data || !r.data.completa){ alert('A nota precisa estar completa para importar.'); return; }
+      const n = r.data;
+      if(typeof fnLer === 'function') await fnLer(true);
+      if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
+      const forn = (typeof fn !== 'undefined' ? fn.lista : []).find(f => f.cnpj && f.cnpj === n.emit_cnpj) || null;
+      const m = await supa.from('nfe_mapa').select('*').eq('usuario_id', usuarioAtual.id).eq('emit_cnpj', n.emit_cnpj);
+      const mapa = new Map((m.data || []).map(x => [x.codigo, x]));
+      const fator = forn && Number(forn.fator_nf) > 0 ? Number(forn.fator_nf) : 1;
+      nfe.imp = { chave, n, forn, fator, ordem: '', linhas: (n.itens || []).map(i => { const mp = mapa.get(String(i.codigo)) || {};
+        const ipiPct = Number(i.valor) > 0 && Number(i.ipi) > 0 ? Math.round(Number(i.ipi) / Number(i.valor) * 10000) / 100 : 0;
+        return { codigo: String(i.codigo), descricao: i.descricao, unidade: i.unidade, qtd: Number(i.qtd) || 0, vun: Number(i.valor_un) || 0, ipi: ipiPct,
+          sku: mp.sku || '', mult: Number(mp.mult) > 0 ? Number(mp.mult) : 1, varia: !!mp.varia, custo: null }; }) };
+      nfeImpDesenhar();
+    }
+    // ordens que podem ser desta nota: do mesmo fornecedor (pelo cadastro ou pelo nome da nota) e ainda sem nota ligada
+    function nfeImpOrdens(){
+      const I = nfe.imp, ch = typeof fnChave === 'function' ? fnChave : (x => String(x || '').toLowerCase());
+      const nomes = new Set([I.n.emit_nome, ...(I.forn ? [I.forn.nome, I.forn.razao_social, I.forn.fantasia, ...(I.forn.apelidos || [])] : [])].map(ch).filter(Boolean));
+      const todas = (typeof oc !== 'undefined' && oc.ordens ? oc.ordens : []).filter(o => Number(o.situacao) !== 2 && !(o.extra && (o.extra.excluida || o.extra.nfe)));
+      const dele = todas.filter(o => nomes.has(ch(o.fornecedor)));
+      return { dele, outras: todas.filter(o => !dele.includes(o)).slice(0, 60) };
+    }
+    function nfeImpLer(){
+      const I = nfe.imp; if(!I) return;
+      const f = document.getElementById('nfi-fator'); if(f) I.fator = nfeNum(f.value) > 0 ? nfeNum(f.value) : 1;
+      const o = document.getElementById('nfi-ordem'); if(o) I.ordem = o.value;
+      I.linhas.forEach((l, k) => { const g = c => document.getElementById('nfi-' + c + '-' + k);
+        if(g('sku')) l.sku = g('sku').value.trim(); if(g('varia')) l.varia = g('varia').checked;
+        if(g('mult')) l.mult = nfeNum(g('mult').value) > 0 ? nfeNum(g('mult').value) : 1;
+        if(g('custo')) l.custo = g('custo').value.trim() === '' ? null : nfeNum(g('custo').value); });
+    }
+    const nfeCustoAuto = (l, fator) => Math.round(l.vun * fator / (l.mult || 1) * 10000) / 10000;
+    function nfeImpDesenhar(){
+      const I = nfe.imp, n = I.n, O = nfeImpOrdens(), nNF = Number(String(I.chave).slice(25, 34));
+      const skusL = [...new Set([...(typeof skus !== 'undefined' ? skus : []).map(x => x.sku), ...(typeof estoqueGalpao !== 'undefined' ? estoqueGalpao : []).map(x => x.sku)])].filter(Boolean).sort();
+      const din = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+      vmlModal('Importar compra — nota nº ' + nNF, `
+        <div class="text-muted" style="margin-bottom:10px;line-height:1.6;">${nfeEsc(n.emit_nome || '')} · ${nfeEsc(nfeCnpj(n.emit_cnpj))} · emitida em ${n.emissao ? new Date(n.emissao).toLocaleDateString('pt-BR') : '—'} · ${fmt(Number(n.valor) || 0)}
+          ${I.forn ? '<br>Fornecedor: <b>' + nfeEsc(I.forn.nome) + '</b>' + (I.forn.grupo ? ' (grupo ' + nfeEsc(I.forn.grupo) + ')' : '') : '<br><span class="text-danger">Este CNPJ não tem cadastro de fornecedor.</span> <a href="#" onclick="event.preventDefault();nfeCadastrarForn(\'' + nfeEsc(I.chave) + '\')">Cadastrar agora</a> (o fator da nota fica no cadastro)'}</div>
+        <div class="pf-grid" style="grid-template-columns:1fr 2fr;align-items:end;">
+          <label class="pf-c"><span>Fator da nota ${typeof dica === 'function' ? dica('Custo do produto = valor na nota × fator ÷ unidades por item. Vem do cadastro do fornecedor; mude aqui se nesta nota for diferente.', true) : ''}</span><input id="nfi-fator" type="number" min="0" step="0.01" value="${I.fator}" onchange="nfeImpLer();nfe.imp.linhas.forEach(l=>l.custo=null);nfeImpDesenhar()"></label>
+          <label class="pf-c"><span>Ordem de compra</span><select id="nfi-ordem" onchange="nfeImpLer()"><option value="">Criar uma ordem nova com esta nota</option>
+            ${O.dele.length ? '<optgroup label="Deste fornecedor">' + O.dele.map(x => `<option value="${x.id}" ${String(I.ordem) === String(x.id) ? 'selected' : ''}>Ligar à ordem ${nfeEsc(x.numero)} · ${x.data ? ptDate(String(x.data).slice(0, 10)) : ''} · ${fmt(Number(x.total) || 0)}</option>`).join('') + '</optgroup>' : ''}
+            ${O.outras.length ? '<optgroup label="Outras ordens">' + O.outras.map(x => `<option value="${x.id}" ${String(I.ordem) === String(x.id) ? 'selected' : ''}>Ligar à ordem ${nfeEsc(x.numero)} · ${nfeEsc(x.fornecedor || '')} · ${fmt(Number(x.total) || 0)}</option>`).join('') + '</optgroup>' : ''}</select></label>
+        </div>
+        <datalist id="nfi-skus">${skusL.map(x => `<option value="${nfeEsc(x)}">`).join('')}</datalist>
+        <div style="overflow-x:auto;max-height:46vh;"><table class="cp-tab"><thead><tr><th>Item da nota</th><th class="num">Qtd.</th><th class="num">Valor na nota</th><th>Nosso SKU</th><th title="Marque quando o mesmo código vale para vários SKUs (cores). A quantidade de cada SKU vem da ordem de compra ligada.">Vários SKUs</th><th class="num" title="Quantas unidades do nosso SKU vêm em cada unidade da nota (ex.: caixa com 10)">Un. por item</th><th class="num">Custo do produto</th></tr></thead><tbody>
+          ${I.linhas.map((l, k) => { const custo = l.custo != null ? l.custo : nfeCustoAuto(l, I.fator);
+            return `<tr><td style="white-space:normal;min-width:220px;"><b>${nfeEsc(l.codigo)}</b> · ${nfeEsc(l.descricao)}</td><td class="num">${(l.qtd || 0).toLocaleString('pt-BR')} ${nfeEsc(l.unidade || '')}</td><td class="num">R$ ${din(l.vun)}${l.ipi ? '<div class="cp-sub">+ IPI ' + String(l.ipi).replace('.', ',') + '%</div>' : ''}</td>
+              <td><input id="nfi-sku-${k}" list="nfi-skus" value="${nfeEsc(l.sku)}" placeholder="${l.varia ? 'vários (pela ordem)' : 'SKU'}" style="min-width:150px;" ${l.varia ? 'disabled' : ''}></td>
+              <td style="text-align:center;"><input type="checkbox" id="nfi-varia-${k}" ${l.varia ? 'checked' : ''} onchange="nfeImpLer();nfeImpDesenhar()"></td>
+              <td class="num"><input id="nfi-mult-${k}" type="number" min="1" step="1" value="${l.mult}" style="width:70px;" onchange="nfeImpLer();nfe.imp.linhas[${k}].custo=null;nfeImpDesenhar()"></td>
+              <td class="num"><input id="nfi-custo-${k}" class="money-input" value="${din(custo)}" style="width:100px;text-align:right;"></td></tr>`; }).join('')}
+        </tbody></table></div>
+        <div class="text-muted" style="font-size:12px;margin-top:8px;">O SKU de cada código fica guardado: na próxima nota deste fornecedor ele já vem preenchido. Criar ordem nova abre a ordem de compra para você revisar e salvar (as parcelas vão para o Contas a pagar como sempre).</div>`,
+        `<button class="btn-out" onclick="nfeVer('${nfeEsc(I.chave)}')">Voltar</button><button class="btn" onclick="nfeImpConfirmar(this)">Continuar</button>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1100px';
+    }
+    async function nfeImpConfirmar(bt){
+      nfeImpLer();
+      const I = nfe.imp, n = I.n, ordem = I.ordem ? (oc.ordens || []).find(x => String(x.id) === String(I.ordem)) : null;
+      const semSku = I.linhas.filter(l => !l.varia && !l.sku);
+      if(semSku.length){ alert('Informe o nosso SKU de: ' + semSku.map(l => l.codigo).join(', ') + ' (ou marque "Vários SKUs").'); return; }
+      if(!ordem && I.linhas.some(l => l.varia)){ alert('Itens com "Vários SKUs" precisam de uma ordem de compra ligada, porque é ela que diz quanto veio de cada SKU. Escolha a ordem no campo "Ordem de compra".'); return; }
+      if(bt){ bt.disabled = true; bt.textContent = 'Salvando…'; }
+      // de-para do código para o SKU, para as próximas notas
+      const mp = I.linhas.map(l => ({ usuario_id: usuarioAtual.id, emit_cnpj: n.emit_cnpj, codigo: l.codigo, sku: l.varia ? null : l.sku, mult: l.mult || 1, varia: !!l.varia, atualizado_em: new Date().toISOString() }));
+      const g = await supa.from('nfe_mapa').upsert(mp, { onConflict: 'usuario_id,emit_cnpj,codigo' });
+      if(g.error){ alert('Não consegui guardar o de-para dos códigos: ' + g.error.message); if(bt){ bt.disabled = false; bt.textContent = 'Continuar'; } return; }
+      if(ordem){
+        // liga a nota à ordem e mostra a comparação de unidades
+        const ex = { ...(ordem.extra || {}), nfe: I.chave };
+        const u = await supa.from('olist_ordens').update({ extra: ex }).eq('usuario_id', usuarioAtual.id).eq('id', ordem.id);
+        if(u.error){ alert('Não consegui ligar a nota à ordem: ' + u.error.message); if(bt){ bt.disabled = false; bt.textContent = 'Continuar'; } return; }
+        ordem.extra = ex;
+        await nfeMarcarImportada(I.chave, { ordem: ordem.numero, ordem_id: ordem.id, como: 'ligada' });
+        const unNota = I.linhas.reduce((s, l) => s + l.qtd * (l.mult || 1), 0), unOrdem = (ordem.itens || []).reduce((s, i) => s + (Number(i.qtd) || 0), 0);
+        const porSku = new Map(); (ordem.itens || []).forEach(i => porSku.set(String(i.sku).toLowerCase(), (porSku.get(String(i.sku).toLowerCase()) || 0) + (Number(i.qtd) || 0)));
+        const dif = I.linhas.filter(l => !l.varia).filter(l => (porSku.get(l.sku.toLowerCase()) || 0) !== l.qtd * (l.mult || 1)).map(l => l.sku + ': nota ' + (l.qtd * (l.mult || 1)) + ', ordem ' + (porSku.get(l.sku.toLowerCase()) || 0));
+        fecharModal('modal-vml'); nfe.lidoEm = 0; await nfeLer(true); nfeDesenhar();
+        alert('Nota ligada à ordem ' + ordem.numero + '.\n\nUnidades na nota: ' + unNota.toLocaleString('pt-BR') + '\nUnidades na ordem: ' + unOrdem.toLocaleString('pt-BR') + (unNota === unOrdem ? '\n\nAs quantidades batem.' : '\n\nAs quantidades NÃO batem: confira com o fornecedor.') + (dif.length ? '\n\nPor SKU:\n' + dif.slice(0, 10).join('\n') : ''));
+        return;
+      }
+      // ordem nova: abre o formulário da ordem já preenchido; ao salvar, a nota fica marcada como importada
+      const itens = I.linhas.map(l => ({ sku: l.sku, qtd: Math.round(l.qtd * (l.mult || 1) * 1000) / 1000, valor: l.custo != null ? l.custo : nfeCustoAuto(l, I.fator), ipi: l.ipi }));
+      fecharModal('modal-vml'); nav('ordens-compra');
+      if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
+      if(typeof ocCriar !== 'function') return;
+      ocCriar(itens);
+      ocNova.itens.forEach((i, k) => { if(itens[k] && itens[k].ipi) i.ipi = String(itens[k].ipi).replace('.', ','); });
+      ocNova.fornecedor = I.forn ? I.forn.nome : (n.emit_nome || '');
+      ocNova.data = n.emissao ? String(n.emissao).slice(0, 10) : getToday();
+      ocNova.nforn = 'NF ' + Number(String(I.chave).slice(25, 34));
+      if(n.loja && n.loja !== ocNova.loja){ ocNova.loja = n.loja; if(typeof ocProximoNumero === 'function') ocNova.numero = ocProximoNumero(n.loja); }   // número com o prefixo da loja da nota
+      ocNova.nfe = I.chave;
+      // duplicatas da nota viram as parcelas só quando o valor da nota é o real (fator 1); com fator, gere pela condição
+      if(I.fator === 1 && (n.duplicatas || []).length) ocNova.parcelas = n.duplicatas.map(d => ({ data: d.vencimento, val: Number(d.valor) || 0 }));
+      ocNova.obs = 'Importada da nota fiscal nº ' + Number(String(I.chave).slice(25, 34)) + ' (' + (n.emit_nome || '') + ').';
+      ocCriarDesenhar();
     }
