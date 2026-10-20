@@ -4,6 +4,22 @@
       document.getElementById('sidebar-overlay').classList.toggle('open');
     }
 
+    // Itens do menu viram links de verdade: um <a href="#pagina"> cobre cada item. Clique normal continua trocando a tela
+    // aqui (onclick do item); clique do meio, Ctrl/Shift+clique e "Abrir em nova guia" abrem a tela em outra guia.
+    function navLinks(){
+      document.querySelectorAll('.nav-item[onclick]').forEach(li => {
+        const m = (li.getAttribute('onclick') || '').match(/^nav\('([\w-]+)'\)$/); if(!m || li.querySelector('.nav-a')) return;
+        const a = document.createElement('a'); a.className = 'nav-a'; a.href = '#' + m[1]; a.tabIndex = -1; a.setAttribute('aria-hidden', 'true');
+        li.style.position = 'relative'; li.appendChild(a);
+      });
+    }
+    document.addEventListener('click', e => {
+      const a = e.target.closest && e.target.closest('.nav-a'); if(!a) return;
+      if(e.ctrlKey || e.metaKey || e.shiftKey) e.stopPropagation();   // o navegador abre a guia; esta não troca de tela
+      else e.preventDefault();                                         // clique normal: só o onclick do item
+    }, true);
+    navLinks();
+
     function nav(page, fromPopState){
       // trocar de página fecha qualquer janela que tenha ficado aberta (algumas abrem por style, outras por classe)
       document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
@@ -11,9 +27,11 @@
       localStorage.setItem('mk_last_page', page);
       // só depois que o sistema terminou de abrir: os redesenhos do carregamento não podem trocar a página guardada
       if(window._navPronto){ try { sessionStorage.setItem('mk_pagina', page); } catch(e){} }
-      // Empurra estado no histórico do browser (exceto quando chamado pelo próprio popstate)
+      // Empurra estado no histórico do browser (exceto quando chamado pelo próprio popstate). O endereço leva a página
+      // no fim (#compras): dá para abrir em outra guia, salvar nos favoritos e voltar com F5 na mesma tela.
       if(!fromPopState && usuarioAtual){
-        history.pushState({page}, '', location.pathname + location.search);
+        const url = location.pathname + location.search + '#' + page;
+        if(location.hash === '#' + page) history.replaceState({page}, '', url); else history.pushState({page}, '', url);
       }
 
       // Fechar sidebar no mobile

@@ -1689,3 +1689,6 @@ input[type="search"]{-webkit-appearance:none;appearance:none;padding:8px 12px;bo
 /* Pedidos: linha de pedido atrasado */
 .pd-tab tr.pd-atrasado td{background:color-mix(in srgb, var(--danger) 7%, transparent);}
 .pd-tab tr.pd-atrasado td:first-child{box-shadow:inset 3px 0 0 var(--danger);}
+
+/* link que cobre cada item do menu (abrir em nova guia; src/nav.js navLinks) */
+.nav-item .nav-a{ position:absolute; inset:0; z-index:1; }
