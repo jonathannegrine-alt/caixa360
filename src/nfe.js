@@ -1,8 +1,8 @@
-// ===== NOTAS FISCAIS RECEBIDAS =====
+// ===== NOTAS DE COMPRA (notas fiscais recebidas pelo CNPJ) =====
 // Configurações → Notas fiscais: um certificado A1 por loja (cada loja é um CNPJ). O arquivo e a senha vão direto para a
 // função nfe, que guarda tudo cifrado; o navegador nunca mais lê o certificado (só CNPJ, titular e validade, pela RPC
 // nfe_certificados_meus). A função consulta a SEFAZ 4 vezes por dia (cron nfe-dist) e guarda as notas em nfe_recebidas.
-// Página "Notas recebidas" (grupo Compras): lista por loja, com o fornecedor do cadastro quando o CNPJ bate.
+// Página "Notas de compra" (grupo Compras): lista por loja, com o fornecedor do cadastro quando o CNPJ bate.
 // Ver nota (nfeVer): itens, totais e duplicatas; nota completa tem "Baixar XML" (Storage nfe/<usuario>/<chave>.xml.gz) e
 // "PDF da nota" (espelho no estilo do DANFE, montado do XML com jsPDF; não é o layout oficial ponto a ponto).
 // Ciência e importar a compra vêm na próxima etapa.
@@ -101,7 +101,7 @@
     }
     async function nfeRender(){
       const el = document.getElementById('view-notas'); if(!el) return;
-      if(!nfe.lidoEm) el.innerHTML = '<div class="pg-head"><div><div class="pg-title">Notas recebidas</div></div></div><div class="vazio"><b>Carregando…</b></div>';
+      if(!nfe.lidoEm) el.innerHTML = '<div class="pg-head"><div><div class="pg-title">Notas de compra</div></div></div><div class="vazio"><b>Carregando…</b></div>';
       await nfeLer();
       nfeDesenhar();
     }
@@ -117,7 +117,7 @@
       const ok = L.filter(n => Number(n.situacao) !== 3), sit = { 1: ['Autorizada', 'cp-ok'], 2: ['Denegada', 'cp-urgente'], 3: ['Cancelada', 'cp-semvenda'] };
       const dist = nfe.dist.filter(d => !vez || nfe.certs.some(c => c.cnpj === d.cnpj && (c.loja || pad) === vez));
       el.innerHTML = `
-        <div class="pg-head"><div><div class="pg-title">Notas recebidas</div><div class="pg-sub">Notas fiscais emitidas para o CNPJ ${vez && typeof contaNome === 'function' ? 'da ' + nfeEsc(contaNome(vez)) : 'das suas lojas'}, consultadas na SEFAZ e guardadas aqui. Só consulta: nada é lançado sozinho.</div></div>
+        <div class="pg-head"><div><div class="pg-title">Notas de compra</div><div class="pg-sub">Notas fiscais emitidas para o CNPJ ${vez && typeof contaNome === 'function' ? 'da ' + nfeEsc(contaNome(vez)) : 'das suas lojas'}, consultadas na SEFAZ e guardadas aqui. Só consulta: nada é lançado sozinho.</div></div>
           <div class="d-flex gap-1">${nfe.certs.length ? '<button class="btn-out btn-sm" onclick="nfeConsultarAgora(this)">Consultar agora</button>' : ''}</div></div>
         ${!nfe.certs.length ? `<div class="alert alert-warning">Nenhum certificado cadastrado. Envie o certificado A1 de cada loja em <a href="#" onclick="event.preventDefault();cfgAbaAtiva='nfe';nav('config')">Configurações → Notas fiscais</a>.</div>` : ''}
         <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));">

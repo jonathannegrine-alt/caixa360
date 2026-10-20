@@ -1,5 +1,5 @@
 // ===== FORNECEDORES =====
-// Página do grupo Compras. Cadastro por loja (fornecedores.loja = ml_user_id; vazio = loja padrão), como as contas a
+// Página do grupo Compras. Cadastro por loja (fornecedores.loja = ml_user_id; vazio = loja padrão; '*' = todas as lojas), como as contas a
 // pagar: com uma loja escolhida na barra lateral, só os dela; em "Todas", todos com a etiqueta da loja.
 // O fornecedor junta o que já existe espalhado: contas a pagar (pagamentos.forn) e ordens de compra (olist_ordens),
 // casando pelo nome, razão social, nome fantasia ou "outros nomes" (apelidos), sem acento e sem pontuação.
@@ -21,7 +21,7 @@
     const fnLojaDe = f => (f && f.loja) || fnLojaPad();
     const fnLojaVez = () => typeof lojaAtiva === 'function' ? lojaAtiva() : '';
     const fnVarias = () => typeof lojasVarias === 'function' && lojasVarias();
-    const fnLojaTag = id => fnVarias() && !fnLojaVez() && typeof lojaNome === 'function' && lojaNome(id) ? ' <span class="loja-tag">' + fnEsc(lojaNome(id)) + '</span>' : '';
+    const fnLojaTag = id => !fnVarias() ? '' : id === '*' ? ' <span class="loja-tag">Todas as lojas</span>' : !fnLojaVez() && typeof lojaNome === 'function' && lojaNome(id) ? ' <span class="loja-tag">' + fnEsc(lojaNome(id)) + '</span>' : '';
 
     async function fnLer(forcar){
       if(!forcar && fn.lidoEm && Date.now() - fn.lidoEm < 60000) return;
@@ -40,14 +40,15 @@
       const contas = (typeof pagTodos === 'function' ? pagTodos() : pagamentos).filter(p => p.forn && !p.oculta)
         .map(p => ({ p, loja: typeof lojaDe === 'function' ? lojaDe(p) : fnLojaPad() })).filter(x => !vez || x.loja === vez);
       const ordens = fn.ordens.map(o => ({ o, loja: (o.extra && o.extra.loja) || fnLojaPad() })).filter(x => !vez || x.loja === vez);
-      const forns = fn.lista.filter(f => !vez || fnLojaDe(f) === vez);
+      // fornecedor de todas as lojas ('*') aparece em qualquer loja; com uma loja escolhida, soma só o que é dela
+      const forns = fn.lista.filter(f => !vez || f.loja === '*' || fnLojaDe(f) === vez);
       return { contas, ordens, forns };
     }
     // nome escrito → fornecedor cadastrado (da mesma loja)
     function fnIndice(forns){
       const m = new Map();
       forns.forEach(f => [f.nome, f.razao_social, f.fantasia, ...(f.apelidos || [])].map(fnChave).filter(Boolean).forEach(k => { const c = fnLojaDe(f) + '|' + k; if(!m.has(c)) m.set(c, f); }));
-      return (nome, loja) => m.get(loja + '|' + fnChave(nome)) || null;
+      return (nome, loja) => m.get(loja + '|' + fnChave(nome)) || m.get('*|' + fnChave(nome)) || null;
     }
     function fnResumo(){
       const B = fnBase(), acha = fnIndice(B.forns), hoje = getToday(), ano = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
@@ -140,7 +141,7 @@
         <table class="cp-tab"><thead><tr><th>Nome como aparece</th><th class="num">Contas</th><th class="num">Ordens</th><th class="num">Pago 12 meses</th><th class="num">Em aberto</th><th></th></tr></thead><tbody>
         ${sem.map((s, i) => `<tr><td><b>${fnEsc(s.nome)}</b>${fnLojaTag(s.loja)}</td><td class="num">${s.contas || '—'}</td><td class="num">${s.ordens || '—'}</td><td class="num">${fmt(s.pago12)}</td><td class="num">${s.aberto ? fmt(s.aberto) : '—'}</td>
           <td style="text-align:right;white-space:nowrap;"><button class="btn btn-sm" onclick="fnCadastrarSem(${i})">Cadastrar</button>
-            ${forns.filter(f => fnLojaDe(f) === s.loja).length ? `<select onchange="if(this.value)fnJuntar(${i}, Number(this.value))" style="width:auto;"><option value="">Juntar a…</option>${forns.filter(f => fnLojaDe(f) === s.loja).map(f => `<option value="${f.id}">${fnEsc(f.nome)}</option>`).join('')}</select>` : ''}</td></tr>`).join('')}
+            ${forns.filter(f => f.loja === '*' || fnLojaDe(f) === s.loja).length ? `<select onchange="if(this.value)fnJuntar(${i}, Number(this.value))" style="width:auto;"><option value="">Juntar a…</option>${forns.filter(f => f.loja === '*' || fnLojaDe(f) === s.loja).map(f => `<option value="${f.id}">${fnEsc(f.nome)}</option>`).join('')}</select>` : ''}</td></tr>`).join('')}
       </tbody></table>`;
     }
     function fnCadastrarSem(i){ const s = (fn.semLista || [])[i]; if(s) fnEditar(null, { nome: s.nome, loja: s.loja === fnLojaPad() ? '' : s.loja }); }
@@ -162,7 +163,7 @@
     function fnEdDesenhar(){
       const e = fn.ed, v = x => fnEsc(x == null ? '' : x), R = e.receita || null;
       const campo = (id, rot, val, extra) => `<label class="pf-c"><span>${rot}</span><input id="fne-${id}" value="${v(val)}" ${extra || ''}></label>`;
-      const loja = typeof lojaSelect === 'function' ? lojaSelect('fne-loja', e.loja || fnLojaPad()) : '';
+      const loja = typeof lojaSelect === 'function' ? lojaSelect('fne-loja', e.loja === '*' ? fnLojaPad() : (e.loja || fnLojaPad())).replace('</select>', `<option value="*" ${e.loja === '*' ? 'selected' : ''}>Todas as lojas</option></select>`) : '';
       vmlModal(e.id ? 'Editar fornecedor' : 'Novo fornecedor', `
         <div class="pf-grid" style="grid-template-columns:1.3fr auto 1fr;align-items:end;">
           ${campo('cnpj', 'CNPJ', fnCnpjFmt(e.cnpj), 'placeholder="00.000.000/0000-00" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fnReceita(this)}"')}

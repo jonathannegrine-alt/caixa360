@@ -239,10 +239,10 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   sai do banco); olist-compras pula as duas ao sincronizar. Lista com busca, caixas de marcar e ações em lote (PDF uma ordem
   por página, planilha, excluir). Com ordens guardadas a tela funciona sem o Olist (ocGuardadas).
 - FORNECEDORES (src/fornecedores.js, página 'fornecedores' no grupo Compras, tabela fornecedores): cadastro por loja
-  (loja = ml_user_id, vazio = padrão). Casa contas a pagar (p.forn) e ordens (olist_ordens.fornecedor) pelo nome, razão
+  (loja = ml_user_id, vazio = padrão, '*' = todas as lojas: aparece em qualquer loja e soma só a da vez). Casa contas a pagar (p.forn) e ordens (olist_ordens.fornecedor) pelo nome, razão
   social, fantasia ou apelidos (fnChave: sem acento, pontuação e LTDA/ME/EPP). CNPJ: BrasilAPI (/api/cnpj/v1) + IE pela
   publica.cnpj.ws (3/min), chamadas do navegador. Junta Comercial não tem consulta pública.
-- NOTAS RECEBIDAS (src/nfe.js + função nfe, cron nfe-dist 4x/dia): Distribuição de DF-e da SEFAZ (Ambiente Nacional,
+- NOTAS DE COMPRA, menu 'Notas de compra' (src/nfe.js + função nfe, cron nfe-dist 4x/dia): Distribuição de DF-e da SEFAZ (Ambiente Nacional,
   SOAP 1.2, TLS com o certificado A1 do cliente via Deno.createHttpClient com http2:false — o AN recusa HTTP/2).
   Certificado por loja em nfe_certificados, .pfx e senha cifrados com AES-GCM (secret NFE_CERT_KEY); a tabela não tem
   política para authenticated (tela usa a RPC nfe_certificados_meus). nfe_dist guarda ult_nsu e esperar_ate (cStat 137
