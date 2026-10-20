@@ -109,10 +109,9 @@
     function ocCriarSku(k){
       ocCriarLer(); const i = ocNova.itens[k]; if(!i || !i.sku) return;
       // nome digitado no campo SKU (tem espaço e não é um SKU conhecido): acha pelo nome ou passa o texto para o Item
-      const P = window._ocProds || [];
-      if(/\s/.test(i.sku) && !P.some(p => ocN(p.sku) === ocN(i.sku))){
-        const t = ocSemAc(i.sku), achou = P.filter(p => ocSemAc(p.nome) === t), parte = achou.length ? achou : P.filter(p => p.nome && ocSemAc(p.nome).includes(t));
-        if(parte.length === 1){ i.sku = parte[0].sku; i.desc = parte[0].nome; }
+      if(/\s/.test(i.sku) && !(window._ocProds || []).some(p => ocN(p.sku) === ocN(i.sku))){
+        const achou = ocAcharProd(i.sku);
+        if(achou.length === 1){ i.sku = achou[0].sku; i.desc = achou[0].nome; }
         else { if(!i.desc) i.desc = i.sku; i.sku = ''; ocCriarDesenhar(); return; }
       }
       const nome = ocNomeProduto(i.sku), preco = ocUltimoPreco().get(ocN(i.sku)) || Number((skus.find(s => ocN(s.sku) === ocN(i.sku)) || {}).custo) || 0;
@@ -121,9 +120,16 @@
       ocCriarDesenhar();
     }
     // ao escolher pelo nome: um produto com esse nome preenche o SKU (sem SKU o item fica só com a descrição; vincula depois)
+    // produtos cujo nome + SKU têm todas as palavras digitadas ("vaso diamante bege"); a opção da lista vem como "Nome · SKU"
+    function ocAcharProd(txt){
+      const P = window._ocProds || [], m = String(txt || '').match(/ · ([^·]+)$/);
+      if(m){ const x = P.filter(p => ocN(p.sku) === ocN(m[1].trim())); if(x.length) return x; }
+      const pal = ocSemAc(txt).split(/[\s\-]+/).filter(Boolean); if(!pal.length) return [];
+      return P.filter(p => { const t = ocSemAc(p.nome + ' ' + p.sku.split('-').join(' ')); return pal.every(w => t.includes(w)); });
+    }
     function ocCriarNome(k){
       ocCriarLer(); const i = ocNova.itens[k]; if(!i || i.sku || !i.desc) return;
-      const alvo = ocSemAc(i.desc), achou = (window._ocProds || []).filter(p => ocSemAc(p.nome) === alvo);
+      const achou = ocAcharProd(i.desc);
       if(achou.length !== 1) return;
       i.sku = achou[0].sku; i.desc = achou[0].nome;
       const preco = ocUltimoPreco().get(ocN(i.sku)) || Number((skus.find(s => ocN(s.sku) === ocN(i.sku)) || {}).custo) || 0;
@@ -170,7 +176,7 @@
       const prods = [...new Set([...skus.map(s => s.sku), ...estoqueGalpao.map(e => e.sku)])].filter(Boolean).sort();
       // nome de cada produto: o campo SKU acha também pelo nome (rótulo da opção) e o campo Item lista os nomes
       window._ocProds = prods.map(p => ({ sku: p, nome: ocNomeProduto(p) || '' }));
-      const nomes = [...new Set(window._ocProds.map(p => p.nome).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const nomes = window._ocProds.filter(p => p.nome).map(p => p.nome + ' · ' + p.sku).sort((a, b) => a.localeCompare(b, 'pt-BR'));
       const cats = categorias.map(c => c.nome), t = ocTotais();
       const loja = typeof lojaSelect === 'function' ? lojaSelect('ocn-loja', n.loja).replace('<select ', n.id ? '<select ' : '<select onchange="ocTrocarLoja()" ') : '';
       const sec = tit => `<div class="oc-sec">${tit}</div>`;
@@ -185,7 +191,7 @@
         ${sec('Itens da compra')}
         <datalist id="ocn-prods">${window._ocProds.map(p => `<option value="${ocEsc(p.sku)}" label="${ocEsc(p.nome)}">`).join('')}</datalist>
         <datalist id="ocn-nomes">${nomes.map(p => `<option value="${ocEsc(p)}">`).join('')}</datalist>
-        <div class="text-muted" style="font-size:12px;margin:-2px 0 6px;">Não lembra o SKU? Digite parte do nome no SKU ou no Item. Produto sem cadastro pode ficar só com a descrição e ser vinculado depois em "Editar ordem".</div>
+        <div class="text-muted" style="font-size:12px;margin:-2px 0 6px;">Não lembra o SKU? Digite palavras do nome e a cor no SKU ou no Item (ex.: vaso diamante bege). Produto sem cadastro pode ficar só com a descrição e ser vinculado depois em "Editar ordem".</div>
         <div class="pf-tab" style="max-height:none;margin-top:0;"><table><thead><tr><th>Cód (SKU)</th><th>Item</th><th style="text-align:right;">Qtde</th><th style="text-align:right;">Preço un</th><th style="text-align:right;">IPI %</th><th style="text-align:right;">Preço total</th><th></th></tr></thead><tbody>
           ${n.itens.map((i, k) => `<tr class="ocn-linha"><td><span style="display:flex;align-items:center;gap:7px;">${i.sku && typeof fotoCel === 'function' ? fotoCel(i.sku) : '<span class="foto-mini vazia" style="cursor:default;"></span>'}<input class="ocn-sku" list="ocn-prods" value="${ocEsc(i.sku)}" placeholder="SKU ou nome" style="width:150px;" onchange="ocCriarSku(${k})"></span></td>
             <td><input class="ocn-nome" list="ocn-nomes" value="${ocEsc(i.desc || '')}" placeholder="Nome do produto" style="min-width:180px;width:100%;" onchange="ocCriarNome(${k})">${i.sku ? '' : (i.desc ? '<small style="color:var(--warning, #b7791f);">sem SKU: vincular depois</small>' : '')}</td>
