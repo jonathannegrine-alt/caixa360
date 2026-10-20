@@ -92,7 +92,7 @@
         const fotos = typeof fotosParaPdf === 'function' ? await fotosParaPdf(itens.map(x => x.sku)) : new Map();
         const fotoDe = i => itens[i] ? fotos.get(String(itens[i].sku).trim().toLowerCase()) : null;
         // colunas: # · foto · produto (SKU em negrito e o nome embaixo) · quantidade · preço · subtotal
-        const cab = comPreco ? ['#', '', 'Produto', 'Qtd.', 'Último preço', 'Subtotal'] : ['#', '', 'Produto', 'Qtd.'];
+        const cab = comPreco ? ['#', '', 'Produto', 'Qtd.', 'Preço', 'Subtotal'] : ['#', '', 'Produto', 'Qtd.'];
         const P = 2;   // coluna do produto
         doc.autoTable({
           startY: y + 14, margin: { left: M, right: M }, theme: 'plain', rowPageBreak: 'avoid',
