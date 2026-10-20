@@ -367,7 +367,7 @@
                 ${lista.length ? lista.map(l => `<tr class="cp-l-${cpNorm(l.sit).replace(/\s/g,'')}">
                   <td><input type="checkbox" class="cp-check" data-k="${cpEsc(l.k)}" ${typeof comprasSel !== 'undefined' && comprasSel[l.k] ? 'checked' : ''} onchange="comprasMarcar(this.dataset.k, this.checked)"></td>
                   <td>${selo(l.sit)}</td>
-                  <td class="cp-prod cp-prod-l" title="${cpEsc(l.it.nome)}">${typeof fotoMini === 'function' ? fotoMini(l.it.sku) : ''}<b>${cpEsc(l.it.sku)}</b><span>${cpEsc(l.it.nome || 'sem nome')}</span>${l.vende ? `<i>${cpEsc(l.vende)}</i>` : ''}</td>
+                  <td class="cp-prod cp-prod-l" title="${cpEsc(l.it.nome)}">${typeof fotoCel === 'function' ? fotoCel(l.it.sku) : ''}<b>${cpEsc(l.it.sku)}</b><span>${cpEsc(l.it.nome || 'sem nome')}</span>${l.vende ? `<i>${cpEsc(l.vende)}</i>` : ''}</td>
                   <td class="cp-forn">${cpEsc(l.it.forn || '—')}</td>
                   <td class="num" title="${cpEsc(l.criterio)}"><b>${d1(l.cons)}</b>${l.zeros ? ` <span class="sem-custo" title="${l.zeros} dias de ruptura ou parada ficaram fora da média">●</span>` : ''}<div class="cp-sub">${tend(l) || '&nbsp;'}</div></td>
                   <td class="num"><b>${cpInt(cpEstoque(l))}</b><div class="cp-sub">galpão ${cpInt(l.it.galpao)} · Full ${cpInt(l.it.full)}${l.it.transito ? ' · a caminho ' + cpInt(l.it.transito) : ''}</div></td>

@@ -932,7 +932,7 @@
           || '';
         html += `<tr onclick="editarSKU(${idx})" style="cursor:pointer;" title="Clique para editar">
           <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="sku-cb" data-idx="${idx}" onchange="atualizarContSKUSel()"></td>
-          <td style="padding:4px 6px;">${typeof fotoMini === 'function' ? fotoMini(s.sku) : ''}</td>
+          <td style="padding:4px 6px;">${typeof fotoCel === 'function' ? fotoCel(s.sku) : ''}</td>
           <td class="sku-cod">${esc(s.sku)}</td>
           <td class="sku-tit" title="${esc(titulo)}">${esc(titulo) || '—'}</td>
           <td style="text-align:right;white-space:nowrap;">${semCusto(s) ? '<span class="badge badge-danger">Sem custo</span>' : '<b>' + fmt(Number(s.custo)) + '</b>'}</td>

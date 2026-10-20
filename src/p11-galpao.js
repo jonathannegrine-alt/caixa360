@@ -1062,7 +1062,7 @@
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
               <div style="display:flex;align-items:center;gap:8px;" onclick="event.stopPropagation()">
                 <input type="checkbox" class="kit-sel-cb" data-sku="${kitSku}" onchange="atualizarContadorKitsSel()" style="margin:0;width:auto;">
-                ${typeof fotoMini === 'function' ? fotoMini(kitSku) : ''}
+                ${typeof fotoCel === 'function' ? fotoCel(kitSku) : ''}
                 <div>
                   <div style="font-weight:650;font-size:13.5px;color:var(--text);">${kitSku}</div>
                   <div style="font-size:12.5px;color:var(--text-2);margin-top:2px;">${titulo || ''}</div>
