@@ -150,7 +150,7 @@ Cada página → `id="view-{page}"` em `index.html` e `render{Page}()` em `rende
 
 Menu lateral (19/10/2026), grupos `data-sec`, um aberto por vez (toggleNavSec): ven Vendas (vendas, pedidos, resumo-fin
 "Lucro das vendas", analise, promocoes) · atd Atendimento (perguntas, mensagens, posvenda) · est Estoque e Full (skus,
-estoque, full) · cmp Compras (compras, ordens-compra, simulador) · cx Caixa (dashboard, planilha, pagar, receber,
+estoque, full) · cmp Compras (compras, ordens-compra, simulador) · cx Financeiro (dashboard, planilha, pagar, receber,
 emprestimos) · conf Conferências (conciliacao, frete, flex) · res Resultado (resultado, patrimonio) · sis Sistema.
 
 ## Development workflow
