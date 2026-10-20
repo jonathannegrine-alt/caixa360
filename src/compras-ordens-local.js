@@ -108,8 +108,25 @@
     // ao escolher o SKU: preenche o nome e o último preço pago
     function ocCriarSku(k){
       ocCriarLer(); const i = ocNova.itens[k]; if(!i || !i.sku) return;
+      // nome digitado no campo SKU (tem espaço e não é um SKU conhecido): acha pelo nome ou passa o texto para o Item
+      const P = window._ocProds || [];
+      if(/\s/.test(i.sku) && !P.some(p => ocN(p.sku) === ocN(i.sku))){
+        const t = ocSemAc(i.sku), achou = P.filter(p => ocSemAc(p.nome) === t), parte = achou.length ? achou : P.filter(p => p.nome && ocSemAc(p.nome).includes(t));
+        if(parte.length === 1){ i.sku = parte[0].sku; i.desc = parte[0].nome; }
+        else { if(!i.desc) i.desc = i.sku; i.sku = ''; ocCriarDesenhar(); return; }
+      }
       const nome = ocNomeProduto(i.sku), preco = ocUltimoPreco().get(ocN(i.sku)) || Number((skus.find(s => ocN(s.sku) === ocN(i.sku)) || {}).custo) || 0;
       if(nome && !i.desc) i.desc = nome;
+      if(preco && !ocNum(i.valor)) i.valor = fmtMoney(preco);
+      ocCriarDesenhar();
+    }
+    // ao escolher pelo nome: um produto com esse nome preenche o SKU (sem SKU o item fica só com a descrição; vincula depois)
+    function ocCriarNome(k){
+      ocCriarLer(); const i = ocNova.itens[k]; if(!i || i.sku || !i.desc) return;
+      const alvo = ocSemAc(i.desc), achou = (window._ocProds || []).filter(p => ocSemAc(p.nome) === alvo);
+      if(achou.length !== 1) return;
+      i.sku = achou[0].sku; i.desc = achou[0].nome;
+      const preco = ocUltimoPreco().get(ocN(i.sku)) || Number((skus.find(s => ocN(s.sku) === ocN(i.sku)) || {}).custo) || 0;
       if(preco && !ocNum(i.valor)) i.valor = fmtMoney(preco);
       ocCriarDesenhar();
     }
@@ -151,6 +168,9 @@
     function ocCriarDesenhar(){
       const n = ocNova, forn = [...new Set(oc.ordens.map(o => o.fornecedor).concat((typeof pagTodos === 'function' ? pagTodos() : pagamentos).map(p => p.forn)).filter(Boolean))].sort().slice(0, 500);
       const prods = [...new Set([...skus.map(s => s.sku), ...estoqueGalpao.map(e => e.sku)])].filter(Boolean).sort();
+      // nome de cada produto: o campo SKU acha também pelo nome (rótulo da opção) e o campo Item lista os nomes
+      window._ocProds = prods.map(p => ({ sku: p, nome: ocNomeProduto(p) || '' }));
+      const nomes = [...new Set(window._ocProds.map(p => p.nome).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
       const cats = categorias.map(c => c.nome), t = ocTotais();
       const loja = typeof lojaSelect === 'function' ? lojaSelect('ocn-loja', n.loja).replace('<select ', n.id ? '<select ' : '<select onchange="ocTrocarLoja()" ') : '';
       const sec = tit => `<div class="oc-sec">${tit}</div>`;
@@ -163,10 +183,12 @@
         <a class="fx-link" style="color:var(--primary);cursor:pointer;font-size:12.5px;" onclick="ocUltimasCompras()">ver últimas compras deste fornecedor</a><div id="ocn-ultimas"></div>
 
         ${sec('Itens da compra')}
-        <datalist id="ocn-prods">${prods.map(p => `<option value="${ocEsc(p)}">`).join('')}</datalist>
+        <datalist id="ocn-prods">${window._ocProds.map(p => `<option value="${ocEsc(p.sku)}" label="${ocEsc(p.nome)}">`).join('')}</datalist>
+        <datalist id="ocn-nomes">${nomes.map(p => `<option value="${ocEsc(p)}">`).join('')}</datalist>
+        <div class="text-muted" style="font-size:12px;margin:-2px 0 6px;">Não lembra o SKU? Digite parte do nome no SKU ou no Item. Produto sem cadastro pode ficar só com a descrição e ser vinculado depois em "Editar ordem".</div>
         <div class="pf-tab" style="max-height:none;margin-top:0;"><table><thead><tr><th>Cód (SKU)</th><th>Item</th><th style="text-align:right;">Qtde</th><th style="text-align:right;">Preço un</th><th style="text-align:right;">IPI %</th><th style="text-align:right;">Preço total</th><th></th></tr></thead><tbody>
-          ${n.itens.map((i, k) => `<tr class="ocn-linha"><td><span style="display:flex;align-items:center;gap:7px;">${i.sku && typeof fotoCel === 'function' ? fotoCel(i.sku) : '<span class="foto-mini vazia" style="cursor:default;"></span>'}<input class="ocn-sku" list="ocn-prods" value="${ocEsc(i.sku)}" placeholder="SKU" style="width:150px;" onchange="ocCriarSku(${k})"></span></td>
-            <td><input class="ocn-nome" value="${ocEsc(i.desc || '')}" placeholder="Descrição" style="min-width:180px;width:100%;"></td>
+          ${n.itens.map((i, k) => `<tr class="ocn-linha"><td><span style="display:flex;align-items:center;gap:7px;">${i.sku && typeof fotoCel === 'function' ? fotoCel(i.sku) : '<span class="foto-mini vazia" style="cursor:default;"></span>'}<input class="ocn-sku" list="ocn-prods" value="${ocEsc(i.sku)}" placeholder="SKU ou nome" style="width:150px;" onchange="ocCriarSku(${k})"></span></td>
+            <td><input class="ocn-nome" list="ocn-nomes" value="${ocEsc(i.desc || '')}" placeholder="Nome do produto" style="min-width:180px;width:100%;" onchange="ocCriarNome(${k})">${i.sku ? '' : (i.desc ? '<small style="color:var(--warning, #b7791f);">sem SKU: vincular depois</small>' : '')}</td>
             <td style="text-align:right;"><input type="number" class="ocn-qtd" value="${ocEsc(i.qtd)}" min="0" style="width:90px;text-align:right;" oninput="ocCriarTotal()"></td>
             <td style="text-align:right;"><input class="ocn-val money-input" value="${ocEsc(i.valor)}" placeholder="0,00" style="width:100px;text-align:right;" oninput="onMoneyInput(this);ocCriarTotal()"></td>
             <td style="text-align:right;"><input class="ocn-ipi" value="${ocEsc(i.ipi || '')}" placeholder="0" style="width:60px;text-align:right;" oninput="ocCriarTotal()"></td>
@@ -219,7 +241,7 @@
     function ocMontarRegistro(){
       ocCriarLer();
       const n = ocNova, t = ocTotais();
-      const itens = n.itens.map(i => ({ sku: i.sku, descricao: i.desc || ocNomeProduto(i.sku), qtd: Number(i.qtd) || 0, valor: ocNum(i.valor), ipi: ocNum(i.ipi) || undefined })).filter(i => i.sku && i.qtd > 0);
+      const itens = n.itens.map(i => ({ sku: i.sku, descricao: i.desc || (i.sku ? ocNomeProduto(i.sku) : ''), qtd: Number(i.qtd) || 0, valor: ocNum(i.valor), ipi: ocNum(i.ipi) || undefined })).filter(i => (i.sku || i.descricao) && i.qtd > 0);
       const parcelas = n.parcelas.filter(p => p.data && Number(p.val) > 0);
       return { itens, t, parcelas, extra: { nforn: n.nforn.trim() || null, desconto: t.desconto || 0, frete: t.frete || 0, ipi: t.ipi || 0, condicao: n.condicao.trim() || null, categoria: n.categoria || null, loja: n.loja || null, lancar: !!n.lancar,
         transportador: n.transportador.trim() || null, fretePor: n.fretePor || null, obs: n.obs.trim() || null, obsInterna: n.obsInterna.trim() || null, parcelas, nfe: n.nfe || null } };

@@ -57,7 +57,7 @@
     // unidades compradas e ainda não recebidas, por SKU (usado pela Sugestão de compras)
     function ocTransitoPorSku(){
       const m = new Map();
-      oc.ordens.forEach(o => { const r = ocResumo(o); if(r.sit === 'A receber' || r.sit === 'Parcial') r.itens.forEach(i => { if(i.falta > 0) m.set(ocN(i.sku), (m.get(ocN(i.sku)) || 0) + i.falta); }); });
+      oc.ordens.forEach(o => { const r = ocResumo(o); if(r.sit === 'A receber' || r.sit === 'Parcial') r.itens.forEach(i => { if(i.falta > 0 && i.sku) m.set(ocN(i.sku), (m.get(ocN(i.sku)) || 0) + i.falta); }); });
       return m;
     }
     function ocTemDados(){ return typeof olist !== 'undefined' && (!!olist.v3 || !!oc.temGuardadas) && oc.carregadoEm > 0; }
@@ -137,7 +137,7 @@
               <td>${selo(r.sit)}</td>
               <td class="cp-prod"><b>Nº ${ocEsc(o.numero || o.id)}</b><span>${dt(o.data)}${Number(o.id) < 0 ? ' · criada aqui' : o.extra && o.extra.editada ? ' · editada aqui' : ''}</span></td>
               <td class="cp-forn" style="max-width:170px;" title="${ocEsc(o.fornecedor || '')}">${ocEsc(o.fornecedor || '—')}</td>
-              <td class="cp-prod" style="max-width:210px;"><b>${r.itens.length} ${r.itens.length === 1 ? 'produto' : 'produtos'}</b><span title="${ocEsc(r.itens.map(i => i.sku).join(', '))}">${ocEsc(r.itens.map(i => i.sku).slice(0, 4).join(', '))}${r.itens.length > 4 ? '…' : ''}</span></td>
+              <td class="cp-prod" style="max-width:210px;"><b>${r.itens.length} ${r.itens.length === 1 ? 'produto' : 'produtos'}</b><span title="${ocEsc(r.itens.map(i => i.sku || i.descricao).join(', '))}">${ocEsc(r.itens.map(i => i.sku || i.descricao).slice(0, 4).join(', '))}${r.itens.length > 4 ? '…' : ''}${r.itens.some(i => !i.sku) ? ' <b style="color:var(--danger);">· sem SKU</b>' : ''}</span></td>
               <td>${r.sit === 'A receber' || r.sit === 'Parcial' ? `<input type="date" value="${ocPrev(o) || ''}" onchange="ocSalvarPrevisao(${o.id}, this.value)" style="width:135px;${ocPrev(o) && ocPrev(o) < getToday() ? 'border-color:var(--danger);color:var(--danger);' : ''}" title="${ocPrev(o) && ocPrev(o) < getToday() ? 'A previsão já passou' : 'Quando a mercadoria deve chegar'}">` : dt(ocPrev(o))}</td>
               <td><div class="cp-cob"><div class="cp-cob-n"><b>${ocInt(r.recebido)}</b> de ${ocInt(r.comprado)} un.</div><div class="cp-cob-t"><span class="cp-cob-${pct >= 100 ? 'v' : pct > 0 ? 'a' : 'r'}" style="width:${Math.max(3, Math.min(100, pct))}%;"></span></div></div></td>
               <td class="num"><b>${fmt(Number(o.total) || 0)}</b>${typeof ocParcelasResumo === 'function' && ocParcelasResumo(o) ? '<br><small class="text-muted">' + ocParcelasResumo(o) + '</small>' : ''}</td>
@@ -171,7 +171,7 @@
         ${r.antiga ? '<div class="alert alert-info">Esta ordem já estava como atendida no Olist antes de a conferência existir aqui, então aparece como recebida.</div>' : ''}
         <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">Comprado</th><th class="num">Já recebido</th><th class="num">Falta</th>${aberta ? '<th class="num">Chegou agora <a class="fx-link" style="color:var(--primary);font-size:11px;margin-left:6px;" onclick="ocReceberTudo()">receber tudo</a></th>' : ''}</tr></thead><tbody>
           ${r.itens.map((i, n) => `<tr><td class="cp-prod">${typeof fotoLinha === 'function' ? fotoLinha(i.sku, `<b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span>`) : `<b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span>`}</td><td class="num">${ocInt(i.comprado)}</td><td class="num">${ocInt(r.antiga ? i.comprado : i.recebido)}</td><td class="num"><b>${ocInt(r.antiga ? 0 : i.falta)}</b></td>
-            ${aberta ? `<td class="num"><input type="number" min="0" step="1" class="cp-dias oc-qtd" style="width:110px !important;" data-sku="${ocEsc(i.sku)}" data-falta="${i.falta}" placeholder="0" ${i.falta ? '' : 'disabled'}></td>` : ''}</tr>`).join('')}
+            ${aberta ? `<td class="num"><input type="number" min="0" step="1" class="cp-dias oc-qtd" style="width:110px !important;" data-sku="${ocEsc(i.sku)}" data-falta="${i.falta}" placeholder="${i.sku ? '0' : 'vincule o SKU'}" ${i.falta && i.sku ? '' : 'disabled'} title="${i.sku ? '' : 'Item sem SKU: em Editar ordem, escolha o produto para poder lançar a chegada'}"></td>` : ''}</tr>`).join('')}
         </tbody></table></div>
         ${aberta ? `
           <div class="form-row" style="margin-top:14px;">
