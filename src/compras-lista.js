@@ -106,6 +106,8 @@
           // foto centralizada; linha partida entre páginas chega aqui sem índice válido: só desenha quando o produto existe
           didDrawCell: d => { if(d.section === 'body' && d.column.index === 1){ const fo = fotoDe(d.row.index); if(fo){ try { doc.addImage(fo, 'JPEG', d.cell.x + (d.cell.width - 40) / 2, d.cell.y + (d.cell.height - 40) / 2, 40, 40); } catch(err){} } } },
         });
+        // itens completos nos metadados: a Ordem de compra importa este PDF com o SKU inteiro (ocLerListaPdf)
+        doc.setProperties({ title: titulo, subject: 'Lista de compras', creator: 'Caixa 360', keywords: 'caixa360-lista ' + JSON.stringify({ v: 1, para, itens: itens.map(x => ({ sku: x.sku, nome: x.nome || '', qtd: x.qtd, preco: x.preco || 0 })) }) });
         doc.save(titulo.toLowerCase().replace(/[^a-z0-9à-ú]+/gi, '_').replace(/^_|_$/g, '') + '_' + getToday() + '.pdf');
       } catch(e){ toast('Não consegui gerar o PDF: ' + (e.message || e)); }
       finally { if(bt){ bt.disabled = false; bt.textContent = 'Baixar PDF'; } }

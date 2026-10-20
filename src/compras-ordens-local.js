@@ -204,6 +204,7 @@
         <a class="fx-link" style="color:var(--primary);cursor:pointer;font-size:12.5px;" onclick="ocUltimasCompras()">ver últimas compras deste fornecedor</a><div id="ocn-ultimas"></div>
 
         ${sec('Itens da compra')}
+        <div style="margin:-2px 0 8px;"><button type="button" class="btn-out btn-sm" onclick="ocImportarListaPdf()">Importar lista de compras (PDF)</button> <span class="text-muted" style="font-size:12px;">o PDF gerado na Sugestão de compras preenche os produtos, quantidades e preços</span></div>
         <datalist id="ocn-prods">${window._ocProds.map(p => `<option value="${ocEsc(p.sku)}" label="${ocEsc(p.nome)}">`).join('')}</datalist>
         <datalist id="ocn-nomes">${nomes.map(p => `<option value="${ocEsc(p)}">`).join('')}</datalist>
         <div class="text-muted" style="font-size:12px;margin:-2px 0 6px;">Não lembra o SKU? Digite palavras do nome e a cor no SKU ou no Item (ex.: vaso diamante bege). Produto sem cadastro pode ficar só com a descrição e ser vinculado depois em "Editar ordem".</div>
@@ -450,4 +451,69 @@
       if(erro) toast('Não consegui excluir: ' + erro);
       else toast(ok.length + ' ordem' + (ok.length === 1 ? ' excluída' : 's excluídas') + (comChegada.length ? '. ' + comChegada.length + ' com chegada lançada ficaram (desfaça as chegadas antes).' : '.'));
       ocDesenhar();
+    }
+
+    // ---------- importar a lista de compras (PDF gerado na Sugestão de compras) ----------
+    // PDF gerado a partir de 20/10/2026 traz os itens completos nos metadados (Keywords "caixa360-lista {json}").
+    // PDF anterior é lido pela tabela (colunas fixas do jsPDF): ali o SKU é só a variação, então casa nome + variação
+    // com o cadastro. O que não casar entra sem SKU (vincula depois). Condição de pagamento não vem no PDF.
+    function ocImportarListaPdf(){
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/pdf,.pdf';
+      inp.onchange = () => { if(inp.files && inp.files[0]) ocLerListaPdf(inp.files[0]); }; inp.click();
+    }
+    function ocPdfJs(){
+      if(typeof esoPdfJs === 'function') return esoPdfJs();
+      return new Promise((ok, erro) => { if(window.pdfjsLib) return ok(window.pdfjsLib); const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; ok(window.pdfjsLib); }; s.onerror = () => erro(new Error('não consegui carregar o leitor de PDF')); document.head.appendChild(s); });
+    }
+    const ocVarDe = sku => String(sku || '').trim().replace(/^[A-Za-z]+-[A-Za-z]?\d+(-|$)/, '').replace(/-/g, ' ').trim();
+    async function ocLerTabelaPdf(pdf){
+      const linhas = []; let para = '';
+      const num = s => Number(String(s || '').replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+      for(let p = 1; p <= pdf.numPages; p++){
+        const tc = await (await pdf.getPage(p)).getTextContent();
+        const T = tc.items.map(i => ({ s: String(i.str || '').trim(), x: i.transform[4], y: i.transform[5] })).filter(i => i.s);
+        if(!para){ const d = T.find(i => /Para:/.test(i.s)); if(d) para = (d.s.split('Para:')[1] || '').trim(); }
+        const hp = T.find(t => t.s === 'Produto'), hq = T.find(t => t.s === 'Qtd.'); if(!hp || !hq) continue;
+        const comPreco = T.some(t => t.s === 'Preço' && Math.abs(t.y - hp.y) < 3);
+        // larguras das colunas no comprasListaPdf (A4, margem 40): #, foto, SKU, produto, qtd, preço, subtotal
+        const lim = comPreco ? [62, 114, 194, 361, 413, 477] : [62, 114, 214, 495, 9999, 9999];
+        const col = x => { let c = 0; while(c < lim.length && x >= lim[c] - 2) c++; return c; };
+        const rod = T.find(t => /^\d+ produtos?$/.test(t.s));
+        const corpo = T.filter(t => t.y < hp.y - 2 && (!rod || t.y > rod.y + 3));
+        const anc = corpo.filter(t => col(t.x) === 0 && /^\d+$/.test(t.s));
+        const L = anc.map(a => ({ y: a.y, sku: [], nome: [], qtd: [], preco: [] }));
+        corpo.forEach(t => { const c = col(t.x); if(c === 0 || c === 1 || !L.length) return;
+          const r = L.reduce((m, l) => Math.abs(l.y - t.y) < Math.abs(m.y - t.y) ? l : m, L[0]);
+          (c === 2 ? r.sku : c === 3 ? r.nome : c === 4 ? r.qtd : c === 5 ? r.preco : []).push(t); });
+        const junta = a => a.sort((m, n) => n.y - m.y || m.x - n.x).map(t => t.s).join(' ').replace(/\s+/g, ' ').trim();
+        L.forEach(l => linhas.push({ vari: junta(l.sku), nome: junta(l.nome), qtd: Math.round(num(junta(l.qtd).replace(/\./g, ''))), preco: num(junta(l.preco)) }));
+      }
+      // casa com o cadastro: mesmo nome e mesma variação; senão, todas as palavras do nome + variação num produto só
+      const P = window._ocProds || [];
+      const itens = linhas.filter(l => l.nome && l.qtd > 0).map(l => {
+        const n = ocSemAc(l.nome), v = ocSemAc(l.vari);
+        let x = P.filter(p => ocSemAc(p.nome) === n && ocSemAc(ocVarDe(p.sku)) === v);
+        if(x.length !== 1) x = ocAcharProd(l.nome + ' ' + l.vari);
+        return { sku: x.length === 1 ? x[0].sku : '', nome: x.length === 1 ? x[0].nome : (l.nome + (l.vari ? ' — ' + l.vari : '')), qtd: l.qtd, preco: l.preco };
+      });
+      return { itens, para };
+    }
+    async function ocLerListaPdf(file){
+      try {
+        ocCriarLer();
+        const lib = await ocPdfJs(), pdf = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+        let itens = null, para = '';
+        try { const md = await pdf.getMetadata(), kw = String((md && md.info && md.info.Keywords) || '');
+          if(kw.startsWith('caixa360-lista ')){ const j = JSON.parse(kw.slice(15)); para = j.para || ''; itens = (j.itens || []).map(i => ({ sku: i.sku || '', nome: i.sku ? (ocNomeProduto(i.sku) || i.nome || '') : (i.nome || ''), qtd: Number(i.qtd) || 0, preco: Number(i.preco) || 0 })).filter(i => i.qtd > 0); } } catch(e){}
+        if(!itens){ const r = await ocLerTabelaPdf(pdf); itens = r.itens; para = r.para; }
+        if(!itens.length){ toast('Não achei produtos neste PDF. Use o PDF da lista gerada na Sugestão de compras.'); return; }
+        const ja = ocNova.itens.filter(i => i.sku || i.desc);
+        ocNova.itens = ja.concat(itens.map(i => { const preco = i.preco || (i.sku ? ocUltimoPreco().get(ocN(i.sku)) || Number((skus.find(s => ocN(s.sku) === ocN(i.sku)) || {}).custo) || 0 : 0);
+          return { sku: i.sku, desc: i.nome, qtd: i.qtd, valor: preco ? fmtMoney(preco) : '', ipi: '' }; }));
+        if(para && !String(ocNova.fornecedor || '').trim()) ocNova.fornecedor = para;
+        ocCriarDesenhar();
+        const sem = itens.filter(i => !i.sku).length;
+        toast(itens.length + ' produto(s) importado(s) do PDF' + (sem ? '; ' + sem + ' sem SKU (escolha o produto na linha ou vincule depois)' : '') + '. Confira e gere as parcelas.');
+      } catch(e){ toast('Não consegui ler o PDF: ' + (e.message || e)); }
     }
