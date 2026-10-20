@@ -429,7 +429,10 @@
             styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak', valign: 'middle' },
             headStyles: { fillColor: [40, 44, 60], textColor: 255 },
             // tira as setas de ordenação do título e alinha à direita as colunas numéricas da tela
-            didParseCell: d => { if(d.section === 'head') d.cell.text = d.cell.text.map(x => x.replace(/[▾▴]/g, '').trim()); const el = d.cell.raw; if(el && el.classList && el.classList.contains('num')) d.cell.styles.halign = 'right'; } });
+            didParseCell: d => { const el = d.cell.raw;
+              // texto como aparece na tela (SKU e nome em linhas separadas), sem setas de ordenação e sem quebrar o R$ do valor
+              if(el && el.innerText != null) d.cell.text = el.innerText.split('\n').map(x => x.replace(/[▾▴]/g, '').trim()).filter(Boolean).map(x => x.replace(/R\$ /g, 'R$\u00A0'));
+              if(el && el.classList && el.classList.contains('num')) d.cell.styles.halign = 'right'; } });
           y = doc.lastAutoTable.finalY + 16;
         });
         doc.save('analise_' + nomeAba.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_') + '_' + p.de + '_' + p.ate + '.pdf');
