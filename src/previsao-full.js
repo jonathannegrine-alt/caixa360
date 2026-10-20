@@ -15,7 +15,7 @@
 // Importação: "Relatório de Planejamento de envios" ou "Relatório geral de estoque" (aba Resumo) → tabela full_sugestoes.
     const pflLS = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch(e){ return d; } };
     let pfl = { chave: '', base: [], sug: [], refs: [], dias: 34, prazo: 14, erro: '', lendo: false, msg: '', sel: {}, qtd: {}, filtro: 'todos', fotos: {},
-      ruptura: pflLS('mk_pfl_ruptura', '0') === '1', progUsar: pflLS('mk_pfl_prog', '1') === '1', prog: {}, progN: 0, busca: '', ord: { col: 'acaba', dir: 1 }, envio: '', entrada: 2, estF: '', estMax: '', reforco: Number(pflLS('mk_pfl_reforco', '0')) || 0 };
+      ruptura: pflLS('mk_pfl_ruptura', '0') === '1', progUsar: pflLS('mk_pfl_prog2', '1') === '1', prog: {}, progN: 0, busca: '', ord: { col: 'acaba', dir: 1 }, envio: '', entrada: 2, estF: '', estMax: '', reforco: Number(pflLS('mk_pfl_reforco', '0')) || 0 };
     function pflRuptura(v){ pfl.ruptura = !!v; try { localStorage.setItem('mk_pfl_ruptura', v ? '1' : '0'); } catch(e){} pflPagina(); }
     // envios ao Full do planejamento interno (Estoque → Envios ao Full, situação "preparando"): o Mercado Livre ainda não
     // os mostra, mas as unidades vão para o Full; entram como "a caminho" (padrão ligado)
@@ -49,7 +49,7 @@
       // ao fechar a janela (salvou ou cancelou), a previsão relê os envios programados
       const m = document.getElementById('modal-vml'), t = setInterval(() => { if(m && m.classList.contains('open')) return; clearInterval(t); pfl.chave = ''; pflPagina(); }, 700);
     }
-    function pflProgUsar(v){ pfl.progUsar = !!v; try { localStorage.setItem('mk_pfl_prog', v ? '1' : '0'); } catch(e){} pflPagina(); }
+    function pflProgUsar(v){ pfl.progUsar = !!v; try { localStorage.setItem('mk_pfl_prog2', v ? '1' : '0'); } catch(e){} pflPagina(); }
     // filtros de urgência, com os mesmos nomes da tela de Planejamento de envios do Mercado Livre
     const PFL_FILTROS = [['todos', 'Todos'], ['esta', 'Enviar esta semana'], ['prox', 'Enviar na próxima semana'], ['duas', 'Enviar em 2 semanas ou mais'], ['sem', 'Sem necessidade']];
     // marcado para o envio? (padrão: tudo que tem quantidade a enviar) e quantidade (padrão: a calculada; pode ser trocada à mão)
@@ -283,7 +283,10 @@
       const topo = '<div class="pg-head"><div><div class="pg-title">Previsão de Full</div><div class="pg-sub">Quanto enviar ao Full e até quando, para agendar o galpão antes de o Mercado Livre publicar a sugestão da semana.</div></div></div>';
       if(recarregar || pfl.chave !== chave){ el.innerHTML = topo + '<div class="vazio"><b>Calculando a previsão…</b></div>'; if(typeof usuarioAtual !== 'undefined' && usuarioAtual) await pflCarregar(chave, conta); }
       if(!el.classList.contains('active')) return;
-      el.innerHTML = topo + pflCorpo();
+      // caixa "Contar envios programados" desmarcada (fica guardada no navegador): avisa, para o "A caminho" não parecer errado
+      // (a chave mk_pfl_prog2 substituiu a mk_pfl_prog em 20/10/2026 para voltar todo mundo a marcado)
+      const avisoProg = !pfl.progUsar && pfl.progN ? '<div class="alert alert-warning">Há ' + pfl.progN + ' envio' + (pfl.progN === 1 ? '' : 's') + ' ao Full em preparação que <b>não estão contando</b> em "A caminho", porque a opção "Contar envios programados" está desmarcada. <a href="#" onclick="event.preventDefault();pflProgUsar(true)">Contar agora</a></div>' : '';
+      el.innerHTML = topo + avisoProg + pflCorpo();
     }
     // produto que trocou de SKU: liga o antigo ao atual (tabela sku_trocas; a RPC full_previsao_base soma as vendas do antigo no atual)
     async function pflTrocaAdd(){
