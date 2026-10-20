@@ -482,11 +482,12 @@
       document.getElementById('sim-multi-card')?.remove();
       if(simSalvas === null){ simSalvas = []; simSalvasLer().then(simBarra); }
       let bar = document.getElementById('sim-barra');
-      if(!bar){ bar = document.createElement('div'); bar.id = 'sim-barra'; bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;'; const pri = view.querySelector('.card'); if(pri) pri.insertAdjacentElement('beforebegin', bar); else view.appendChild(bar); }
+      // fica no cabeçalho do próprio cartão "Simular Compra", à direita do título
+      if(!bar){ bar = document.createElement('div'); bar.id = 'sim-barra'; bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto;'; const cab = view.querySelector('.card .card-header'); if(cab){ cab.style.flexWrap = 'wrap'; cab.style.gap = '8px'; cab.appendChild(bar); } else view.appendChild(bar); }
       const e = x => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
       const aberta = simSalvas.find(x => x.id === simSalvaId);
       bar.innerHTML = `<span style="font-size:13px;">${aberta ? 'Simulação aberta: <b>' + e(aberta.nome) + '</b> (' + simCompras.length + ' compra' + (simCompras.length === 1 ? '' : 's') + ')' : '<span class="text-muted">Cada "Simular" acrescenta a compra na simulação e ela fica salva.</span>'}</span>
-        <select onchange="simAbrir(this.value)" style="width:auto;margin-left:auto;"><option value="">${simSalvas.length ? 'Abrir simulação salva…' : 'Nenhuma simulação salva'}</option>${simSalvas.map(x => `<option value="${x.id}" ${x.id === simSalvaId ? 'selected' : ''}>${e(x.nome)} · ${(x.compras || []).length} compra(s) · ${new Date(x.atualizado_em).toLocaleDateString('pt-BR')}</option>`).join('')}</select>
+        <select onchange="simAbrir(this.value)" style="width:auto;"><option value="">${simSalvas.length ? 'Abrir simulação salva…' : 'Nenhuma simulação salva'}</option>${simSalvas.map(x => `<option value="${x.id}" ${x.id === simSalvaId ? 'selected' : ''}>${e(x.nome)} · ${(x.compras || []).length} compra(s) · ${new Date(x.atualizado_em).toLocaleDateString('pt-BR')}</option>`).join('')}</select>
         ${aberta ? '<button class="btn-out btn-sm" onclick="simRenomear()">Renomear</button><button class="btn-out btn-sm" onclick="simNova()">Nova simulação</button><button class="btn-out btn-sm" style="color:var(--danger);" onclick="simExcluir()">Excluir</button>' : ''}`;
     }
     async function simGravar(){
