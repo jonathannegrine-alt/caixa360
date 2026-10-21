@@ -145,7 +145,7 @@
         const dentro = p.situacao === 'started' || p.situacao === 'pending', preco = p.preco || p.sugerido || 0, desc = p.original && preco ? (1 - preco / p.original) * 100 : (p.ml_pct + p.vendedor_pct);
         const m = preco && typeof pmMargem === 'function' ? pmMargem(item, preco, p.original * (p.ml_pct || 0) / 100) : null;
         return `<div class="pc-promo ${dentro ? 'dentro' : ''}"><div><b>${pqE(p.nome || PM_TIPO[p.tipo] || p.tipo)}</b> <span class="v-tag ${dentro ? 'conta' : ''}">${p.situacao === 'started' ? 'Participando' : p.situacao === 'pending' ? 'Programado' : 'Pode participar'}</span>
-            <small>${pqE(PM_TIPO[p.tipo] || p.tipo)}${p.inicio ? ' · ' + pcDia(p.inicio) + ' a ' + pcDia(p.fim) : ''}</small></div>
+            <small>${pqE(PM_TIPO[p.tipo] || p.tipo)}</small>${pcPeriodo(p)}</div>
           <div class="pc-num">${desc ? `<b>${pqN(desc, 1)}%</b>` : ''}${p.vendedor_pct || p.ml_pct ? `<small>você ${pqN(p.vendedor_pct, 1)}% · Mercado Livre ${pqN(p.ml_pct, 1)}%</small>` : ''}${p.ml_pct && p.original ? `<small title="Parte do desconto que o Mercado Livre devolve a você em cada venda nesta promoção."><b style="font-size:inherit;color:var(--success,#16a34a);">Rebate: R$ ${pqN(p.original * p.ml_pct / 100)}</b> por venda</small>` : ''}</div>
           <div class="pc-num">${preco ? `<b>R$ ${pqN(preco)}</b><small>${dentro ? 'preço na promoção' : 'preço sugerido'}</small>` : '<small>defina o preço ao participar</small>'}</div>
           <div class="pc-num">${m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)}</b><small>margem ${pqN(m.pct, 1)}%</small>` : '<small>sem custo no cadastro</small>'}</div>
@@ -156,6 +156,11 @@
     // PC_EDITA: promoções em que o Mercado Livre deixa mudar o preço depois de entrar.
     const PC_PRECO_LIVRE = ['SELLER_CAMPAIGN', 'DEAL', 'DOD', 'LIGHTNING', 'PRICE_DISCOUNT'], PC_PARTICIPA = PC_PRECO_LIVRE.concat(['SMART', 'SMART_LIGHTNING', 'MARKETPLACE_CAMPAIGN', 'PRICE_MATCHING', 'PRICE_MATCHING_MELI_ALL', 'UNHEALTHY_STOCK', 'PRE_NEGOTIATED']);
     const PC_EDITA = ['SELLER_CAMPAIGN', 'DEAL', 'PRICE_DISCOUNT'];
+    // período da promoção: início e fim (e o prazo para entrar, quando o Mercado Livre informa)
+    function pcPeriodo(p){
+      if(!p.inicio && !p.fim) return '<small class="text-muted">sem data informada pelo Mercado Livre</small>';
+      return `<small>📅 Início <b>${pcDia(p.inicio) || '—'}</b> · termina <b>${pcDia(p.fim) || '—'}</b>${p.prazo && p.situacao === 'candidate' ? ' · entrar até ' + pcDia(p.prazo) : ''}</small>`;
+    }
     function pcPromoDe(item, id, tipo){ return (((pc.aberto[item] || {}).promos) || []).find(p => (p.id || '') === id && p.tipo === tipo); }
     function pcParticipar(item, id, tipo, editar){
       const p = pcPromoDe(item, id, tipo); if(!p) return;
@@ -163,6 +168,7 @@
       const h = getToday(), fim0 = dateStr(new Date(new Date(h + 'T12:00:00').getTime() + 13 * 86400000));
       pc._part = { item, id, tipo, editar: !!editar };
       vmlModal((editar ? 'Editar preço: ' : 'Participar: ') + pqE(p.nome || PM_TIPO[tipo] || tipo), `<div class="pm-an" style="margin-bottom:14px;">${i.thumbnail ? `<img src="${pqE(i.thumbnail)}" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(i.titulo || item)}</b><small>${pcTipoTag(item)}${pqE(i.sku || '')} · ${pqE(item)} · preço de hoje R$ ${pqN(p.original || i.preco)}</small></div></div>
+        ${tipo === 'PRICE_DISCOUNT' && !editar ? '' : `<div style="margin:-4px 0 12px;font-size:13px;">${pcPeriodo(p)}</div>`}
         ${livre ? `<div class="form-row"><div class="form-group"><label class="form-label" for="pc-p-preco">Preço na promoção (R$)</label><div style="display:flex;gap:8px;align-items:center;"><input type="text" inputmode="decimal" id="pc-p-preco" value="${preco0 ? pqN(preco0) : ''}" oninput="pcParticiparConta('preco')" style="flex:1;"><span>ou</span><input type="text" inputmode="decimal" id="pc-p-pct" aria-label="Desconto em %" style="width:74px;" oninput="pcParticiparConta('pct')"><span>%</span></div>${p.minimo || p.maximo ? `<div class="text-muted" style="font-size:12px;margin-top:5px;">O Mercado Livre aceita de R$ ${pqN(p.minimo)} a R$ ${pqN(p.maximo)}${p.sugerido ? ' · sugerido R$ ' + pqN(p.sugerido) : ''}.</div>` : ''}</div>
             ${tipo === 'PRICE_DISCOUNT' && !editar ? `<div class="form-group"><label class="form-label" for="pc-p-ini">Período do desconto</label><div style="display:flex;gap:8px;align-items:center;"><input type="date" id="pc-p-ini" value="${h}" min="${h}"><span>a</span><input type="date" id="pc-p-fim" aria-label="Fim do desconto" value="${fim0}" min="${h}"></div><div class="text-muted" style="font-size:12px;margin-top:5px;">O Mercado Livre aceita até 14 dias.</div></div>` : ''}
             ${tipo === 'LIGHTNING' && !editar ? `<div class="form-group"><label class="form-label" for="pc-p-est">Estoque reservado</label><input type="number" id="pc-p-est" min="${p.estoque_min || 1}" max="${p.estoque_max || ''}" value="${p.estoque_min || ''}"><div class="text-muted" style="font-size:12px;margin-top:5px;">de ${p.estoque_min} a ${p.estoque_max} unidades</div></div>` : ''}</div>`

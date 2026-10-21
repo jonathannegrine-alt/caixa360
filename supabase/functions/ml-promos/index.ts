@@ -66,8 +66,15 @@ Deno.serve(async (req: Request) => {
       const item = idItem(body?.item); if (!item) return resp({ error: 'Anúncio inválido.' }, 400)
       const j: any = await g(`${ML}/seller-promotions/items/${item}?app_version=v2`)
       if (!j || j.erro) return resp({ ok: false, motivo: (j && j.erro) || 'sem resposta' })
-      return resp({ ok: true, promos: (Array.isArray(j) ? j : []).map((x: any) => ({ id: x.id, tipo: x.type, sub: x.sub_type || '', situacao: x.status || '', nome: x.name || '', preco: Number(x.price) || 0, original: Number(x.original_price) || 0,
-        ml_pct: Number(x.meli_percentage) || 0, vendedor_pct: Number(x.seller_percentage) || 0, inicio: x.start_date || '', fim: x.finish_date || '', sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0, ref: x.ref_id || x.offer_id || '', estoque_min: Number(x.stock?.min) || 0, estoque_max: Number(x.stock?.max) || 0 })) })
+      // o anúncio nem sempre traz as datas: completa pela lista de promoções da conta
+      const lista = Array.isArray(j) ? j : []
+      const datas = new Map<string, any>()
+      if (lista.some((x: any) => x.id && !(x.start_date && x.finish_date))) {
+        const u: any = await g(`${ML}/seller-promotions/users/${conta}?app_version=v2`)
+        for (const p of (u?.results || [])) datas.set(String(p.id), p)
+      }
+      return resp({ ok: true, promos: lista.map((x: any) => ({ id: x.id, tipo: x.type, sub: x.sub_type || '', situacao: x.status || '', nome: x.name || '', preco: Number(x.price) || 0, original: Number(x.original_price) || 0,
+        ml_pct: Number(x.meli_percentage) || 0, vendedor_pct: Number(x.seller_percentage) || 0, inicio: x.start_date || datas.get(String(x.id))?.start_date || '', fim: x.finish_date || x.end_date || datas.get(String(x.id))?.finish_date || '', prazo: datas.get(String(x.id))?.deadline_date || '', sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0, ref: x.ref_id || x.offer_id || '', estoque_min: Number(x.stock?.min) || 0, estoque_max: Number(x.stock?.max) || 0 })) })
     }
     // promoções EM ANDAMENTO de vários anúncios (para o selo "Promoção ativa" da lista, sem abrir anúncio por anúncio).
     // O preço "de" de /items não serve para isso (vem vazio em campanha do vendedor), então consulta as promoções de cada
