@@ -50,7 +50,8 @@
       const valorFalta = itens.reduce((s, i) => s + i.falta * (Number(i.valor) || 0), 0);
       // atendida no Olist e sem nenhuma conferência aqui = já tinha chegado antes de existir a conferência
       const antiga = Number(o.situacao) === 1 && recebido === 0;
-      const sit = Number(o.situacao) === 2 ? 'Cancelada' : antiga ? 'Recebida' : falta === 0 && comprado > 0 ? 'Recebida' : recebido > 0 ? 'Parcial' : 'A receber';
+      // proposta (extra.etapa = 'proposta'): enviada ao fornecedor, ainda não comprada; não conta como a caminho nem gera contas
+      const sit = Number(o.situacao) === 2 ? 'Cancelada' : o.extra && o.extra.etapa === 'proposta' ? 'Proposta' : antiga ? 'Recebida' : falta === 0 && comprado > 0 ? 'Recebida' : recebido > 0 ? 'Parcial' : 'A receber';
       return { itens, comprado, recebido: antiga ? comprado : recebido, falta: antiga ? 0 : falta, valorFalta: antiga ? 0 : valorFalta, sit, antiga };
     }
 
@@ -97,7 +98,7 @@
         ${oc.erro ? `<div class="alert alert-danger">${ocEsc(oc.erro)}</div>` : ''}
         <div class="kpi-grid k4i">
           <div class="kpi k-frete"><div class="kpi-label">A caminho</div><div class="kpi-value">${ocInt(unCaminho)} un.</div><div class="kpi-sub">${fmt(valCaminho)} em mercadoria comprada</div></div>
-          <div class="kpi k-venda"><div class="kpi-label">Aguardando chegada</div><div class="kpi-value">${cont('A receber')}</div><div class="kpi-sub">ordens sem nenhuma conferência</div></div>
+          <div class="kpi k-venda"><div class="kpi-label">Em trânsito</div><div class="kpi-value">${cont('A receber')}</div><div class="kpi-sub">compradas, sem nenhuma conferência${cont('Proposta') ? ' · ' + cont('Proposta') + ' proposta' + (cont('Proposta') === 1 ? '' : 's') + ' enviada' + (cont('Proposta') === 1 ? '' : 's') : ''}</div></div>
           <div class="kpi k-hoje"><div class="kpi-label">Recebimento parcial</div><div class="kpi-value">${cont('Parcial')}</div><div class="kpi-sub">chegou uma parte</div></div>
           <div class="kpi k-mc"><div class="kpi-label">Recebido em 30 dias</div><div class="kpi-value">${ocInt(rec30)} un.</div><div class="kpi-sub">conferidas aqui</div></div>
         </div>
@@ -115,12 +116,12 @@
       const f = oc.filtro, sel = oc.sel || (oc.sel = new Set());
       const mostrar = ocOrdenar(base.filter(x => f === 'todas' ? true : f === 'pendentes' ? (x.r.sit === 'A receber' || x.r.sit === 'Parcial') : x.r.sit === f));
       const cont = s => base.filter(x => x.r.sit === s).length, pendN = base.filter(x => x.r.sit === 'A receber' || x.r.sit === 'Parcial').length;
-      const selo = s => `<span class="cp-sit ${s === 'Recebida' ? 'cp-ok' : s === 'Parcial' ? 'cp-excesso' : 'cp-comprar'}">${s}</span>`;
+      const selo = s => s === 'Proposta' ? '<span class="cp-sit" style="background:var(--surface-2,#eef0f4);color:var(--text-muted,#555);">Proposta</span>' : `<span class="cp-sit ${s === 'Recebida' ? 'cp-ok' : s === 'Parcial' ? 'cp-excesso' : 'cp-comprar'}">${ocSitNome(s)}</span>`;
       const dt = d => d ? ptDate(String(d).substring(0, 10)) : '—';
       const marcadas = oc.ordens.filter(o => sel.has(Number(o.id)));
       const totMost = mostrar.reduce((s, x) => s + (Number(x.o.total) || 0), 0);
       return `<div class="card"><div class="card-body"><div class="chips">
-          ${[['pendentes', 'A receber e parciais', pendN], ['A receber', 'A receber', cont('A receber')], ['Parcial', 'Parcial', cont('Parcial')], ['Recebida', 'Recebidas', cont('Recebida')], ['todas', 'Todas', base.length]]
+          ${[['Proposta', 'Propostas', cont('Proposta')], ['pendentes', 'Em trânsito e parciais', pendN], ['A receber', 'Em trânsito', cont('A receber')], ['Parcial', 'Parcial', cont('Parcial')], ['Recebida', 'Recebidas', cont('Recebida')], ['todas', 'Todas', base.length]]
             .map(([k, t, n]) => `<button class="chip ${f === k ? 'active' : ''}" onclick="oc.filtro='${k}';ocFiltrar();">${t}<span class="n">${n}</span></button>`).join('')}
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:12.5px;">
@@ -141,7 +142,7 @@
               <td>${r.sit === 'A receber' || r.sit === 'Parcial' ? `<input type="date" value="${ocPrev(o) || ''}" onchange="ocSalvarPrevisao(${o.id}, this.value)" style="width:135px;${ocPrev(o) && ocPrev(o) < getToday() ? 'border-color:var(--danger);color:var(--danger);' : ''}" title="${ocPrev(o) && ocPrev(o) < getToday() ? 'A previsão já passou' : 'Quando a mercadoria deve chegar'}">` : dt(ocPrev(o))}</td>
               <td><div class="cp-cob"><div class="cp-cob-n"><b>${ocInt(r.recebido)}</b> de ${ocInt(r.comprado)} un.</div><div class="cp-cob-t"><span class="cp-cob-${pct >= 100 ? 'v' : pct > 0 ? 'a' : 'r'}" style="width:${Math.max(3, Math.min(100, pct))}%;"></span></div></div></td>
               <td class="num"><b>${fmt(Number(o.total) || 0)}</b>${typeof ocParcelasResumo === 'function' && ocParcelasResumo(o) ? '<br><small class="text-muted">' + ocParcelasResumo(o) + '</small>' : ''}</td>
-              <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="ocEditar(${o.id})" title="Editar a ordem: fornecedor, itens, preços, pagamento e observações">Editar</button> <button class="btn-out btn-sm" onclick="ocPdf(${o.id})" title="Baixar o PDF desta ordem">PDF</button> <button class="btn-out btn-sm" onclick="ocPdf(${o.id}, true)" title="PDF só com itens e quantidades, para o galpão conferir e dar entrada no estoque">Lista p/ galpão</button> ${r.sit === 'A receber' || r.sit === 'Parcial' ? `<button class="btn btn-sm" onclick="ocConferir(${o.id})">Conferir chegada</button>` : `<button class="btn-out btn-sm" onclick="ocConferir(${o.id})">Ver</button>`}</td>
+              <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="ocEditar(${o.id})" title="Editar a ordem: fornecedor, itens, preços, pagamento e observações">Editar</button> <button class="btn-out btn-sm" onclick="ocPdf(${o.id})" title="Baixar o PDF desta ordem">PDF</button> ${r.sit === 'Proposta' ? '' : `<button class="btn-out btn-sm" onclick="ocPdf(${o.id}, true)" title="PDF só com itens e quantidades, para o galpão conferir e dar entrada no estoque">Lista p/ galpão</button> `}${r.sit === 'Proposta' ? `<button class="btn btn-sm" onclick="ocGerarCompra(${o.id})" title="O fornecedor aceitou: vira compra (em trânsito) e lança as parcelas no Contas a pagar">Gerar compra</button>` : r.sit === 'A receber' || r.sit === 'Parcial' ? `<button class="btn btn-sm" onclick="ocConferir(${o.id})">Conferir chegada</button>` : `<button class="btn-out btn-sm" onclick="ocConferir(${o.id})">Ver</button>`}</td>
             </tr>`; }).join('') : `<tr><td colspan="9"><div class="vazio"><b>Nenhuma ordem nesta lista</b>Troque o filtro ou a busca acima.</div></td></tr>`}</tbody>
         </table></div></div>`;
     }
@@ -149,13 +150,15 @@
     function ocOrdem(k){ oc.ord = oc.ord && oc.ord.k === k ? { k, desc: !oc.ord.desc } : { k, desc: k === 'valor' || k === 'numero' }; ocFiltrar(); }
     function ocOrdenar(L){
       const o = oc.ord; if(!o) return L;
-      const SIT = { 'A receber': 0, 'Parcial': 1, 'Recebida': 2 };
+      const SIT = { 'Proposta': -1, 'A receber': 0, 'Parcial': 1, 'Recebida': 2 };
       const val = ({ o: x, r }) => ({ sit: SIT[r.sit] != null ? SIT[r.sit] : 9, numero: Number(x.numero) || 0, forn: ocSemAc(x.fornecedor), prod: r.itens.length,
         prev: String(ocPrev(x) || ''), cheg: r.comprado ? r.recebido / r.comprado : 0, valor: Number(x.total) || 0 })[o.k];
       return L.slice().sort((a, b) => { const va = val(a), vb = val(b);
         if(o.k === 'prev' && (!va || !vb)) return !va && !vb ? 0 : !va ? 1 : -1;   // sem previsão vai para o fim
         const c = typeof va === 'string' ? va.localeCompare(vb, 'pt-BR') : va - vb; return o.desc ? -c : c; });
     }
+    // a situação 'A receber' aparece como "Em trânsito" (o nome interno continua, outras telas usam)
+    const ocSitNome = s => s === 'A receber' ? 'Em trânsito' : s;
     function ocListaBase(){
       const lojaSel = typeof lojaAtiva === 'function' ? lojaAtiva() : '';
       const daLoja = o => !lojaSel || ((o.extra && o.extra.loja) || (typeof lojaPadraoId === 'function' ? lojaPadraoId() : '')) === lojaSel;
@@ -196,7 +199,7 @@
           ${hist.map(h => `<tr><td>${dth(h.recebido_em)}</td><td><b>${ocEsc(h.sku)}</b></td><td style="text-align:right;">${ocInt(h.qtd)} un.</td><td class="text-muted" style="font-size:12px;">${h.conferido_por ? 'conferido por <b>' + ocEsc(h.conferido_por) + '</b> · ' : ''}${h.somou === false ? 'sem somar ao galpão' : 'somado ao galpão'}${h.obs ? ' · ' + ocEsc(h.obs) : ''}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="ocDesfazer(${h.id})">Desfazer</button></td></tr>`).join('')}
         </tbody></table>` : ''}
         ${typeof ocParcelasHtml === 'function' ? ocParcelasHtml(o) : ''}`,
-        `${Number(o.id) < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${o.id}, this)">Excluir ordem</button><button class="btn-out" onclick="ocEditar(${o.id})">Editar ordem</button>` : '<span style="margin-right:auto;"></span><button class="btn-out" onclick="ocEditar(' + o.id + ')">Editar ordem</button>'}<button class="btn-out" onclick="ocDuplicar(${o.id})" title="Abre uma ordem nova com os mesmos itens e fornecedor">Repetir compra</button><button class="btn-out" onclick="ocPdf(${o.id})">PDF</button><button class="btn-out" onclick="ocPdf(${o.id}, true)" title="Só itens e quantidades, para o galpão conferir e dar entrada">Lista p/ galpão</button>${hist.length && typeof ocPdfConferencia === 'function' ? `<button class="btn-out" onclick="ocPdfConferencia(${o.id})" title="PDF com as chegadas lançadas: data, quantidades e quem conferiu">Baixar conferência</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${aberta ? `<button class="btn" onclick="ocLancar(${o.id}, this)">Lançar chegada</button>` : ''}`);
+        `${Number(o.id) < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${o.id}, this)">Excluir ordem</button><button class="btn-out" onclick="ocEditar(${o.id})">Editar ordem</button>` : '<span style="margin-right:auto;"></span><button class="btn-out" onclick="ocEditar(' + o.id + ')">Editar ordem</button>'}<button class="btn-out" onclick="ocDuplicar(${o.id})" title="Abre uma ordem nova com os mesmos itens e fornecedor">Repetir compra</button><button class="btn-out" onclick="ocPdf(${o.id})">PDF</button><button class="btn-out" onclick="ocPdf(${o.id}, true)" title="Só itens e quantidades, para o galpão conferir e dar entrada">Lista p/ galpão</button>${hist.length && typeof ocPdfConferencia === 'function' ? `<button class="btn-out" onclick="ocPdfConferencia(${o.id})" title="PDF com as chegadas lançadas: data, quantidades e quem conferiu">Baixar conferência</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${aberta ? `<button class="btn" onclick="ocLancar(${o.id}, this)">Lançar chegada</button>` : ''}${r.sit === 'Proposta' ? `<button class="btn" onclick="ocGerarCompra(${o.id})">Gerar compra</button>` : ''}`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
     }
     function ocReceberTudo(){ document.querySelectorAll('.oc-qtd').forEach(i => { if(!i.disabled) i.value = i.dataset.falta; }); }

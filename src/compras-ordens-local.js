@@ -72,12 +72,21 @@
       const prod = (o.itens || []).reduce((s, i) => s + (Number(i.qtd) || 0) * (Number(i.valor) || 0), 0), dif = doOlist ? ocR2((Number(o.total) || 0) - prod) : 0;
       ocNova = { id: o.id, numero: o.numero, fornecedor: o.fornecedor || '', data: o.data || getToday(), prev: ocPrev(o) || '', nforn: e.nforn || '', desconto: e.desconto ? fmtMoney(e.desconto) : dif < 0 ? fmtMoney(-dif) : '', frete: e.frete ? fmtMoney(e.frete) : dif > 0 ? fmtMoney(dif) : '',
         condicao: e.condicao || '', categoria: e.categoria || '', loja: e.loja || '', lancar: !!e.lancar, transportador: e.transportador || '', fretePor: e.fretePor || '', obs: e.obs || '', obsInterna: e.obsInterna || '',
-        parcelas: (e.parcelas || []).map(p => ({ data: p.data, val: p.val })),
+        parcelas: (e.parcelas || []).map(p => ({ data: p.data, val: p.val })), etapa: e.etapa || null,
         itens: (o.itens || []).map(i => ({ sku: i.sku, desc: i.descricao || ocNomeProduto(i.sku), qtd: i.qtd, valor: fmtMoney(Number(i.valor) || 0), ipi: i.ipi || '' })), nfe: e.nfe || null };
       if(!ocNova.itens.length) ocNova.itens.push({ sku: '', desc: '', qtd: '', valor: '', ipi: '' });
       ocCriarDesenhar();
     }
     const ocEditarLocal = ocEditar;
+    // proposta aceita pelo fornecedor: abre a ordem para conferir preços e pagamento; a data da compra passa a ser hoje
+    // e os vencimentos das parcelas andam junto (mantendo os valores combinados)
+    function ocGerarCompra(id){
+      ocEditar(id); if(!ocNova) return;
+      const hoje = getToday(), dif = ocNova.data ? diasDif(ocNova.data, hoje) : 0;
+      ocNova.gerar = true; ocNova.data = hoje; ocNova.lancar = true;
+      if(dif) ocNova.parcelas = ocNova.parcelas.map(p => ({ ...p, data: p.data ? addDias(p.data, dif) : p.data }));
+      ocCriarDesenhar();
+    }
     function ocDuplicar(id){
       const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return;
       ocCriar((o.itens || []).map(i => ({ sku: i.sku, qtd: i.qtd, valor: i.valor })));
@@ -195,7 +204,8 @@
       const cats = categorias.map(c => c.nome), t = ocTotais();
       const loja = typeof lojaSelect === 'function' ? lojaSelect('ocn-loja', n.loja).replace('<select ', n.id ? '<select ' : '<select onchange="ocTrocarLoja()" ') : '';
       const sec = tit => `<div class="oc-sec">${tit}</div>`;
-      vmlModal((n.id ? 'Editar ordem de compra ' : 'Nova ordem de compra ') + ocEsc(n.numero), `
+      vmlModal((n.gerar ? 'Gerar compra da proposta ' : n.etapa === 'proposta' ? 'Editar proposta ' : n.id ? 'Editar ordem de compra ' : 'Nova ordem de compra ') + ocEsc(n.numero), `
+        ${n.gerar ? '<div class="alert alert-info">O fornecedor aceitou? Confira preços, quantidades, data e pagamento e clique em <b>Gerar compra</b>. A ordem passa a <b>Em trânsito</b> (conta como estoque a caminho) e as parcelas vão para o Contas a pagar.</div>' : n.etapa === 'proposta' ? '<div class="alert alert-info">Esta ordem é uma <b>proposta</b>: não conta como estoque a caminho e não lança contas a pagar até você gerar a compra.</div>' : ''}
         <div class="pf-grid" style="grid-template-columns:2fr 1fr 1fr;">
           <label class="pf-c"><span>Fornecedor</span><input id="ocn-forn" list="ocn-forns" value="${ocEsc(n.fornecedor)}" placeholder="Nome do fornecedor"><datalist id="ocn-forns">${forn.map(f => `<option value="${ocEsc(f)}">`).join('')}</datalist></label>
           <label class="pf-c"><span>Nº no fornecedor</span><input id="ocn-nforn" value="${ocEsc(n.nforn)}" placeholder="Pedido dele, se houver"></label>
@@ -255,7 +265,7 @@
           <label class="pf-c pf-larg"><span>Observações (saem no PDF)</span><input id="ocn-obs" value="${ocEsc(n.obs)}"></label>
           <label class="pf-c pf-larg"><span>Observações internas (não saem no PDF)</span><input id="ocn-obsint" value="${ocEsc(n.obsInterna)}"></label>
         </div>`,
-        `${n.id && n.id < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${n.id}, this)">Excluir ordem</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn-out" onclick="ocPdf()">Baixar PDF</button><button class="btn-out" onclick="ocPdf(null, true)" title="Só itens e quantidades, para o galpão conferir e dar entrada">Lista p/ galpão</button><button class="btn" onclick="ocCriarSalvar(this)">Salvar ordem</button>`);
+        `${n.id && n.id < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${n.id}, this)">Excluir ordem</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn-out" onclick="ocPdf()">Baixar PDF</button><button class="btn-out" onclick="ocPdf(null, true)" title="Só itens e quantidades, para o galpão conferir e dar entrada">Lista p/ galpão</button>${n.gerar ? '<button class="btn" onclick="ocCriarSalvar(this, \'compra\')">Gerar compra</button>' : n.etapa === 'proposta' ? '<button class="btn-out" onclick="ocCriarSalvar(this)">Salvar proposta</button><button class="btn" onclick="ocCriarSalvar(this, \'compra\')" title="O fornecedor aceitou: vira compra">Gerar compra</button>' : n.id ? '<button class="btn" onclick="ocCriarSalvar(this)">Salvar ordem</button>' : '<button class="btn-out" onclick="ocCriarSalvar(this, \'proposta\')" title="Para mandar ao fornecedor: não conta como estoque a caminho nem lança contas a pagar">Salvar como proposta</button><button class="btn" onclick="ocCriarSalvar(this)" title="Compra feita: fica em trânsito">Salvar compra</button>'}`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1000px';
       ocCriarTotal();
     }
@@ -266,16 +276,18 @@
       const itens = n.itens.map(i => ({ sku: i.sku, descricao: i.desc || (i.sku ? ocNomeProduto(i.sku) : ''), qtd: Number(i.qtd) || 0, valor: ocNum(i.valor), ipi: ocNum(i.ipi) || undefined })).filter(i => (i.sku || i.descricao) && i.qtd > 0);
       const parcelas = n.parcelas.filter(p => p.data && Number(p.val) > 0);
       return { itens, t, parcelas, extra: { nforn: n.nforn.trim() || null, desconto: t.desconto || 0, frete: t.frete || 0, ipi: t.ipi || 0, condicao: n.condicao.trim() || null, categoria: n.categoria || null, loja: n.loja || null, lancar: !!n.lancar,
-        transportador: n.transportador.trim() || null, fretePor: n.fretePor || null, obs: n.obs.trim() || null, obsInterna: n.obsInterna.trim() || null, parcelas, nfe: n.nfe || null } };
+        transportador: n.transportador.trim() || null, fretePor: n.fretePor || null, obs: n.obs.trim() || null, obsInterna: n.obsInterna.trim() || null, parcelas, nfe: n.nfe || null, etapa: n.etapa || undefined } };
     }
 
-    async function ocCriarSalvar(btn){
+    async function ocCriarSalvar(btn, modo){
       const R = ocMontarRegistro(), n = ocNova;
+      if(modo === 'proposta') R.extra.etapa = 'proposta'; else if(modo === 'compra') delete R.extra.etapa;
+      const proposta = R.extra.etapa === 'proposta';
       if(!n.fornecedor.trim()){ toast('Informe o fornecedor.'); return; }
       if(!R.itens.length){ toast('Inclua pelo menos um item com quantidade.'); return; }
-      if(R.extra.lancar && !R.parcelas.length){ toast('Para lançar no Contas a pagar, gere as parcelas (condição de pagamento).'); return; }
+      if(R.extra.lancar && !proposta && !R.parcelas.length){ toast('Para lançar no Contas a pagar, gere as parcelas (condição de pagamento).'); return; }
       // ordem do Olist cujas parcelas já estão no Contas a pagar (vieram do Olist): lançar de novo duplicaria as contas
-      if(R.extra.lancar && n.id > 0){ const o = oc.ordens.find(x => Number(x.id) === Number(n.id)), P = o ? ocParcelasDaOrdem(o) : [];
+      if(R.extra.lancar && !proposta && n.id > 0){ const o = oc.ordens.find(x => Number(x.id) === Number(n.id)), P = o ? ocParcelasDaOrdem(o) : [];
         if(P.some(p => p.pago !== null) && !(typeof pagTodos === 'function' ? pagTodos() : pagamentos).some(p => String(p.tiny_key || '').startsWith('oc:' + n.id + ':'))){
           toast('As parcelas desta ordem já estão no Contas a pagar (vieram do Olist). Desmarque "Lançar as parcelas no Contas a pagar" para não duplicar.'); return; } }
       if(n.id > 0) R.extra.editada = true;                     // ordem do Olist alterada aqui: a busca no Olist não sobrescreve
@@ -283,14 +295,14 @@
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }
       const r = n.id ? await supa.from('olist_ordens').update({ data: reg.data, data_prevista_local: reg.data_prevista_local, fornecedor: reg.fornecedor, total: reg.total, itens: reg.itens, extra: reg.extra }).eq('usuario_id', usuarioAtual.id).eq('id', n.id)
                      : await supa.from('olist_ordens').insert(reg);
-      if(r.error){ toast('Não consegui salvar a ordem: ' + r.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Salvar ordem'; } return; }
+      if(r.error){ toast('Não consegui salvar a ordem: ' + r.error.message); if(btn){ btn.disabled = false; btn.textContent = modo === 'compra' ? 'Gerar compra' : 'Salvar'; } return; }
       const i = oc.ordens.findIndex(x => Number(x.id) === Number(reg.id));
       // edição: situação e origem continuam as da ordem (uma ordem atendida do Olist não volta a "a receber")
       if(i >= 0){ const { situacao, origem, ...mud } = reg; Object.assign(oc.ordens[i], mud); } else oc.ordens.unshift(reg);
       ocContasDaOrdem(i >= 0 ? oc.ordens[i] : reg);
       ocNova = null;
       fecharModal('modal-vml'); ocDesenhar();
-      toast('Ordem ' + reg.numero + ' salva' + (reg.extra.lancar ? ' e ' + reg.extra.parcelas.length + ' parcela(s) lançada(s) no Contas a pagar.' : '.'));
+      toast(proposta ? 'Proposta ' + reg.numero + ' salva. Quando o fornecedor aceitar, clique em "Gerar compra".' : (modo === 'compra' && n.etapa === 'proposta' ? 'Compra ' + reg.numero + ' gerada: está em trânsito' : 'Ordem ' + reg.numero + ' salva') + (reg.extra.lancar && reg.extra.parcelas.length ? ' e ' + reg.extra.parcelas.length + ' parcela(s) lançada(s) no Contas a pagar.' : '.'));
       // ordem criada pela importação de uma nota (Notas de compra): a nota fica marcada como importada
       if(reg.extra.nfe && typeof nfeMarcarImportada === 'function') nfeMarcarImportada(reg.extra.nfe, { ordem: reg.numero, ordem_id: reg.id, como: 'nova' });
     }
@@ -303,12 +315,12 @@
         const pagas = new Set(pagamentos.filter(p => String(p.tiny_key || '').startsWith(pref) && p.pago).map(p => p.tiny_key));
         const tinha = pagamentos.some(p => String(p.tiny_key || '').startsWith(pref));
         pagamentos = pagamentos.filter(p => !String(p.tiny_key || '').startsWith(pref) || p.pago);
-        if(!excluir && e.lancar) (e.parcelas || []).forEach((p, k) => {
+        if(!excluir && e.lancar && e.etapa !== 'proposta') (e.parcelas || []).forEach((p, k) => {
           const chave = pref + (k + 1); if(pagas.has(chave)) return;
           pagamentos.push({ desc: 'Compra ' + o.numero + ' — ' + o.fornecedor, forn: o.fornecedor, val: Number(p.val) || 0, data: p.data, cat: e.categoria || '', pago: false, tipo: e.parcelas.length > 1 ? 'parcelado' : 'unico',
             parcela: e.parcelas.length > 1 ? (k + 1) + '/' + e.parcelas.length : null, grupo_id: e.parcelas.length > 1 ? 'g_oc_' + o.id : null, fonte: 'ordem', tiny_key: chave, emissao: o.data, doc: e.nforn || null, loja: e.loja || null, desconto: 0, juros: 0 });
         });
-        if(!tinha && !(e.lancar && (e.parcelas || []).length)) return;
+        if(!tinha && !(e.lancar && e.etapa !== 'proposta' && (e.parcelas || []).length)) return;
       } finally { if(typeof lojasFechar === 'function') lojasFechar(); }
       salvar(); if(typeof recalc === 'function') try { recalc(); } catch(err){}
     }
@@ -369,7 +381,7 @@
     // desenha uma ordem na página atual do documento
     function ocPdfPagina(doc, { o, e, itens, t }){
       const n2 = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20); doc.text('Ordem de compra ' + (o.numero || ''), 40, 50);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20); doc.text((e.etapa === 'proposta' ? 'Proposta de compra ' : 'Ordem de compra ') + (o.numero || ''), 40, 50);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(70);
       const linhas = ['Fornecedor: ' + (o.fornecedor || ''), 'Data da compra: ' + (o.data ? ptDate(String(o.data).slice(0, 10)) : '') + (ocPrev(o) ? '     Previsão de chegada: ' + ptDate(String(ocPrev(o)).slice(0, 10)) : '') + (e.nforn ? '     Nº no fornecedor: ' + e.nforn : ''),
         e.condicao ? 'Condição de pagamento: ' + e.condicao : '', e.transportador || e.fretePor ? 'Transporte: ' + [e.transportador, e.fretePor].filter(Boolean).join(' · ') : ''].filter(Boolean);
@@ -450,7 +462,7 @@
         await ocPdfLib();
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
         (galpao ? ocPdfGalpaoPagina : ocPdfPagina)(doc, d);
-        doc.save((galpao ? 'conferencia_galpao_' : 'ordem_de_compra_') + String(d.o.numero || '').toLowerCase() + '.pdf');
+        doc.save((galpao ? 'conferencia_galpao_' : d.e && d.e.etapa === 'proposta' ? 'proposta_de_compra_' : 'ordem_de_compra_') + String(d.o.numero || '').toLowerCase() + '.pdf');
       } catch(err){ toast('Não consegui gerar o PDF: ' + (err.message || err)); }
     }
 
