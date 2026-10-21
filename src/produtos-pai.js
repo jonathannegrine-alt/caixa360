@@ -20,7 +20,7 @@
       ppCarregado = true;
       const [p, m] = await Promise.all([
         supa.from('sku_pais').select('codigo,nome').eq('usuario_id', usuarioAtual.id),
-        supa.from('sku_mapa').select('item_id,variation_id,sku,ml_user_id,criado_em').eq('usuario_id', usuarioAtual.id) ]);
+        supa.from('sku_mapa').select('item_id,variation_id,sku,ml_user_id,sku_anuncio,criado_em').eq('usuario_id', usuarioAtual.id) ]);
       if(!p.error) skuPais = p.data || [];
       if(!m.error) skuMapa = m.data || [];
       const v = document.getElementById('view-skus'); if(v && v.classList.contains('active')) renderSKUs();
@@ -269,7 +269,8 @@
       const pelo = (mlAnuncios || []).filter(a => ppN(a.sku_anuncio) === ppN(sku) && !skuMapa.some(m => m.item_id === a.item_id && (Number(m.variation_id) === Number(a.variation_id) || Number(m.variation_id) === 0)));
       el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;"><span class="form-label" style="margin:0;">Anúncios deste produto</span><button class="btn-out btn-sm" onclick="ppMapearAbrir(${ppQ(sku)})">+ Mapear anúncio</button></div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-          ${meus.map(m => `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;">${ppAnuncioHtml(ppAnuncio(m.item_id, m.variation_id), m.item_id, m.variation_id)}<span style="display:flex;gap:6px;align-items:center;flex:none;"><span class="badge badge-success">mapeado</span><button class="btn-out btn-sm" onclick="ppDesmapear(${ppQ(m.item_id)}, ${Number(m.variation_id) || 0}, ${ppQ(sku)}, this)">Desfazer</button></span></div>`).join('')}
+          ${meus.map(m => { const a = ppAnuncio(m.item_id, m.variation_id), vale = !m.sku_anuncio || !a || ppN(a.sku_anuncio) === ppN(m.sku_anuncio);
+            return `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;">${ppAnuncioHtml(a, m.item_id, m.variation_id)}<span style="display:flex;gap:6px;align-items:center;flex:none;">${vale ? '<span class="badge badge-success"' + (m.sku_anuncio ? ' title="Vale para as vendas com o SKU ' + ppEsc(m.sku_anuncio) + ' no anúncio"' : '') + '>mapeado</span>' : '<span class="badge badge-warning" title="O SKU do anúncio mudou para ' + ppEsc(a.sku_anuncio || 'vazio') + ': as vendas novas usam o SKU do anúncio">SKU do anúncio mudou</span>'}<button class="btn-out btn-sm" onclick="ppDesmapear(${ppQ(m.item_id)}, ${Number(m.variation_id) || 0}, ${ppQ(sku)}, this)">Desfazer</button></span></div>`; }).join('')}
           ${pelo.map(a => `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;">${ppAnuncioHtml(a, a.item_id, a.variation_id)}<span class="badge" style="flex:none;" title="O anúncio já traz este SKU escrito nele: não precisa mapear">pelo SKU do anúncio</span></div>`).join('')}
           ${!meus.length && !pelo.length ? '<div class="text-muted" style="font-size:12px;">Nenhum anúncio traz este SKU. Use "Mapear anúncio" para ligar um anúncio a este produto.</div>' : ''}
         </div>`;
@@ -311,7 +312,8 @@
     async function ppMapear(item, vari, conta, btn, sku){
       sku = sku || ppMapSku;
       if(btn){ btn.disabled = true; btn.textContent = 'Mapeando…'; }
-      const r = await supa.from('sku_mapa').upsert({ usuario_id: usuarioAtual.id, item_id: item, variation_id: vari || 0, sku, ml_user_id: conta || null }, { onConflict: 'usuario_id,item_id,variation_id' });
+      const an = ppAnuncio(item, vari);   // o mapeamento vale para o anúncio com o SKU que ele tem agora
+      const r = await supa.from('sku_mapa').upsert({ usuario_id: usuarioAtual.id, item_id: item, variation_id: vari || 0, sku, ml_user_id: conta || null, sku_anuncio: an && an.sku_anuncio ? an.sku_anuncio : null }, { onConflict: 'usuario_id,item_id,variation_id' });
       if(r.error){ toast('Não consegui mapear: ' + r.error.message); if(btn){ btn.disabled = false; btn.textContent = 'Mapear'; } return false; }
       skuMapa = skuMapa.filter(m => !(m.item_id === item && Number(m.variation_id) === Number(vari || 0))).concat([{ item_id: item, variation_id: vari || 0, sku, ml_user_id: conta || null, criado_em: new Date().toISOString() }]);
       const ap = await supa.rpc('sku_mapa_aplicar', { p_item: item, p_variation: vari || 0 });

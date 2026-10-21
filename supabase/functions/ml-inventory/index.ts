@@ -59,7 +59,12 @@ const skuDe = (o: any): string => {
 }
 
 // mapa = anúncio mapeado na tela Produtos (sku_mapa): 'item:variação' -> SKU do produto (variação 0 = anúncio inteiro)
-async function estoqueDaConta(mlUserId: string, apelido: string, h: Record<string, string>, mapa: Map<string, string> = new Map()) {
+async function estoqueDaConta(mlUserId: string, apelido: string, h: Record<string, string>, mapa: Map<string, { sku: string; sa: string | null }> = new Map()) {
+  // o mapeamento só vale enquanto o anúncio tiver o SKU que tinha ao mapear
+  const mapear = (item: string, vari: any, bruto: string) => {
+    for (const k of [item + ':' + String(vari || 0), item + ':0']) { const m = mapa.get(k); if (m && (!m.sa || m.sa === bruto.toUpperCase())) return m.sku }
+    return bruto
+  }
   const avisos: string[] = []
   // 1) anúncios Full (ativos e pausados)
   const ids: string[] = []
@@ -84,7 +89,7 @@ async function estoqueDaConta(mlUserId: string, apelido: string, h: Record<strin
       const it = e?.body || e
       if (!it?.id) continue
       if (Array.isArray(it.variations) && it.variations.length) { comVariacao.push(it.id); continue }
-      if (it.inventory_id && !alvos.has(it.inventory_id)) alvos.set(it.inventory_id, { sku: mapa.get(it.id + ':0') || skuDe(it), titulo: it.title || '' })
+      if (it.inventory_id && !alvos.has(it.inventory_id)) alvos.set(it.inventory_id, { sku: mapear(it.id, 0, skuDe(it)), titulo: it.title || '' })
     }
   })
   await emLotes(comVariacao, 4, async id => {
@@ -94,7 +99,7 @@ async function estoqueDaConta(mlUserId: string, apelido: string, h: Record<strin
     for (const v of (it.variations || [])) {
       if (!v?.inventory_id || alvos.has(v.inventory_id)) continue
       const comb = (v.attribute_combinations || []).map((a: any) => a?.value_name).filter(Boolean).join(' / ')
-      alvos.set(v.inventory_id, { sku: mapa.get(it.id + ':' + v.id) || mapa.get(it.id + ':0') || skuDe(v), titulo: (it.title || '') + (comb ? ' — ' + comb : '') })
+      alvos.set(v.inventory_id, { sku: mapear(it.id, v.id, skuDe(v)), titulo: (it.title || '') + (comb ? ' — ' + comb : '') })
     }
   })
 
@@ -154,9 +159,9 @@ Deno.serve(async (req: Request) => {
       return resp({ ok: true, conta: tk.ml_user_id, out })
     }
 
-    const mapa = new Map<string, string>()
-    const mp = await safeJson(await fetch(`${supaUrl}/rest/v1/sku_mapa?usuario_id=eq.${userId}&select=item_id,variation_id,sku`, { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }))
-    if (Array.isArray(mp)) for (const m of mp) mapa.set(String(m.item_id) + ':' + String(m.variation_id || 0), String(m.sku))
+    const mapa = new Map<string, { sku: string; sa: string | null }>()
+    const mp = await safeJson(await fetch(`${supaUrl}/rest/v1/sku_mapa?usuario_id=eq.${userId}&select=item_id,variation_id,sku,sku_anuncio`, { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }))
+    if (Array.isArray(mp)) for (const m of mp) mapa.set(String(m.item_id) + ':' + String(m.variation_id || 0), { sku: String(m.sku), sa: m.sku_anuncio ? String(m.sku_anuncio).trim().toUpperCase() : null })
     const contas = await Promise.all(tokens.map((t: any) => t.invalido
       ? Promise.resolve({ conta: String(t.ml_user_id), apelido: t.apelido || '', itens: [], anuncios: 0, avisos: ['conexão expirada: reconecte a conta'] })
       : estoqueDaConta(String(t.ml_user_id), t.apelido || '', { Authorization: `Bearer ${t.access_token}` }, mapa)))
