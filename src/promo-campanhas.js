@@ -149,24 +149,29 @@
           <div class="pc-num">${desc ? `<b>${pqN(desc, 1)}%</b>` : ''}${p.vendedor_pct || p.ml_pct ? `<small>você ${pqN(p.vendedor_pct, 1)}% · Mercado Livre ${pqN(p.ml_pct, 1)}%</small>` : ''}${p.ml_pct && p.original ? `<small title="Parte do desconto que o Mercado Livre devolve a você em cada venda nesta promoção."><b style="font-size:inherit;color:var(--success,#16a34a);">Rebate: R$ ${pqN(p.original * p.ml_pct / 100)}</b> por venda</small>` : ''}</div>
           <div class="pc-num">${preco ? `<b>R$ ${pqN(preco)}</b><small>${dentro ? 'preço na promoção' : 'preço sugerido'}</small>` : '<small>defina o preço ao participar</small>'}</div>
           <div class="pc-num">${m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)}</b><small>margem ${pqN(m.pct, 1)}%</small>` : '<small>sem custo no cadastro</small>'}</div>
-          <div class="pc-acao">${dentro ? `<button class="btn-out btn btn-sm" style="color:var(--danger);" onclick="pcSair('${item}','${pqE(p.id)}','${pqE(p.tipo)}')">Sair</button>` : (PC_PARTICIPA.includes(p.tipo) ? `<button class="btn btn-sm" onclick="pcParticipar('${item}','${pqE(p.id)}','${pqE(p.tipo)}')">Participar</button>` : '<small class="text-muted" title="Este tipo de promoção ainda só entra pelo Mercado Livre">pelo Mercado Livre</small>')}</div></div>`; }).join('')}</div>`;
+          <div class="pc-acao">${dentro ? `${PC_EDITA.includes(p.tipo) ? `<button class="btn-out btn btn-sm" onclick="pcParticipar('${item}','${pqE(p.id || '')}','${pqE(p.tipo)}',true)">Editar</button> ` : ''}<button class="btn-out btn btn-sm" style="color:var(--danger);" onclick="pcSair('${item}','${pqE(p.id || '')}','${pqE(p.tipo)}')">Sair</button>` : (PC_PARTICIPA.includes(p.tipo) ? `<button class="btn btn-sm" onclick="pcParticipar('${item}','${pqE(p.id || '')}','${pqE(p.tipo)}')">Participar</button>` : '<small class="text-muted" title="Este tipo de promoção ainda só entra pelo Mercado Livre">pelo Mercado Livre</small>')}</div></div>`; }).join('')}</div>`;
     }
     // tipos em que dá para entrar por aqui. Com preço livre: você escolhe o preço; os demais usam o preço que o Mercado Livre oferece.
-    const PC_PRECO_LIVRE = ['SELLER_CAMPAIGN', 'DEAL', 'DOD', 'LIGHTNING'], PC_PARTICIPA = PC_PRECO_LIVRE.concat(['SMART', 'MARKETPLACE_CAMPAIGN', 'PRICE_MATCHING', 'PRICE_MATCHING_MELI_ALL', 'UNHEALTHY_STOCK', 'PRE_NEGOTIATED']);
-    function pcPromoDe(item, id, tipo){ return (((pc.aberto[item] || {}).promos) || []).find(p => p.id === id && p.tipo === tipo); }
-    function pcParticipar(item, id, tipo){
+    // Desconto direto (PRICE_DISCOUNT) não tem id de promoção e pede as datas; o relâmpago automático (SMART_LIGHTNING) entra pela oferta, como o SMART.
+    // PC_EDITA: promoções em que o Mercado Livre deixa mudar o preço depois de entrar.
+    const PC_PRECO_LIVRE = ['SELLER_CAMPAIGN', 'DEAL', 'DOD', 'LIGHTNING', 'PRICE_DISCOUNT'], PC_PARTICIPA = PC_PRECO_LIVRE.concat(['SMART', 'SMART_LIGHTNING', 'MARKETPLACE_CAMPAIGN', 'PRICE_MATCHING', 'PRICE_MATCHING_MELI_ALL', 'UNHEALTHY_STOCK', 'PRE_NEGOTIATED']);
+    const PC_EDITA = ['SELLER_CAMPAIGN', 'DEAL', 'PRICE_DISCOUNT'];
+    function pcPromoDe(item, id, tipo){ return (((pc.aberto[item] || {}).promos) || []).find(p => (p.id || '') === id && p.tipo === tipo); }
+    function pcParticipar(item, id, tipo, editar){
       const p = pcPromoDe(item, id, tipo); if(!p) return;
-      const i = pc.base[item] || {}, livre = PC_PRECO_LIVRE.includes(tipo), preco0 = p.sugerido || p.preco || 0;
-      pc._part = { item, id, tipo };
-      vmlModal('Participar: ' + pqE(p.nome || PM_TIPO[tipo] || tipo), `<div class="pm-an" style="margin-bottom:14px;">${i.thumbnail ? `<img src="${pqE(i.thumbnail)}" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(i.titulo || item)}</b><small>${pcTipoTag(item)}${pqE(i.sku || '')} · ${pqE(item)} · preço de hoje R$ ${pqN(p.original || i.preco)}</small></div></div>
+      const i = pc.base[item] || {}, livre = editar || PC_PRECO_LIVRE.includes(tipo), preco0 = editar ? (p.preco || 0) : (p.sugerido || p.preco || 0);
+      const h = getToday(), fim0 = dateStr(new Date(new Date(h + 'T12:00:00').getTime() + 13 * 86400000));
+      pc._part = { item, id, tipo, editar: !!editar };
+      vmlModal((editar ? 'Editar preço: ' : 'Participar: ') + pqE(p.nome || PM_TIPO[tipo] || tipo), `<div class="pm-an" style="margin-bottom:14px;">${i.thumbnail ? `<img src="${pqE(i.thumbnail)}" alt="">` : '<span class="pm-sem"></span>'}<div><b>${pqE(i.titulo || item)}</b><small>${pcTipoTag(item)}${pqE(i.sku || '')} · ${pqE(item)} · preço de hoje R$ ${pqN(p.original || i.preco)}</small></div></div>
         ${livre ? `<div class="form-row"><div class="form-group"><label class="form-label" for="pc-p-preco">Preço na promoção (R$)</label><div style="display:flex;gap:8px;align-items:center;"><input type="text" inputmode="decimal" id="pc-p-preco" value="${preco0 ? pqN(preco0) : ''}" oninput="pcParticiparConta('preco')" style="flex:1;"><span>ou</span><input type="text" inputmode="decimal" id="pc-p-pct" aria-label="Desconto em %" style="width:74px;" oninput="pcParticiparConta('pct')"><span>%</span></div>${p.minimo || p.maximo ? `<div class="text-muted" style="font-size:12px;margin-top:5px;">O Mercado Livre aceita de R$ ${pqN(p.minimo)} a R$ ${pqN(p.maximo)}${p.sugerido ? ' · sugerido R$ ' + pqN(p.sugerido) : ''}.</div>` : ''}</div>
-            ${tipo === 'LIGHTNING' ? `<div class="form-group"><label class="form-label" for="pc-p-est">Estoque reservado</label><input type="number" id="pc-p-est" min="${p.estoque_min || 1}" max="${p.estoque_max || ''}" value="${p.estoque_min || ''}"><div class="text-muted" style="font-size:12px;margin-top:5px;">de ${p.estoque_min} a ${p.estoque_max} unidades</div></div>` : ''}</div>`
+            ${tipo === 'PRICE_DISCOUNT' && !editar ? `<div class="form-group"><label class="form-label" for="pc-p-ini">Período do desconto</label><div style="display:flex;gap:8px;align-items:center;"><input type="date" id="pc-p-ini" value="${h}" min="${h}"><span>a</span><input type="date" id="pc-p-fim" aria-label="Fim do desconto" value="${fim0}" min="${h}"></div><div class="text-muted" style="font-size:12px;margin-top:5px;">O Mercado Livre aceita até 14 dias.</div></div>` : ''}
+            ${tipo === 'LIGHTNING' && !editar ? `<div class="form-group"><label class="form-label" for="pc-p-est">Estoque reservado</label><input type="number" id="pc-p-est" min="${p.estoque_min || 1}" max="${p.estoque_max || ''}" value="${p.estoque_min || ''}"><div class="text-muted" style="font-size:12px;margin-top:5px;">de ${p.estoque_min} a ${p.estoque_max} unidades</div></div>` : ''}</div>`
           : `<div class="alert alert-info">Nesta promoção o preço é definido pelo Mercado Livre e não dá para alterar: <b>R$ ${pqN(p.preco)}</b>${p.vendedor_pct || p.ml_pct ? ' (você paga ' + pqN(p.vendedor_pct, 1) + '% do desconto e o Mercado Livre ' + pqN(p.ml_pct, 1) + '%)' : ''}.</div>`}
         <div id="pc-p-margem" style="font-size:13.5px;line-height:1.6;margin-top:6px;"></div>
-        ${['SELLER_CAMPAIGN', 'DEAL'].includes(tipo) ? `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13.5px;margin:0;"><input type="checkbox" id="pc-p-meli-on" style="width:auto;" onchange="pcParticiparConta()"> Preço exclusivo para clientes Meli+ (opcional)</label>
+        ${['SELLER_CAMPAIGN', 'DEAL', 'PRICE_DISCOUNT'].includes(tipo) ? `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:13.5px;margin:0;"><input type="checkbox" id="pc-p-meli-on" style="width:auto;" onchange="pcParticiparConta()"> Preço exclusivo para clientes Meli+ (opcional)</label>
             <div id="pc-p-meli-box" style="display:none;margin-top:10px;"><div style="display:flex;gap:8px;align-items:center;"><input type="text" inputmode="decimal" id="pc-p-meli" aria-label="Preço exclusivo Meli+" placeholder="menor que o preço da promoção" oninput="pcParticiparConta('meli')" style="flex:1;"><span>ou</span><input type="text" inputmode="decimal" id="pc-p-meli-pct" aria-label="Desconto Meli+ em %" style="width:74px;" oninput="pcParticiparConta('melipct')"><span>%</span></div><div id="pc-p-meli-m" style="font-size:13px;margin-top:6px;"></div></div></div>` : ''}
         <div id="pc-p-msg" class="alert alert-danger" style="display:none;margin-top:12px;"></div>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="pc-p-ok" onclick="pcParticiparOk(this)">Participar</button>`);
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="pc-p-ok" onclick="pcParticiparOk(this)">${editar ? 'Salvar preço' : 'Participar'}</button>`);
       pcParticiparConta();
     }
     function pcNumCampo(id){ const el = document.getElementById(id); if(!el) return 0; const s = String(el.value).replace(/[^\d,.]/g, ''); return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s) || 0; }
@@ -190,15 +195,16 @@
       }
     }
     async function pcParticiparOk(bt){
-      const a = pc._part, p = pcPromoDe(a.item, a.id, a.tipo), msg = document.getElementById('pc-p-msg'), erro = t => { msg.textContent = t; msg.style.display = 'block'; if(bt){ bt.disabled = false; bt.textContent = 'Participar'; } };
-      const corpo = { acao: 'participar', conta: pmConta(), item: a.item, id: a.id, tipo: a.tipo, ref: p.ref || '' };
-      if(PC_PRECO_LIVRE.includes(a.tipo)){ corpo.preco = pcParticiparPreco(p); if(!(corpo.preco > 0)) return erro('Informe o preço na promoção.'); if(p.maximo && corpo.preco > p.maximo + 0.005) return erro('O preço máximo aceito é R$ ' + pqN(p.maximo) + '.'); if(p.minimo && corpo.preco < p.minimo - 0.005) return erro('O preço mínimo aceito é R$ ' + pqN(p.minimo) + '.'); }
-      if(a.tipo === 'LIGHTNING') corpo.estoque = Number((document.getElementById('pc-p-est') || {}).value) || 0;
+      const a = pc._part, p = pcPromoDe(a.item, a.id, a.tipo), msg = document.getElementById('pc-p-msg'), rot = a.editar ? 'Salvar preço' : 'Participar', erro = t => { msg.textContent = t; msg.style.display = 'block'; if(bt){ bt.disabled = false; bt.textContent = rot; } };
+      const corpo = { acao: a.editar ? 'editar' : 'participar', conta: pmConta(), item: a.item, id: a.id, tipo: a.tipo, ref: p.ref || '' };
+      if(a.tipo === 'PRICE_DISCOUNT' && !a.editar){ corpo.inicio = (document.getElementById('pc-p-ini') || {}).value || ''; corpo.fim = (document.getElementById('pc-p-fim') || {}).value || ''; if(!corpo.inicio || !corpo.fim || corpo.fim < corpo.inicio) return erro('Confira as datas do desconto.'); if((new Date(corpo.fim) - new Date(corpo.inicio)) / 86400000 > 13) return erro('O desconto direto vale por até 14 dias.'); }
+      if(a.editar || PC_PRECO_LIVRE.includes(a.tipo)){ corpo.preco = pcParticiparPreco(p); if(!(corpo.preco > 0)) return erro('Informe o preço na promoção.'); if(p.maximo && corpo.preco > p.maximo + 0.005) return erro('O preço máximo aceito é R$ ' + pqN(p.maximo) + '.'); if(p.minimo && corpo.preco < p.minimo - 0.005) return erro('O preço mínimo aceito é R$ ' + pqN(p.minimo) + '.'); }
+      if(a.tipo === 'LIGHTNING' && !a.editar) corpo.estoque = Number((document.getElementById('pc-p-est') || {}).value) || 0;
       { const on = document.getElementById('pc-p-meli-on'); if(on && on.checked){ corpo.preco_meli = pcNumCampo('pc-p-meli'); if(!(corpo.preco_meli > 0) || corpo.preco_meli >= corpo.preco) return erro('O preço exclusivo Meli+ precisa ser menor que o preço da promoção.'); } }
       if(bt){ bt.disabled = true; bt.textContent = 'Enviando…'; }
       const r = await pqFuncao('ml-promos', corpo).catch(() => null);
       if(!r || !r.ok) return erro('O Mercado Livre não aceitou: ' + ((r && (r.motivo || r.error)) || 'sem resposta'));
-      fecharModal('modal-vml'); if(typeof toast === 'function') toast('Anúncio incluído na promoção.');
+      fecharModal('modal-vml'); if(typeof toast === 'function') toast(a.editar ? 'Preço da promoção alterado.' : 'Anúncio incluído na promoção.');
       delete pc.aberto[a.item]; pcAbrirAnuncio(a.item);
     }
     function pcSair(item, id, tipo){
@@ -336,7 +342,7 @@
       if(e.sub === 'FIXED_PERCENTAGE' && !e.id && !(Number(e.pct_fixa) >= 5 && Number(e.pct_fixa) <= 80)){ avisa('Na porcentagem fixa, informe um desconto entre 5% e 80%.'); return; }
       const semPreco = e.linhas.filter(l => !(l.preco > 0) || !(l.pct >= 5) || l.pct > 80);
       if(semPreco.length){ avisa(semPreco.length + ' anúncio' + (semPreco.length > 1 ? 's estão' : ' está') + ' sem desconto válido (o Mercado Livre aceita de 5% a 80%). Ajuste ou remova antes de salvar.'); return; }
-      const por = e.linhas.filter(l => e.antes[l.item] == null || Math.abs(e.antes[l.item] - l.preco) > 0.005).map(l => ({ item: l.item, preco: l.preco }));
+      const por = e.linhas.filter(l => e.antes[l.item] == null || Math.abs(e.antes[l.item] - l.preco) > 0.005).map(l => ({ item: l.item, preco: l.preco, ja: e.antes[l.item] != null }));
       const agora = new Set(e.linhas.map(l => l.item)), tirar = Object.keys(e.antes).filter(i => !agora.has(i));
       if(tirar.length && !confirm(tirar.length + ' anúncio' + (tirar.length > 1 ? 's serão retirados' : ' será retirado') + ' desta campanha no Mercado Livre. Continuar?')) return;
       const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; }

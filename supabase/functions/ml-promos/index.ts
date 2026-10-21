@@ -3,7 +3,7 @@
 //   { acao: 'lista', conta }                                   promoções da conta (campanhas, ofertas, cupons de campanha)
 //   { acao: 'itens', conta, id, tipo, situacao?, depois? }     anúncios de uma promoção (50 por chamada; "depois" continua a lista)
 //
-// Participar/sair de promoção (gravação no ML) fica para uma próxima etapa: entra aqui como novas ações.
+//   { acao: 'participar' | 'editar' | 'sair', conta, item, id, tipo, ... }   entrar, mudar o preço ou sair (grava no ML)
 // O token do ML nunca sai do servidor.
 
 const CORS = {
@@ -103,20 +103,35 @@ Deno.serve(async (req: Request) => {
       return resp({ ok: true, anuncios: ids })
     }
     // participar de uma promoção com UM anúncio. Campanhas com preço livre pedem "preco"; as do Mercado Livre com preço pronto usam a referência da oferta.
-    if (body?.acao === 'participar' || body?.acao === 'sair') {
-      const item = idItem(body?.item), pid = String(body?.id || ''), tipo = String(body?.tipo || '')
-      if (!item || !/^[A-Za-z0-9_-]{1,40}$/.test(pid) || !/^[A-Z_]{1,40}$/.test(tipo)) return resp({ error: 'Dados da promoção inválidos.' }, 400)
+    // "editar" muda o preço de quem já participa (PUT; só nas promoções em que o Mercado Livre deixa).
+    // Desconto direto (PRICE_DISCOUNT) não tem id de promoção: leva data de início e de fim (até 14 dias).
+    if (body?.acao === 'participar' || body?.acao === 'sair' || body?.acao === 'editar') {
+      const item = idItem(body?.item), pid = String(body?.id || ''), tipo = String(body?.tipo || ''), semId = tipo === 'PRICE_DISCOUNT'
+      if (!item || !(semId || /^[A-Za-z0-9_-]{1,40}$/.test(pid)) || !/^[A-Z_]{1,40}$/.test(tipo)) return resp({ error: 'Dados da promoção inválidos.' }, 400)
       const ref = /^[A-Za-z0-9_-]{1,80}$/.test(String(body?.ref || '')) ? String(body.ref) : ''
       if (body.acao === 'sair') {
-        const p = new URLSearchParams({ promotion_type: tipo, promotion_id: pid, app_version: 'v2' }); if (ref && tipo !== 'SELLER_CAMPAIGN' && tipo !== 'DEAL') p.set('offer_id', ref)
+        const p = new URLSearchParams({ promotion_type: tipo, app_version: 'v2' }); if (pid) p.set('promotion_id', pid); if (ref && !['SELLER_CAMPAIGN', 'DEAL', 'PRICE_DISCOUNT'].includes(tipo)) p.set('offer_id', ref)
         const r = await chama('DELETE', `${ML}/seller-promotions/items/${item}?${p}`)
         return resp(r.ok ? { ok: true } : { ok: false, motivo: r.erro })
       }
-      const corpo: Record<string, unknown> = { promotion_id: pid, promotion_type: tipo }
+      if (body.acao === 'editar') {
+        const p = Math.round(Number(body?.preco) * 100) / 100; if (!(p > 0)) return resp({ error: 'Informe o preço com desconto.' }, 400)
+        const corpo: Record<string, unknown> = { promotion_type: tipo, deal_price: p }; if (pid) corpo.promotion_id = pid
+        if (Number(body?.preco_meli) > 0) { const pm = Math.round(Number(body.preco_meli) * 100) / 100; if (pm >= p) return resp({ error: 'O preço exclusivo Meli+ precisa ser menor que o preço da promoção.' }, 400); corpo.top_deal_price = pm }
+        const r = await chama('PUT', `${ML}/seller-promotions/items/${item}?app_version=v2`, corpo)
+        return resp(r.ok ? { ok: true, preco: Number(r.dados?.price) || p } : { ok: false, motivo: r.erro })
+      }
+      const corpo: Record<string, unknown> = { promotion_type: tipo }; if (pid) corpo.promotion_id = pid
+      if (semId) {
+        const dia = (x: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(String(x)) ? String(x) : ''
+        const ini = dia(body?.inicio), fim = dia(body?.fim)
+        if (!ini || !fim || fim < ini) return resp({ error: 'Informe as datas de início e de fim do desconto.' }, 400)
+        corpo.start_date = ini + 'T00:00:00'; corpo.finish_date = fim + 'T23:59:59'
+      }
       const comPreco = ['SELLER_CAMPAIGN', 'DEAL', 'DOD', 'LIGHTNING', 'PRICE_DISCOUNT'].includes(tipo)
       if (comPreco) { const p = Math.round(Number(body?.preco) * 100) / 100; if (!(p > 0)) return resp({ error: 'Informe o preço com desconto.' }, 400); corpo.deal_price = p }
       else { if (!ref) return resp({ error: 'Esta promoção não trouxe a referência da oferta. Atualize a lista e tente de novo.' }, 400); corpo.offer_id = ref }
-      if (comPreco && Number(body?.preco_meli) > 0) { const pm = Math.round(Number(body.preco_meli) * 100) / 100; if (pm >= Number(corpo.deal_price)) return resp({ error: 'O preço exclusivo Meli+ precisa ser menor que o preço da promoção.' }, 400); corpo.top_deal_price = pm }
+      if (comPreco && ['SELLER_CAMPAIGN', 'DEAL', 'PRICE_DISCOUNT'].includes(tipo) && Number(body?.preco_meli) > 0) { const pm = Math.round(Number(body.preco_meli) * 100) / 100; if (pm >= Number(corpo.deal_price)) return resp({ error: 'O preço exclusivo Meli+ precisa ser menor que o preço da promoção.' }, 400); corpo.top_deal_price = pm }
       if (tipo === 'LIGHTNING') { const e = Math.round(Number(body?.estoque)); if (!(e > 0)) return resp({ error: 'Informe o estoque reservado para a oferta relâmpago.' }, 400); corpo.stock = e }
       const r = await chama('POST', `${ML}/seller-promotions/items/${item}?app_version=v2`, corpo)
       return resp(r.ok ? { ok: true, preco: Number(r.dados?.price) || null, original: Number(r.dados?.original_price) || null } : { ok: false, motivo: r.erro })
@@ -202,7 +217,10 @@ Deno.serve(async (req: Request) => {
       const res: any[] = []
       for (let i = 0; i < por.length; i += 5) {
         await Promise.all(por.slice(i, i + 5).map(async (x: any) => {
-          const r = await chama('POST', `${ML}/seller-promotions/items/${x.item}?app_version=v2`, { promotion_id: id, promotion_type: 'SELLER_CAMPAIGN', deal_price: Math.round(Number(x.preco) * 100) / 100 })
+          const corpo = { promotion_id: id, promotion_type: 'SELLER_CAMPAIGN', deal_price: Math.round(Number(x.preco) * 100) / 100 }
+          // anúncio que já está na campanha muda o preço com PUT; se o Mercado Livre recusar, tenta como entrada (POST)
+          let r = await chama(x.ja ? 'PUT' : 'POST', `${ML}/seller-promotions/items/${x.item}?app_version=v2`, corpo)
+          if (!r.ok && x.ja) { const r2 = await chama('POST', `${ML}/seller-promotions/items/${x.item}?app_version=v2`, corpo); if (r2.ok) r = r2 }
           res.push({ item: x.item, acao: 'por', ok: r.ok, motivo: r.ok ? '' : r.erro, preco: r.ok ? Number(r.dados?.price) || Number(x.preco) : null })
         }))
       }

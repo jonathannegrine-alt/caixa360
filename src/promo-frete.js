@@ -14,7 +14,7 @@
     }
 
     // ---------------------------------------------------------------- PROMOÇÕES
-    const PM_TIPO = { DEAL: 'Campanha tradicional', MARKETPLACE_CAMPAIGN: 'Campanha com coparticipação', SMART: 'Campanha Smart', LIGHTNING: 'Oferta relâmpago', DOD: 'Oferta do dia', PRICE_DISCOUNT: 'Desconto individual', VOLUME: 'Desconto por volume', PRE_NEGOTIATED: 'Desconto pré-acordado', SELLER_CAMPAIGN: 'Campanha do vendedor', UNHEALTHY_STOCK: 'Liquidação de estoque Full', SELLER_COUPON_CAMPAIGN: 'Cupom do vendedor', PRICE_MATCHING: 'Preço competitivo', PRICE_MATCHING_MELI_ALL: 'Preço competitivo (100% ML)' };
+    const PM_TIPO = { DEAL: 'Campanha tradicional', MARKETPLACE_CAMPAIGN: 'Campanha com coparticipação', SMART: 'Campanha Smart', LIGHTNING: 'Oferta relâmpago', SMART_LIGHTNING: 'Relâmpago com coparticipação', DOD: 'Oferta do dia', PRICE_DISCOUNT: 'Desconto individual', VOLUME: 'Desconto por volume', PRE_NEGOTIATED: 'Desconto pré-acordado', SELLER_CAMPAIGN: 'Campanha do vendedor', UNHEALTHY_STOCK: 'Liquidação de estoque Full', SELLER_COUPON_CAMPAIGN: 'Cupom do vendedor', PRICE_MATCHING: 'Preço competitivo', PRICE_MATCHING_MELI_ALL: 'Preço competitivo (100% ML)' };
     const PM_SIT = { candidate: 'Candidato', pending: 'Programado', started: 'Participando', finished: 'Encerrado' };
     let pm = { conta: '', promos: null, erro: '', sel: null, itens: [], total: 0, depois: null, sit: 'candidate', info: {}, base: {}, carregando: false };
 
