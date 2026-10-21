@@ -48,6 +48,7 @@
         const r = await supa.from('flex_faturas').select('id,numero,transportador,emitida,de,ate,total,resumo,criado_em').eq('usuario_id', usuarioAtual.id).order('criado_em', { ascending: false }).limit(60);
         fx.hist = r.data || [];
       }
+      if(typeof fpCarregar === 'function') await fpCarregar();   // pendências sempre frescas ao abrir a página
       fxDesenhar();
     }
 

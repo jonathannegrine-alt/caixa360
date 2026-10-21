@@ -12,7 +12,7 @@
     async function fpCarregar(){
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
       const r = await supa.from('flex_pendencias').select('*').eq('usuario_id', usuarioAtual.id).order('criado_em', { ascending: false }).limit(1000);
-      fp.lista = r.error ? (fp.lista || []) : (r.data || []);
+      fp.lista = r.error ? (fp.lista || []) : (r.data || []); fp.lidoEm = Date.now();
     }
 
     // chamada ao guardar a conferência: cria as pendências dos envios marcados (o que já existe não é mexido)
@@ -145,7 +145,7 @@
 
     // ---------- alerta no Início: pendência com prazo vencido ----------
     function fpAlertaInicio(){
-      if(fp.lista === null){ if(!fp._lendo){ fp._lendo = true; fpCarregar().then(() => { fp._lendo = false; const v = document.getElementById('view-inicio'); if(v && v.classList.contains('active') && (fp.lista || []).some(fpVencida) && typeof renderInicio === 'function') renderInicio(); }).catch(() => { fp._lendo = false; }); } return null; }
+      if(fp.lista === null || Date.now() - (fp.lidoEm || 0) > 600000){ if(!fp._lendo){ fp._lendo = true; fpCarregar().then(() => { fp._lendo = false; const v = document.getElementById('view-inicio'); if(v && v.classList.contains('active') && (fp.lista || []).some(fpVencida) && typeof renderInicio === 'function') renderInicio(); }).catch(() => { fp._lendo = false; }); } if(fp.lista === null) return null; }
       const v = fp.lista.filter(fpVencida); if(!v.length) return null;
       const tot = v.reduce((s, p) => s + (Number(p.valor) || 0) + (p.frete_estornado ? 0 : Number(p.frete) || 0), 0);
       return { t: 'warning', i: '📦', tx: `<b>${v.length} produto${v.length > 1 ? 's' : ''} do Flex sem devolução</b> com o prazo vencido · ${fmt(tot)} a cobrar do transportador.`, ac: "fp.ver='aberto';nav('flex')", la: 'Ver pendências' };
