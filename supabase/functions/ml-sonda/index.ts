@@ -40,7 +40,8 @@ Deno.serve(async (req: Request) => {
       try {
         const r = await fetch('https://api.mercadolibre.com' + caminho, { headers: { Authorization: `Bearer ${t.access_token}` }, signal: AbortSignal.timeout(15000) })
         const txt = await r.text(); let j: any = null; try { j = JSON.parse(txt) } catch (_e) { /* não é JSON */ }
-        out.push({ caminho, status: r.status, resumo: j ? resumo(j) : txt.slice(0, 200) })
+        // completo: true devolve a resposta inteira (texto de até 40 KB), para listas que o resumo corta no 1º item
+        out.push({ caminho, status: r.status, resumo: j ? (body?.completo ? JSON.stringify(j).slice(0, 40000) : resumo(j)) : txt.slice(0, 200) })
       } catch (e) { out.push({ caminho, erro: String((e as Error)?.message || e).slice(0, 120) }) }
     }
     return resp({ ok: true, conta: String(t.ml_user_id), resultados: out })
