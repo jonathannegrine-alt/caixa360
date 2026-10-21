@@ -226,7 +226,7 @@
           <div class="kpi k-mc"><div class="kpi-label">Estornos já lançados</div><div class="kpi-value">${fmt(T.cre)}</div><div class="kpi-sub"><span>créditos que vieram nas faturas</span></div></div>
           <div class="kpi k-hoje"><div class="kpi-label">Ainda a recuperar</div><div class="kpi-value" style="color:${T.ped - T.cre > 0 ? 'var(--danger)' : 'var(--success,#16a34a)'}">${fmt(Math.max(0, T.ped - T.cre))}</div><div class="kpi-sub"><span>cobrado a mais menos os estornos</span></div></div>
         </div>` : '';
-        view.innerHTML = cab + erro + cartoes + `<div class="card"><div class="card-header"><div class="card-title">Faturas já conferidas</div></div>
+        view.innerHTML = cab + erro + cartoes + (typeof fpPainel === 'function' ? fpPainel() : '') + `<div class="card"><div class="card-header"><div class="card-title">Faturas já conferidas</div></div>
           ${h.length ? `<div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Fatura</th><th>Transportador</th><th>Período</th><th class="num">Envios</th><th class="num">Valor fechado</th><th class="num" title="Créditos (estornos e abatimentos) que o transportador lançou nesta fatura">Estornos na fatura</th><th class="num">A questionar</th><th></th></tr></thead><tbody>
             ${h.map(f => `<tr><td><b>${fxE(f.numero || '—')}</b><br><small class="text-muted">conferida em ${fxDH(f.criado_em)}</small></td><td>${fxE(f.transportador || '')}</td><td>${f.de ? ptDate(f.de) + ' a ' + ptDate(f.ate) : '—'}</td>${(() => { const lj = fxLoja(), pl = f.resumo && f.resumo.porLoja, nome = k => k === '-' ? 'sem venda' : (typeof contaNome === 'function' && contaNome(k)) || k;
               const est = f.resumo && f.resumo.quadro ? `<td class="num" style="${f.resumo.creditos > 0 ? 'color:var(--success,#16a34a);font-weight:700;' : ''}">${f.resumo.creditos > 0 ? fmt(f.resumo.creditos) : 'nenhum'}</td>` : '<td class="num text-muted" title="Fatura conferida antes de o sistema ler este campo: abra e guarde de novo, ou reenvie o PDF">—</td>';
@@ -254,6 +254,7 @@
             <span>Cobranças extras (débitos) <b>${fmt(F.debitos)}</b></span><span>Estornos (créditos) <b>${fmt(F.creditos)}</b></span><span>Valor fechado <b>${fmt(F.total)}</b></span>
             <span style="flex-basis:100%;font-size:12.5px;">${F.creditos > 0 ? 'O transportador lançou ' + fmt(F.creditos) + ' de estorno nesta fatura. Confira se bate com o que foi combinado.' : 'Esta fatura não tem nenhum estorno lançado. Se o transportador prometeu abater algum envio, ele não entrou aqui.'}</span></div>` : ''}
         ${F.substitui ? `<div class="alert alert-info"><b>Fatura retificada:</b> substitui a fatura nº ${fxE(F.substitui.numero)} (mesmo transportador e mesmo período). Antes: ${fmt(F.substitui.total)} em ${F.substitui.envios} envios · agora: ${fmt(F.total)} em ${R.envios} envios${Math.abs(F.total - F.substitui.total) > 0.005 ? ' · diferença <b>' + fmt(F.total - F.substitui.total) + '</b>' : ''}. Ao guardar, a conferência da ${fxE(F.substitui.numero)} é trocada por esta.</div>` : ''}
+        ${typeof fpAvisoFatura === 'function' ? fpAvisoFatura(F) : ''}
         ${difTotal ? `<div class="alert alert-warning">A soma dos envios que li (${fmt(R.frete)}) é diferente do valor a pagar da fatura (${fmt(F.total)}). Pode haver linha que não consegui ler: confira o total de envios.</div>` : ''}
         <div class="kpi-grid k4i">
           <div class="kpi k-venda"><div class="kpi-label">Envios conferidos${lj && typeof contaNome === 'function' ? ' · ' + fxE(contaNome(lj)) : ''}</div><div class="kpi-value">${R.envios}</div><div class="kpi-sub"><span><b>${R.envios ? Math.round(R.ok / R.envios * 100) : 0}%</b> pagos e entregues</span><span>${lj ? 'desta loja ' + fmt(R.frete) + ' · fatura ' + fmt(F.total) : 'valor fechado ' + fmt(F.total || R.frete)}</span></div></div>
@@ -288,8 +289,10 @@
       if(F.numero) await supa.from('flex_faturas').delete().eq('usuario_id', uid).eq('numero', F.numero);
       if(F.substitui && F.substitui.id) await supa.from('flex_faturas').delete().eq('usuario_id', uid).eq('id', F.substitui.id);   // retificada: sai a anterior
       const r = await supa.from('flex_faturas').insert({ usuario_id: uid, numero: F.numero || null, transportador: F.transportador || null, emitida: F.emitida || null, de: F.de || null, ate: F.ate || null, total: F.total || null, arquivo: F.arquivo || null, linhas, resumo: { ...R, venc: F.venc || null, substitui: F.substitui ? F.substitui.numero : null, quadro: !!F.quadro, pedidos: F.pedidos || null, freteBruto: F.freteBruto || 0, debitos: F.debitos || 0, creditos: F.creditos || 0 } });
+      // cada envio marcado vira uma pendência com o transportador (flex-pend.js)
+      const np = !r.error && typeof fpGerar === 'function' ? await fpGerar(F, todas.filter(mk)) : 0;
       if(btn){ btn.disabled = false; btn.textContent = 'Guardar conferência'; }
-      toast(r.error ? 'Não consegui guardar: ' + r.error.message : 'Conferência guardada. Envios desta fatura cobrados de novo em outra serão apontados.');
+      toast(r.error ? 'Não consegui guardar: ' + r.error.message : 'Conferência guardada' + (np ? ' e ' + np + ' envio' + (np > 1 ? 's' : '') + ' na lista de pendências com o transportador' : '') + '. Envios desta fatura cobrados de novo em outra serão apontados.');
       fx.hist = null;
     }
     async function fxAbrir(id){

@@ -251,6 +251,11 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   e nas vendas já gravadas (RPC sku_mapa_aplicar / sku_mapa_desfazer). Lista de anúncios: ml_anuncios, preenchida pela função
   ml-anuncios (botão "Atualizar anúncios" ou lista com mais de 1 dia; aceita service_role + {usuario} para teste). No ML atual cada
   cor costuma ser um anúncio próprio (User Products), então variation_id quase sempre é 0.
+- PENDÊNCIAS DO FLEX (src/flex-pend.js, tabela flex_pendencias, uma por envio): ao guardar a conferência da fatura (fxSalvar) cada envio
+  marcado vira pendência (upsert ignoreDuplicates: retificada não duplica). Situação aguardando → devolvido (conferido_por, bom/avariado,
+  entrada no estoque com motivo devolucao, kit aberto por esoAbrir) | abatido (nº da fatura) | perdoado. Prazo = vencimento + 15 dias.
+  Aparece na conferência do mesmo transportador (fpAvisoFatura) e no Início quando vence (fpAlertaInicio). FATURA RETIFICADA: mesmo
+  transportador e período de uma guardada substitui a anterior (F.substitui; guardar apaga a anterior; Lançar atualiza a conta dela).
 - FORNECEDORES (src/fornecedores.js, página 'fornecedores' no grupo Compras, tabela fornecedores): cadastro por loja
   (loja = ml_user_id, vazio = padrão, '*' = todas as lojas: aparece em qualquer loja e soma só a da vez). Casa contas a pagar (p.forn) e ordens (olist_ordens.fornecedor) pelo nome, razão
   social, fantasia ou apelidos (fnChave: sem acento, pontuação e LTDA/ME/EPP). CNPJ: BrasilAPI (/api/cnpj/v1) + IE pela
