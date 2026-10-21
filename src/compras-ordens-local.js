@@ -255,7 +255,7 @@
           <label class="pf-c pf-larg"><span>Observações (saem no PDF)</span><input id="ocn-obs" value="${ocEsc(n.obs)}"></label>
           <label class="pf-c pf-larg"><span>Observações internas (não saem no PDF)</span><input id="ocn-obsint" value="${ocEsc(n.obsInterna)}"></label>
         </div>`,
-        `${n.id && n.id < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${n.id}, this)">Excluir ordem</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn-out" onclick="ocPdf()">Baixar PDF</button><button class="btn" onclick="ocCriarSalvar(this)">Salvar ordem</button>`);
+        `${n.id && n.id < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${n.id}, this)">Excluir ordem</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn-out" onclick="ocPdf()">Baixar PDF</button><button class="btn-out" onclick="ocPdf(null, true)" title="Só itens e quantidades, para o galpão conferir e dar entrada">Lista p/ galpão</button><button class="btn" onclick="ocCriarSalvar(this)">Salvar ordem</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '1000px';
       ocCriarTotal();
     }
@@ -397,29 +397,74 @@
       }
       if(e.obs) doc.text(doc.splitTextToSize('Observações: ' + e.obs, 515), 40, yy);
     }
-    async function ocPdf(id){
+    // lista de conferência para o galpão: só itens e quantidades, com colunas em branco para anotar o que chegou
+    function ocPdfGalpaoPagina(doc, { o, itens, t }){
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20); doc.text('Conferência de recebimento · Ordem ' + (o.numero || ''), 40, 50);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(70);
+      doc.text('Fornecedor: ' + (o.fornecedor || '') + (ocPrev(o) ? '     Previsão de chegada: ' + ptDate(String(ocPrev(o)).slice(0, 10)) : ''), 40, 68);
+      doc.text(itens.length + ' ite' + (itens.length === 1 ? 'm' : 'ns') + ' · ' + t.qtd.toLocaleString('pt-BR') + ' unidades', 40, 82);
+      doc.autoTable({ startY: 96, margin: { left: 40, right: 40 },
+        head: [['#', 'SKU', 'Item', 'Qtde pedida', 'Qtde recebida', 'OK', 'Observação']],
+        body: itens.map((i, k) => [k + 1, i.sku || '', i.descricao || '', (Number(i.qtd) || 0).toLocaleString('pt-BR'), '', '', '']),
+        styles: { fontSize: 9.5, cellPadding: 6, overflow: 'linebreak', lineColor: [200, 203, 210], lineWidth: 0.5 }, headStyles: { fillColor: [40, 44, 60], textColor: 255 },
+        columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 90, fontStyle: 'bold' }, 3: { halign: 'right', cellWidth: 52, fontStyle: 'bold' }, 4: { cellWidth: 58 }, 5: { cellWidth: 26 }, 6: { cellWidth: 90 } },
+        didDrawCell: d => { if(d.section === 'body' && d.column.index === 5){ const z = 9; doc.setDrawColor(90); doc.rect(d.cell.x + (d.cell.width - z) / 2, d.cell.y + (d.cell.height - z) / 2, z, z); } } });
+      let y = doc.lastAutoTable.finalY + 34; doc.setTextColor(30);
+      if(y > 760){ doc.addPage(); y = 60; }
+      doc.text('Conferido por: ______________________________     Data: ____/____/______', 40, y);
+      doc.text('Volumes recebidos: ________     Avarias ou faltas: ______________________________', 40, y + 24);
+    }
+    // conferência já lançada: o que foi comprado, o que chegou e quem conferiu cada chegada
+    async function ocPdfConferencia(id){
+      const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return;
+      const hist = oc.receb.filter(x => Number(x.ordem_id) === Number(id)).sort((a, b) => String(a.recebido_em).localeCompare(String(b.recebido_em)));
+      if(!hist.length){ toast('Esta ordem ainda não tem chegada lançada.'); return; }
+      const r = ocResumo(o), desc = sku => ((o.itens || []).find(i => ocN(i.sku) === ocN(sku)) || {}).descricao || '';
+      const dh = t => { const d = new Date(t); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+      const n = v => (Number(v) || 0).toLocaleString('pt-BR');
+      try {
+        await ocPdfLib();
+        const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20); doc.text('Conferência de recebimento · Ordem ' + (o.numero || ''), 40, 50);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(70);
+        doc.text('Fornecedor: ' + (o.fornecedor || '') + '     Situação: ' + r.sit, 40, 68);
+        const quem = [...new Set(hist.map(h => h.conferido_por).filter(Boolean))];
+        doc.text('Conferido por: ' + (quem.join(', ') || 'não informado'), 40, 82);
+        doc.autoTable({ startY: 96, margin: { left: 40, right: 40 }, head: [['SKU', 'Item', 'Comprado', 'Recebido', 'Falta']],
+          body: r.itens.map(i => [i.sku || '', i.descricao || '', n(i.comprado), n(r.antiga ? i.comprado : i.recebido), n(r.antiga ? 0 : i.falta)]),
+          styles: { fontSize: 9.5, cellPadding: 5, overflow: 'linebreak' }, headStyles: { fillColor: [40, 44, 60], textColor: 255 },
+          columnStyles: { 0: { cellWidth: 95, fontStyle: 'bold' }, 2: { halign: 'right', cellWidth: 60 }, 3: { halign: 'right', cellWidth: 60 }, 4: { halign: 'right', cellWidth: 50, fontStyle: 'bold' } } });
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(20); doc.text('Chegadas lançadas', 40, doc.lastAutoTable.finalY + 26);
+        doc.autoTable({ startY: doc.lastAutoTable.finalY + 34, margin: { left: 40, right: 40 }, head: [['Data', 'SKU', 'Item', 'Qtde', 'Conferido por', 'Observação']],
+          body: hist.map(h => [dh(h.recebido_em), h.sku, desc(h.sku), n(h.qtd), h.conferido_por || '—', h.obs || '']),
+          styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' }, headStyles: { fillColor: [235, 237, 243], textColor: 20 },
+          columnStyles: { 0: { cellWidth: 88 }, 1: { cellWidth: 80, fontStyle: 'bold' }, 3: { halign: 'right', cellWidth: 40 }, 4: { cellWidth: 85, fontStyle: 'bold' }, 5: { cellWidth: 90 } } });
+        doc.save('conferencia_ordem_' + String(o.numero || o.id).toLowerCase() + '.pdf');
+      } catch(err){ toast('Não consegui gerar o PDF: ' + (err.message || err)); }
+    }
+    async function ocPdf(id, galpao){
       let d;
       if(id != null){ const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return; d = ocPdfDados(o); }
       else { const R = ocMontarRegistro(); d = { o: { numero: ocNova.numero, fornecedor: ocNova.fornecedor, data: ocNova.data, data_prevista_local: ocNova.prev }, e: R.extra, itens: R.itens, t: R.t }; if(!d.itens.length){ toast('Inclua os itens antes de gerar o PDF.'); return; } }
       try {
         await ocPdfLib();
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
-        ocPdfPagina(doc, d);
-        doc.save('ordem_de_compra_' + String(d.o.numero || '').toLowerCase() + '.pdf');
+        (galpao ? ocPdfGalpaoPagina : ocPdfPagina)(doc, d);
+        doc.save((galpao ? 'conferencia_galpao_' : 'ordem_de_compra_') + String(d.o.numero || '').toLowerCase() + '.pdf');
       } catch(err){ toast('Não consegui gerar o PDF: ' + (err.message || err)); }
     }
 
     // ---------- ações com as ordens marcadas na lista ----------
     const ocMarcadas = () => oc.ordens.filter(o => oc.sel && oc.sel.has(Number(o.id))).sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')) || Number(a.numero) - Number(b.numero));
     // um PDF só, uma ordem por página
-    async function ocPdfVarias(bt){
+    async function ocPdfVarias(bt, galpao){
       const L = ocMarcadas(); if(!L.length){ toast('Marque as ordens na lista.'); return; }
       const rot = bt ? bt.textContent : ''; if(bt){ bt.disabled = true; bt.textContent = 'Gerando…'; }
       try {
         await ocPdfLib();
         const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
-        L.forEach((o, k) => { if(k) doc.addPage(); ocPdfPagina(doc, ocPdfDados(o)); });
-        doc.save(L.length === 1 ? 'ordem_de_compra_' + String(L[0].numero || '').toLowerCase() + '.pdf' : 'ordens_de_compra_' + getToday() + '.pdf');
+        L.forEach((o, k) => { if(k) doc.addPage(); (galpao ? ocPdfGalpaoPagina : ocPdfPagina)(doc, ocPdfDados(o)); });
+        doc.save(galpao ? 'conferencia_galpao_' + (L.length === 1 ? String(L[0].numero || '').toLowerCase() : getToday()) + '.pdf' : L.length === 1 ? 'ordem_de_compra_' + String(L[0].numero || '').toLowerCase() + '.pdf' : 'ordens_de_compra_' + getToday() + '.pdf');
       } catch(err){ toast('Não consegui gerar o PDF: ' + (err.message || err)); }
       if(bt){ bt.disabled = false; bt.textContent = rot; }
     }
