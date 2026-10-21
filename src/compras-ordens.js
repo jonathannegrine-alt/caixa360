@@ -121,7 +121,7 @@
       const marcadas = oc.ordens.filter(o => sel.has(Number(o.id)));
       const totMost = mostrar.reduce((s, x) => s + (Number(x.o.total) || 0), 0);
       return `<div class="card"><div class="card-body"><div class="chips">
-          ${[['Proposta', 'Propostas', cont('Proposta')], ['pendentes', 'Em trânsito e parciais', pendN], ['A receber', 'Em trânsito', cont('A receber')], ['Parcial', 'Parcial', cont('Parcial')], ['Recebida', 'Recebidas', cont('Recebida')], ['todas', 'Todas', base.length]]
+          ${[['Proposta', 'Propostas', cont('Proposta')], ['pendentes', 'Em trânsito', pendN], ['Parcial', 'Chegou uma parte', cont('Parcial')], ['Recebida', 'Recebidas', cont('Recebida')], ['todas', 'Todas', base.length]]
             .map(([k, t, n]) => `<button class="chip ${f === k ? 'active' : ''}" onclick="oc.filtro='${k}';ocFiltrar();">${t}<span class="n">${n}</span></button>`).join('')}
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:12.5px;">
