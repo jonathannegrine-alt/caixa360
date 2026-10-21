@@ -141,8 +141,12 @@
       const porEnvio = new Map(); vendas.forEach(v => { const k = String(v.shipping_id); if(!porEnvio.has(k)) porEnvio.set(k, []); porEnvio.get(k).push(v); });
       // envios já cobrados em faturas conferidas antes
       const antigos = new Map();
-      const ant = await supa.from('flex_faturas').select('numero,linhas').eq('usuario_id', uid).neq('numero', fx.fat.numero || '—').limit(200);
-      (ant.data || []).forEach(f => (f.linhas || []).forEach(l => antigos.set(String(l.envio), f.numero)));
+      const ant = await supa.from('flex_faturas').select('id,numero,transportador,de,ate,total,linhas').eq('usuario_id', uid).neq('numero', fx.fat.numero || '—').limit(200);
+      // FATURA RETIFICADA: mesmo transportador e mesmo período de uma fatura já conferida = ela substitui a anterior.
+      // Os envios da anterior não contam como cobrança em duplicidade.
+      const F0 = fx.fat, ret = F0.de && F0.ate ? (ant.data || []).find(f => f.de === F0.de && f.ate === F0.ate && fxN(f.transportador) === fxN(F0.transportador)) : null;
+      F0.substitui = ret ? { id: ret.id, numero: ret.numero, total: Number(ret.total) || 0, envios: (ret.linhas || []).length } : null;
+      (ant.data || []).filter(f => f !== ret).forEach(f => (f.linhas || []).forEach(l => antigos.set(String(l.envio), f.numero)));
       const vistos = new Set();
       L.forEach(l => {
         const vs = porEnvio.get(l.envio) || [];
@@ -249,6 +253,7 @@
             <span>Período <b>${F.de ? ptDate(F.de) + ' a ' + ptDate(F.ate) : '—'}</b></span><span>Pedidos <b>${F.pedidos}</b></span><span>Fretes <b>${fmt(F.freteBruto)}</b></span>
             <span>Cobranças extras (débitos) <b>${fmt(F.debitos)}</b></span><span>Estornos (créditos) <b>${fmt(F.creditos)}</b></span><span>Valor fechado <b>${fmt(F.total)}</b></span>
             <span style="flex-basis:100%;font-size:12.5px;">${F.creditos > 0 ? 'O transportador lançou ' + fmt(F.creditos) + ' de estorno nesta fatura. Confira se bate com o que foi combinado.' : 'Esta fatura não tem nenhum estorno lançado. Se o transportador prometeu abater algum envio, ele não entrou aqui.'}</span></div>` : ''}
+        ${F.substitui ? `<div class="alert alert-info"><b>Fatura retificada:</b> substitui a fatura nº ${fxE(F.substitui.numero)} (mesmo transportador e mesmo período). Antes: ${fmt(F.substitui.total)} em ${F.substitui.envios} envios · agora: ${fmt(F.total)} em ${R.envios} envios${Math.abs(F.total - F.substitui.total) > 0.005 ? ' · diferença <b>' + fmt(F.total - F.substitui.total) + '</b>' : ''}. Ao guardar, a conferência da ${fxE(F.substitui.numero)} é trocada por esta.</div>` : ''}
         ${difTotal ? `<div class="alert alert-warning">A soma dos envios que li (${fmt(R.frete)}) é diferente do valor a pagar da fatura (${fmt(F.total)}). Pode haver linha que não consegui ler: confira o total de envios.</div>` : ''}
         <div class="kpi-grid k4i">
           <div class="kpi k-venda"><div class="kpi-label">Envios conferidos${lj && typeof contaNome === 'function' ? ' · ' + fxE(contaNome(lj)) : ''}</div><div class="kpi-value">${R.envios}</div><div class="kpi-sub"><span><b>${R.envios ? Math.round(R.ok / R.envios * 100) : 0}%</b> pagos e entregues</span><span>${lj ? 'desta loja ' + fmt(R.frete) + ' · fatura ' + fmt(F.total) : 'valor fechado ' + fmt(F.total || R.frete)}</span></div></div>
@@ -281,7 +286,8 @@
       const R = { envios: todas.length, frete: todas.reduce((s, l) => s + l.frete, 0), marcados: todas.filter(mk).length, qFrete: todas.filter(mk).reduce((s, l) => s + fxFreteQ(l), 0), qRessarcir: todas.filter(mk).reduce((s, l) => s + fxProdutoQ(l), 0), porLoja };
       const linhas = fx.linhas.map(l => ({ envio: l.envio, codigo: l.codigo, coleta: l.coleta, cep: l.cep || '', dest: l.dest || '', frete: l.frete, cat: l.cat, nota: l.nota, conta: l.conta, valor: l.valor, custo: l.custo, vendas: l.vendas, marc: fx.marc.has(l.codigo + '|' + l.envio) }));
       if(F.numero) await supa.from('flex_faturas').delete().eq('usuario_id', uid).eq('numero', F.numero);
-      const r = await supa.from('flex_faturas').insert({ usuario_id: uid, numero: F.numero || null, transportador: F.transportador || null, emitida: F.emitida || null, de: F.de || null, ate: F.ate || null, total: F.total || null, arquivo: F.arquivo || null, linhas, resumo: { ...R, venc: F.venc || null, quadro: !!F.quadro, pedidos: F.pedidos || null, freteBruto: F.freteBruto || 0, debitos: F.debitos || 0, creditos: F.creditos || 0 } });
+      if(F.substitui && F.substitui.id) await supa.from('flex_faturas').delete().eq('usuario_id', uid).eq('id', F.substitui.id);   // retificada: sai a anterior
+      const r = await supa.from('flex_faturas').insert({ usuario_id: uid, numero: F.numero || null, transportador: F.transportador || null, emitida: F.emitida || null, de: F.de || null, ate: F.ate || null, total: F.total || null, arquivo: F.arquivo || null, linhas, resumo: { ...R, venc: F.venc || null, substitui: F.substitui ? F.substitui.numero : null, quadro: !!F.quadro, pedidos: F.pedidos || null, freteBruto: F.freteBruto || 0, debitos: F.debitos || 0, creditos: F.creditos || 0 } });
       if(btn){ btn.disabled = false; btn.textContent = 'Guardar conferência'; }
       toast(r.error ? 'Não consegui guardar: ' + r.error.message : 'Conferência guardada. Envios desta fatura cobrados de novo em outra serão apontados.');
       fx.hist = null;
@@ -290,24 +296,32 @@
       const r = await supa.from('flex_faturas').select('*').eq('id', id).eq('usuario_id', usuarioAtual.id).maybeSingle();
       if(r.error || !r.data){ toast('Não consegui abrir esta fatura.'); return; }
       const f = r.data;
-      fx.fat = { numero: f.numero || '', transportador: f.transportador || '', emitida: f.emitida || '', de: f.de || '', ate: f.ate || '', total: Number(f.total) || 0, arquivo: f.arquivo || '', venc: (f.resumo && f.resumo.venc) || '', quadro: !!(f.resumo && f.resumo.quadro), pedidos: (f.resumo && f.resumo.pedidos) || 0, freteBruto: (f.resumo && f.resumo.freteBruto) || 0, debitos: (f.resumo && f.resumo.debitos) || 0, creditos: (f.resumo && f.resumo.creditos) || 0 };
+      fx.fat = { numero: f.numero || '', transportador: f.transportador || '', emitida: f.emitida || '', de: f.de || '', ate: f.ate || '', total: Number(f.total) || 0, arquivo: f.arquivo || '', venc: (f.resumo && f.resumo.venc) || '', substitui: f.resumo && f.resumo.substitui ? { numero: f.resumo.substitui, total: 0, envios: 0, guardada: true } : null, quadro: !!(f.resumo && f.resumo.quadro), pedidos: (f.resumo && f.resumo.pedidos) || 0, freteBruto: (f.resumo && f.resumo.freteBruto) || 0, debitos: (f.resumo && f.resumo.debitos) || 0, creditos: (f.resumo && f.resumo.creditos) || 0 };
       fx.linhas = (f.linhas || []).map(l => ({ ...l, vendas: l.vendas || [], cat: FX_CAT[l.cat] ? l.cat : 'andamento' }));
       fx.marc = new Set(fx.linhas.filter(l => l.marc).map(l => l.codigo + '|' + l.envio)); fx.ver = 'questionar'; fxDesenhar();
     }
 
     // ---------- lançar no Contas a pagar ----------
     // conta já lançada: mesmo nº de documento e fornecedor (ou histórico) que fala da fatura do Flex
-    function fxLancada(){
-      const F = fx.fat; if(!F || !F.numero) return null;
+    function fxLancada(numero){
+      const F = fx.fat; numero = numero || (F && F.numero); if(!F || !numero) return null;
       const T = typeof pagTodos === 'function' ? pagTodos() : pagamentos, t = fxN(F.transportador);
       // o número pode estar no Nº do documento ou no histórico (contas lançadas à mão: 'Fatura nº: 27976', 'Flex - Fat 26779')
-      const num = new RegExp('(^|[^0-9])' + String(F.numero) + '([^0-9]|$)');
-      return T.find(p => (String(p.doc || '').trim() === String(F.numero) || num.test(String(p.desc || ''))) && (!t || fxN(p.forn).includes(t.slice(0, 8)) || /flex/i.test(String(p.desc || '') + ' ' + String(p.cat || '')))) || null;
+      const num = new RegExp('(^|[^0-9])' + String(numero) + '([^0-9]|$)');
+      return T.find(p => (String(p.doc || '').trim() === String(numero) || num.test(String(p.desc || ''))) && (!t || fxN(p.forn).includes(t.slice(0, 8)) || /flex/i.test(String(p.desc || '') + ' ' + String(p.cat || '')))) || null;
     }
     const fxN = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     function fxLancar(){
       const F = fx.fat; if(!F || typeof abrirModalLanc !== 'function') return;
       const j = fxLancada();
+      // retificada: se a anterior já está em Contas a pagar, troca valor, vencimento e número nela (não lança duas vezes)
+      const a = !j && F.substitui ? fxLancada(F.substitui.numero) : null;
+      if(a && !a.pago && confirm('A fatura anterior (nº ' + F.substitui.numero + ') está em Contas a pagar: ' + fmt(Number(a.val) || 0) + ', vence ' + ptDate(a.data) + '. Atualizar essa conta para a retificada (nº ' + F.numero + ', ' + fmt(Number(F.total) || 0) + (F.venc ? ', vence ' + ptDate(F.venc) : '') + ')?')){
+        a.val = Number(F.total) || a.val; if(F.venc) a.data = F.venc; a.doc = F.numero; if(F.emitida) a.emissao = F.emitida;
+        a.desc = 'Fatura Flex nº ' + F.numero + ' (retifica a ' + F.substitui.numero + ')' + (F.de ? ' · ' + ptDate(F.de) + ' a ' + ptDate(F.ate) : '');
+        salvar(); if(typeof recalc === 'function') recalc(); toast('Conta atualizada para a fatura retificada.'); fxDesenhar(); return;
+      }
+      if(a && a.pago) toast('A fatura anterior (nº ' + F.substitui.numero + ') já está paga. Lance a diferença, se houver.');
       if(j && !confirm('Esta fatura já está em Contas a pagar (' + fmt(Number(j.val) || 0) + ', vence ' + ptDate(j.data) + '). Lançar de novo?')) return;
       abrirModalLanc();
       const T = typeof pagTodos === 'function' ? pagTodos() : pagamentos;
@@ -323,7 +337,7 @@
       set('pf-val', F.total ? fmtMoney(Number(F.total)) : '');
       set('pf-emis', F.emitida || '');
       set('pf-doc', F.numero || '');
-      set('pf-desc', 'Fatura Flex ' + (F.numero ? 'nº ' + F.numero : '') + (F.de ? ' · ' + ptDate(F.de) + ' a ' + ptDate(F.ate) : ''));
+      set('pf-desc', 'Fatura Flex ' + (F.numero ? 'nº ' + F.numero : '') + (F.substitui ? ' (retifica a ' + F.substitui.numero + ')' : '') + (F.de ? ' · ' + ptDate(F.de) + ' a ' + ptDate(F.ate) : ''));
       const sc = document.getElementById('pf-cat'); if(sc && cat && [...sc.options].some(o => o.value === cat || o.text === cat)){ sc.value = cat; if(typeof pfGrupoMostrar === 'function') pfGrupoMostrar(); }
       const sl = document.getElementById('pf-loja'); if(sl && loja && [...sl.options].some(o => o.value === loja)) sl.value = loja;
       // depois de salvar, o botão vira "Lançada"
