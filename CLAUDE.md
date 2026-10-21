@@ -33,6 +33,7 @@ gestaomk/
     utils.js          ← dateStr, parseDate, fmt, sortTableByCol, makeSortable, getEntrada,
                         getPag, calcScore, calcPiorSaldo, P3 centro de decisão, P1 regressão
     nav.js            ← nav(page) — mostra/esconde .view divs
+    produtos-pai.js   ← produto pai/variações, mapeamento de anúncio → SKU, anúncios sem cadastro (aba Produtos)
     renders.js        ← renderDashboard, renderPlanilha, renderPagar, renderCalendario,
                         renderReceber, renderSKUs, renderConfig e auxiliares
     modals.js         ← abrirModalLanc, salvarLanc, deletarLanc, modal SKU, modal kit, etc.
@@ -238,6 +239,18 @@ GitHub Pages publica automaticamente em ~1 min em https://jonathannegrine-alt.gi
   qualquer ordem pode ser editada (ocEditar). Ordem do Olist editada ganha extra.editada e excluída ganha extra.excluida (não
   sai do banco); olist-compras pula as duas ao sincronizar. Lista com busca, caixas de marcar e ações em lote (PDF uma ordem
   por página, planilha, excluir). Com ordens guardadas a tela funciona sem o Olist (ocGuardadas).
+  Proposta: extra.etapa = 'proposta' → situação 'Proposta' (não conta a caminho nem lança contas); "Gerar compra" (ocGerarCompra)
+  tira a etapa, data da compra = hoje e parcelas andam junto. 'A receber' aparece como "Em trânsito" (ocSitNome; nome interno igual).
+  Chegada: compras_recebimentos.conferido_por (obrigatório); PDFs "Lista p/ galpão" (sem preços) e "Baixar conferência".
+- PRODUTO PAI E MAPEAMENTO (src/produtos-pai.js, aba Produtos): pai só agrupa (skus.pai / skus.variacao; nome em sku_pais); venda,
+  custo, estoque e compra seguem pela variação. Kit continua kit. "Agrupar variações" sugere pelo prefixo J-NNNN (sufixo só numérico fica
+  de fora: costuma ser quantidade de outro produto). Código do SKU não muda depois de criado (editarSKU trava); SKU novo sem acento.
+  Mapeamento = "Mapeado SKU do Anúncio" do UpSeller: sku_mapa (item_id, variation_id 0 = anúncio inteiro, sku, sku_anuncio). Vale só
+  enquanto o anúncio tiver o SKU que tinha ao mapear (sku_mapa.sku_anuncio) — anúncio reaproveitado não puxa vendas de outro produto.
+  Aplicado em ml-vendas (vendas_ml.sku = SKU do produto; vendas_ml.sku_anuncio = o que veio do ML; variation_id), ml-inventory (Full)
+  e nas vendas já gravadas (RPC sku_mapa_aplicar / sku_mapa_desfazer). Lista de anúncios: ml_anuncios, preenchida pela função
+  ml-anuncios (botão "Atualizar anúncios" ou lista com mais de 1 dia; aceita service_role + {usuario} para teste). No ML atual cada
+  cor costuma ser um anúncio próprio (User Products), então variation_id quase sempre é 0.
 - FORNECEDORES (src/fornecedores.js, página 'fornecedores' no grupo Compras, tabela fornecedores): cadastro por loja
   (loja = ml_user_id, vazio = padrão, '*' = todas as lojas: aparece em qualquer loja e soma só a da vez). Casa contas a pagar (p.forn) e ordens (olist_ordens.fornecedor) pelo nome, razão
   social, fantasia ou apelidos (fnChave: sem acento, pontuação e LTDA/ME/EPP). CNPJ: BrasilAPI (/api/cnpj/v1) + IE pela
