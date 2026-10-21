@@ -238,7 +238,7 @@
       const justo = (F.total || R.frete) - pedir;
       view.innerHTML = cab + erro + `
         <div class="fx-acoes"><button class="btn-out btn" onclick="fx.fat=null;fx.linhas=[];fx.hist=null;fxRender()">← Voltar para as faturas</button>
-          <span style="flex:1;"></span><button class="btn-out btn" ${R.marcados ? '' : 'disabled'} onclick="fxPdf()">Relatório para o transportador</button><button class="btn" onclick="fxSalvar(this)">Guardar conferência</button></div>
+          <span style="flex:1;"></span><button class="btn-out btn" ${R.marcados ? '' : 'disabled'} onclick="fxPdf()">Relatório para o transportador</button>${(() => { const j = fxLancada(); return j ? `<button class="btn-out btn" onclick="fxLancar()" title="${fxE('Já está em Contas a pagar: ' + (j.desc || '') + ' · ' + fmt(Number(j.val) || 0) + ' · vence ' + ptDate(j.data))}">✓ Lançada no Contas a pagar</button>` : '<button class="btn-out btn" onclick="fxLancar()" title="Abre uma conta a pagar já preenchida com o valor, o vencimento e o número desta fatura">Lançar no Contas a pagar</button>'; })()}<button class="btn" onclick="fxSalvar(this)">Guardar conferência</button></div>
         <div class="card"><div class="card-body" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
           <div><b style="font-size:15px;">Fatura ${fxE(F.numero || '')} · ${fxE(F.transportador || '')}</b><div class="text-muted" style="font-size:12.5px;margin-top:3px;">${F.de ? 'Período ' + ptDate(F.de) + ' a ' + ptDate(F.ate) + ' · ' : ''}${F.venc ? 'vence em ' + ptDate(F.venc) + ' · ' : ''}${fxE(F.arquivo || '')}</div></div>
           <div class="d-flex gap-1" style="flex-wrap:wrap;align-items:center;">
@@ -293,6 +293,40 @@
       fx.fat = { numero: f.numero || '', transportador: f.transportador || '', emitida: f.emitida || '', de: f.de || '', ate: f.ate || '', total: Number(f.total) || 0, arquivo: f.arquivo || '', venc: (f.resumo && f.resumo.venc) || '', quadro: !!(f.resumo && f.resumo.quadro), pedidos: (f.resumo && f.resumo.pedidos) || 0, freteBruto: (f.resumo && f.resumo.freteBruto) || 0, debitos: (f.resumo && f.resumo.debitos) || 0, creditos: (f.resumo && f.resumo.creditos) || 0 };
       fx.linhas = (f.linhas || []).map(l => ({ ...l, vendas: l.vendas || [], cat: FX_CAT[l.cat] ? l.cat : 'andamento' }));
       fx.marc = new Set(fx.linhas.filter(l => l.marc).map(l => l.codigo + '|' + l.envio)); fx.ver = 'questionar'; fxDesenhar();
+    }
+
+    // ---------- lançar no Contas a pagar ----------
+    // conta já lançada: mesmo nº de documento e fornecedor (ou histórico) que fala da fatura do Flex
+    function fxLancada(){
+      const F = fx.fat; if(!F || !F.numero) return null;
+      const T = typeof pagTodos === 'function' ? pagTodos() : pagamentos, t = fxN(F.transportador);
+      return T.find(p => String(p.doc || '').trim() === String(F.numero) && (!t || fxN(p.forn).includes(t.slice(0, 8)) || /flex/i.test(String(p.desc || '') + ' ' + String(p.cat || '')))) || null;
+    }
+    const fxN = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    function fxLancar(){
+      const F = fx.fat; if(!F || typeof abrirModalLanc !== 'function') return;
+      const j = fxLancada();
+      if(j && !confirm('Esta fatura já está em Contas a pagar (' + fmt(Number(j.val) || 0) + ', vence ' + ptDate(j.data) + '). Lançar de novo?')) return;
+      abrirModalLanc();
+      const T = typeof pagTodos === 'function' ? pagTodos() : pagamentos;
+      // categoria: a mais usada nas contas do Flex; senão a primeira categoria com "Flex" no nome
+      const cont = {}; T.filter(p => p.cat && /flex/i.test(p.cat)).forEach(p => { cont[p.cat] = (cont[p.cat] || 0) + 1; });
+      const cat = Object.keys(cont).sort((a, b) => cont[b] - cont[a])[0] || ((categorias.find(c => /flex/i.test(c.nome)) || {}).nome) || '';
+      // loja: a que tem mais frete nesta fatura
+      const pl = {}; fx.linhas.forEach(l => { if(l.conta) pl[l.conta] = (pl[l.conta] || 0) + l.frete; });
+      const loja = Object.keys(pl).sort((a, b) => pl[b] - pl[a])[0] || '';
+      const set = (id, v) => { const e = document.getElementById(id); if(e && v != null && v !== '') e.value = v; };
+      set('pf-forn', F.transportador || '');
+      set('pf-venc', F.venc || '');
+      set('pf-val', F.total ? fmtMoney(Number(F.total)) : '');
+      set('pf-emis', F.emitida || '');
+      set('pf-doc', F.numero || '');
+      set('pf-desc', 'Fatura Flex ' + (F.numero ? 'nº ' + F.numero : '') + (F.de ? ' · ' + ptDate(F.de) + ' a ' + ptDate(F.ate) : ''));
+      const sc = document.getElementById('pf-cat'); if(sc && cat && [...sc.options].some(o => o.value === cat || o.text === cat)){ sc.value = cat; if(typeof pfGrupoMostrar === 'function') pfGrupoMostrar(); }
+      const sl = document.getElementById('pf-loja'); if(sl && loja && [...sl.options].some(o => o.value === loja)) sl.value = loja;
+      // depois de salvar, o botão vira "Lançada"
+      const ok = document.querySelector('#modal-vml .modal-footer .btn:not(.btn-out)') || [...document.querySelectorAll('#modal-vml button')].find(b => b.textContent.trim() === 'Salvar');
+      if(ok) ok.addEventListener('click', () => setTimeout(() => { if(fx.fat) fxDesenhar(); }, 300));
     }
 
     // ---------- relatório para o transportador ----------
