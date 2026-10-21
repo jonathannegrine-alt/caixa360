@@ -22,6 +22,8 @@
       nao_entregue: { r: 'Saiu e não foi entregue',          q: true,  cls: 'cp-excesso', d: 'O envio saiu com o transportador e a venda foi cancelada sem entrega.' },
       // validar:true = não entra marcado; o usuário confere com o transportador antes
       pnr:          { r: 'Comprador diz que não recebeu',    q: true,  validar: true, cls: 'cp-excesso', d: 'Consta como entregue, mas o comprador reclamou que não recebeu e a venda foi cancelada.' },
+      // marcada:true na linha = o usuário marcou a venda ("Conferir na fatura", página Vendas); sem problema no ML vira esta categoria
+      marcada:      { r: 'Marcada por você',                 q: true,  validar: true, cls: 'cp-excesso', d: 'Você marcou esta venda para conferir na fatura (ex.: o comprador diz que não recebeu).' },
       paga_nao_ent: { r: 'Não entregue (venda ainda paga)',  q: true,  cls: 'cp-excesso', d: 'O Mercado Livre marcou o envio como não entregue.' },
       sem_venda:    { r: 'Sem venda correspondente',         q: true,  cls: 'cp-excesso', d: 'Este número de envio não existe nas suas vendas.' },
       duplicada:    { r: 'Cobrada em duplicidade',           q: true,  cls: 'cp-excesso', d: 'Este envio já foi cobrado (nesta fatura ou em outra já conferida).' },
@@ -32,6 +34,7 @@
       antes: 'Devolver o produto. O frete desta coleta não está sendo contestado. Se o produto não for devolvido até o vencimento, abater o valor dele desta fatura.',
       nao_entregue: 'Devolver o produto e estornar o frete. Se não for devolvido, abater também o valor do produto.',
       pnr: 'Apresentar o comprovante de entrega. Sem comprovante, abater o frete e o valor do produto.',
+      marcada: 'Apresentar o comprovante de entrega. Sem comprovante, abater o frete e o valor do produto.',
       paga_nao_ent: 'Informar onde está o pacote e devolver o produto.',
       sem_venda: 'Estornar o frete: este envio não consta nas nossas vendas.',
       duplicada: 'Estornar o frete cobrado em duplicidade.',
@@ -129,6 +132,12 @@
         const r = await supa.from('vendas_ml').select('order_id,shipping_id,ml_user_id,status,sku,titulo,qtd,preco_unit,custo_unit,envio_status,logistic_type,data_venda').eq('usuario_id', uid).in('shipping_id', ids.slice(i, i + 150));
         if(r.error) throw r.error; vendas.push(...(r.data || []));
       }
+      // vendas marcadas na página Vendas para conferir na fatura
+      const marcadas = new Set(), pedidos = [...new Set(vendas.map(v => String(v.order_id)))];
+      for(let i = 0; i < pedidos.length; i += 150){
+        const r = await supa.from('vendas_conferir').select('order_id').eq('usuario_id', uid).in('order_id', pedidos.slice(i, i + 150));
+        (r.data || []).forEach(x => marcadas.add(String(x.order_id)));
+      }
       const porEnvio = new Map(); vendas.forEach(v => { const k = String(v.shipping_id); if(!porEnvio.has(k)) porEnvio.set(k, []); porEnvio.get(k).push(v); });
       // envios já cobrados em faturas conferidas antes
       const antigos = new Map();
@@ -157,6 +166,10 @@
         (r.envios || []).forEach(d => { const l = lote.find(x => String(x.envio) === String(d.envio)); if(l){ l.det = d; fxClassificar(l); } });
       }
       pend.filter(l => l.cat === '').forEach(l => { l.cat = l.cancelada ? 'antes' : 'andamento'; l.nota = 'o Mercado Livre não devolveu os detalhes deste envio'; });
+      L.forEach(l => {
+        l.marcada = l.vendas.some(v => marcadas.has(v.pedido));
+        if(l.marcada && !FX_CAT[l.cat].q){ l.nota = 'Você marcou esta venda para conferir. No Mercado Livre ela consta como ' + (l.cat === 'ok' ? 'entregue' : FX_CAT[l.cat].r.toLowerCase()) + '. ' + (l.nota || ''); l.cat = 'marcada'; }
+      });
       fx.marc = new Set(L.filter(l => FX_CAT[l.cat].q && !FX_CAT[l.cat].validar).map(l => l.codigo + '|' + l.envio));
       fx.lendo = ''; fx.ver = 'questionar'; fxDesenhar();
     }
@@ -252,7 +265,7 @@
               return `<tr><td><input type="checkbox" style="width:auto;" ${fx.marc.has(k) ? 'checked' : ''} onchange="this.checked?fx.marc.add('${k}'):fx.marc.delete('${k}');fxDesenhar()"></td>
                 <td>${v ? `<a class="fx-link" style="color:var(--primary);font-weight:700;" href="https://www.mercadolivre.com.br/vendas/${fxE(v.pedido)}/detalhe" target="_blank" rel="noopener" title="Abrir a venda no Mercado Livre">${fxE(l.envio)}</a>` : `<b>${fxE(l.envio)}</b>`}<br><small class="text-muted">cód. ${fxE(l.codigo)}${loja(l.conta) ? ' · ' + fxE(loja(l.conta)) : ''}${l.dest ? '<br>' + fxE(l.dest) + (l.cep ? ' · CEP ' + fxE(l.cep) : '') : ''}</small></td>
                 <td>${l.coleta ? ptDate(l.coleta).slice(0, 5) : '—'}</td>
-                <td><span class="cp-sit ${c.cls}">${c.r}</span></td>
+                <td><span class="cp-sit ${c.cls}">${c.r}</span>${l.marcada && l.cat !== 'marcada' ? '<br><small style="color:var(--warning,#d97706);font-weight:700;">⚑ marcada por você</small>' : ''}</td>
                 <td class="fx-oque">${fxE(l.nota || c.d)}${c.validar && !fx.marc.has(k) ? '<br><b style="color:var(--warning,#d97706)">Confira antes:</b> peça ao transportador a prova de entrega; se ele não comprovar, marque a caixa ao lado para incluir no relatório.' : ''}${FX_PEDIDO[l.cat] ? '<br><b>Pedir:</b> ' + fxE(FX_PEDIDO[l.cat]) : ''}${v ? `<br><a class="fx-link" style="color:var(--primary);" href="https://www.mercadolivre.com.br/vendas/${fxE(v.pedido)}/detalhe" target="_blank" rel="noopener">venda #${fxE(v.pedido)}</a>` : ''}</td>
                 <td class="cp-prod"><b>${fxE(l.vendas.map(x => x.sku).filter(Boolean).join(', ') || '—')}</b><span>${fxE(v ? v.titulo : '')}</span></td>
                 <td class="num">${fmt(l.frete)}${c.q && c.frete === false ? '<br><small class="text-muted">não contestado</small>' : ''}</td><td class="num">${l.valor ? fmt(l.valor) : '—'}</td><td class="num">${l.custo ? fmt(l.custo) : '—'}</td><td class="num"><b>${fxProdutoQ(l) ? fmt(fxProdutoQ(l)) : '—'}</b></td></tr>`; }).join('')

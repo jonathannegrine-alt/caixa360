@@ -13,7 +13,7 @@
     const VD_MAX_DIAS = 31;            // a página Vendas é operacional: períodos longos ficam no Resumo Financeiro
 
     // Vendas
-    let vdFiltro = { de:null, ate:null, atalho:'hoje', status:'todas', envio:'todas', campo:'sku', termo:'', semCusto:false, pagina:1, porPagina:40 };
+    let vdFiltro = { de:null, ate:null, atalho:'hoje', status:'todas', envio:'todas', campo:'sku', termo:'', semCusto:false, conferir:false, pagina:1, porPagina:40 };
     let vdDados = { linhas:[], total:0, tot:null, carrinhos:{}, carregado:false };
     // Resumo Financeiro
     let rfPend = null;   // filtros do Resumo alterados na tela e ainda não buscados
@@ -157,6 +157,7 @@
       let q = supa.from('vendas_ml_calc').select(sel, opts).eq('usuario_id', usuarioAtual.id);
       if(contaAtiva && !semConta) q = q.eq('ml_user_id', contaAtiva);
       if(!t){
+        if(f.conferir) return q.in('order_id', vdConf && vdConf.size ? [...vdConf] : [0]);   // marcadas: todas as datas
         q = q.gte('dia', f.de).lte('dia', f.ate);
         if(f.status === 'aprovadas') q = q.eq('situacao', 'aprovada');
         if(f.status === 'canceladas') q = q.eq('situacao', 'cancelada');
@@ -181,6 +182,7 @@
     }
     async function vdCarregar(){
       if(!usuarioAtual) return;
+      if(!vdConf){ const r = await supa.from('vendas_conferir').select('order_id').eq('usuario_id', usuarioAtual.id); vdConf = new Set((r.data || []).map(x => String(x.order_id))); }
       const seq = ++vmlSeq, f = vdFiltro, buscando = !!f.termo.trim();
       const ini = (f.pagina - 1) * f.porPagina;
       const pagina = () => vdConsulta('*', { count:'exact' }).order('data_venda', {ascending:false}).range(ini, ini + f.porPagina - 1);
@@ -312,6 +314,7 @@
           ${envios.map(e => `<button class="chip ${f.envio === e.envio ? 'active' : ''}" onclick="vdSet('envio','${e.envio}')">${e.envio}<span class="n">${Number(e.qtd).toLocaleString('pt-BR')}</span></button>`).join('')}
           <span style="width:1px;background:var(--border);margin:0 6px;"></span>
           <button class="chip ${f.semCusto ? 'active' : ''}" onclick="vdSet('semCusto',${!f.semCusto})">Sem custo ou imposto</button>
+          <button class="chip ${f.conferir ? 'active' : ''}" onclick="vdSet('conferir',${!f.conferir})" title="Vendas marcadas para conferir na fatura (de todas as datas)">⚑ Conferir na fatura<span class="n">${vdConf ? vdConf.size : 0}</span></button>
         </div>
 
         <div class="card">
@@ -334,11 +337,12 @@
       const ex = (vdDados.extra || {})[v.order_id] || {}, temCid = ex.cidade && ex.cidade !== '--';
       const nCart = v.pack_id ? (vdDados.carrinhos[v.pack_id] || 1) : 1;
       const nota = vmlNotas()[v.order_id] || '';
+      const conf = vdConf && vdConf.has(String(v.order_id));
       const completo = c.temCusto && c.temImposto;
       const cp = (txt) => `<button class="ico-btn" style="width:20px;height:20px;border:none;background:none;" title="Copiar" onclick="vmlCopiar('${vmlEsc(txt)}', this)">⧉</button>`;
       const linha = (rot, val, cls, tit) => `<div class="${cls || ''}" ${tit ? `title="${tit}"` : ''}><span>${rot}</span><span>${val}</span></div>`;
       return `
-        <div class="venda ${st === 'cancelada' ? 'cancelada' : ''}">
+        <div class="venda ${st === 'cancelada' ? 'cancelada' : ''}" ${conf ? 'style="box-shadow:inset 4px 0 0 var(--warning,#d97706);"' : ''}>
           <div class="v-comp">
             <div class="nome"><button class="ico-btn v-i" title="Dados do comprador" onclick="vdPagamento('${v.order_id}','comprador')">i</button>${vmlEsc(v.comprador_nome || v.comprador_apelido || 'Comprador')} ${v.comprador_nome ? cp(v.comprador_nome) : ''}</div>
             <div>${vmlEsc(v.comprador_apelido || '')} ${v.comprador_apelido ? cp(v.comprador_apelido) : ''}</div>
@@ -347,6 +351,7 @@
             ${ex.cep || temCid ? `<div>${ex.cep ? '<b>CEP:</b> ' + vdCep(ex.cep) + ' ' + cp(vdCep(ex.cep)) : ''}${temCid ? '<span class="text-muted"> ' + vmlEsc(ex.cidade) + (ex.uf && ex.uf !== '--' ? ' - ' + ex.uf : '') + '</span>' : ''}</div>` : ''}
             <div><b>Data:</b> ${ptDate(dt.dia)} - ${dt.hora}</div>
             <div style="margin-top:4px;"><button class="ico-btn" style="width:auto;padding:0 8px;gap:5px;" onclick="vdNota('${v.order_id}')" title="Anotação da venda">✎ ${nota ? vmlEsc(nota.length > 22 ? nota.slice(0,22) + '…' : nota) : 'Anotar'}</button></div>
+            <label style="display:flex;gap:6px;align-items:center;margin:6px 0 0;font-size:12.5px;cursor:pointer;${conf ? 'color:var(--warning,#d97706);font-weight:700;' : ''}" title="Marque para conferir esta venda quando chegar a fatura (ex.: comprador diz que não recebeu)"><input type="checkbox" style="width:auto;margin:0;" ${conf ? 'checked' : ''} onchange="vdConferir('${v.order_id}', '${v.ml_user_id || ''}', ${ex.shipping_id || 'null'}, this)"> ⚑ Conferir na fatura</label>
           </div>
 
           <div class="v-prod">
@@ -683,6 +688,18 @@
     function vmlRecarregar(){
       if(document.getElementById('view-vendas').classList.contains('active')) vdCarregar();
       if(document.getElementById('view-resumo-fin').classList.contains('active')) rfCarregar();
+    }
+
+    // Vendas marcadas para conferir na fatura (tabela vendas_conferir; a conferência do Flex destaca o envio)
+    let vdConf = null;
+    async function vdConferir(orderId, conta, envio, cx){
+      const marcar = cx.checked, uid = usuarioAtual.id; cx.disabled = true;
+      const r = marcar
+        ? await supa.from('vendas_conferir').upsert({ usuario_id: uid, order_id: orderId, ml_user_id: conta || null, shipping_id: envio || null })
+        : await supa.from('vendas_conferir').delete().eq('usuario_id', uid).eq('order_id', orderId);
+      if(r.error){ cx.checked = !marcar; cx.disabled = false; alert('Não consegui salvar a marcação: ' + r.error.message); return; }
+      if(marcar) vdConf.add(String(orderId)); else vdConf.delete(String(orderId));
+      vdDesenhar();
     }
 
     // Anotações por venda (ficam neste navegador)
