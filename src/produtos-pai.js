@@ -270,7 +270,7 @@
       const pelo = (mlAnuncios || []).filter(a => ppN(a.sku_anuncio) === ppN(sku) && !skuMapa.some(m => m.item_id === a.item_id && (Number(m.variation_id) === Number(a.variation_id) || Number(m.variation_id) === 0)));
       el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;"><span class="form-label" style="margin:0;">Anúncios deste produto</span><button class="btn-out btn-sm" onclick="ppMapearAbrir(${ppQ(sku)})">+ Mapear anúncio</button></div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-          ${meus.map(m => { const a = ppAnuncio(m.item_id, m.variation_id), vale = !m.sku_anuncio || !a || ppN(a.sku_anuncio) === ppN(m.sku_anuncio);
+          ${meus.map(m => { const a = ppAnuncio(m.item_id, m.variation_id), vale = !m.sku_anuncio || !a || ppN(a.sku_anuncio) === ppN(m.sku_anuncio) || ppN(a.sku_anuncio) === ppN(sku);
             return `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;">${ppAnuncioHtml(a, m.item_id, m.variation_id)}<span style="display:flex;gap:6px;align-items:center;flex:none;">${vale ? '<span class="badge badge-success"' + (m.sku_anuncio ? ' title="Vale para as vendas com o SKU ' + ppEsc(m.sku_anuncio) + ' no anúncio"' : '') + '>mapeado</span>' : '<span class="badge badge-warning" title="O SKU do anúncio mudou para ' + ppEsc(a.sku_anuncio || 'vazio') + ': as vendas novas usam o SKU do anúncio">SKU do anúncio mudou</span>'}<button class="btn-out btn-sm" onclick="ppDesmapear(${ppQ(m.item_id)}, ${Number(m.variation_id) || 0}, ${ppQ(sku)}, this)">Desfazer</button></span></div>`; }).join('')}
           ${pelo.map(a => `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;">${ppAnuncioHtml(a, a.item_id, a.variation_id)}<span class="badge" style="flex:none;" title="O anúncio já traz este SKU escrito nele: não precisa mapear">pelo SKU do anúncio</span></div>`).join('')}
           ${!meus.length && !pelo.length ? '<div class="text-muted" style="font-size:12px;">Nenhum anúncio traz este SKU. Use "Mapear anúncio" para ligar um anúncio a este produto.</div>' : ''}
@@ -291,7 +291,7 @@
         .sort((a, b) => (a.status === b.status ? 0 : a.status === 'active' ? -1 : 1) || ppCmp(a.titulo, b.titulo)).slice(0, 80);
       const atual = a => skuMapa.find(m => m.item_id === a.item_id && Number(m.variation_id) === Number(a.variation_id)) || skuMapa.find(m => m.item_id === a.item_id && Number(m.variation_id) === 0);
       const corpo = `<div style="display:flex;gap:8px;margin-bottom:10px;"><input id="pp-busca" type="search" placeholder="Buscar por título, MLB ou SKU do anúncio" value="${ppEsc(busca)}" oninput="ppMapearFiltrar()" style="flex:1;"><button class="btn-out btn-sm" onclick="ppAnunciosAtualizar(this).then(ppMapearDesenhar)" title="Busca de novo no Mercado Livre a lista de anúncios">Atualizar anúncios</button></div>
-        <div class="text-muted" style="font-size:12px;margin-bottom:8px;">${(mlAnuncios || []).length} anúncios${L.length === 80 ? ' · mostrando os 80 primeiros, refine a busca' : ''}. Mapear faz as vendas desse anúncio (as novas e as já gravadas) usarem o produto <b>${ppEsc(ppMapSku)}</b>.</div>
+        <div id="pp-map-info" class="text-muted" style="font-size:12px;margin-bottom:8px;">${(mlAnuncios || []).length} anúncios${L.length === 80 ? ' · mostrando os 80 primeiros, refine a busca' : ''}. Mapear faz as vendas desse anúncio (as novas e as já gravadas) usarem o produto <b>${ppEsc(ppMapSku)}</b>.</div>
         <div id="pp-map-lista" style="display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;">
           ${L.length ? L.map(a => { const m = atual(a), meu = m && ppN(m.sku) === ppN(ppMapSku), igual = !m && ppN(a.sku_anuncio) === ppN(ppMapSku);
             return `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;">${ppAnuncioHtml(a, a.item_id, a.variation_id)}
@@ -302,6 +302,7 @@
       const lista = document.getElementById('pp-map-lista');
       if(lista && document.getElementById('pp-busca')){   // só a lista muda: o campo de busca não perde o cursor
         const tmp = document.createElement('div'); tmp.innerHTML = corpo; lista.replaceWith(tmp.querySelector('#pp-map-lista'));
+        const info = document.getElementById('pp-map-info'); if(info) info.replaceWith(tmp.querySelector('#pp-map-info'));
         return;
       }
       vmlModal('Mapear anúncio para ' + ppEsc(ppMapSku), corpo, `<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>`);
@@ -340,13 +341,14 @@
       ppSemCadastroDesenhar();
     }
     function ppSemCadastroDesenhar(){
-      const cad = new Set(skus.map(s => ppN(s.sku)));
+      // cadastrado = produto ou kit (o kit pode existir só na aba Kits)
+      const cad = new Set(skus.map(s => ppN(s.sku)).concat(composicaoKit.map(c => ppN(c.sku_comercial))));
       const L = (mlAnuncios || []).filter(a => !skuMapa.some(m => m.item_id === a.item_id && (Number(m.variation_id) === Number(a.variation_id) || Number(m.variation_id) === 0)) && !cad.has(ppN(a.sku_anuncio)))
         .sort((a, b) => (a.status === b.status ? 0 : a.status === 'active' ? -1 : 1) || ppCmp(a.titulo, b.titulo));
       window._ppSem = L;
       vmlModal('Anúncios sem cadastro (' + L.length + ')', `
         <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;"><span class="text-muted" style="font-size:12.5px;">O SKU escrito nestes anúncios não existe nos seus produtos, então as vendas deles ficam sem custo. Escolha o produto de cada um e clique em Mapear, ou corrija o SKU no Mercado Livre.</span><button class="btn-out btn-sm" onclick="ppAnunciosAtualizar(this).then(ppSemCadastroDesenhar)">Atualizar anúncios</button></div>
-        <datalist id="pp-skus-todos">${skus.map(s => `<option value="${ppEsc(s.sku)}" label="${ppEsc(s.titulo || '')}">`).join('')}</datalist>
+        <datalist id="pp-skus-todos">${[...new Set(skus.map(s => s.sku).concat(composicaoKit.map(c => c.sku_comercial)))].sort(ppCmp).map(k => `<option value="${ppEsc(k)}">`).join('')}</datalist>
         <div style="display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow:auto;">
           ${L.length ? L.map((a, k) => `<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:8px;flex-wrap:wrap;">${ppAnuncioHtml(a, a.item_id, a.variation_id)}
             <span style="display:flex;gap:6px;flex:none;"><input class="pp-sem-sku" data-k="${k}" list="pp-skus-todos" placeholder="SKU do produto" style="width:170px;"><button class="btn btn-sm" onclick="ppSemMapear(${k}, this)">Mapear</button></span></div>`).join('')
@@ -356,7 +358,7 @@
     }
     async function ppSemMapear(k, btn){
       const a = (window._ppSem || [])[k], inp = document.querySelector('.pp-sem-sku[data-k="' + k + '"]');
-      const s = inp && skus.find(x => ppN(x.sku) === ppN(inp.value));
+      const s = inp && (skus.find(x => ppN(x.sku) === ppN(inp.value)) || (composicaoKit.find(c => ppN(c.sku_comercial) === ppN(inp.value)) ? { sku: composicaoKit.find(c => ppN(c.sku_comercial) === ppN(inp.value)).sku_comercial } : null));
       if(!a) return;
       if(!s){ toast('Escolha um SKU que exista nos produtos.'); return; }
       if(await ppMapear(a.item_id, Number(a.variation_id) || 0, a.ml_user_id, btn, s.sku)) ppSemCadastroDesenhar();
