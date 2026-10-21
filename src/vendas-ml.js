@@ -314,7 +314,7 @@
           ${envios.map(e => `<button class="chip ${f.envio === e.envio ? 'active' : ''}" onclick="vdSet('envio','${e.envio}')">${e.envio}<span class="n">${Number(e.qtd).toLocaleString('pt-BR')}</span></button>`).join('')}
           <span style="width:1px;background:var(--border);margin:0 6px;"></span>
           <button class="chip ${f.semCusto ? 'active' : ''}" onclick="vdSet('semCusto',${!f.semCusto})">Sem custo ou imposto</button>
-          <button class="chip ${f.conferir ? 'active' : ''}" onclick="vdSet('conferir',${!f.conferir})" title="Vendas marcadas para conferir na fatura (de todas as datas)">⚑ Conferir na fatura<span class="n">${vdConf ? vdConf.size : 0}</span></button>
+          <button class="chip ${f.conferir ? 'active' : ''}" onclick="vdSet('conferir',${!f.conferir})" title="Vendas marcadas para conferir na fatura do Flex (de todas as datas)">⚑ Conferir na fatura Flex<span class="n">${vdConf ? vdConf.size : 0}</span></button>
         </div>
 
         <div class="card">
@@ -351,7 +351,7 @@
             ${ex.cep || temCid ? `<div>${ex.cep ? '<b>CEP:</b> ' + vdCep(ex.cep) + ' ' + cp(vdCep(ex.cep)) : ''}${temCid ? '<span class="text-muted"> ' + vmlEsc(ex.cidade) + (ex.uf && ex.uf !== '--' ? ' - ' + ex.uf : '') + '</span>' : ''}</div>` : ''}
             <div><b>Data:</b> ${ptDate(dt.dia)} - ${dt.hora}</div>
             <div style="margin-top:4px;"><button class="ico-btn" style="width:auto;padding:0 8px;gap:5px;" onclick="vdNota('${v.order_id}')" title="Anotação da venda">✎ ${nota ? vmlEsc(nota.length > 22 ? nota.slice(0,22) + '…' : nota) : 'Anotar'}</button></div>
-            <label style="display:flex;gap:6px;align-items:center;margin:6px 0 0;font-size:12.5px;cursor:pointer;${conf ? 'color:var(--warning,#d97706);font-weight:700;' : ''}" title="Marque para conferir esta venda quando chegar a fatura (ex.: comprador diz que não recebeu)"><input type="checkbox" style="width:auto;margin:0;" ${conf ? 'checked' : ''} onchange="vdConferir('${v.order_id}', '${v.ml_user_id || ''}', ${ex.shipping_id || 'null'}, this)"> ⚑ Conferir na fatura</label>
+            ${log === 'Flex' || conf ? `<label style="display:flex;gap:6px;align-items:center;margin:6px 0 0;font-size:12.5px;cursor:pointer;${conf ? 'color:var(--warning,#d97706);font-weight:700;' : ''}" title="Marque para conferir esta venda quando chegar a fatura do Flex (ex.: comprador diz que não recebeu)"><input type="checkbox" style="width:auto;margin:0;" ${conf ? 'checked' : ''} onchange="vdConferir('${v.order_id}', '${v.ml_user_id || ''}', ${ex.shipping_id || 'null'}, this)"> ⚑ Conferir na fatura Flex</label>` : ''}
           </div>
 
           <div class="v-prod">
