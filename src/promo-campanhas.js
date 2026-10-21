@@ -158,7 +158,7 @@
     const PC_EDITA = ['SELLER_CAMPAIGN', 'DEAL', 'PRICE_DISCOUNT'];
     // período da promoção: início e fim (e o prazo para entrar, quando o Mercado Livre informa)
     function pcPeriodo(p){
-      if(!p.inicio && !p.fim) return '<small class="text-muted">sem data informada pelo Mercado Livre</small>';
+      if(!p.inicio && !p.fim) return '<small class="text-muted">' + (p.tipo === 'PRICE_DISCOUNT' ? 'você escolhe o início e o fim ao participar' : p.tipo === 'LIGHTNING' ? 'o Mercado Livre marca o dia e a hora da oferta' : 'sem data informada pelo Mercado Livre') + '</small>';
       return `<small>📅 Início <b>${pcDia(p.inicio) || '—'}</b> · termina <b>${pcDia(p.fim) || '—'}</b>${p.prazo && p.situacao === 'candidate' ? ' · entrar até ' + pcDia(p.prazo) : ''}</small>`;
     }
     function pcPromoDe(item, id, tipo){ return (((pc.aberto[item] || {}).promos) || []).find(p => (p.id || '') === id && p.tipo === tipo); }

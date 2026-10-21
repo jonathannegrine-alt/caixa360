@@ -72,6 +72,9 @@ Deno.serve(async (req: Request) => {
       if (lista.some((x: any) => x.id && !(x.start_date && x.finish_date))) {
         const u: any = await g(`${ML}/seller-promotions/users/${conta}?app_version=v2`)
         for (const p of (u?.results || [])) datas.set(String(p.id), p)
+        // o que ainda faltar: lê a própria promoção (até 12)
+        const falta = [...new Map(lista.filter((x: any) => x.id && !(x.start_date && x.finish_date) && !datas.has(String(x.id))).map((x: any) => [String(x.id), String(x.type)])).entries()].slice(0, 12)
+        await Promise.all(falta.map(async ([pid, tp]) => { const p: any = await g(`${ML}/seller-promotions/promotions/${pid}?promotion_type=${tp}&app_version=v2`); if (p && !p.erro) datas.set(pid, p) }))
       }
       return resp({ ok: true, promos: lista.map((x: any) => ({ id: x.id, tipo: x.type, sub: x.sub_type || '', situacao: x.status || '', nome: x.name || '', preco: Number(x.price) || 0, original: Number(x.original_price) || 0,
         ml_pct: Number(x.meli_percentage) || 0, vendedor_pct: Number(x.seller_percentage) || 0, inicio: x.start_date || datas.get(String(x.id))?.start_date || '', fim: x.finish_date || x.end_date || datas.get(String(x.id))?.finish_date || '', prazo: datas.get(String(x.id))?.deadline_date || '', sugerido: Number(x.suggested_discounted_price) || 0, minimo: Number(x.min_discounted_price) || 0, maximo: Number(x.max_discounted_price) || 0, ref: x.ref_id || x.offer_id || '', estoque_min: Number(x.stock?.min) || 0, estoque_max: Number(x.stock?.max) || 0 })) })
