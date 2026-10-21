@@ -300,7 +300,9 @@
     function fxLancada(){
       const F = fx.fat; if(!F || !F.numero) return null;
       const T = typeof pagTodos === 'function' ? pagTodos() : pagamentos, t = fxN(F.transportador);
-      return T.find(p => String(p.doc || '').trim() === String(F.numero) && (!t || fxN(p.forn).includes(t.slice(0, 8)) || /flex/i.test(String(p.desc || '') + ' ' + String(p.cat || '')))) || null;
+      // o número pode estar no Nº do documento ou no histórico (contas lançadas à mão: 'Fatura nº: 27976', 'Flex - Fat 26779')
+      const num = new RegExp('(^|[^0-9])' + String(F.numero) + '([^0-9]|$)');
+      return T.find(p => (String(p.doc || '').trim() === String(F.numero) || num.test(String(p.desc || ''))) && (!t || fxN(p.forn).includes(t.slice(0, 8)) || /flex/i.test(String(p.desc || '') + ' ' + String(p.cat || '')))) || null;
     }
     const fxN = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     function fxLancar(){
