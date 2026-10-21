@@ -113,7 +113,7 @@
       const pal = ocSemAc(oc.busca).split(/\s+/).filter(Boolean);
       const base = lista.filter(x => !pal.length || (t => pal.every(p => t.includes(p)))(ocSemAc([x.o.numero, x.o.fornecedor, ...(x.o.itens || []).map(i => i.sku + ' ' + (i.descricao || ''))].join(' '))));
       const f = oc.filtro, sel = oc.sel || (oc.sel = new Set());
-      const mostrar = base.filter(x => f === 'todas' ? true : f === 'pendentes' ? (x.r.sit === 'A receber' || x.r.sit === 'Parcial') : x.r.sit === f);
+      const mostrar = ocOrdenar(base.filter(x => f === 'todas' ? true : f === 'pendentes' ? (x.r.sit === 'A receber' || x.r.sit === 'Parcial') : x.r.sit === f));
       const cont = s => base.filter(x => x.r.sit === s).length, pendN = base.filter(x => x.r.sit === 'A receber' || x.r.sit === 'Parcial').length;
       const selo = s => `<span class="cp-sit ${s === 'Recebida' ? 'cp-ok' : s === 'Parcial' ? 'cp-excesso' : 'cp-comprar'}">${s}</span>`;
       const dt = d => d ? ptDate(String(d).substring(0, 10)) : '—';
@@ -129,7 +129,7 @@
           <button class="btn btn-sm" ${marcadas.length ? '' : 'disabled'} onclick="ocPdfVarias(this)">PDF das marcadas</button><button class="btn-out btn-sm" ${marcadas.length ? '' : 'disabled'} onclick="ocPdfVarias(this, true)" title="Uma lista de conferência por ordem, sem preços">Lista p/ galpão</button><button class="btn-out btn-sm" ${marcadas.length ? '' : 'disabled'} onclick="ocPlanilhaVarias()" title="Planilha com um item por linha">Planilha</button><button class="btn-out btn-sm" style="color:var(--danger);" ${marcadas.length ? '' : 'disabled'} onclick="ocExcluirVarias(this)" title="Ordem com chegada lançada não é excluída">Excluir marcadas</button>
         </div></div></div>
         <div class="card"><div style="overflow-x:auto;"><table class="cp-tab" data-sem-ordem>
-          <thead><tr><th style="width:30px;"><input type="checkbox" title="Marcar ou desmarcar todas as da lista" ${mostrar.length && mostrar.every(x => sel.has(Number(x.o.id))) ? 'checked' : ''} onchange="ocMarcarTodas(this.checked)"></th><th>Situação</th><th>Ordem</th><th>Fornecedor</th><th>Produtos</th><th>Previsão de chegada</th><th>Chegada</th><th class="num">Valor da ordem</th><th></th></tr></thead>
+          <thead><tr><th style="width:30px;"><input type="checkbox" title="Marcar ou desmarcar todas as da lista" ${mostrar.length && mostrar.every(x => sel.has(Number(x.o.id))) ? 'checked' : ''} onchange="ocMarcarTodas(this.checked)"></th>${[['sit', 'Situação'], ['numero', 'Ordem'], ['forn', 'Fornecedor'], ['prod', 'Produtos'], ['prev', 'Previsão de chegada'], ['cheg', 'Chegada'], ['valor', 'Valor da ordem', 'num']].map(([k, t, c]) => `<th class="${c || ''}" style="cursor:pointer;user-select:none;white-space:nowrap;" onclick="ocOrdem('${k}')" title="Ordenar por ${t.toLowerCase()}">${t}${oc.ord && oc.ord.k === k ? (oc.ord.desc ? ' ↓' : ' ↑') : ''}</th>`).join('')}<th></th></tr></thead>
           <tbody>${mostrar.length ? mostrar.map(({ o, r }) => {
             const pct = r.comprado ? Math.round(r.recebido / r.comprado * 100) : 0;
             return `<tr>
@@ -144,6 +144,17 @@
               <td style="text-align:right;white-space:nowrap;"><button class="btn-out btn-sm" onclick="ocEditar(${o.id})" title="Editar a ordem: fornecedor, itens, preços, pagamento e observações">Editar</button> <button class="btn-out btn-sm" onclick="ocPdf(${o.id})" title="Baixar o PDF desta ordem">PDF</button> <button class="btn-out btn-sm" onclick="ocPdf(${o.id}, true)" title="PDF só com itens e quantidades, para o galpão conferir e dar entrada no estoque">Lista p/ galpão</button> ${r.sit === 'A receber' || r.sit === 'Parcial' ? `<button class="btn btn-sm" onclick="ocConferir(${o.id})">Conferir chegada</button>` : `<button class="btn-out btn-sm" onclick="ocConferir(${o.id})">Ver</button>`}</td>
             </tr>`; }).join('') : `<tr><td colspan="9"><div class="vazio"><b>Nenhuma ordem nesta lista</b>Troque o filtro ou a busca acima.</div></td></tr>`}</tbody>
         </table></div></div>`;
+    }
+    // ordenação da tabela pelo cabeçalho (clicar de novo inverte); sem escolha, fica a ordem em que as ordens vieram
+    function ocOrdem(k){ oc.ord = oc.ord && oc.ord.k === k ? { k, desc: !oc.ord.desc } : { k, desc: k === 'valor' || k === 'numero' }; ocFiltrar(); }
+    function ocOrdenar(L){
+      const o = oc.ord; if(!o) return L;
+      const SIT = { 'A receber': 0, 'Parcial': 1, 'Recebida': 2 };
+      const val = ({ o: x, r }) => ({ sit: SIT[r.sit] != null ? SIT[r.sit] : 9, numero: Number(x.numero) || 0, forn: ocSemAc(x.fornecedor), prod: r.itens.length,
+        prev: String(ocPrev(x) || ''), cheg: r.comprado ? r.recebido / r.comprado : 0, valor: Number(x.total) || 0 })[o.k];
+      return L.slice().sort((a, b) => { const va = val(a), vb = val(b);
+        if(o.k === 'prev' && (!va || !vb)) return !va && !vb ? 0 : !va ? 1 : -1;   // sem previsão vai para o fim
+        const c = typeof va === 'string' ? va.localeCompare(vb, 'pt-BR') : va - vb; return o.desc ? -c : c; });
     }
     function ocListaBase(){
       const lojaSel = typeof lojaAtiva === 'function' ? lojaAtiva() : '';
