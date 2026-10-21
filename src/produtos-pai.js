@@ -175,7 +175,8 @@
     function ppSugerir(){
       const kits = new Set(composicaoKit.map(c => c.sku_comercial)), g = new Map();
       skus.filter(s => !s.pai).forEach(s => {
-        const m = String(s.sku).match(/^([A-Za-z]+-\d+)-(.+)$/); if(!m) return;
+        // sufixo só com número (J-2014-2, J-2016-12) é quantidade/kit do SKU base, que pode ser outro produto: fica de fora
+        const m = String(s.sku).match(/^([A-Za-z]+-\d+)-(.+)$/); if(!m || /^\d+$/.test(m[2])) return;
         const k = ppN(m[1]); if(!g.has(k)) g.set(k, { codigo: m[1].toUpperCase(), filhos: [] });
         g.get(k).filhos.push({ sku: s.sku, variacao: m[2], kit: kits.has(s.sku), titulo: s.titulo || '' });
       });
@@ -189,7 +190,7 @@
       });
       window._ppSug = lista;
       vmlModal('Agrupar variações automaticamente', lista.length ? `
-        <div class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Encontrei estes grupos pelo começo do código (ex.: <b>J-2010</b>-Azul e <b>J-2010</b>-Rosa ficam no pai <b>J-2010</b>). Nenhum código muda. Confira o nome, desmarque o que não for da mesma família e clique em Agrupar.</div>
+        <div class="text-muted" style="font-size:12.5px;margin-bottom:10px;">Encontrei estes grupos pelo começo do código (ex.: <b>J-2010</b>-Azul e <b>J-2010</b>-Rosa ficam no pai <b>J-2010</b>). Nenhum código muda. Confira o nome, desmarque o que não for da mesma família e clique em Agrupar. SKUs que terminam só em número (ex.: J-2014-2) ficam de fora, porque costumam ser quantidade de outro produto: inclua à mão em "Editar" do pai, se for o caso.</div>
         <div style="margin-bottom:8px;font-size:12.5px;"><a href="#" onclick="document.querySelectorAll('.pp-sg').forEach(c=>c.checked=true);return false;">marcar todos</a> · <a href="#" onclick="document.querySelectorAll('.pp-sg').forEach(c=>c.checked=false);return false;">desmarcar todos</a></div>
         ${lista.map((x, k) => `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
           <label style="display:flex;gap:10px;align-items:center;margin:0;"><input type="checkbox" class="pp-sg" data-k="${k}" checked style="width:auto;">
