@@ -367,7 +367,7 @@
 
       if(rLib.data) liberacoes = rLib.data.map(l => ({data:l.data, val:l.val}));
 
-      if(rSku.data) skus = rSku.data.map(s => ({id:s.id, sku:s.sku, custo:s.custo, imposto:s.imposto, titulo:s.titulo||''}));
+      if(rSku.data) skus = rSku.data.map(s => ({id:s.id, sku:s.sku, custo:s.custo, imposto:s.imposto, titulo:s.titulo||'', pai:s.pai||null, variacao:s.variacao||null}));
 
       if(rCat.data) categorias = rCat.data.map(c => ({id:c.id, nome:c.nome, impactaDRE:c.impacta_dre, tipoPassivo:c.tipo_passivo||'divida', dreGrupo:c.dre_grupo||null, grupo:c.grupo||null, grupoManual:!!c.grupo_manual, competencia:c.competencia_padrao||'vencimento'}));
       if(rPag.data && rCat.data && rSku.data) sincDefinirBase();
@@ -428,7 +428,7 @@
       travas: Array.isArray(p.travas) && p.travas.length ? p.travas : null, oculta: !!p.oculta
     });
     const sincLinhaCat = c => ({ nome: c.nome, impacta_dre: c.impactaDRE||false, tipo_passivo: c.tipoPassivo||'divida', dre_grupo: c.dreGrupo||null, grupo: c.grupo||null, grupo_manual: !!c.grupoManual, competencia_padrao: c.competencia||'vencimento' });
-    const sincLinhaSku = s => ({ sku: s.sku, custo: s.custo, imposto: s.imposto, titulo: s.titulo||null });
+    const sincLinhaSku = s => ({ sku: s.sku, custo: s.custo, imposto: s.imposto, titulo: s.titulo||null, pai: s.pai||null, variacao: s.variacao||null });
     const _sincTabelas = () => [
       { nome: 'pagamentos', lista: () => (typeof pagTodos === 'function' ? pagTodos() : pagamentos), linha: sincLinhaPag, chave: p => p.tiny_key ? 'k:' + p.tiny_key : null },
       { nome: 'categorias', lista: () => categorias, linha: sincLinhaCat, chave: c => 'n:' + String(c.nome).trim().toLowerCase() },

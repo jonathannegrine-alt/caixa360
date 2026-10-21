@@ -893,6 +893,7 @@
     function skuFiltrarCusto(v){ skuFiltroCusto = v; renderSKUs(); }
 
     function renderSKUs(){
+      if(typeof ppCarregar === 'function' && !ppCarregado) ppCarregar();   // produtos pai e anúncios mapeados (produtos-pai.js)
       const tbody = document.getElementById('tbody-skus');
       const busca = document.getElementById('filtro-sku').value.toLowerCase();
       const vazio = document.getElementById('skus-vazio');
@@ -914,10 +915,12 @@
         <div class="kpi k-neutro"><div class="kpi-label">Custo médio</div><div class="kpi-value">${fmt(medio)}</div><div class="kpi-sub">Entre os produtos com custo</div></div>`;
       const ch = document.getElementById('sku-chips');
       if(ch) ch.innerHTML = [['', 'Todos', produtos.length], ['sem', 'Sem custo', nSem], ['com', 'Com custo', nCom]]
-        .map(([v, n, q]) => `<button class="chip ${v === skuFiltroCusto ? 'active' : ''}" onclick="skuFiltrarCusto('${v}')">${n}<span class="n">${q}</span></button>`).join('');
+        .map(([v, n, q]) => `<button class="chip ${v === skuFiltroCusto ? 'active' : ''}" onclick="skuFiltrarCusto('${v}')">${n}<span class="n">${q}</span></button>`).join('')
+        + (typeof ppChips === 'function' ? ppChips(produtos) : '');
 
-      let filtrados = produtos.filter(s => (!busca || s.sku.toLowerCase().includes(busca) || (s.titulo||'').toLowerCase().includes(busca))
-        && (skuFiltroCusto === '' || (skuFiltroCusto === 'sem') === semCusto(s)));
+      const pp = typeof ppFiltrar === 'function';
+      let filtrados = produtos.filter(s => (!busca || s.sku.toLowerCase().includes(busca) || (s.titulo||'').toLowerCase().includes(busca) || (pp && ppFiltrar(s, busca)))
+        && (skuFiltroCusto === '' || (skuFiltroCusto === 'sem') === semCusto(s)) && (!pp || ppFiltrar(s, '')));
 
       if(filtrados.length === 0){
         tbody.innerHTML = produtos.length ? '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted);">Nenhum produto neste filtro.</td></tr>' : '';
@@ -928,8 +931,8 @@
 
       vazio.style.display = 'none';
 
-      let html = '';
-      filtrados.forEach((s) => {
+      // filho = variação mostrada dentro do produto pai (lista agrupada)
+      const linha = (s, filho) => {
         const idx = skus.indexOf(s);
         // Título: próprio > vendasSku > componentes > estoqueGalpao
         const titulo = s.titulo
@@ -937,23 +940,26 @@
           || (componentes.find(c => c.codigo === s.sku)||{}).descricao
           || (estoqueGalpao.find(e => e.sku === s.sku)||{}).descricao
           || '';
-        html += `<tr onclick="editarSKU(${idx})" style="cursor:pointer;" title="Clique para editar">
+        return `<tr onclick="editarSKU(${idx})" style="cursor:pointer;" title="Clique para editar">
           <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="sku-cb" data-idx="${idx}" onchange="atualizarContSKUSel()"></td>
-          <td style="padding:4px 6px;">${typeof fotoCel === 'function' ? fotoCel(s.sku) : ''}</td>
-          <td class="sku-cod">${esc(s.sku)}</td>
-          <td class="sku-tit" title="${esc(titulo)}">${esc(titulo) || '—'}</td>
+          <td style="padding:4px 6px;${filho ? 'padding-left:22px;' : ''}">${typeof fotoCel === 'function' ? fotoCel(s.sku) : ''}</td>
+          <td class="sku-cod">${filho ? '<span style="color:var(--text-muted);margin-right:4px;">↳</span>' : ''}${esc(s.sku)}${!filho && s.pai ? '<div style="font-size:11px;color:var(--text-muted);">pai ' + esc(s.pai) + '</div>' : ''}</td>
+          <td class="sku-tit" title="${esc(titulo)}">${s.variacao ? '<span class="badge" style="margin-right:6px;">' + esc(s.variacao) + '</span>' : ''}${esc(titulo) || '—'}</td>
           <td style="text-align:right;white-space:nowrap;">${semCusto(s) ? '<span class="badge badge-danger">Sem custo</span>' : '<b>' + fmt(Number(s.custo)) + '</b>'}</td>
           <td style="text-align:right;white-space:nowrap;">${Number(s.imposto) > 0 ? Number(s.imposto).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%' : '<span class="text-muted">—</span>'}</td>
           <td style="text-align:center;">
             <button class="btn-out btn-sm" onclick="event.stopPropagation();editarSKU(${idx})">Editar</button>
           </td>
         </tr>`;
-      });
-
-      tbody.innerHTML = html;
+      };
+      const agrupar = typeof ppAgrupar === 'function' && ppAgrupado;
+      tbody.innerHTML = agrupar ? ppAgrupar(filtrados, linha, busca) : filtrados.map(s => linha(s, false)).join('');
+      const tabela = tbody.closest('table');
       // fotos: busca as que faltam e redesenha uma vez
       if(typeof fotosPara === 'function') fotosPara(filtrados.map(s => s.sku), () => { const v = document.getElementById('view-skus'); if(v && v.classList.contains('active')) renderSKUs(); });
-      makeSortable('tbody-skus', [3, 4]);
+      // agrupada: a ordem é a dos pais (clicar no título não ordena, para não separar as variações do pai)
+      if(agrupar){ tabela.setAttribute('data-sem-ordem', ''); tabela.querySelectorAll('thead th').forEach(th => { th.onclick = null; th.style.cursor = ''; const a = th.querySelector('.sort-arrow'); if(a) a.remove(); }); }
+      else { tabela.removeAttribute('data-sem-ordem'); makeSortable('tbody-skus', [3, 4]); }
       initResizableCols('tbody-skus');
       const selAll = document.getElementById('sku-sel-all');
       if(selAll) selAll.checked = false;
@@ -983,6 +989,8 @@
       document.getElementById('modal-sku-title').textContent = 'Novo SKU';
       document.getElementById('btn-del-sku').style.display = 'none';
       document.getElementById('sku-codigo').value = '';
+      { const c = document.getElementById('sku-codigo'); c.readOnly = false; c.title = ''; const av = document.getElementById('sku-codigo-trava'); if(av) av.style.display = 'none'; }
+      if(typeof ppModalSku === 'function') ppModalSku(null);
       document.getElementById('sku-titulo').value = '';
       document.getElementById('sku-custo').value = '';
       { const im = document.getElementById('sku-imposto'); if(im){ const moda = {}; skus.forEach(x => { if(Number(x.imposto) > 0) moda[x.imposto] = (moda[x.imposto] || 0) + 1; }); const m = Object.keys(moda).sort((a, b) => moda[b] - moda[a])[0]; im.value = m || ''; } }   // sugere o imposto mais usado
@@ -998,6 +1006,9 @@
       btnDel.style.display = 'block';
       btnDel.onclick = deletarSKU;
       document.getElementById('sku-codigo').value = s.sku;
+      // o código não muda depois de criado: vendas, estoque, kits e compras se ligam a ele (para trocar, crie outro SKU e mapeie os anúncios)
+      { const c = document.getElementById('sku-codigo'); c.readOnly = true; c.title = 'O código não muda depois de criado'; const av = document.getElementById('sku-codigo-trava'); if(av) av.style.display = ''; }
+      if(typeof ppModalSku === 'function') ppModalSku(s);
       document.getElementById('sku-titulo').value = s.titulo || '';
       document.getElementById('sku-custo').value = s.custo;
       { const im = document.getElementById('sku-imposto'); if(im) im.value = Number(s.imposto) > 0 ? s.imposto : ''; }
@@ -1006,10 +1017,13 @@
       document.getElementById('modal-sku').classList.add('open');
     }
 
-    function salvarSKU(){
+    async function salvarSKU(){
       const skuAnterior = editandoIdxSKU !== null ? skus[editandoIdxSKU] : null;
+      const semAcento = v => String(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       const sku = {
-        sku: document.getElementById('sku-codigo').value.trim(),
+        // SKU novo sempre sem acento; o de um SKU existente não muda
+        sku: skuAnterior ? skuAnterior.sku : semAcento(document.getElementById('sku-codigo').value.trim()),
+        pai: skuAnterior ? (skuAnterior.pai || null) : null, variacao: skuAnterior ? (skuAnterior.variacao || null) : null,
         titulo: document.getElementById('sku-titulo').value.trim(),
         custo: parseFloat(document.getElementById('sku-custo').value) || 0,
         imposto: (() => { const im = document.getElementById('sku-imposto'); return im ? (parseFloat(String(im.value).replace(',', '.')) || 0) : (skuAnterior ? (skuAnterior.imposto || 0) : 0); })(),
@@ -1021,6 +1035,11 @@
         alert('Preencha SKU e Custo');
         return;
       }
+      if(!skuAnterior){
+        const igual = skus.find(x => semAcento(x.sku).trim().toUpperCase() === sku.sku.toUpperCase());
+        if(igual){ alert('Já existe o SKU ' + igual.sku + '. Abra ele na lista para editar.'); return; }
+      }
+      if(typeof ppLerModalSku === 'function') await ppLerModalSku(sku);
 
       if(editandoIdxSKU !== null){
         skus[editandoIdxSKU] = sku;

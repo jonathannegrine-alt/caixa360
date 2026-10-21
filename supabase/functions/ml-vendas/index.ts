@@ -168,6 +168,10 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   }
 
   // 5. gravar
+  // anúncio mapeado na tela Produtos (sku_mapa): a venda usa o SKU do produto; o SKU escrito no anúncio fica em sku_anuncio
+  const mapa = new Map<string, string>()
+  const mp = await fetch(`${ctx.supaUrl}/rest/v1/sku_mapa?usuario_id=eq.${userId}&select=item_id,variation_id,sku`, { headers: ctx.dbH }).then(r => r.json()).catch(() => [])
+  if (Array.isArray(mp)) for (const m of mp) mapa.set(String(m.item_id) + ':' + String(m.variation_id || 0), String(m.sku))
   let pendentes = 0
   const rows = [...pedidos.values()].map(o => {
     const oi = o.order_items?.[0] || {}
@@ -194,7 +198,9 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       comprador_nome: [o.buyer?.first_name, o.buyer?.last_name].filter(Boolean).join(' ') || null,
       item_id: it.id || null,
       titulo: it.title || null,
-      sku: ant?.sku_fixo ? ant.sku : (it.seller_sku || it.seller_custom_field || null),   // SKU nivelado à mão não é trocado
+      sku: ant?.sku_fixo ? ant.sku : (mapa.get(String(it.id) + ':' + String(it.variation_id || 0)) || mapa.get(String(it.id) + ':0') || it.seller_sku || it.seller_custom_field || null),   // SKU nivelado à mão não é trocado
+      sku_anuncio: it.seller_sku || it.seller_custom_field || null,
+      variation_id: it.variation_id || null,
       variacao: (it.variation_attributes || []).map((v: any) => `${v.name}: ${v.value_name}`).join(', ') || null,
       qtd,
       preco_unit: Number(oi.unit_price) || 0,
@@ -239,7 +245,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
         for (const s of (Array.isArray(sal) ? sal : [])) galpao.set(String(s.sku_norm), (galpao.get(String(s.sku_norm)) || 0) + (Number(s.fisico) || 0))
       }
       await emParalelo(novas, 6, async (o) => {
-        const it = o.order_items[0].item, sku = String(it.seller_sku || it.seller_custom_field || '').trim().toLowerCase()
+        const it = o.order_items[0].item, sku = String(mapa.get(String(it.id) + ':' + String(it.variation_id || 0)) || mapa.get(String(it.id) + ':0') || it.seller_sku || it.seller_custom_field || '').trim().toLowerCase()
         const corpo: Record<string, number | null> = { est_anuncio_apos: disp.has(String(it.id)) ? disp.get(String(it.id))! : null, est_galpao_apos: sku && galpao.has(sku) ? galpao.get(sku)! : null }
         if (corpo.est_anuncio_apos == null && corpo.est_galpao_apos == null) return
         await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&order_id=eq.${o.id}`, { method: 'PATCH', headers: { ...ctx.dbH, Prefer: 'return=minimal' }, body: JSON.stringify(corpo) })
