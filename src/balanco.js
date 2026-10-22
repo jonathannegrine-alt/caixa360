@@ -68,6 +68,19 @@
       (Array.isArray(estoqueFullML) ? estoqueFullML : []).forEach(f => { if(conta && String(f._conta || '') !== conta) return; const q = Number(f.total_geral) || 0; abrir(f.sku, q).forEach(d => { full += d.q * custoDe(d.k); fullUn += d.q; }); });
       let caminhoFull = 0;
       if(typeof esoACaminhoDoFull === 'function') esoACaminhoDoFull().forEach((q, k) => { caminhoFull += q * fatia(k) * custoDe(k); });
+      // cada envio que saiu: custo inteiro e quanto dele o Mercado Livre já mostra no Full (essa parte está em "Estoque no Full")
+      const envios = [];
+      if(typeof eso !== 'undefined' && Array.isArray(eso.envios)){
+        const limite = Date.now() - 15 * 86400000, fml = Array.isArray(estoqueFullML) ? estoqueFullML : [];
+        eso.envios.filter(x => x.situacao === 'saiu' && (!x.saiu_em || Date.parse(x.saiu_em) > limite)).forEach(x => {
+          let total = 0, falta = 0;
+          (x.itens || []).forEach(i => { const q = Number(i.qtd) || 0; if(!q) return;
+            const ml = fml.filter(f => blN(f.sku) === blN(i.anuncio_sku) && (!x.ml_user_id || !f._conta || String(f._conta) === String(x.ml_user_id))).reduce((s, f) => s + (Number(f.em_transito) || 0) + (Number(f.pendente) || 0) + (Number(f.em_separacao) || 0), 0);
+            const parte = Math.max(0, q - ml) / q;
+            (i.componentes || []).forEach(c => { const k = blN(c.sku), v = (Number(c.qtd) || 0) * fatia(k) * custoDe(k); total += v; falta += v * parte; }); });
+          if(total > 0) envios.push({ numero: x.numero || ('#' + x.id), total, falta });
+        });
+      }
       const ativo = caixa + receber + galpao + full + caminhoFull;
 
       // PASSIVO
@@ -79,7 +92,7 @@
       linhas.filter(l => l.entra).forEach(l => { const g = l.p.cat || 'Sem categoria'; grupos[g] = (grupos[g] || 0) + (Number(l.p.val) || 0); });
       const passivo = Object.values(grupos).reduce((s, v) => s + v, 0);
       const fora = linhas.filter(l => !l.entra).reduce((s, l) => s + (Number(l.p.val) || 0), 0);
-      return { caixa, receber, galpao, galpaoUn, full, fullUn, caminhoFull, ativo, grupos, passivo, fora, pl: ativo - passivo, linhas, semCusto };
+      return { caixa, receber, galpao, galpaoUn, full, fullUn, caminhoFull, envios, ativo, grupos, passivo, fora, pl: ativo - passivo, linhas, semCusto };
     }
 
     async function renderBalanco(){
@@ -132,7 +145,7 @@
                 ${lin('A receber do Mercado Livre', B.receber, 'liberações já confirmadas')}
                 ${lin('Estoque no galpão', B.galpao, un(B.galpaoUn) + ' a custo médio')}
                 ${lin('Estoque no Full', B.full, un(B.fullUn) + ', kits abertos nos componentes')}
-                ${B.caminhoFull ? lin('A caminho do Full', B.caminhoFull, 'saiu do galpão, o Mercado Livre ainda não recebeu') : ''}
+                ${B.caminhoFull || (B.envios || []).length ? lin('A caminho do Full', B.caminhoFull, 'saiu do galpão, o Mercado Livre ainda não mostra no Full' + (B.envios || []).map(e => '<br>Envio ' + blEsc(e.numero) + ': custo total ' + fmt(e.total) + (e.total - e.falta > 0.5 ? ' · ' + fmt(e.total - e.falta) + ' já contados em "Estoque no Full"' : ' · nada no Full ainda')).join('')) : ''}
                 <div class="bl-lin bl-tot"><span>Total do ativo</span><b>${fmt(B.ativo)}</b></div>
                 ${B.semCusto ? `<div class="text-muted" style="font-size:12px;margin-top:6px;">${B.semCusto} produtos com estoque e sem custo entram valendo zero.</div>` : ''}
               </div>
