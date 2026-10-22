@@ -12,7 +12,14 @@
       ['mensagens', 'Mensagem de comprador', 'Mensagem nova numa venda'],
       ['posvenda', 'Reclamação ou devolução', 'Caso novo aberto pelo comprador'],
     ];
-    const SOM_VENDA = { caixa: 'Caixa registradora', moedas: 'Moedas', sino: 'Sino' };
+    // sons disponíveis para qualquer aviso (cada tipo começa com um padrão e o usuário troca)
+    const SOM_OPCOES = [
+      ['Dinheiro', [['caixa', 'Caixa registradora antiga'], ['manivela', 'Caixa antiga de manivela'], ['moderna', 'Caixa moderna (bip e gaveta)'], ['kaching', 'Cha-ching rápido'],
+        ['cofre', 'Moeda caindo no cofrinho'], ['moedas', 'Punhado de moedas'], ['notas', 'Contadora de notas'], ['pix', 'Dinheiro na conta'], ['fliperama', 'Moeda de fliperama'], ['vitoria', 'Fanfarra de vitória']]],
+      ['Avisos', [['perguntas', 'Duas notas'], ['mensagens', 'Bolha (pop)'], ['gota', 'Gota'], ['campainha', 'Campainha (dim-dom)'], ['marimba', 'Marimba'], ['sino', 'Sino'], ['posvenda', 'Alerta (três bipes)'], ['sirene', 'Alerta forte']]],
+    ];
+    const SOM_PADRAO_DE = { venda: 'caixa', perguntas: 'perguntas', mensagens: 'mensagens', posvenda: 'posvenda' };
+    const somEscolhido = (tipo, c) => (c || somCfg())['som_' + tipo] || (tipo === 'venda' && (c || somCfg()).somVenda) || SOM_PADRAO_DE[tipo];
     function somCfg(){ try { return { ...SOM_PADRAO, ...(JSON.parse(localStorage.getItem('mk_sons') || '{}')) }; } catch(e){ return { ...SOM_PADRAO }; } }
     function somGravar(k, v){ const c = somCfg(); c[k] = v; try { localStorage.setItem('mk_sons', JSON.stringify(c)); } catch(e){} somRender(); }
 
@@ -54,13 +61,41 @@
       },
       moedas(ctx, out, t){ for(let i = 0; i < 9; i++){ const x = t + i * 0.055 + Math.random() * 0.03; somTom(ctx, out, 3800 + Math.random() * 3000, x, 0.12, 0.13); somRuido(ctx, out, x, 0.03, 0.15, 6000, 3); } },
       sino(ctx, out, t){ somSino(ctx, out, 1568, t, 1.6, 0.4); },
+      // manivela: catraca girando, gaveta e uma campainha grande
+      manivela(ctx, out, t){
+        for(let i = 0; i < 8; i++) somRuido(ctx, out, t + i * 0.035, 0.02, 0.6, 3200, 4);
+        somRuido(ctx, out, t + 0.3, 0.2, 0.4, 700, 0.8); somTom(ctx, out, 110, t + 0.3, 0.12, 0.5, 'triangle', 60);
+        somSino(ctx, out, 2349, t + 0.36, 1.8, 0.42);
+      },
+      // caixa de supermercado: bip do leitor, gaveta batendo e moedas
+      moderna(ctx, out, t){
+        somTom(ctx, out, 1900, t, 0.13, 0.18, 'square');
+        somRuido(ctx, out, t + 0.2, 0.16, 0.7, 450, 0.8); somTom(ctx, out, 95, t + 0.2, 0.14, 0.6, 'triangle', 55);
+        for(let i = 0; i < 4; i++) somTom(ctx, out, 4500 + Math.random() * 2000, t + 0.34 + i * 0.05, 0.08, 0.08);
+      },
+      kaching(ctx, out, t){ somRuido(ctx, out, t, 0.04, 0.8, 3000, 2); somSino(ctx, out, 3136, t + 0.05, 0.6, 0.3); somSino(ctx, out, 3951, t + 0.13, 1.1, 0.34); },
+      // moeda caindo e quicando no fundo do cofrinho
+      cofre(ctx, out, t){
+        let x = t, gap = 0.26, v = 0.32;
+        for(let i = 0; i < 9; i++){ somSino(ctx, out, 3300 + i * 40, x, 0.35, v); x += gap; gap *= 0.68; v *= 0.8; }
+        somRuido(ctx, out, x, 0.18, 0.12, 5000, 2);
+      },
+      notas(ctx, out, t){ for(let i = 0; i < 16; i++) somRuido(ctx, out, t + i * 0.028, 0.025, 0.45, 2600 + Math.random() * 1500, 1.5); somSino(ctx, out, 2637, t + 0.5, 0.9, 0.22); },
+      // notificação de dinheiro recebido: arpejo subindo, com brilho de sino
+      pix(ctx, out, t){ [1046.5, 1318.5, 1568, 2093].forEach((f, i) => { somTom(ctx, out, f, t + i * 0.08, 0.5, 0.22); somTom(ctx, out, f * 2, t + i * 0.08, 0.25, 0.05); }); },
+      fliperama(ctx, out, t){ somTom(ctx, out, 988, t, 0.08, 0.15, 'square'); somTom(ctx, out, 1319, t + 0.08, 0.45, 0.15, 'square'); },
+      vitoria(ctx, out, t){ [[523, 0], [659, 0.11], [784, 0.22], [1046.5, 0.33]].forEach(([f, d], i) => somTom(ctx, out, f, t + d, i === 3 ? 0.7 : 0.14, 0.16, 'square')); somTom(ctx, out, 1318.5, t + 0.33, 0.7, 0.06, 'square'); },
+      gota(ctx, out, t){ somTom(ctx, out, 700, t, 0.15, 0.4, 'sine', 1600); },
+      campainha(ctx, out, t){ somSino(ctx, out, 659, t, 1.1, 0.4); somSino(ctx, out, 523, t + 0.45, 1.4, 0.4); },
+      marimba(ctx, out, t){ somTom(ctx, out, 784, t, 0.35, 0.4, 'triangle'); somTom(ctx, out, 1568, t, 0.12, 0.1); somTom(ctx, out, 1046.5, t + 0.12, 0.45, 0.35, 'triangle'); },
+      sirene(ctx, out, t){ for(let i = 0; i < 3; i++){ somTom(ctx, out, 700, t + i * 0.32, 0.15, 0.3, 'sawtooth', 1100); somTom(ctx, out, 1100, t + i * 0.32 + 0.15, 0.15, 0.3, 'sawtooth', 700); } },
       perguntas(ctx, out, t){ somTom(ctx, out, 880, t, 0.35, 0.3); somTom(ctx, out, 1318.5, t + 0.16, 0.6, 0.3); },
       mensagens(ctx, out, t){ somTom(ctx, out, 420, t, 0.12, 0.35, 'sine', 950); somTom(ctx, out, 620, t + 0.13, 0.16, 0.35, 'sine', 1300); },
       posvenda(ctx, out, t){ [0, 0.2, 0.4].forEach((d, i) => somTom(ctx, out, i === 1 ? 523 : 659, t + d, 0.17, 0.25, 'triangle')); },
     };
     function somTocar(tipo, vezes){
       const ctx = somAudio(); if(!ctx) return false;
-      const desenho = SOM_DESENHO[tipo === 'venda' ? somCfg().somVenda : tipo] || SOM_DESENHO.caixa, out = somSaida(ctx);
+      const desenho = SOM_DESENHO[SOM_DESENHO[tipo] && !SOM_PADRAO_DE[tipo] ? tipo : somEscolhido(tipo)] || SOM_DESENHO.caixa, out = somSaida(ctx);
       const n = Math.min(vezes || 1, 3);
       for(let i = 0; i < n; i++) desenho(ctx, out, ctx.currentTime + 0.05 + i * 0.9);
       return ctx.state === 'running';
@@ -154,7 +189,7 @@
         <div class="text-muted" style="font-size:13px;margin-bottom:12px;">Escolha o que toca som neste aparelho. Funciona com o Caixa 360 aberto (pode estar em outra aba ou minimizado). O navegador só libera o som depois do primeiro clique na página.</div>
         ${SOM_TIPOS.map(([k, nome, desc]) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
           <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:220px;cursor:pointer;margin:0;"><input type="checkbox" ${c[k] ? 'checked' : ''} onchange="somGravar('${k}', this.checked)" style="width:18px;height:18px;"><span><b>${nome}</b><br><small class="text-muted">${desc}</small></span></label>
-          ${k === 'venda' ? `<select onchange="somGravar('somVenda', this.value)" style="width:auto;">${Object.entries(SOM_VENDA).map(([v, n]) => `<option value="${v}" ${c.somVenda === v ? 'selected' : ''}>${n}</option>`).join('')}</select>` : ''}
+          <select onchange="somGravar('som_${k}', this.value);somTestar('${k}')" style="width:auto;">${SOM_OPCOES.map(([g, L]) => `<optgroup label="${g}">${L.map(([v, n]) => `<option value="${v}" ${somEscolhido(k, c) === v ? 'selected' : ''}>${n}</option>`).join('')}</optgroup>`).join('')}</select>
           <button type="button" class="btn-out btn" onclick="somTestar('${k}')">▶ Ouvir</button>
         </div>`).join('')}
         <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
