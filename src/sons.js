@@ -5,7 +5,7 @@
 // Detecção a cada 30 s: vendas novas em vendas_ml (status paid) e avisos novos em ml_avisos (o ml-webhook grava);
 // pergunta/reclamação conta só na primeira vez que o recurso aparece (as atualizações do mesmo caso não tocam).
 
-    const SOM_PADRAO = { venda: true, perguntas: true, mensagens: true, posvenda: true, somVenda: 'caixa', volume: 0.7, silencio: false, de: '22:00', ate: '07:00' };
+    const SOM_PADRAO = { venda: true, perguntas: true, mensagens: true, posvenda: true, somVenda: 'caixa', popVenda: true, volume: 0.7, silencio: false, de: '22:00', ate: '07:00' };
     const SOM_TIPOS = [
       ['venda', 'Venda nova', 'A cada venda paga no Mercado Livre'],
       ['perguntas', 'Pergunta nova', 'Pergunta de comprador num anúncio'],
@@ -128,16 +128,16 @@
     async function somConferir(){
       if(somEst.rodando || typeof usuarioAtual === 'undefined' || !usuarioAtual || typeof supa === 'undefined' || (typeof MODO_DEMO !== 'undefined' && MODO_DEMO)) return;
       const c = somCfg();
-      if(!SOM_TIPOS.some(([k]) => c[k])) return;
+      if(!SOM_TIPOS.some(([k]) => c[k]) && !c.popVenda) return;
       somEst.rodando = true;
       try {
         const tocar = {};
         // vendas pagas das últimas 6 horas que esta aba ainda não tinha visto (a primeira leitura só marca)
-        if(c.venda){
+        if(c.venda || c.popVenda){
           const r = await supa.from('vendas_ml').select('order_id').eq('usuario_id', usuarioAtual.id).eq('status', 'paid').gt('data_venda', new Date(Date.now() - 6 * 3600000).toISOString()).order('data_venda', { ascending: false }).limit(1000);
           if(!r.error){
             const ids = (r.data || []).map(v => String(v.order_id));
-            if(somEst.vendas){ const novas = ids.filter(id => !somEst.vendas.has(id)).length; if(novas) tocar.venda = novas; ids.forEach(id => somEst.vendas.add(id)); }
+            if(somEst.vendas){ const novas = ids.filter(id => !somEst.vendas.has(id)); if(novas.length && c.venda) tocar.venda = novas.length; if(novas.length && c.popVenda && !document.hidden) popVendas(novas); ids.forEach(id => somEst.vendas.add(id)); }
             else somEst.vendas = new Set(ids);
           }
         } else somEst.vendas = null;
@@ -181,6 +181,69 @@
     setTimeout(somConferir, 7000);
     setInterval(somConferir, 30000);
 
+    // ----- janelinha de venda nova (canto inferior direito; some sozinha em 10 s, para enquanto o mouse está em cima) -----
+    const POP_COLS = 'order_id,pack_id,titulo,thumbnail,qtd,preco_unit,sku,variacao,ml_user_id,logistic_type,data_venda';
+    let popDados = {};
+    const popE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    async function popVendas(ids){
+      try {
+        const r = await supa.from('vendas_ml').select(POP_COLS).eq('usuario_id', usuarioAtual.id).in('order_id', ids.slice(0, 20));
+        const L = (r.data || []).sort((a, b) => String(a.data_venda).localeCompare(String(b.data_venda)));
+        const mostrar = L.slice(-3);
+        mostrar.forEach(v => popMostrar(v));
+        if(ids.length > mostrar.length) popMostrar(null, ids.length - mostrar.length);
+      } catch(e){}
+    }
+    function popMostrar(v, mais){
+      let box = document.getElementById('som-pop');
+      if(!box){
+        box = document.createElement('div'); box.id = 'som-pop';
+        box.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;width:min(340px,calc(100vw - 32px));pointer-events:none;';
+        document.body.appendChild(box);
+        const st = document.createElement('style');
+        st.textContent = '.som-pop-it{pointer-events:auto;display:flex;gap:10px;align-items:center;background:var(--surface,#fff);color:var(--text,#111);border:1px solid var(--border,#ddd);border-left:4px solid #16a34a;border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.18);cursor:pointer;animation:somPopIn .25s ease-out;font-size:13px;}'
+          + '.som-pop-it.sai{opacity:0;transform:translateX(30px);transition:all .3s;}.som-pop-it img,.som-pop-it .ft{width:48px;height:48px;border-radius:8px;object-fit:cover;flex:none;background:var(--gray-100,#eee);}'
+          + '.som-pop-it .tx{flex:1;min-width:0;}.som-pop-it .tt{font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;}'
+          + '.som-pop-it .cb{font-size:11.5px;color:#16a34a;font-weight:700;}.som-pop-it .rd{font-size:12px;color:var(--text-muted,#666);margin-top:2px;}.som-pop-it .x{border:0;background:none;color:var(--text-muted,#888);font-size:18px;cursor:pointer;align-self:flex-start;padding:0 2px;line-height:1;}'
+          + '@keyframes somPopIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}';
+        document.head.appendChild(st);
+      }
+      const it = document.createElement('div'); it.className = 'som-pop-it';
+      if(v){
+        popDados[v.order_id] = v;
+        const val = (Number(v.qtd) || 1) * (Number(v.preco_unit) || 0), loja = typeof lojaNome === 'function' && typeof lojasVarias === 'function' && lojasVarias() ? lojaNome(v.ml_user_id) : '';
+        const env = { fulfillment: 'Full', self_service: 'Flex', cross_docking: 'Coleta', xd_drop_off: 'Agência', drop_off: 'Correios' }[v.logistic_type] || '';
+        it.innerHTML = (v.thumbnail ? '<img src="' + popE(String(v.thumbnail).replace('http://', 'https://')) + '" alt="">' : '<div class="ft"></div>')
+          + '<div class="tx"><div class="cb">💰 Nova venda' + (loja ? ' · ' + popE(loja) : '') + '</div><div class="tt">' + popE(v.titulo || v.sku || 'Venda #' + v.order_id) + '</div>'
+          + '<div class="rd">' + popE(v.qtd || 1) + ' un · <b>' + (typeof fmt === 'function' ? fmt(val) : 'R$ ' + val.toFixed(2)) + '</b>' + (env ? ' · ' + env : '') + (v.sku ? ' · ' + popE(v.sku) : '') + '</div></div>';
+        it.onclick = () => { fechar(); popAbrir(v.order_id); };
+      } else {
+        it.innerHTML = '<div class="tx"><div class="cb">💰 E mais ' + mais + ' venda' + (mais > 1 ? 's' : '') + ' nova' + (mais > 1 ? 's' : '') + '</div><div class="rd">Clique para abrir a página Vendas</div></div>';
+        it.onclick = () => { fechar(); if(typeof nav === 'function') nav('vendas'); };
+      }
+      const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.title = 'Fechar';
+      x.onclick = ev => { ev.stopPropagation(); fechar(); };
+      it.appendChild(x);
+      function fechar(){ it.classList.add('sai'); setTimeout(() => it.remove(), 320); }
+      let tm = setTimeout(fechar, 10000);
+      it.onmouseenter = () => clearTimeout(tm); it.onmouseleave = () => { tm = setTimeout(fechar, 4000); };
+      box.appendChild(it);
+      while(box.children.length > 4) box.firstChild.remove();
+    }
+    // clique na janelinha: abre os detalhes da venda (itens + entrega, pagamento e comprador lidos no ML)
+    function popAbrir(orderId){
+      const v = popDados[orderId];
+      if(typeof vmlModal !== 'function' || typeof vdDetalheML !== 'function'){ if(typeof nav === 'function') nav('vendas'); return; }
+      const item = v ? '<div class="d-flex gap-2" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">' + (v.thumbnail ? '<img class="v-thumb" src="' + popE(String(v.thumbnail).replace('http://', 'https://')) + '" alt="">' : '') + '<div><div class="v-tit"><span class="v-qtd">' + popE(v.qtd || 1) + 'x</span>' + popE(v.titulo) + '</div><div class="text-muted">SKU: ' + popE(v.sku || '—') + (v.variacao ? ' · ' + popE(v.variacao) : '') + '</div></div></div>' : '';
+      vmlModal('Venda #' + popE(orderId), item + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>');
+      vdDetalheML(orderId);
+    }
+    async function popExemplo(){
+      if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      const r = await supa.from('vendas_ml').select(POP_COLS).eq('usuario_id', usuarioAtual.id).eq('status', 'paid').order('data_venda', { ascending: false }).limit(1);
+      if(r.data && r.data[0]) popMostrar(r.data[0]); else if(typeof toast === 'function') toast('Ainda não há venda para mostrar de exemplo.');
+    }
+
     // ----- Configurações → Sons -----
     function somRender(){
       const el = document.getElementById('cfg-sons'); if(!el) return;
@@ -192,6 +255,10 @@
           <select onchange="somGravar('som_${k}', this.value);somTestar('${k}')" style="width:auto;">${SOM_OPCOES.map(([g, L]) => `<optgroup label="${g}">${L.map(([v, n]) => `<option value="${v}" ${somEscolhido(k, c) === v ? 'selected' : ''}>${n}</option>`).join('')}</optgroup>`).join('')}</select>
           <button type="button" class="btn-out btn" onclick="somTestar('${k}')">▶ Ouvir</button>
         </div>`).join('')}
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:10px;flex:1;min-width:220px;cursor:pointer;margin:0;"><input type="checkbox" ${c.popVenda ? 'checked' : ''} onchange="somGravar('popVenda', this.checked)" style="width:18px;height:18px;"><span><b>Janelinha a cada venda</b><br><small class="text-muted">Mostra no canto inferior direito o produto, a quantidade e o valor de cada venda nova (mesmo com o som desligado)</small></span></label>
+          <button type="button" class="btn-out btn" onclick="popExemplo()">▶ Ver exemplo</button>
+        </div>
         <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
           <b style="min-width:80px;">Volume</b><input type="range" min="0" max="1" step="0.05" value="${e(c.volume)}" onchange="somGravar('volume', Number(this.value));somTestar('venda')" style="flex:1;min-width:160px;">
         </div>
