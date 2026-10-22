@@ -182,7 +182,7 @@
     setInterval(somConferir, 30000);
 
     // ----- janelinha de venda nova (canto inferior direito; some sozinha em 10 s, para enquanto o mouse está em cima) -----
-    const POP_COLS = 'order_id,pack_id,titulo,thumbnail,qtd,preco_unit,sku,variacao,ml_user_id,logistic_type,data_venda';
+    const POP_COLS = 'order_id,pack_id,item_id,titulo,thumbnail,qtd,preco_unit,sku,variacao,ml_user_id,logistic_type,data_venda';
     let popDados = {};
     const popE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     async function popVendas(ids){
@@ -190,9 +190,15 @@
         const r = await supa.from('vendas_ml').select(POP_COLS).eq('usuario_id', usuarioAtual.id).in('order_id', ids.slice(0, 20));
         const L = (r.data || []).sort((a, b) => String(a.data_venda).localeCompare(String(b.data_venda)));
         const mostrar = L.slice(-3);
+        await popFotos(mostrar);
         mostrar.forEach(v => popMostrar(v));
         if(ids.length > mostrar.length) popMostrar(null, ids.length - mostrar.length);
       } catch(e){}
+    }
+    // a venda costuma vir sem foto: usa a do anúncio
+    async function popFotos(L){
+      const ids = [...new Set(L.filter(v => !v.thumbnail && v.item_id).map(v => v.item_id))]; if(!ids.length) return;
+      try { const r = await supa.from('ml_anuncios').select('item_id,thumbnail').eq('usuario_id', usuarioAtual.id).in('item_id', ids); const f = {}; (r.data || []).forEach(a => { if(a.thumbnail) f[a.item_id] = a.thumbnail; }); L.forEach(v => { if(!v.thumbnail) v.thumbnail = f[v.item_id] || null; }); } catch(e){}
     }
     function popMostrar(v, mais){
       let box = document.getElementById('som-pop');
@@ -241,7 +247,7 @@
     async function popExemplo(){
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
       const r = await supa.from('vendas_ml').select(POP_COLS).eq('usuario_id', usuarioAtual.id).eq('status', 'paid').order('data_venda', { ascending: false }).limit(1);
-      if(r.data && r.data[0]) popMostrar(r.data[0]); else if(typeof toast === 'function') toast('Ainda não há venda para mostrar de exemplo.');
+      if(r.data && r.data[0]){ await popFotos(r.data); popMostrar(r.data[0]); } else if(typeof toast === 'function') toast('Ainda não há venda para mostrar de exemplo.');
     }
 
     // ----- Configurações → Sons -----
