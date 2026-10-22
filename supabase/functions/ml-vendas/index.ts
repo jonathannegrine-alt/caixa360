@@ -235,16 +235,20 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   }
 
   // 6. "disponível após esta venda": para vendas que acabaram de entrar (feitas há menos de 40 min), guarda o estoque do
-  //    anúncio no Mercado Livre (no Full, é o estoque do Full) e o do galpão. Nunca derruba a sincronização se falhar.
+  //    anúncio no Mercado Livre (da variação vendida, quando o anúncio tem variações; no Full, é o estoque do Full) e o do galpão. Nunca derruba a sincronização se falhar.
   try {
     const novas = [...pedidos.values()].filter(o => !jaTem.has(o.id) && o.order_items?.[0]?.item?.id && Date.now() - new Date(o.date_created).getTime() < 40 * 60000)
     if (novas.length) {
       const idsItens = [...new Set(novas.map(o => String(o.order_items[0].item.id)))], disp = new Map<string, number>()
       const lts: string[][] = []; for (let i = 0; i < idsItens.length; i += 20) lts.push(idsItens.slice(i, i + 20))
       await emParalelo(lts, 4, async (lote) => {
-        const r = await mlGet(`https://api.mercadolibre.com/items?ids=${lote.join(',')}&attributes=id,available_quantity`, accessToken, prazoMs)
+        const r = await mlGet(`https://api.mercadolibre.com/items?ids=${lote.join(',')}&attributes=id,available_quantity,variations`, accessToken, prazoMs)
         if (!r.ok || !Array.isArray(r.data)) return
-        for (const x of r.data) if (x.code === 200 && x.body?.id && x.body.available_quantity != null) disp.set(String(x.body.id), Number(x.body.available_quantity))
+        for (const x of r.data) if (x.code === 200 && x.body?.id) {
+          if (x.body.available_quantity != null) disp.set(String(x.body.id), Number(x.body.available_quantity))
+          // anúncio com variações (cor, tamanho, amperagem): guarda o estoque de cada uma, não só o total
+          for (const vr of (Array.isArray(x.body.variations) ? x.body.variations : [])) if (vr?.id && vr.available_quantity != null) disp.set(String(x.body.id) + ':' + String(vr.id), Number(vr.available_quantity))
+        }
       })
       const galpao = new Map<string, number>()
       const deps = await fetch(`${ctx.supaUrl}/rest/v1/estoque_depositos?usuario_id=eq.${userId}&tipo=eq.proprio&select=id`, { headers: ctx.dbH }).then(r => r.json()).catch(() => [])
@@ -255,7 +259,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       }
       await emParalelo(novas, 6, async (o) => {
         const it = o.order_items[0].item, sku = String(mapear(it) || '').trim().toLowerCase()
-        const corpo: Record<string, number | null> = { est_anuncio_apos: disp.has(String(it.id)) ? disp.get(String(it.id))! : null, est_galpao_apos: sku && galpao.has(sku) ? galpao.get(sku)! : null }
+        const corpo: Record<string, number | null> = { est_anuncio_apos: it.variation_id && disp.has(String(it.id) + ':' + String(it.variation_id)) ? disp.get(String(it.id) + ':' + String(it.variation_id))! : (disp.has(String(it.id)) ? disp.get(String(it.id))! : null), est_galpao_apos: sku && galpao.has(sku) ? galpao.get(sku)! : null }
         if (corpo.est_anuncio_apos == null && corpo.est_galpao_apos == null) return
         await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&order_id=eq.${o.id}`, { method: 'PATCH', headers: { ...ctx.dbH, Prefer: 'return=minimal' }, body: JSON.stringify(corpo) })
       })
