@@ -9,6 +9,17 @@
 // Obedece ao seletor de conta da barra lateral.
 
     let an = { aba: 'geral', dias: 30, chave: '', meses: null, cob: {}, dados: null, rank: null, rankMlb: null, ads: null, adsErro: '', erro: '', ord: {}, busca: '' };
+    // status do anúncio no Product Ads: o ML não diz o motivo; o selo mostra as causas comuns ao passar o mouse
+    const AN_ADS_STATUS = {
+      hold: ['suspenso', 'O Mercado Livre parou a publicidade deste anúncio. Causas comuns:\n• anúncio pausado (por você ou pelo ML)\n• sem estoque, inclusive no Full\n• anúncio em revisão, com infração ou moderado\n• anúncio finalizado ou inativo\n• anúncio que deixou de ser elegível (tipo de anúncio, preço ou condição)\nQuando o motivo é resolvido, a publicidade volta sozinha. Confira o anúncio no Mercado Livre.'],
+      paused: ['pausado', 'A publicidade deste anúncio está pausada. Causas comuns:\n• você pausou o anúncio na campanha\n• a campanha inteira está pausada\n• a campanha ficou sem orçamento\nConfira no Mercado Ads, no Mercado Livre.'],
+      idle: ['parado', 'O anúncio está na campanha mas não está aparecendo. Causas comuns:\n• orçamento da campanha esgotado no dia\n• lance ou ACOS alvo baixo demais\n• pouca relevância do anúncio na busca\nConfira no Mercado Ads, no Mercado Livre.'],
+      recommended: ['recomendado', 'O Mercado Livre recomenda colocar este anúncio em publicidade, mas ele ainda não está em nenhuma campanha.'],
+    };
+    function anStatusAds(s){
+      const [nome, dica] = AN_ADS_STATUS[s] || [s, ''];
+      return dica ? `<span title="${anE(dica)}" style="border-bottom:1px dotted currentColor;cursor:help;">${anE(nome)} ⓘ</span>` : anE(nome);
+    }
     const anE = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const anN = (v, d) => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
     const anP = (a, b, d) => b ? anN(a / b * 100, d == null ? 1 : d) + '%' : '–';
@@ -395,7 +406,7 @@
         ${avisos.length ? `<div class="alert alert-warning">${avisos.map(anE).join(' · ')}</div>` : ''}
         <div class="card"><div class="card-header"><div class="card-title">Anúncios pagos por anúncio</div><input type="text" placeholder="Buscar título ou MLB" value="${anE(an.busca)}" oninput="an.busca=this.value;clearTimeout(an._t);an._t=setTimeout(()=>{anDesenhar();const i=document.querySelector('#an-host .card-header input');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},350)" style="max-width:260px;"></div>
         ${anTabela(filt, [
-          { k: 'titulo', t: 'Anúncio', fmt: l => `<div class="an-anuncio">${l.foto ? `<img src="${anE(l.foto)}" loading="lazy" alt="">` : ''}<div class="cp-prod" style="max-width:320px;"><b>${anE(l.titulo)}</b><span>${anE(l.item_id)}${l.status && l.status !== 'active' ? ' · ' + anE(({ paused: 'pausado', hold: 'ADS parado: anúncio pausado ou sem estoque', idle: 'parado', recommended: 'recomendado' })[l.status] || l.status) : ''}${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? ' · ' + anE(lojaNome(l.conta)) : ''}</span></div></div>` },
+          { k: 'titulo', t: 'Anúncio', fmt: l => `<div class="an-anuncio">${l.foto ? `<img src="${anE(l.foto)}" loading="lazy" alt="">` : ''}<div class="cp-prod" style="max-width:320px;"><b>${anE(l.titulo)}</b><span>${anE(l.item_id)}${l.status && l.status !== 'active' ? ' · ' + anStatusAds(l.status) : ''}${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? ' · ' + anE(lojaNome(l.conta)) : ''}</span></div></div>` },
           { k: 'impressoes', t: 'Impressões', num: 1, fmt: l => anN(l.impressoes) }, { k: 'cliques', t: 'Cliques', num: 1, fmt: l => anN(l.cliques) },
           { k: 'ctr', t: 'CTR', num: 1, fmt: l => anN(l.ctr, 2) + '%' }, { k: 'cpc', t: 'CPC', num: 1, fmt: l => fmt(l.cpc) },
           { k: 'investimento', t: 'Investimento', num: 1, fmt: l => '<b>' + fmt(l.investimento) + '</b>' }, { k: 'vendas_ads', t: 'Vendas ADS', num: 1, fmt: l => fmt(l.vendas_ads) },
