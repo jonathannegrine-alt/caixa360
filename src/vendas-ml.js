@@ -40,9 +40,9 @@
     }
     // Números de uma linha da view vendas_ml_calc
     function vmlCalc(v){
-      const bruto = Number(v.bruto) || 0, freteComp = Number(v.frete_comprador) || 0, freteVend = Number(v.frete_vendedor) || 0, tarifa = Number(v.tarifa) || 0, cupom = Number(v.cupom_vendedor) || 0;
+      const bruto = Number(v.bruto) || 0, freteComp = Number(v.frete_comprador) || 0, freteVend = Number(v.frete_vendedor) || 0, tarifa = Number(v.tarifa) || 0, cupom = Number(v.cupom_vendedor) || 0, retido = Number(v.retido_mp) || 0;
       return {
-        qtd: Number(v.qtd) || 1, bruto, freteComp, freteVend, tarifa, cupom,
+        qtd: Number(v.qtd) || 1, bruto, freteComp, freteVend, tarifa, cupom, retido,
         custo: Number(v.custo) || 0, imposto: Number(v.imposto) || 0, mc: Number(v.mc) || 0, mcPct: Number(v.mc_pct) || 0,
         faturamento: bruto + cupom + freteComp, liquidoML: bruto - tarifa - freteVend,
         temCusto: !!v.tem_custo, temImposto: !!v.tem_imposto, fretePendente: v.frete_vendedor == null,
@@ -385,7 +385,8 @@
             ${linha('Líquido ML', 'R$ ' + vmlNum(c.liquidoML), 'sub')}
             ${linha('Custo', c.temCusto ? '-R$ ' + vmlNum(c.custo) : 'sem custo', c.temCusto ? 'neg' : 'neg sem-custo')}
             ${linha('Imposto', c.temImposto ? '-R$ ' + vmlNum(c.imposto) : 'sem imposto', c.temImposto ? 'neg' : 'neg sem-custo')}
-            <div class="mc" ${completo ? '' : 'title="Margem incompleta: falta custo ou imposto no cadastro do produto"'}><span>Margem${completo ? '' : ' *'}</span><span class="${!completo ? 'sem-custo' : (c.mc >= 0 ? 'mc-pos' : 'mc-neg')}">R$ ${vmlNum(c.mc)} <small>(${vmlPct(c.mcPct)})</small></span></div>`}
+            <div class="mc" ${completo ? '' : 'title="Margem incompleta: falta custo ou imposto no cadastro do produto"'}><span>Margem${completo ? '' : ' *'}</span><span class="${!completo ? 'sem-custo' : (c.mc >= 0 ? 'mc-pos' : 'mc-neg')}">R$ ${vmlNum(c.mc)} <small>(${vmlPct(c.mcPct)})</small></span></div>
+            ${c.retido > 0 ? `<div class="text-muted" style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);" title="Valor que o Mercado Pago descontou deste pagamento além de tarifa, frete e cupom — geralmente parcela de empréstimo. Não é custo da venda: fica fora da margem e do DRE, mas não entra no caixa."><span>Retido pelo Mercado Pago ⓘ</span><span>-R$ ${vmlNum(c.retido)}</span></div>` : ''}`}
           </div>
 
           <div class="v-acoes">
@@ -726,7 +727,7 @@
           'Data': ptDate(dt.dia), 'Hora': dt.hora, 'Venda': String(v.order_id), 'Carrinho': v.pack_id ? String(v.pack_id) : '',
           'Status': v.situacao, 'Anúncio': v.titulo || '', 'MLB': v.item_id || '', 'SKU': v.sku || '',
           'Modalidade': v.modalidade, 'Envio': v.envio, 'Comprador': v.comprador_nome || v.comprador_apelido || '',
-          'Qtd': c.qtd, 'Valor unit.': Number(v.preco_unit) || 0, 'Cupom do vendedor': c.cupom, 'Valor produtos': c.bruto, 'Frete comprador': c.freteComp,
+          'Qtd': c.qtd, 'Valor unit.': Number(v.preco_unit) || 0, 'Cupom do vendedor': c.cupom, 'Retido pelo Mercado Pago': c.retido, 'Valor produtos': c.bruto, 'Frete comprador': c.freteComp,
           'Custo': c.custo, 'Imposto': c.imposto, 'Tarifa de venda': c.tarifa, 'Frete vendedor': c.freteVend,
           'Margem contrib.': c.mc, 'MC %': c.mcPct
         };

@@ -111,7 +111,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   const jaTem = new Map<number, any>()
   const thumbs = new Map<string, string>()
   const existentes = await fetch(
-    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,frete_flex,item_id,thumbnail,sku,sku_fixo,cupom_vendedor&limit=10000`,
+    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,frete_flex,item_id,thumbnail,sku,sku_fixo,cupom_vendedor,pago_mp,liquido_mp&limit=10000`,
     { headers: ctx.dbH }
   ).then(r => r.json()).catch(() => [])
   if (Array.isArray(existentes)) for (const e of existentes) {
@@ -181,6 +181,24 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
     cupons.set(o.id, Math.round(s * 100) / 100)
   })
 
+  // 4c. o que o Mercado Pago pagou de fato (GET /collections/{pagamento}): net_received_amount = líquido; total_paid_amount
+  //     menos finance_fee (juros do parcelamento, pagos pelo comprador e repassados) = o que entrou pela venda. Lido uma vez
+  //     por pedido pago. Serve para achar o "retido pelo Mercado Pago" (passo 5b) — não entra na margem.
+  const cols = new Map<number, { pago: number; liq: number }>()
+  let colFalhou = false
+  const pagos = [...pedidos.values()].filter(o => o.status === 'paid' && jaTem.get(o.id)?.liquido_mp == null && (o.payments || []).some((p: any) => p.status === 'approved'))
+  await emParalelo(pagos, 6, async (o) => {
+    let pago = 0, liq = 0
+    for (const p of (o.payments || []).filter((p: any) => p.status === 'approved')) {
+      const r = await mlGet(`https://api.mercadolibre.com/collections/${p.id}`, accessToken, prazoMs)
+      const x = r.ok ? (r.data?.collection || r.data) : null
+      if (!x || x.net_received_amount == null) { colFalhou = true; return }
+      pago += (Number(x.total_paid_amount) || 0) - (Number(x.finance_fee) || 0)
+      liq += Number(x.net_received_amount) || 0
+    }
+    cols.set(o.id, { pago: Math.round(pago * 100) / 100, liq: Math.round(liq * 100) / 100 })
+  })
+
   // 5. gravar
   // anúncio mapeado na tela Produtos (sku_mapa): a venda usa o SKU do produto; o SKU escrito no anúncio fica em sku_anuncio
   // o mapeamento só vale enquanto o anúncio tiver o SKU que tinha ao mapear (m.sku_anuncio; nulo = qualquer)
@@ -236,11 +254,26 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       frete_flex: freteFlex,
       envio_n: n,
       cupom_vendedor: cupons.has(o.id) ? cupons.get(o.id)! : (temDesconto(o) ? (ant?.cupom_vendedor ?? null) : 0),
+      pago_mp: cols.has(o.id) ? cols.get(o.id)!.pago : (ant?.pago_mp ?? null),
+      liquido_mp: cols.has(o.id) ? cols.get(o.id)!.liq : (ant?.liquido_mp ?? null),
+      retido_mp: null as number | null,
       total_pago: Number(o.paid_amount) || 0,
       thumbnail: null,   // a foto vem de vendas_fotos (view vendas_ml_calc)
       atualizado_em: new Date().toISOString(),
     }
   })
+  // 5b. retido pelo Mercado Pago: o que entrou pela venda − cupom − tarifa − frete − líquido. Conta por envio (no carrinho o
+  //     ML cobra o frete inteiro num dos pedidos) e divide pelo valor pago. Costuma ser parcela de empréstimo; fica fora da
+  //     margem. Só com tudo conhecido no envio; abaixo de R$ 0,10 (ou negativo) = 0.
+  const grupos = new Map<string, any[]>()
+  for (const r of rows) { const k = r.shipping_id ? 's' + r.shipping_id : 'o' + r.order_id; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k)!.push(r) }
+  for (const g of grupos.values()) {
+    if (g.some(r => r.status !== 'paid' || r.pago_mp == null || r.liquido_mp == null || r.frete_vendedor == null || r.cupom_vendedor == null)) continue
+    const frete = g.reduce((t, r) => t + (Number(r.frete_vendedor) || 0) + (r.logistic_type === 'self_service' ? 0 : (Number(r.frete_comprador) || 0)), 0)
+    const ret = g.reduce((t, r) => t + r.pago_mp - r.cupom_vendedor - r.tarifa - r.liquido_mp, 0) - frete
+    const totPago = g.reduce((t, r) => t + r.pago_mp, 0)
+    for (const r of g) r.retido_mp = ret >= 0.1 && totPago > 0 ? Math.round(ret * r.pago_mp / totPago * 100) / 100 : 0
+  }
   for (let i = 0; i < rows.length; i += 500) {
     const up = await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml?on_conflict=usuario_id,order_id`, {
       method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' },
@@ -282,7 +315,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   } catch (_e) { /* o estoque é informativo: segue a sincronização */ }
   await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?on_conflict=usuario_id,ml_user_id,dia`, {
     method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ usuario_id: userId, ml_user_id: String(mlUserId), dia, vendas: rows.length, completo: pendentes === 0, cupom_lido: !cupomFalhou, sincronizado_em: new Date().toISOString() })
+    body: JSON.stringify({ usuario_id: userId, ml_user_id: String(mlUserId), dia, vendas: rows.length, completo: pendentes === 0, cupom_lido: !cupomFalhou && !colFalhou, sincronizado_em: new Date().toISOString() })
   })
   return { ok: true, vendas: rows.length, pendentes, semPermissao: false, erro: null as string | null }
 }
