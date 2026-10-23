@@ -235,10 +235,16 @@
       if(typeof vdConf !== 'undefined' && vdConf){ if(marcar) vdConf.add(String(orderId)); else vdConf.delete(String(orderId)); }   // página Vendas usa a mesma lista
       pdDesenhar();
     }
+    // foto no detalhe: a mesma da lista (cadastro/anúncio, estFotos de estoque.js) ou a da própria venda
+    function pdFotoDet(v){
+      const k = typeof esN === 'function' ? esN(v.sku) : '', u = (k && typeof estFotos !== 'undefined' && estFotos.get(k)) || v.thumbnail;
+      if(u) return `<img class="v-thumb" src="${pdEsc(u)}" alt="">`;
+      return typeof fotoCel === 'function' && k ? fotoCel(v.sku) : '<div class="v-thumb"></div>';
+    }
     function pdDetalhe(orderId){
       if(typeof vmlModal !== 'function' || typeof vdDetalheML !== 'function') return;
       const p = pdPacotes().find(x => x.itens.some(v => String(v.order_id) === String(orderId)));
-      const itens = p ? p.itens.map(v => `<div class="d-flex gap-2" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">${v.thumbnail ? `<img class="v-thumb" src="${pdEsc(v.thumbnail)}" alt="">` : '<div class="v-thumb"></div>'}<div><div class="v-tit"><span class="v-qtd">${Number(v.qtd) || 1}x</span>${pdEsc(v.titulo || '')}</div><div class="text-muted">SKU: ${pdEsc(v.sku || '—')}${v.variacao ? ' · ' + pdEsc(v.variacao) : ''} · #${pdEsc(v.order_id)}</div></div></div>`).join('') : '';
+      const itens = p ? p.itens.map(v => `<div class="d-flex gap-2" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">${pdFotoDet(v)}<div><div class="v-tit"><span class="v-qtd">${Number(v.qtd) || 1}x</span>${pdEsc(v.titulo || '')}</div><div class="text-muted">SKU: ${pdEsc(v.sku || '—')}${v.variacao ? ' · ' + pdEsc(v.variacao) : ''} · #${pdEsc(v.order_id)}</div></div></div>`).join('') : '';
       vmlModal('Pedido #' + pdEsc(orderId), itens + (p ? pdConfCaixa(p) : '') + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>',
         `<a class="btn-out btn" href="https://www.mercadolivre.com.br/vendas/${pdEsc(orderId)}/detalhe" target="_blank" rel="noopener" style="text-decoration:none;">Abrir no Mercado Livre ↗</a><button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button>`);
       vdDetalheML(orderId);
