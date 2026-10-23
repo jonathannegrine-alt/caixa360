@@ -7,7 +7,7 @@
 // Busca (nº da venda, carrinho, envio, comprador ou SKU) procura em TODAS as abas; sem nada nos últimos 25 dias carregados,
 // procura no banco em qualquer data (pdBuscarBanco) e mostra também venda do Full.
 
-    let pd = { linhas: [], carregadoEm: 0, carregando: null, aba: 'atrasados', busca: '', erro: '', sel: new Set(), extras: [], extrasTermo: '', buscandoBanco: false };
+    let pd = { linhas: [], carregadoEm: 0, carregando: null, aba: 'atrasados', busca: '', erro: '', sel: new Set(), conf: new Set(), extras: [], extrasTermo: '', buscandoBanco: false };
     const PD_ABAS = [['atrasados', 'Atrasados'], ['hoje', 'Vencem hoje'], ['enviar', 'Para enviar'], ['aguardando', 'Aguardando liberação'], ['enviados', 'Enviados'], ['cancelados', 'Cancelados'], ['todos', 'Todos']];
     const PD_TIPO = { cross_docking: 'Coleta', xd_drop_off: 'Agência', drop_off: 'Correios', self_service: 'Flex', fulfillment: 'Full' };
     const pdEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -28,6 +28,8 @@
           if(r.error){ pd.erro = r.error.message; break; }
           out.push(...r.data); if(r.data.length < 1000) break;
         }
+        const cf = await supa.from('vendas_conferir').select('order_id').eq('usuario_id', usuarioAtual.id);
+        if(!cf.error) pd.conf = new Set((cf.data || []).map(x => String(x.order_id)));
         // lista vazia não fica guardada: pode ter sido lida antes de a sessão terminar de abrir
         pd.linhas = out; pd.carregadoEm = out.length ? Date.now() : 0; pd.erro = pd.erro && out.length ? '' : pd.erro;
       })();
@@ -151,7 +153,7 @@
               <td class="cp-prod" style="min-width:260px;">${p.itens.map(v => (typeof fotoLinha === 'function' ? fotoLinha(v.sku, `<b>${pdEsc(v.sku || '—')}</b> <span class="text-muted">× ${Number(v.qtd) || 1}</span><span title="${pdEsc(v.titulo)}">${pdEsc(v.titulo || '')}</span>`) : `<b>${pdEsc(v.sku)}</b> × ${Number(v.qtd) || 1}`)).join('<div style="height:6px;"></div>')}</td>
               <td class="num">${fmt(p.valor)}</td>
               <td style="white-space:normal;min-width:150px;">${pdEsc(p.comprador_nome || p.comprador_apelido || '—')}${p.cidade ? `<div class="cp-sub">${pdEsc(p.cidade)}${p.uf ? ' / ' + pdEsc(p.uf) : ''}</div>` : ''}</td>
-              <td><a href="#" onclick="event.preventDefault();pdDetalhe('${p.order_id}')">${pdEsc(p.order_id)}</a>${p.pack_id ? `<div class="cp-sub">carrinho ${pdEsc(p.pack_id)}</div>` : ''}${typeof contaNome === 'function' && contasML && contasML.length > 1 ? `<div class="cp-sub">${pdEsc(contaNome(p.ml_user_id) || '')}</div>` : ''}</td>
+              <td><a href="https://www.mercadolivre.com.br/vendas/${pdEsc(p.order_id)}/detalhe" target="_blank" rel="noopener" title="Abrir a venda no Mercado Livre">${pdEsc(p.order_id)} ↗</a>${p.pack_id ? `<div class="cp-sub">carrinho ${pdEsc(p.pack_id)}</div>` : ''}${typeof contaNome === 'function' && contasML && contasML.length > 1 ? `<div class="cp-sub">${pdEsc(contaNome(p.ml_user_id) || '')}</div>` : ''}${pdConfCaixa(p)}</td>
               <td style="font-size:12.5px;white-space:nowrap;"><span class="text-muted">Vendido</span> ${dt(p.data_venda)}<br>${p.saiu ? `<span class="text-muted">Saiu</span> ${dt(p.enviado_em)}` : p.lim ? `<span class="${p.atrasado ? 'text-danger' : p.venceHoje ? 'text-warning' : 'text-muted'}">Enviar até</span> <b class="${p.atrasado ? 'text-danger' : ''}">${dt(p.lim)}</b>${p.atrasado ? `<div class="text-danger" style="font-weight:600;">atrasado ${p.diasAtraso ? 'há ' + p.diasAtraso + ' dia' + (p.diasAtraso > 1 ? 's' : '') : 'hoje'}</div>` : ''}` : '<span class="text-muted">prazo ainda não informado</span>'}</td>
               <td>${PD_TIPO[p.logistic_type] || pdEsc(p.logistic_type || '—')}</td>
               <td><span class="cp-sit ${cls}">${est}</span></td>
@@ -217,11 +219,28 @@
     }
 
     // janela de detalhes: itens do pacote + entrega, pagamento, comprador e etiqueta lidos no Mercado Livre
+    // "Conferir na fatura Flex": a mesma marcação da página Vendas (tabela vendas_conferir), usada na conferência da fatura
+    function pdConfCaixa(p){
+      const conf = pd.conf.has(String(p.order_id));
+      if(p.logistic_type !== 'self_service' && !conf) return '';
+      return `<label style="display:flex;gap:5px;align-items:center;margin-top:4px;font-size:12px;cursor:pointer;white-space:nowrap;${conf ? 'color:var(--warning,#d97706);font-weight:700;' : 'color:var(--text-muted);'}" title="Marque para conferir este pedido quando chegar a fatura do Flex (ex.: comprador diz que não recebeu)"><input type="checkbox" style="width:auto;margin:0;" ${conf ? 'checked' : ''} onchange="pdConferir('${p.order_id}', '${p.ml_user_id || ''}', ${p.shipping_id || 'null'}, this)"> ⚑ Conferir na fatura Flex</label>`;
+    }
+    async function pdConferir(orderId, conta, envio, cx){
+      const marcar = cx.checked, uid = usuarioAtual.id; cx.disabled = true;
+      const r = marcar
+        ? await supa.from('vendas_conferir').upsert({ usuario_id: uid, order_id: orderId, ml_user_id: conta || null, shipping_id: envio || null })
+        : await supa.from('vendas_conferir').delete().eq('usuario_id', uid).eq('order_id', orderId);
+      if(r.error){ cx.checked = !marcar; cx.disabled = false; alert('Não consegui salvar a marcação: ' + r.error.message); return; }
+      if(marcar) pd.conf.add(String(orderId)); else pd.conf.delete(String(orderId));
+      if(typeof vdConf !== 'undefined' && vdConf){ if(marcar) vdConf.add(String(orderId)); else vdConf.delete(String(orderId)); }   // página Vendas usa a mesma lista
+      pdDesenhar();
+    }
     function pdDetalhe(orderId){
       if(typeof vmlModal !== 'function' || typeof vdDetalheML !== 'function') return;
       const p = pdPacotes().find(x => x.itens.some(v => String(v.order_id) === String(orderId)));
       const itens = p ? p.itens.map(v => `<div class="d-flex gap-2" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">${v.thumbnail ? `<img class="v-thumb" src="${pdEsc(v.thumbnail)}" alt="">` : '<div class="v-thumb"></div>'}<div><div class="v-tit"><span class="v-qtd">${Number(v.qtd) || 1}x</span>${pdEsc(v.titulo || '')}</div><div class="text-muted">SKU: ${pdEsc(v.sku || '—')}${v.variacao ? ' · ' + pdEsc(v.variacao) : ''} · #${pdEsc(v.order_id)}</div></div></div>`).join('') : '';
-      vmlModal('Pedido #' + pdEsc(orderId), itens + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>');
+      vmlModal('Pedido #' + pdEsc(orderId), itens + (p ? pdConfCaixa(p) : '') + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>',
+        `<a class="btn-out btn" href="https://www.mercadolivre.com.br/vendas/${pdEsc(orderId)}/detalhe" target="_blank" rel="noopener" style="text-decoration:none;">Abrir no Mercado Livre ↗</a><button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button>`);
       vdDetalheML(orderId);
     }
 

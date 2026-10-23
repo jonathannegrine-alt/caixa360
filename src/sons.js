@@ -243,7 +243,8 @@
       const v = popDados[orderId];
       if(typeof vmlModal !== 'function' || typeof vdDetalheML !== 'function'){ if(typeof nav === 'function') nav('vendas'); return; }
       const item = v ? '<div class="d-flex gap-2" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">' + (v.thumbnail ? '<img class="v-thumb" src="' + popE(String(v.thumbnail).replace('http://', 'https://')) + '" alt="">' : '') + '<div><div class="v-tit"><span class="v-qtd">' + popE(v.qtd || 1) + 'x</span>' + popE(v.titulo) + '</div><div class="text-muted">SKU: ' + popE(v.sku || '—') + (v.variacao ? ' · ' + popE(v.variacao) : '') + '</div></div></div>' : '';
-      vmlModal('Venda #' + popE(orderId), item + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>');
+      vmlModal('Venda #' + popE(orderId), item + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>',
+        '<a class="btn-out btn" href="https://www.mercadolivre.com.br/vendas/' + popE(orderId) + '/detalhe" target="_blank" rel="noopener" style="text-decoration:none;">Abrir no Mercado Livre ↗</a><button class="btn-out btn" onclick="fecharModal(\'modal-vml\')">Fechar</button>');
       vdDetalheML(orderId);
     }
     async function popExemplo(){
