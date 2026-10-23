@@ -178,7 +178,9 @@ h1,h2,h3{color:var(--text);letter-spacing:-.01em;}
   box-shadow:var(--shadow-sm);
 }
 .btn-out:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft);}
-.btn-del{background:var(--danger);box-shadow:none;}
+/* .btn-del também é usado sozinho (sem .btn): precisa do formato completo de botão */
+.btn-del{background:var(--danger);box-shadow:none;color:#fff;border:none;border-radius:9px;padding:8px 16px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;transition:filter .2s,transform .2s;}
+.btn-del:hover{filter:brightness(1.08);transform:translateY(-1px);}
 .btn-toggle,.period-btn{font-family:var(--font);}
 
 input[type="text"],input[type="number"],input[type="date"],input[type="email"],input[type="password"],input[type="search"],input[type="month"],select,textarea{
@@ -702,6 +704,7 @@ a.v-id{text-decoration:none;}
 }
 .ap-selbar.open{transform:translate(-50%,0);opacity:1;pointer-events:auto;}
 .ap-selbar b{font-size:15px;color:var(--text);}
+.ap-selbar .btn-sm{font-size:13px;padding:8px 16px;letter-spacing:.015em;line-height:1.2;}
 .ap-selbar-x{border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px 6px;}
 @media (max-width:1100px){
   .ap-row{grid-template-columns:20px 84px minmax(0,1fr) 120px 92px;}
