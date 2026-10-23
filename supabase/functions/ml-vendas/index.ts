@@ -111,7 +111,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   const jaTem = new Map<number, any>()
   const thumbs = new Map<string, string>()
   const existentes = await fetch(
-    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,frete_flex,item_id,thumbnail,sku,sku_fixo&limit=10000`,
+    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,frete_flex,item_id,thumbnail,sku,sku_fixo,cupom_vendedor&limit=10000`,
     { headers: ctx.dbH }
   ).then(r => r.json()).catch(() => [])
   if (Array.isArray(existentes)) for (const e of existentes) {
@@ -167,6 +167,20 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       body: JSON.stringify([...fotosNovas].map(id => ({ usuario_id: userId, item_id: id, thumbnail: thumbs.get(id), atualizado_em: agora }))) }).catch(() => null)
   }
 
+  // 4b. cupom de desconto bancado pelo VENDEDOR: só vem em /orders/{id}/discounts (type "coupon", amounts.seller), não no
+  //     unit_price nem no paid_amount. A oferta (type "discount") já está no unit_price. Lido uma vez por pedido com desconto.
+  const cupons = new Map<number, number>()
+  let cupomFalhou = false
+  const temDesconto = (o: any) => Array.isArray(o.tags) && o.tags.includes('order_has_discount')
+  const comDesc = [...pedidos.values()].filter(o => temDesconto(o) && jaTem.get(o.id)?.cupom_vendedor == null)
+  await emParalelo(comDesc, 6, async (o) => {
+    const r = await mlGet(`https://api.mercadolibre.com/orders/${o.id}/discounts`, accessToken, prazoMs)
+    if (!r.ok) { if (r.status === 404) cupons.set(o.id, 0); else cupomFalhou = true; return }
+    let s = 0
+    for (const d of (r.data?.details || [])) if (d?.type === 'coupon') for (const i of (d.items || [])) s += Number(i?.amounts?.seller) || 0
+    cupons.set(o.id, Math.round(s * 100) / 100)
+  })
+
   // 5. gravar
   // anúncio mapeado na tela Produtos (sku_mapa): a venda usa o SKU do produto; o SKU escrito no anúncio fica em sku_anuncio
   // o mapeamento só vale enquanto o anúncio tiver o SKU que tinha ao mapear (m.sku_anuncio; nulo = qualquer)
@@ -221,6 +235,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       frete_comprador: freteComp,
       frete_flex: freteFlex,
       envio_n: n,
+      cupom_vendedor: cupons.has(o.id) ? cupons.get(o.id)! : (temDesconto(o) ? (ant?.cupom_vendedor ?? null) : 0),
       total_pago: Number(o.paid_amount) || 0,
       thumbnail: null,   // a foto vem de vendas_fotos (view vendas_ml_calc)
       atualizado_em: new Date().toISOString(),
@@ -267,7 +282,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   } catch (_e) { /* o estoque é informativo: segue a sincronização */ }
   await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?on_conflict=usuario_id,ml_user_id,dia`, {
     method: 'POST', headers: { ...ctx.dbH, Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ usuario_id: userId, ml_user_id: String(mlUserId), dia, vendas: rows.length, completo: pendentes === 0, sincronizado_em: new Date().toISOString() })
+    body: JSON.stringify({ usuario_id: userId, ml_user_id: String(mlUserId), dia, vendas: rows.length, completo: pendentes === 0, cupom_lido: !cupomFalhou, sincronizado_em: new Date().toISOString() })
   })
   return { ok: true, vendas: rows.length, pendentes, semPermissao: false, erro: null as string | null }
 }
@@ -296,6 +311,13 @@ async function diasRevisar(ctx: Ctx, userId: string, conta: string) {
   const rows = await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&dia=gte.${de}&dia=lte.${ate}&select=dia,sincronizado_em&order=sincronizado_em.asc&limit=20`, { headers: ctx.dbH })
     .then(r => r.json()).catch(() => [])
   return (Array.isArray(rows) ? rows : []).filter((r: any) => Date.now() - new Date(r.sincronizado_em).getTime() > 6 * 3600000).map((r: any) => String(r.dia).substring(0, 10))
+}
+
+// Dias dos últimos 30 ainda sem a leitura do cupom do vendedor (coluna nova em 2026-10-23): relê um por vez, do mais recente
+async function diasCupom(ctx: Ctx, userId: string, conta: string) {
+  const rows = await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml_dias?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&dia=gte.${diaBRT(-30)}&dia=lte.${diaBRT(-2)}&cupom_lido=eq.false&vendas=gt.0&select=dia&order=dia.desc&limit=3`, { headers: ctx.dbH })
+    .then(r => r.json()).catch(() => [])
+  return (Array.isArray(rows) ? rows : []).map((r: any) => String(r.dia).substring(0, 10))
 }
 
 async function sincronizarLista(ctx: Ctx, userId: string, conta: Conta, dias: string[], prazoMs: number): Promise<any> {
@@ -353,7 +375,8 @@ Deno.serve(async (req) => {
           if (diasPedidos.length) { const r = await sincronizarLista(ctx, u, conta, diasPedidos, prazoMs); resultados.push({ usuario_id: u, ml_user_id: c, dias: diasPedidos, ...r }); continue }
           const antigos = soRecentes ? [] : await diasPendentes(ctx, u, c, inicioDe(conta), diaBRT(-2), false)
           const revisar = soRecentes ? [] : (await diasRevisar(ctx, u, c)).filter(d => !antigos.includes(d)).slice(0, 1)
-          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos.slice(0, DIAS_HIST_POR_VEZ), ...revisar], prazoMs)
+          const cupom = soRecentes ? [] : (await diasCupom(ctx, u, c)).filter(d => !antigos.includes(d) && !revisar.includes(d)).slice(0, 1)
+          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos.slice(0, DIAS_HIST_POR_VEZ), ...revisar, ...cupom], prazoMs)
           resultados.push({ usuario_id: u, ml_user_id: c, ...r })
         } catch (e) {
           resultados.push({ usuario_id: u, ml_user_id: c, error: String(e) })

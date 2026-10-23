@@ -40,11 +40,11 @@
     }
     // Números de uma linha da view vendas_ml_calc
     function vmlCalc(v){
-      const bruto = Number(v.bruto) || 0, freteComp = Number(v.frete_comprador) || 0, freteVend = Number(v.frete_vendedor) || 0, tarifa = Number(v.tarifa) || 0;
+      const bruto = Number(v.bruto) || 0, freteComp = Number(v.frete_comprador) || 0, freteVend = Number(v.frete_vendedor) || 0, tarifa = Number(v.tarifa) || 0, cupom = Number(v.cupom_vendedor) || 0;
       return {
-        qtd: Number(v.qtd) || 1, bruto, freteComp, freteVend, tarifa,
+        qtd: Number(v.qtd) || 1, bruto, freteComp, freteVend, tarifa, cupom,
         custo: Number(v.custo) || 0, imposto: Number(v.imposto) || 0, mc: Number(v.mc) || 0, mcPct: Number(v.mc_pct) || 0,
-        faturamento: bruto + freteComp, liquidoML: bruto - tarifa - freteVend,
+        faturamento: bruto + cupom + freteComp, liquidoML: bruto - tarifa - freteVend,
         temCusto: !!v.tem_custo, temImposto: !!v.tem_imposto, fretePendente: v.frete_vendedor == null,
         flexRep: Number(v.flex_repasse) || 0, flexCusto: Number(v.flex_custo) || 0, flex: v.logistic_type === 'self_service'
       };
@@ -379,6 +379,7 @@
             ${st === 'cancelada' && ex.cobr ? vdFinCancelada(ex, linha) : `
             ${linha('Recebido', 'R$ ' + vmlNum(c.faturamento), 'pos', 'Valor dos produtos + frete pago pelo comprador')}
             ${linha('Frete', c.fretePendente ? '…' : '-R$ ' + vmlNum(c.freteVend + c.freteComp), 'neg', 'Frete do comprador + frete do vendedor')}
+            ${c.cupom > 0 ? linha('Cupom do vendedor', '-R$ ' + vmlNum(c.cupom), 'neg', 'Cupom de desconto bancado por você (campanha de cupom no Mercado Livre). Sai do valor que você recebe.') : ''}
             ${linha('Tarifa de venda', '-R$ ' + vmlNum(c.tarifa), 'neg')}
             ${c.flexCusto > 0 ? linha('Flex', (c.flexRep - c.flexCusto >= 0 ? 'R$ ' : '-R$ ') + vmlNum(Math.abs(c.flexRep - c.flexCusto)), c.flexRep - c.flexCusto >= 0 ? 'pos' : 'neg', 'Repasse do Mercado Livre pelo envio Flex (R$ ' + vmlNum(c.flexRep) + ') menos o que você paga ao transportador (R$ ' + vmlNum(c.flexCusto) + ')') : ''}
             ${linha('Líquido ML', 'R$ ' + vmlNum(c.liquidoML), 'sub')}
@@ -725,7 +726,7 @@
           'Data': ptDate(dt.dia), 'Hora': dt.hora, 'Venda': String(v.order_id), 'Carrinho': v.pack_id ? String(v.pack_id) : '',
           'Status': v.situacao, 'Anúncio': v.titulo || '', 'MLB': v.item_id || '', 'SKU': v.sku || '',
           'Modalidade': v.modalidade, 'Envio': v.envio, 'Comprador': v.comprador_nome || v.comprador_apelido || '',
-          'Qtd': c.qtd, 'Valor unit.': Number(v.preco_unit) || 0, 'Valor produtos': c.bruto, 'Frete comprador': c.freteComp,
+          'Qtd': c.qtd, 'Valor unit.': Number(v.preco_unit) || 0, 'Cupom do vendedor': c.cupom, 'Valor produtos': c.bruto, 'Frete comprador': c.freteComp,
           'Custo': c.custo, 'Imposto': c.imposto, 'Tarifa de venda': c.tarifa, 'Frete vendedor': c.freteVend,
           'Margem contrib.': c.mc, 'MC %': c.mcPct
         };
