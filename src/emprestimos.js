@@ -6,6 +6,10 @@
 //              em linhas separadas (fonte 'emprestimo', tiny_key 'emp:<id>:<n>:a|j').
 // O robô lê o PDF do contrato (Edge Function ler-contrato) e preenche o formulário para o usuário conferir.
 // Banco: supabase/migrations/20261011_emprestimos.sql
+// sistema 'vendas' (Mercado Crédito): o Mercado Pago retém uma % de cada venda até completar o total a devolver. Não há
+// parcela com data: o pago sai de vendas_ml.retido_mp da conta (RPC emprestimo_retido) e cada mês vira duas contas já pagas
+// no Contas a pagar (amortização e juros, na proporção valor / total; tiny_key 'emp:<id>:m<AAAA-MM>:a|j'), para o DRE e o
+// custo da dívida. Atualizado ao abrir Empréstimos ou o DRE (empVendasAtualizar).
 
     let emp = { lista: [], carregado: false, erro: '', form: null, lendo: false };
     const emN = s => String(s == null ? '' : s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -34,6 +38,7 @@
       return pagamentos.filter(p => emN((p.desc || '') + ' ' + (p.forn || '')).includes(v));
     }
     function empResumo(c){
+      if(c.sistema === 'vendas') return empVendasResumo(c);
       const contas = empContas(c), ehJuros = p => /juros/i.test(p.desc || '');
       // sem data para devolver: o saldo é o valor emprestado menos as devoluções já pagas; os juros do mês saem da taxa
       if(c.sistema === 'aberto'){
@@ -62,6 +67,7 @@
       if(!emp.carregado){ el.innerHTML = '<div class="vazio"><b>Carregando os empréstimos…</b></div>'; await empCarregar(); }
       if(typeof olist !== 'undefined' && olist.conectado === null && typeof olistStatus === 'function') try { await olistStatus(); } catch(e){}
       empRecortar();
+      await empVendasAtualizar();
       empDesenhar();
     }
 
@@ -86,11 +92,11 @@
         </div>
         ${res.length ? `<div class="card"><div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Contrato</th><th>Parcelas</th><th class="num">Saldo devedor</th><th class="num">Juros a pagar</th><th class="num">Já pago</th><th>Próxima parcela</th><th>Termina em</th><th></th></tr></thead><tbody>
           ${res.map(({ c, r }) => { const pct = r.total ? Math.round(r.pagas / r.total * 100) : 0; return `<tr>
-            <td class="cp-prod" style="max-width:300px;"><b>${emEsc(c.nome)}</b><span>${emEsc(c.credor || '')}${c.dono && c.dono !== 'empresa' ? ' · ' + EM_DONO[c.dono] : ''}</span><i>${c.modo === 'gerar' ? 'parcelas geradas aqui' : 'parcelas vindas do Olist'}${r.total ? '' : ' · nenhuma conta encontrada'}${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? ' · ' + emEsc(lojaNome(c.loja || lojaPadraoId())) : ''}</i></td>
-            <td><div class="cp-cob"><div class="cp-cob-n"><b>${r.pagas}</b> de ${r.total || c.parcelas} pagas</div><div class="cp-cob-t"><span class="cp-cob-v" style="width:${Math.max(3, pct)}%;"></span></div></div></td>
+            <td class="cp-prod" style="max-width:300px;"><b>${emEsc(c.nome)}</b><span>${emEsc(c.credor || '')}${c.dono && c.dono !== 'empresa' ? ' · ' + EM_DONO[c.dono] : ''}</span><i>${c.sistema === 'vendas' ? 'retido de cada venda' + (c.conta_ml && typeof contaNome === 'function' && contaNome(c.conta_ml) ? ' · ' + emEsc(contaNome(c.conta_ml)) : '') : (c.modo === 'gerar' ? 'parcelas geradas aqui' : 'parcelas vindas do Olist') + (r.total ? '' : ' · nenhuma conta encontrada')}${typeof lojasVarias === 'function' && lojasVarias() && !lojaAtiva() ? ' · ' + emEsc(lojaNome(c.loja || lojaPadraoId())) : ''}</i></td>
+            <td>${r.vendas ? `<div class="cp-cob"><div class="cp-cob-n"><b>${Math.round(r.pctPago)}%</b> devolvido · ${String(c.pct_vendas || '?').replace('.', ',')}% das vendas</div><div class="cp-cob-t"><span class="cp-cob-v" style="width:${Math.max(3, r.pctPago)}%;"></span></div></div>` : `<div class="cp-cob"><div class="cp-cob-n"><b>${r.pagas}</b> de ${r.total || c.parcelas} pagas</div><div class="cp-cob-t"><span class="cp-cob-v" style="width:${Math.max(3, pct)}%;"></span></div></div>`}</td>
             <td class="num"><b>${fmt(r.saldo)}</b></td><td class="num">${fmt(r.jurosAbertos)}</td><td class="num">${fmt(r.pago)}</td>
-            <td>${r.prox ? `${dt(r.prox.data)}<div class="cp-sub">${fmt(r.valorProx)}${r.atrasadas ? ' · <span class="text-danger">' + r.atrasadas + ' em atraso</span>' : ''}</div>` : '<span class="cp-sit cp-ok">Quitado</span>'}</td>
-            <td>${dt(r.fim)}</td>
+            <td>${r.vendas ? (r.saldoTotal > 0 ? `retido nos últimos 30 dias<div class="cp-sub">${fmt(r.ult30)}</div>` : '<span class="cp-sit cp-ok">Quitado</span>') : r.prox ? `${dt(r.prox.data)}<div class="cp-sub">${fmt(r.valorProx)}${r.atrasadas ? ' · <span class="text-danger">' + r.atrasadas + ' em atraso</span>' : ''}</div>` : '<span class="cp-sit cp-ok">Quitado</span>'}</td>
+            <td>${r.vendas ? (r.fim ? 'por volta de ' + dt(r.fim) : '—') : dt(r.fim)}</td>
             <td style="text-align:right;white-space:nowrap;">${c.arquivo ? `<button class="btn-out btn-sm" title="Baixar o PDF do contrato" onclick="empBaixar(${c.id})">PDF</button> ` : ''}<button class="btn-out btn-sm" onclick="empVer(${c.id})">Parcelas</button> <button class="btn-out btn-sm" onclick="empEditar(${c.id})">Editar</button></td></tr>`; }).join('')}
         </tbody></table></div></div>` : `<div class="card"><div class="vazio"><div class="vazio-ico"></div><b>Nenhum contrato cadastrado</b>Clique em "Cadastrar contrato com IA" e envie o PDF: o robô preenche e você confere. Ou use uma das sugestões abaixo.</div></div>`}
         ${sug.length ? `<div class="card"><div class="card-header"><div class="card-title">Contas que parecem empréstimo e ainda não têm contrato</div><span class="text-muted" style="font-size:12px;">Um clique cria o contrato já ligado a essas parcelas</span></div>
@@ -102,7 +108,7 @@
     // ----- formulário -----
     function empModoPadrao(){ return typeof olist !== 'undefined' && olist.conectado ? 'vincular' : 'gerar'; }
     function empNovo(dados){
-      emp.form = Object.assign({ id: null, nome: '', credor: '', numero_contrato: '', valor: '', taxa_mes: '', parcelas: '', primeira: '', sistema: 'price', dono: 'empresa', modo: empModoPadrao(), vinculo: '', obs: '', valor_parcela: '', valor_liberado: '', loja: typeof lojaNova === 'function' ? lojaNova() : null, arquivo: null }, dados || {});
+      emp.form = Object.assign({ id: null, nome: '', credor: '', numero_contrato: '', valor: '', taxa_mes: '', parcelas: '', primeira: '', sistema: 'price', dono: 'empresa', modo: empModoPadrao(), vinculo: '', obs: '', valor_parcela: '', valor_liberado: '', pct_vendas: '', total_devolver: '', conta_ml: '', loja: typeof lojaNova === 'function' ? lojaNova() : null, arquivo: null }, dados || {});
       emp.pdf = null;
       empForm();
     }
@@ -110,7 +116,7 @@
     function empDeSugestao(i, comIA){ const o = empSugestoes()[i]; if(!o) return; empNovo({ nome: o.desc, credor: o.forn, vinculo: o.desc, modo: 'vincular', parcelas: o.n, primeira: o.primeira }); if(comIA) empLerPdf(true); }
     function empFormLer(){
       const f = emp.form; if(!f) return;
-      ['nome', 'credor', 'numero_contrato', 'valor', 'taxa_mes', 'parcelas', 'primeira', 'sistema', 'dono', 'modo', 'vinculo', 'obs', 'loja', 'valor_parcela', 'valor_liberado'].forEach(k => { const el = document.getElementById('emp-' + k); if(el) f[k] = el.value; });
+      ['nome', 'credor', 'numero_contrato', 'valor', 'taxa_mes', 'parcelas', 'primeira', 'sistema', 'dono', 'modo', 'vinculo', 'obs', 'loja', 'valor_parcela', 'valor_liberado', 'pct_vendas', 'total_devolver', 'conta_ml'].forEach(k => { const el = document.getElementById('emp-' + k); if(el) f[k] = el.value; });
     }
     function empForm(aviso){
       const f = emp.form, opt = (v, t, sel) => `<option value="${v}" ${String(sel) === v ? 'selected' : ''}>${t}</option>`;
@@ -130,28 +136,29 @@
           <div class="form-group"><label class="form-label">Banco ou credor</label><input type="text" id="emp-credor" value="${emEsc(f.credor || '')}"></div>
           <div class="form-group"><label class="form-label">Nº do contrato</label><input type="text" id="emp-numero_contrato" value="${emEsc(f.numero_contrato || '')}"></div>
         </div>
-        <div class="form-row">
+        ${f.sistema === 'vendas' ? empVendasCampos(f, opt) : `<div class="form-row">
           <div class="form-group"><label class="form-label" title="O valor da dívida: o total financiado, com IOF, tarifas e seguro quando entram no financiamento. Costuma ser maior que o valor que caiu na conta.">Valor financiado (R$)</label><input type="text" id="emp-valor" value="${emEsc(f.valor)}" placeholder="0,00" onchange="empFormLer();empForm();"></div>
           <div class="form-group"><label class="form-label">Juros ao mês (%)</label><input type="text" id="emp-taxa_mes" value="${emEsc(f.taxa_mes)}" placeholder="Ex.: 1,75" onchange="empFormLer();empForm();"></div>
           <div class="form-group"><label class="form-label">Número de parcelas</label><input type="number" id="emp-parcelas" value="${emEsc(f.parcelas)}" min="1" onchange="empFormLer();empForm();"></div>
           <div class="form-group"><label class="form-label">Primeira parcela</label><input type="date" id="emp-primeira" value="${emEsc(f.primeira || '')}"></div>
-        </div>
+        </div>`}
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Como as parcelas são calculadas</label><select id="emp-sistema">${opt('price', 'Parcelas iguais (Price)', f.sistema)}${opt('sac', 'Amortização igual, parcela diminui (SAC)', f.sistema)}${opt('outro', 'Outro', f.sistema)}${opt('aberto', 'Sem data para devolver (saldo em aberto, juros por mês)', f.sistema)}</select>
+          <div class="form-group"><label class="form-label">Como as parcelas são calculadas</label><select id="emp-sistema" onchange="empFormLer();empForm();">${opt('price', 'Parcelas iguais (Price)', f.sistema)}${opt('sac', 'Amortização igual, parcela diminui (SAC)', f.sistema)}${opt('outro', 'Outro', f.sistema)}${opt('aberto', 'Sem data para devolver (saldo em aberto, juros por mês)', f.sistema)}${opt('vendas', 'Porcentagem de cada venda (Mercado Crédito)', f.sistema)}</select>
             <div class="text-muted" style="font-size:11.5px;line-height:1.5;margin-top:4px;">Sem data: para dinheiro emprestado que você devolve quando puder ou quando pedirem. Informe o valor e a taxa ao mês; nenhuma parcela é criada. Cada devolução que você lançar e pagar em Contas a pagar com o trecho de identificação abaixo abate o saldo.</div></div>
-          <div class="form-group"><label class="form-label" title="Opcional. Se o contrato informa o valor da parcela, as parcelas são geradas exatamente nesse valor.">Valor da parcela no contrato (R$)</label><input type="text" id="emp-valor_parcela" value="${emEsc(f.valor_parcela == null ? '' : f.valor_parcela)}" placeholder="opcional" onchange="empFormLer();empForm();">${empConfParcela(f)}</div>
-          <div class="form-group"><label class="form-label" title="Opcional. O que caiu na conta. A diferença para o valor financiado é IOF, tarifa e seguro, que entram numa linha própria (IOF de empréstimo) em cada parcela.">Valor liberado na conta (R$)</label><input type="text" id="emp-valor_liberado" value="${emEsc(f.valor_liberado == null ? '' : f.valor_liberado)}" placeholder="opcional" onchange="empFormLer();empForm();">${(() => { const fin = emNum(f.valor), lib = emNum(f.valor_liberado); return fin > 0 && lib > 0 && lib < fin ? `<div class="emp-conf text-muted">IOF e encargos financiados: ${fmt(fin - lib)}. Cada parcela terá três linhas: amortização, juros e IOF.</div>` : (lib > fin && fin > 0 ? '<div class="emp-conf text-danger">O valor liberado não pode ser maior que o financiado.</div>' : ''); })()}</div>
+          ${f.sistema === 'vendas' ? '' : `<div class="form-group"><label class="form-label" title="Opcional. Se o contrato informa o valor da parcela, as parcelas são geradas exatamente nesse valor.">Valor da parcela no contrato (R$)</label><input type="text" id="emp-valor_parcela" value="${emEsc(f.valor_parcela == null ? '' : f.valor_parcela)}" placeholder="opcional" onchange="empFormLer();empForm();">${empConfParcela(f)}</div>
+          <div class="form-group"><label class="form-label" title="Opcional. O que caiu na conta. A diferença para o valor financiado é IOF, tarifa e seguro, que entram numa linha própria (IOF de empréstimo) em cada parcela.">Valor liberado na conta (R$)</label><input type="text" id="emp-valor_liberado" value="${emEsc(f.valor_liberado == null ? '' : f.valor_liberado)}" placeholder="opcional" onchange="empFormLer();empForm();">${(() => { const fin = emNum(f.valor), lib = emNum(f.valor_liberado); return fin > 0 && lib > 0 && lib < fin ? `<div class="emp-conf text-muted">IOF e encargos financiados: ${fmt(fin - lib)}. Cada parcela terá três linhas: amortização, juros e IOF.</div>` : (lib > fin && fin > 0 ? '<div class="emp-conf text-danger">O valor liberado não pode ser maior que o financiado.</div>' : ''); })()}</div>`}
           <div class="form-group"><label class="form-label">De quem é a dívida</label><select id="emp-dono">${Object.entries(EM_DONO).map(([k, t]) => opt(k, t, f.dono)).join('')}</select></div>
         </div>
-        <div class="form-group"><label class="form-label">De onde vêm as parcelas</label>
+        ${f.sistema === 'vendas' ? '' : `<div class="form-group"><label class="form-label">De onde vêm as parcelas</label>
           <select id="emp-modo" onchange="empFormLer();empForm();">${opt('vincular', 'Já estão no Contas a pagar (vêm do Olist): só reconhecer', f.modo)}${opt('gerar', 'Gerar as parcelas aqui, no Contas a pagar', f.modo)}</select></div>
         ${f.modo === 'vincular' ? `<div class="form-group"><label class="form-label">Trecho que identifica as parcelas (aparece na descrição ou no fornecedor)</label>
             <input type="text" id="emp-vinculo" value="${emEsc(f.vinculo || '')}" placeholder="Ex.: Sicoob FGI" onchange="empFormLer();empForm();">
             <div class="text-muted" style="font-size:12px;margin-top:5px;">${f.vinculo ? (achadas ? `<b>${achadas} contas</b> do Contas a pagar têm esse trecho (amortização e juros).` : '<span class="text-danger">Nenhuma conta tem esse trecho.</span> Confira como a parcela está escrita no Contas a pagar.') : 'Digite um trecho que só as parcelas deste contrato tenham. Maiúsculas e acentos não importam.'}</div></div>`
-          : `<div class="alert alert-warning">Ao salvar, o sistema cria as parcelas no Contas a pagar: uma linha de amortização e uma de juros por mês. ${typeof olist !== 'undefined' && olist.conectado ? '<b>&nbsp;Atenção:</b>&nbsp;o Olist está conectado; se este empréstimo também for lançado lá, as parcelas ficam em dobro.' : ''}</div>`}
+          : `<div class="alert alert-warning">Ao salvar, o sistema cria as parcelas no Contas a pagar: uma linha de amortização e uma de juros por mês. ${typeof olist !== 'undefined' && olist.conectado ? '<b>&nbsp;Atenção:</b>&nbsp;o Olist está conectado; se este empréstimo também for lançado lá, as parcelas ficam em dobro.' : ''}</div>`}`}
         <div class="form-group"><label class="form-label">Observação</label><input type="text" id="emp-obs" value="${emEsc(f.obs || '')}" placeholder="Carência, indexador, seguro..."></div>`,
         `${f.id ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="empExcluir(${f.id})">Excluir contrato</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="empSalvar(this)">Salvar contrato</button>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '900px';
+      if(f.sistema === 'vendas') empVendasObservado(f);
     }
 
     // taxa ao mês que faz a parcela Price (pv, n) dar exatamente o valor informado no contrato
@@ -192,11 +199,19 @@
       const erro = (t, campo) => { const el = document.getElementById('emp-erro'); if(el){ el.textContent = t; el.style.display = 'block'; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } toast(t); const c = campo && document.getElementById(campo); if(c){ c.style.borderColor = 'var(--danger)'; c.focus(); } };
       if(!String(f.nome).trim()){ erro('Falta o nome do contrato.', 'emp-nome'); return; }
       if(f.sistema === 'aberto') f.modo = 'vincular';
+      if(f.sistema === 'vendas'){
+        f.modo = 'gerar';
+        if(!f.conta_ml){ erro('Escolha a conta do Mercado Livre onde o Mercado Pago faz a retenção.', 'emp-conta_ml'); return; }
+        if(!(emNum(f.valor) > 0)){ erro('Falta o valor que você recebeu do empréstimo.', 'emp-valor'); return; }
+        if(!(emNum(f.total_devolver) >= emNum(f.valor))){ erro('O total a devolver precisa ser igual ou maior que o valor recebido (ele inclui os juros).', 'emp-total_devolver'); return; }
+        if(!f.primeira){ erro('Falta a data em que as retenções começaram (normalmente o dia em que o dinheiro caiu).', 'emp-primeira'); return; }
+      }
       if(f.sistema !== 'aberto' && f.modo === 'vincular' && !String(f.vinculo || '').trim()){ erro('Falta o "trecho que identifica as parcelas". Em "De onde vêm as parcelas" está escolhido que elas já estão no Contas a pagar: escreva um trecho da descrição dessas contas ou troque para "Gerar as parcelas aqui".', 'emp-vinculo'); return; }
       const reg = { usuario_id: usuarioAtual.id, nome: String(f.nome).trim(), credor: String(f.credor || '').trim() || null, numero_contrato: String(f.numero_contrato || '').trim() || null,
         valor: emNum(f.valor), taxa_mes: emNum(f.taxa_mes), parcelas: Math.max(1, Math.round(emNum(f.parcelas)) || 1), primeira: f.primeira || null, sistema: f.sistema, dono: f.dono, modo: f.modo,
-        vinculo: f.modo === 'vincular' ? (String(f.vinculo || '').trim() || null) : null, obs: String(f.obs || '').trim() || null, loja: f.loja || null, valor_parcela: emNum(f.valor_parcela) || null, valor_liberado: emNum(f.valor_liberado) || null };
-      if(f.modo === 'gerar'){
+        vinculo: f.modo === 'vincular' ? (String(f.vinculo || '').trim() || null) : null, obs: String(f.obs || '').trim() || null, loja: f.loja || null, valor_parcela: emNum(f.valor_parcela) || null, valor_liberado: emNum(f.valor_liberado) || null,
+        pct_vendas: f.sistema === 'vendas' ? (emNum(f.pct_vendas) || null) : null, total_devolver: f.sistema === 'vendas' ? emNum(f.total_devolver) : null, conta_ml: f.sistema === 'vendas' ? (f.conta_ml || null) : null };
+      if(f.modo === 'gerar' && f.sistema !== 'vendas'){
         const tab = empTabela(reg);
         if(!tab.length){ erro('Para gerar as parcelas, informe o valor financiado e a data da primeira parcela.', emNum(f.valor) > 0 ? 'emp-primeira' : 'emp-valor'); return; }
         const tot = tab.reduce((s, l) => s + l.amort + l.juros, 0);
@@ -213,8 +228,8 @@
           await supa.from('emprestimos').update({ arquivo: cam }).eq('id', g.data.id); }
         emp.pdf = null;
       }
-      if(reg.modo === 'gerar') empGerar(g.data);
-      await empCarregar(); fecharModal('modal-vml'); empDesenhar();
+      if(reg.modo === 'gerar' && reg.sistema !== 'vendas') empGerar(g.data);
+      await empCarregar(); if(reg.sistema === 'vendas') await empVendasAtualizar(true); fecharModal('modal-vml'); empDesenhar();
     }
 
     // cria as parcelas no Contas a pagar (as já pagas ficam como estão)
@@ -239,17 +254,18 @@
 
     async function empExcluir(id){
       const c = emp.lista.find(x => x.id === id); if(!c) return;
-      const ger = c.modo === 'gerar' ? pagamentos.filter(p => String(p.tiny_key || '').startsWith('emp:' + id + ':') && !p.pago).length : 0;
+      const ger = c.modo === 'gerar' ? pagamentos.filter(p => String(p.tiny_key || '').startsWith('emp:' + id + ':') && (!p.pago || c.sistema === 'vendas')).length : 0;
       if(!confirm('Excluir o contrato "' + c.nome + '"?' + (ger ? ' As ' + ger + ' parcelas em aberto geradas por ele saem do Contas a pagar; as já pagas ficam.' : ' As contas do Contas a pagar não são alteradas.'))) return;
       const r = await supa.from('emprestimos').delete().eq('id', id);
       if(r.error){ toast('Não consegui excluir: ' + r.error.message); return; }
-      if(ger){ pagamentos = pagamentos.filter(p => !String(p.tiny_key || '').startsWith('emp:' + id + ':') || p.pago); salvar(); }
+      if(ger){ if(typeof lojasAbrir === 'function') lojasAbrir(); try { pagamentos = pagamentos.filter(p => !String(p.tiny_key || '').startsWith('emp:' + id + ':') || (p.pago && c.sistema !== 'vendas')); } finally { if(typeof lojasFechar === 'function') lojasFechar(); } salvar(); }
       if(c.arquivo) try { await supa.storage.from('contratos').remove([c.arquivo]); } catch(e){}
       await empCarregar(); fecharModal('modal-vml'); empDesenhar();
     }
 
     function empVer(id){
       const c = emp.lista.find(x => x.id === id); if(!c) return;
+      if(c.sistema === 'vendas') return empVendasVer(c);
       const r = empResumo(c), contas = r.contas.slice().sort((a, b) => String(a.data).localeCompare(String(b.data)) || (/juros/i.test(a.desc) ? 1 : -1));
       vmlModal(emEsc(c.nome) + ' — parcelas', `
         <div class="text-muted" style="margin-bottom:10px;">${emEsc(c.credor || '')}${c.numero_contrato ? ' · contrato ' + emEsc(c.numero_contrato) : ''}${emNum(c.valor) ? ' · ' + fmt(emNum(c.valor)) + ' emprestados' : ''}${emNum(c.taxa_mes) ? ' · ' + String(c.taxa_mes).replace('.', ',') + '% ao mês' : ''}${c.obs ? '<br>' + emEsc(c.obs) : ''}</div>
@@ -305,4 +321,104 @@
       { const mm = document.getElementById('modal-vml'); if(mm) mm._sujo = true; }   // já tem conteúdo: clicar fora pergunta antes de fechar
       if(falhou){ empForm('Não consegui ler o contrato' + (j && j.error ? ': ' + emEsc(j.error) : '') + '. Preencha à mão; o PDF fica anexado.'); return; }
       empForm('O robô preencheu com o que leu no contrato. <b>&nbsp;Confira cada campo&nbsp;</b> antes de salvar' + (d.valor_parcela ? ': a parcela informada no contrato é ' + fmt(Number(d.valor_parcela) || 0) + '.' : '.'));
+    }
+
+    // ----- empréstimo por % das vendas (Mercado Crédito) -----
+    function empVendasCampos(f, opt){
+      const contas = typeof contasML !== 'undefined' ? contasML : [], fin = emNum(f.valor), tot = emNum(f.total_devolver);
+      return `<div class="alert alert-info" style="font-size:12.5px;">O Mercado Pago desconta uma porcentagem de cada venda até completar o total a devolver. O Caixa 360 soma o que foi <b>retido pelo Mercado Pago</b> nas vendas da conta escolhida a partir da data de início, e divide cada retenção entre devolução do valor e juros. Cada mês vira duas contas já pagas no Contas a pagar (amortização e juros) para o DRE.</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Conta do Mercado Livre</label><select id="emp-conta_ml" onchange="empFormLer();empForm();"><option value="">Escolha…</option>${contas.map(x => opt(x.id, emEsc(x.apelido || x.id), f.conta_ml)).join('')}</select></div>
+          <div class="form-group"><label class="form-label" title="O que caiu na conta do Mercado Pago">Valor recebido (R$)</label><input type="text" id="emp-valor" value="${emEsc(f.valor)}" placeholder="0,00" onchange="empFormLer();empForm();"></div>
+          <div class="form-group"><label class="form-label" title="Valor recebido + juros/tarifa. Aparece na proposta do Mercado Pago como 'Total a pagar'.">Total a devolver (R$)</label><input type="text" id="emp-total_devolver" value="${emEsc(f.total_devolver == null ? '' : f.total_devolver)}" placeholder="0,00" onchange="empFormLer();empForm();"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">% retido de cada venda</label><input type="text" id="emp-pct_vendas" value="${emEsc(f.pct_vendas == null ? '' : f.pct_vendas)}" placeholder="Ex.: 30"></div>
+          <div class="form-group"><label class="form-label">Início das retenções</label><input type="date" id="emp-primeira" value="${emEsc(f.primeira || '')}" onchange="empFormLer();empForm();"></div>
+          <div class="form-group"><label class="form-label">Juros do contrato</label><div style="padding:8px 0;">${fin > 0 && tot >= fin ? fmt(tot - fin) + ' <span class="text-muted">(' + String(Math.round((tot - fin) / fin * 1000) / 10).replace('.', ',') + '% sobre o valor recebido)</span>' : '<span class="text-muted">preencha valor e total</span>'}</div></div>
+        </div>
+        <div id="emp-observado" class="text-muted" style="font-size:12.5px;margin:-4px 0 12px;"></div>`;
+    }
+    // no formulário: quanto o Mercado Pago já reteve nessa conta desde o início (ajuda a conferir a %)
+    async function empVendasObservado(f){
+      const el = document.getElementById('emp-observado'); if(!el || !f.conta_ml || !f.primeira) return;
+      const r = await supa.rpc('emprestimo_retido', { p_conta: f.conta_ml, p_de: f.primeira });
+      if(r.error || !document.getElementById('emp-observado')) return;
+      const L = r.data || [], ret = L.reduce((s, x) => s + (Number(x.retido) || 0), 0), pago = L.reduce((s, x) => s + (Number(x.pago) || 0), 0), n = L.reduce((s, x) => s + (Number(x.vendas) || 0), 0);
+      el.innerHTML = n ? `Desde ${ptDate(f.primeira)} o Mercado Pago reteve <b>${fmt(ret)}</b> em ${n} vendas (${String(Math.round(ret / (pago || 1) * 1000) / 10).replace('.', ',')}% do que elas pagaram).`
+        : 'Ainda não há retenção registrada nessa conta a partir dessa data. (As vendas dos últimos 30 dias estão sendo lidas aos poucos.)';
+    }
+    // lê as retenções e mantém as contas mensais (já pagas) no Contas a pagar
+    async function empVendasAtualizar(forcar){
+      if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
+      if(!emp.carregado) await empCarregar();
+      const lista = (emp.todos || []).filter(c => c.sistema === 'vendas' && c.conta_ml && c.primeira);
+      if(!lista.length) return;
+      if(!forcar && emp.vendasEm && Date.now() - emp.vendasEm < 5 * 60000) return;
+      emp.vendasEm = Date.now();
+      let mudou = false;
+      if(typeof lojasAbrir === 'function') lojasAbrir();
+      try {
+        for(const c of lista){
+          const r = await supa.rpc('emprestimo_retido', { p_conta: c.conta_ml, p_de: c.primeira });
+          if(r.error) continue;
+          (emp.ret = emp.ret || {})[c.id] = (r.data || []).map(x => ({ mes: x.mes, retido: Number(x.retido) || 0, vendas: Number(x.vendas) || 0 }));
+          if(empVendasLinhas(c)) mudou = true;
+        }
+      } finally { if(typeof lojasFechar === 'function') lojasFechar(); }
+      if(mudou){ salvar(); if(typeof recalc === 'function') try { recalc(); } catch(e){} }
+    }
+    // retenções por mês até completar o total; cada mês dividido em amortização e juros
+    function empVendasMeses(c){
+      const fin = Number(c.valor) || 0, tot = Math.max(Number(c.total_devolver) || 0, fin), parte = tot > 0 ? fin / tot : 1;
+      let acc = 0;
+      return ((emp.ret || {})[c.id] || []).map(x => { const r = Math.max(0, Math.min(x.retido, tot - acc)); acc += r; const am = Math.round(r * parte * 100) / 100;
+        return { mes: x.mes, retido: Math.round(r * 100) / 100, amort: am, juros: Math.round((r - am) * 100) / 100, vendas: x.vendas, alem: Math.round((x.retido - r) * 100) / 100 }; });
+    }
+    function empVendasLinhas(c){
+      const pref = 'emp:' + c.id + ':m', hoje = getToday(), novas = [];
+      const cat = nome => { if(!categorias.some(x => emN(x.nome) === emN(nome))) categorias.push({ nome, impactaDRE: !/amortiza/i.test(nome), tipoPassivo: /amortiza/i.test(nome) ? 'divida' : 'operacional' }); return nome; };
+      empVendasMeses(c).forEach(m => {
+        const [y, mm] = m.mes.split('-').map(Number), fim = dateStr(new Date(y, mm, 0)), data = fim > hoje ? hoje : fim;
+        const base = { forn: c.credor || 'Mercado Pago', data, dataPaga: data, pago: true, tipo: 'unica', parcela: m.mes.slice(5) + '/' + m.mes.slice(0, 4), grupo_id: 'g_emp_' + c.id, fonte: 'emprestimo', desconto: 0, juros: 0, loja: c.loja || null };
+        if(m.amort > 0) novas.push({ ...base, desc: c.nome + ' (retido nas vendas)', val: m.amort, valorPago: m.amort, cat: cat('Amortização de empréstimo'), tiny_key: pref + m.mes + ':a' });
+        if(m.juros > 0) novas.push({ ...base, desc: 'Juros ' + c.nome + ' (retido nas vendas)', val: m.juros, valorPago: m.juros, cat: cat('Juros de empréstimo'), tiny_key: pref + m.mes + ':j' });
+      });
+      const velhas = pagamentos.filter(p => String(p.tiny_key || '').startsWith(pref));
+      const igual = velhas.length === novas.length && novas.every(n => velhas.some(v => v.tiny_key === n.tiny_key && Math.abs((Number(v.val) || 0) - n.val) < 0.005 && v.data === n.data && v.desc === n.desc));
+      if(igual) return false;
+      // mantém o id das linhas que já existem (gravação por linha no banco)
+      const porChave = new Map(velhas.map(v => [v.tiny_key, v]));
+      pagamentos = pagamentos.filter(p => !String(p.tiny_key || '').startsWith(pref)).concat(novas.map(n => { const v = porChave.get(n.tiny_key); return v ? Object.assign({}, v, n) : n; }));
+      return true;
+    }
+    function empVendasResumo(c){
+      const fin = Number(c.valor) || 0, tot = Math.max(Number(c.total_devolver) || 0, fin), M = empVendasMeses(c);
+      const pago = M.reduce((s, m) => s + m.retido, 0), am = M.reduce((s, m) => s + m.amort, 0), ju = M.reduce((s, m) => s + m.juros, 0);
+      const contas = pagamentos.filter(p => String(p.tiny_key || '').startsWith('emp:' + c.id + ':m'));
+      // ritmo: retido nos últimos 30 dias (aproximado pelos meses: o mês atual e o anterior proporcional)
+      const hoje = getToday(), ym = hoje.slice(0, 7), dia = Number(hoje.slice(8, 10));
+      const mesAnt = (() => { const [y, m] = ym.split('-').map(Number); return dateStr(new Date(y, m - 2, 1)).slice(0, 7); })();
+      const doMes = k => (M.find(m => m.mes === k) || {}).retido || 0, diasAnt = new Date(Number(mesAnt.slice(0, 4)), Number(mesAnt.slice(5, 7)), 0).getDate();
+      const ult30 = doMes(ym) + doMes(mesAnt) * Math.max(0, 30 - dia) / diasAnt;
+      const saldoTotal = Math.max(0, tot - pago), porDia = ult30 / 30;
+      return { contas, vendas: true, total: 0, pagas: 0, saldo: Math.max(0, fin - am), jurosAbertos: Math.max(0, (tot - fin) - ju), pago, prox: null, valorProx: 0, atrasadas: 0,
+        pctPago: tot > 0 ? Math.min(100, pago / tot * 100) : 0, saldoTotal, ult30, fim: saldoTotal > 0 && porDia > 0 ? addDias(hoje, Math.ceil(saldoTotal / porDia)) : null };
+    }
+    function empVendasVer(c){
+      const r = empVendasResumo(c), M = empVendasMeses(c), fin = Number(c.valor) || 0, tot = Math.max(Number(c.total_devolver) || 0, fin);
+      const nomeMes = k => { const [y, m] = k.split('-'); return ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][Number(m) - 1] + '/' + y; };
+      vmlModal(emEsc(c.nome) + ' — retido nas vendas', `
+        <div class="text-muted" style="margin-bottom:10px;">${emEsc(c.credor || 'Mercado Pago')} · ${fmt(fin)} recebidos · ${fmt(tot)} a devolver${c.pct_vendas ? ' · ' + String(c.pct_vendas).replace('.', ',') + '% de cada venda' : ''} · desde ${ptDate(c.primeira)}</div>
+        <div class="kpi-grid k4i" style="margin-bottom:12px;">
+          <div class="kpi"><div class="kpi-label">Já devolvido</div><div class="kpi-value">${fmt(r.pago)}</div><div class="kpi-sub">${Math.round(r.pctPago)}% do total</div></div>
+          <div class="kpi"><div class="kpi-label">Falta devolver</div><div class="kpi-value">${fmt(r.saldoTotal)}</div><div class="kpi-sub">${fmt(r.saldo)} de valor + ${fmt(r.jurosAbertos)} de juros</div></div>
+          <div class="kpi"><div class="kpi-label">Últimos 30 dias</div><div class="kpi-value">${fmt(r.ult30)}</div><div class="kpi-sub">retido nas vendas</div></div>
+          <div class="kpi"><div class="kpi-label">Termina</div><div class="kpi-value" style="font-size:20px;">${r.saldoTotal <= 0 ? 'Quitado' : r.fim ? ptDate(r.fim) : '—'}</div><div class="kpi-sub">${r.saldoTotal > 0 ? 'no ritmo atual (estimativa)' : ''}</div></div>
+        </div>
+        <div style="overflow-x:auto;max-height:50vh;"><table class="cp-tab"><thead><tr><th>Mês</th><th class="num">Vendas com retenção</th><th class="num">Retido</th><th class="num">Devolução do valor</th><th class="num">Juros</th></tr></thead><tbody>
+          ${M.length ? M.map(m => `<tr><td>${nomeMes(m.mes)}</td><td class="num">${m.vendas}</td><td class="num"><b>${fmt(m.retido)}</b>${m.alem > 0 ? '<div class="cp-sub">+ ' + fmt(m.alem) + ' além do total</div>' : ''}</td><td class="num">${fmt(m.amort)}</td><td class="num">${fmt(m.juros)}</td></tr>`).join('') : '<tr><td colspan="5" class="text-muted" style="padding:18px;text-align:center;">Nenhuma retenção encontrada nessa conta desde a data de início.</td></tr>'}
+        </tbody></table></div>
+        <div class="text-muted" style="font-size:12px;margin-top:10px;line-height:1.5;">O retido vem de cada venda (diferença entre o que a venda pagou e o que o Mercado Pago liberou, fora tarifa, frete e cupom). Cada mês entra no Contas a pagar como duas contas já pagas: devolução do valor (fora do DRE) e juros (despesa financeira no DRE). Retenção acima do total a devolver não é contada.</div>`);
+      const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
     }

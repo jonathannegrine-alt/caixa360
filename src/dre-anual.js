@@ -42,6 +42,8 @@
     async function renderDREAnual(){
       const el = document.getElementById('res-anual-view');
       if(!el) return;
+      // empréstimo por % das vendas: mantém os juros do mês (retidos nas vendas) no Contas a pagar antes de montar o DRE
+      if(typeof empVendasAtualizar === 'function') try { await empVendasAtualizar(); } catch(e){}
       const chave = dreAno + '|' + (typeof contaAtiva !== 'undefined' ? contaAtiva : '');
       if(dreDados.chave !== chave){ dreDados = { chave, ml:{}, cobertura:{}, carregado:false, erro:null }; dreDesenhar(); }
       if(!usuarioAtual){ dreDados.carregado = true; dreDesenhar(); return; }

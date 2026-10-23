@@ -111,7 +111,7 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
   const jaTem = new Map<number, any>()
   const thumbs = new Map<string, string>()
   const existentes = await fetch(
-    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,frete_flex,item_id,thumbnail,sku,sku_fixo,cupom_vendedor,pago_mp,liquido_mp&limit=10000`,
+    `${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&data_venda=gte.${dia}T00:00:00-03:00&data_venda=lte.${dia}T23:59:59.999-03:00&select=order_id,shipping_id,logistic_type,frete_vendedor,frete_comprador,frete_flex,item_id,thumbnail,sku,sku_fixo,cupom_vendedor,pago_mp,liquido_mp,liberacao_mp,liquido_final&limit=10000`,
     { headers: ctx.dbH }
   ).then(r => r.json()).catch(() => [])
   if (Array.isArray(existentes)) for (const e of existentes) {
@@ -183,20 +183,23 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
 
   // 4c. o que o Mercado Pago pagou de fato (GET /collections/{pagamento}): net_received_amount = líquido; total_paid_amount
   //     menos finance_fee (juros do parcelamento, pagos pelo comprador e repassados) = o que entrou pela venda. Lido uma vez
-  //     por pedido pago. Serve para achar o "retido pelo Mercado Pago" (passo 5b) — não entra na margem.
-  const cols = new Map<number, { pago: number; liq: number }>()
+  //     por pedido pago e RELIDO depois da liberação (money_release_date): a retenção do Mercado Pago (ex.: parcela de
+  //     empréstimo) só é descontada do net_received_amount quando o dinheiro é liberado. Serve para o passo 5b.
+  const cols = new Map<number, { pago: number; liq: number; lib: string | null; fim: boolean }>()
   let colFalhou = false
-  const pagos = [...pedidos.values()].filter(o => o.status === 'paid' && jaTem.get(o.id)?.liquido_mp == null && (o.payments || []).some((p: any) => p.status === 'approved'))
+  const relerLib = (a: any) => a && a.liquido_mp != null && !a.liquido_final && a.liberacao_mp && new Date(a.liberacao_mp).getTime() <= Date.now()
+  const pagos = [...pedidos.values()].filter(o => o.status === 'paid' && (jaTem.get(o.id)?.liquido_mp == null || relerLib(jaTem.get(o.id))) && (o.payments || []).some((p: any) => p.status === 'approved'))
   await emParalelo(pagos, 6, async (o) => {
-    let pago = 0, liq = 0
+    let pago = 0, liq = 0, lib: string | null = null
     for (const p of (o.payments || []).filter((p: any) => p.status === 'approved')) {
       const r = await mlGet(`https://api.mercadolibre.com/collections/${p.id}`, accessToken, prazoMs)
       const x = r.ok ? (r.data?.collection || r.data) : null
       if (!x || x.net_received_amount == null) { colFalhou = true; return }
       pago += (Number(x.total_paid_amount) || 0) - (Number(x.finance_fee) || 0)
       liq += Number(x.net_received_amount) || 0
+      if (x.money_release_date && (!lib || new Date(x.money_release_date) > new Date(lib))) lib = new Date(x.money_release_date).toISOString()
     }
-    cols.set(o.id, { pago: Math.round(pago * 100) / 100, liq: Math.round(liq * 100) / 100 })
+    cols.set(o.id, { pago: Math.round(pago * 100) / 100, liq: Math.round(liq * 100) / 100, lib, fim: !!lib && new Date(lib).getTime() <= Date.now() })
   })
 
   // 5. gravar
@@ -256,6 +259,8 @@ async function sincronizarDia(ctx: Ctx, userId: string, mlUserId: string, access
       cupom_vendedor: cupons.has(o.id) ? cupons.get(o.id)! : (temDesconto(o) ? (ant?.cupom_vendedor ?? null) : 0),
       pago_mp: cols.has(o.id) ? cols.get(o.id)!.pago : (ant?.pago_mp ?? null),
       liquido_mp: cols.has(o.id) ? cols.get(o.id)!.liq : (ant?.liquido_mp ?? null),
+      liberacao_mp: cols.has(o.id) ? cols.get(o.id)!.lib : (ant?.liberacao_mp ?? null),
+      liquido_final: cols.has(o.id) ? cols.get(o.id)!.fim : (ant?.liquido_final ?? false),
       retido_mp: null as number | null,
       total_pago: Number(o.paid_amount) || 0,
       thumbnail: null,   // a foto vem de vendas_fotos (view vendas_ml_calc)
@@ -353,6 +358,13 @@ async function diasCupom(ctx: Ctx, userId: string, conta: string) {
   return (Array.isArray(rows) ? rows : []).map((r: any) => String(r.dia).substring(0, 10))
 }
 
+// Dia (até 60 dias) com venda paga cujo dinheiro já foi liberado e o líquido ainda não foi relido (retenção do Mercado Pago)
+async function diasLiberados(ctx: Ctx, userId: string, conta: string) {
+  const rows = await fetch(`${ctx.supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${conta}&status=eq.paid&liquido_final=eq.false&liberacao_mp=lt.${new Date().toISOString()}&data_venda=gte.${diaBRT(-60)}T00:00:00-03:00&select=data_venda&order=data_venda.asc&limit=1`, { headers: ctx.dbH })
+    .then(r => r.json()).catch(() => [])
+  return (Array.isArray(rows) ? rows : []).map((r: any) => new Date(new Date(r.data_venda).getTime() - 3 * 3600000).toISOString().substring(0, 10))
+}
+
 async function sincronizarLista(ctx: Ctx, userId: string, conta: Conta, dias: string[], prazoMs: number): Promise<any> {
   if (!conta.accessToken) return { error: conta.erro || 'Conta sem token' }
   let feitos = 0, vendas = 0, pendentes = 0
@@ -409,7 +421,8 @@ Deno.serve(async (req) => {
           const antigos = soRecentes ? [] : await diasPendentes(ctx, u, c, inicioDe(conta), diaBRT(-2), false)
           const revisar = soRecentes ? [] : (await diasRevisar(ctx, u, c)).filter(d => !antigos.includes(d)).slice(0, 1)
           const cupom = soRecentes ? [] : (await diasCupom(ctx, u, c)).filter(d => !antigos.includes(d) && !revisar.includes(d)).slice(0, 1)
-          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos.slice(0, DIAS_HIST_POR_VEZ), ...revisar, ...cupom], prazoMs)
+          const liberados = soRecentes ? [] : (await diasLiberados(ctx, u, c)).filter(d => !antigos.includes(d) && !revisar.includes(d) && !cupom.includes(d) && !recentes.includes(d))
+          const r = await sincronizarLista(ctx, u, conta, [...recentes, ...antigos.slice(0, DIAS_HIST_POR_VEZ), ...revisar, ...cupom, ...liberados], prazoMs)
           resultados.push({ usuario_id: u, ml_user_id: c, ...r })
         } catch (e) {
           resultados.push({ usuario_id: u, ml_user_id: c, error: String(e) })
