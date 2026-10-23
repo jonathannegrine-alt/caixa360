@@ -125,8 +125,10 @@
     let somEst = { vendas: null, avisoEm: null, rodando: false, ultimo: {} };
     const SOM_TOP = { questions: 'perguntas', messages: 'mensagens', claims: 'posvenda' };
     const somChave = (top, rec) => top === 'claims' ? ((String(rec).match(/claims\/(\d+)/) || [])[1] || rec) : top === 'questions' ? ((String(rec).match(/(\d{6,})/) || [])[1] || rec) : rec;
+    // celular e tablet: sem som nem janelinha (decisão do usuário, 2026-10-22)
+    const somCelular = () => /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent || '') || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent || '')) || (window.matchMedia && matchMedia('(pointer:coarse) and (max-width: 900px)').matches);
     async function somConferir(){
-      if(somEst.rodando || typeof usuarioAtual === 'undefined' || !usuarioAtual || typeof supa === 'undefined' || (typeof MODO_DEMO !== 'undefined' && MODO_DEMO)) return;
+      if(somCelular() || somEst.rodando || typeof usuarioAtual === 'undefined' || !usuarioAtual || typeof supa === 'undefined' || (typeof MODO_DEMO !== 'undefined' && MODO_DEMO)) return;
       const c = somCfg();
       if(!SOM_TIPOS.some(([k]) => c[k]) && !c.popVenda) return;
       somEst.rodando = true;
@@ -254,6 +256,7 @@
     function somRender(){
       const el = document.getElementById('cfg-sons'); if(!el) return;
       const c = somCfg(), e = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+      if(somCelular()){ el.innerHTML = '<div class="text-muted" style="font-size:13px;">Os sons e a janelinha de venda nova funcionam só no computador. No celular ficam desligados.</div>'; return; }
       el.innerHTML = `
         <div class="text-muted" style="font-size:13px;margin-bottom:12px;">Escolha o que toca som neste aparelho. Funciona com o Caixa 360 aberto (pode estar em outra aba ou minimizado). O navegador só libera o som depois do primeiro clique na página.</div>
         ${SOM_TIPOS.map(([k, nome, desc]) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
