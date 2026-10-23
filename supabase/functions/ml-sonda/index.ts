@@ -3,6 +3,7 @@
 // o status e um resumo da resposta (chaves e um trecho curto). Serve para descobrir o que a API entrega antes de
 // construir uma função de verdade. Não grava nada e não aceita outro método nem outro endereço.
 //   body { conta?: '<ml_user_id>', caminhos: ['/users/me', ...] }   ({uid} no caminho vira o ml_user_id da conta)
+//   usuario?: '<uuid>' lê a conta de um cliente — só o dono do sistema (DONO), continua só GET.
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -24,8 +25,12 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}))
     const caminhos: string[] = (Array.isArray(body?.caminhos) ? body.caminhos : []).map((c: unknown) => String(c)).filter((c: string) => c.startsWith('/') && !c.includes('://')).slice(0, 25)
     if (!caminhos.length) return resp({ error: 'Informe caminhos.' })
+    // conta de cliente (body.usuario): só para o dono do sistema, para investigar problema que o cliente relatou
+    const DONO = 'd8a29095-56ad-447a-b72f-e463df5ccf78'
+    const alvo = body?.usuario ? String(body.usuario) : id
+    if (alvo !== id && id !== DONO) return resp({ error: 'Só o dono do sistema consulta conta de cliente.' }, 403)
     const filtro = body?.conta ? `&ml_user_id=eq.${String(body.conta).replace(/\D/g, '')}` : ''
-    const toks = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${id}${filtro}&select=ml_user_id,access_token,expires_at&order=updated_at.desc&limit=1`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    const toks = await fetch(`${supaUrl}/rest/v1/ml_tokens?usuario_id=eq.${encodeURIComponent(alvo)}${filtro}&select=ml_user_id,access_token,expires_at&order=updated_at.desc&limit=1`, { headers: dbH }).then(r => r.json()).catch(() => [])
     const t = Array.isArray(toks) ? toks[0] : null
     if (!t) return resp({ error: 'Conta não encontrada.' })
     if (new Date(t.expires_at) <= new Date()) return resp({ error: 'Token vencido agora; tente de novo em alguns minutos.' })
