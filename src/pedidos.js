@@ -4,13 +4,16 @@
 //   Atrasado     = ainda não saiu, não foi cancelado e o prazo de envio (envio_limite) já passou
 //   Vence hoje   = ainda não saiu e o prazo termina hoje
 // O Full fica de fora: quem envia é o Mercado Livre.
+// Busca (nº da venda, carrinho, envio, comprador ou SKU) procura em TODAS as abas; sem nada nos últimos 25 dias carregados,
+// procura no banco em qualquer data (pdBuscarBanco) e mostra também venda do Full.
 
-    let pd = { linhas: [], carregadoEm: 0, carregando: null, aba: 'atrasados', busca: '', erro: '', sel: new Set() };
+    let pd = { linhas: [], carregadoEm: 0, carregando: null, aba: 'atrasados', busca: '', erro: '', sel: new Set(), extras: [], extrasTermo: '', buscandoBanco: false };
     const PD_ABAS = [['atrasados', 'Atrasados'], ['hoje', 'Vencem hoje'], ['enviar', 'Para enviar'], ['aguardando', 'Aguardando liberação'], ['enviados', 'Enviados'], ['cancelados', 'Cancelados'], ['todos', 'Todos']];
-    const PD_TIPO = { cross_docking: 'Coleta', xd_drop_off: 'Agência', drop_off: 'Correios', self_service: 'Flex' };
+    const PD_TIPO = { cross_docking: 'Coleta', xd_drop_off: 'Agência', drop_off: 'Correios', self_service: 'Flex', fulfillment: 'Full' };
     const pdEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const pdDiaBR = t => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 
+    const PD_CAMPOS = 'order_id,pack_id,shipping_id,ml_user_id,data_venda,status,sku,titulo,variacao,qtd,preco_unit,total_pago,comprador_nome,comprador_apelido,logistic_type,envio_status,envio_substatus,envio_limite,enviado_em,thumbnail,cidade,uf';
     async function pdCarregar(forcar){
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
       if(pd.carregando) return pd.carregando;
@@ -18,7 +21,7 @@
       if(!forcar && pd.carregadoEm && Date.now() - pd.carregadoEm < 3 * 60 * 1000) return;
       pd.carregando = (async () => {
         const desde = new Date(Date.now() - 25 * 86400000).toISOString();
-        const campos = 'order_id,pack_id,shipping_id,ml_user_id,data_venda,status,sku,titulo,variacao,qtd,preco_unit,total_pago,comprador_nome,comprador_apelido,logistic_type,envio_status,envio_substatus,envio_limite,enviado_em,thumbnail,cidade,uf';
+        const campos = PD_CAMPOS;
         const out = [];
         for(let i = 0; i < 10; i++){
           const r = await supa.from('vendas_ml').select(campos).eq('usuario_id', usuarioAtual.id).gte('data_venda', desde).or('logistic_type.is.null,logistic_type.neq.fulfillment').order('data_venda', { ascending: false }).range(i * 1000, i * 1000 + 999);
@@ -33,10 +36,11 @@
     }
 
     // um envio (pacote) pode ter várias vendas (carrinho): a tela mostra um pacote por linha
-    function pdPacotes(){
+    function pdPacotes(comExtras){
       const conta = typeof contaAtiva !== 'undefined' ? String(contaAtiva || '') : '';
-      const m = new Map();
-      pd.linhas.filter(v => !conta || String(v.ml_user_id) === conta).forEach(v => {
+      const m = new Map(), ja = new Set(pd.linhas.map(v => String(v.order_id)));
+      const fonte = comExtras && pd.extras.length ? pd.linhas.concat(pd.extras.filter(v => !ja.has(String(v.order_id)))) : pd.linhas;
+      fonte.filter(v => !conta || String(v.ml_user_id) === conta).forEach(v => {
         const k = v.shipping_id ? 's' + v.shipping_id : 'o' + v.order_id;
         if(!m.has(k)) m.set(k, { k, itens: [], ...v });
         m.get(k).itens.push(v);
@@ -90,13 +94,35 @@
     }
     let pdBuscaT = null;
     function pdBuscar(v){ pd.busca = v; clearTimeout(pdBuscaT); pdBuscaT = setTimeout(() => { pdDesenhar(); const i = document.getElementById('pd-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); }
+    // botão Buscar / Enter: busca agora e, se não achar nos pedidos carregados, procura no banco em qualquer data
+    async function pdBuscarJa(){
+      const i = document.getElementById('pd-busca'); if(i) pd.busca = i.value;
+      clearTimeout(pdBuscaT); pdDesenhar();
+      const t = String(pd.busca || '').trim();
+      if(t.length < 3 || pdFiltrar(pdPacotes(true), t.toLowerCase()).length || pd.extrasTermo === t) return;
+      pd.buscandoBanco = true; pdDesenhar();
+      try { pd.extras = await pdBuscarBanco(t); pd.extrasTermo = t; } catch(e){ pd.extras = []; }
+      pd.buscandoBanco = false; pdDesenhar();
+    }
+    function pdLimpar(){ pd.busca = ''; pd.extras = []; pd.extrasTermo = ''; pdDesenhar(); }
+    async function pdBuscarBanco(t){
+      const num = /^\d{6,}$/.test(t), esc = t.replace(/[%,()]/g, ' ');
+      let q = supa.from('vendas_ml').select(PD_CAMPOS).eq('usuario_id', usuarioAtual.id);
+      q = num ? q.or('order_id.eq.' + t + ',pack_id.eq.' + t + ',shipping_id.eq.' + t) : q.or('comprador_apelido.ilike.%' + esc + '%,comprador_nome.ilike.%' + esc + '%,sku.ilike.%' + esc + '%');
+      const r = await q.order('data_venda', { ascending: false }).limit(200);
+      return r.error ? [] : (r.data || []);
+    }
+    function pdFiltrar(lista, b){
+      return !b ? lista : lista.filter(p => [p.order_id, p.pack_id, p.shipping_id, p.comprador_nome, p.comprador_apelido, ...p.itens.map(v => v.sku + ' ' + v.titulo)].join(' ').toLowerCase().includes(b));
+    }
 
     function pdDesenhar(){
       const view = document.getElementById('view-pedidos'); if(!view) return;
       const todos = pdPacotes(), n = a => todos.filter(p => pdNaAba(p, a)).length;
-      const b = String(pd.busca || '').trim().toLowerCase();
-      const lista = todos.filter(p => pdNaAba(p, pd.aba)).filter(p => !b || [p.order_id, p.pack_id, p.comprador_nome, p.comprador_apelido, ...p.itens.map(v => v.sku + ' ' + v.titulo)].join(' ').toLowerCase().includes(b))
-        .sort((x, y) => pd.aba === 'enviados' ? String(y.enviado_em).localeCompare(String(x.enviado_em)) : (x.lim || 9e15) - (y.lim || 9e15) || String(x.data_venda).localeCompare(String(y.data_venda)));
+      const b = String(pd.busca || '').trim().toLowerCase(), buscando = !!b;
+      // com busca, procura em todas as abas (o pedido aparece onde estiver)
+      const lista = pdFiltrar(buscando ? pdPacotes(true) : todos.filter(p => pdNaAba(p, pd.aba)), b)
+        .sort((x, y) => buscando ? String(y.data_venda).localeCompare(String(x.data_venda)) : pd.aba === 'enviados' ? String(y.enviado_em).localeCompare(String(x.enviado_em)) : (x.lim || 9e15) - (y.lim || 9e15) || String(x.data_venda).localeCompare(String(y.data_venda)));
       const dt = t => t ? new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
       const atras = todos.filter(p => p.atrasado), maisVelho = atras.reduce((m, p) => Math.max(m, p.diasAtraso), 0);
       const semPrazo = todos.filter(p => !p.saiu && !p.cancel && !p.aguardando && !p.lim).length;
@@ -112,10 +138,11 @@
           <div class="kpi k-mc" onclick="pd.aba='enviados';pdDesenhar();" style="cursor:pointer;"><div class="kpi-label">Enviados · 7 dias</div><div class="kpi-value">${n('enviados')}</div><div class="kpi-sub">${n('aguardando')} aguardando liberação do ML</div></div>
         </div>
         <div class="card"><div class="sku-barra">
-          <input type="text" id="pd-busca" placeholder="Buscar por nº do pedido, comprador ou SKU" value="${pdEsc(pd.busca)}" oninput="pdBuscar(this.value)">
-          <div class="chips">${PD_ABAS.map(([k, t]) => `<button class="chip ${pd.aba === k ? 'active' : ''}" onclick="pd.aba='${k}';pdDesenhar();">${t}<span class="n">${n(k)}</span></button>`).join('')}</div>
+          <div style="display:flex;gap:6px;flex:1;min-width:260px;"><input type="text" id="pd-busca" placeholder="Buscar por nº do pedido, comprador ou SKU" value="${pdEsc(pd.busca)}" oninput="pdBuscar(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();pdBuscarJa();}" style="flex:1;"><button class="btn btn-sm" onclick="pdBuscarJa()">🔍 Buscar</button>${buscando ? '<button class="btn-out btn-sm" onclick="pdLimpar()">Limpar</button>' : ''}</div>
+          <div class="chips" style="${buscando ? 'opacity:.45;pointer-events:none;' : ''}">${PD_ABAS.map(([k, t]) => `<button class="chip ${pd.aba === k ? 'active' : ''}" onclick="pd.aba='${k}';pdDesenhar();">${t}<span class="n">${n(k)}</span></button>`).join('')}</div>
         </div>
-        ${semPrazo && (pd.aba === 'enviar' || pd.aba === 'atrasados') ? `<div class="text-muted" style="font-size:12px;padding:0 16px 8px;">${semPrazo} pedido${semPrazo > 1 ? 's' : ''} ainda sem prazo de envio registrado: o prazo é preenchido na próxima consulta ao Mercado Livre (a cada 15 minutos).</div>` : ''}
+        ${buscando ? `<div class="alert alert-info" style="margin:0 16px 10px;">${pd.buscandoBanco ? 'Não achei nos pedidos dos últimos 25 dias; procurando em todas as datas…' : `Buscando "${pdEsc(pd.busca.trim())}" em <b>todas as abas</b>${pd.extrasTermo === pd.busca.trim() ? ' e em todas as datas' : ''}. A coluna Estado mostra onde cada pedido está.`}</div>` : ''}
+        ${!buscando && semPrazo && (pd.aba === 'enviar' || pd.aba === 'atrasados') ? `<div class="text-muted" style="font-size:12px;padding:0 16px 8px;">${semPrazo} pedido${semPrazo > 1 ? 's' : ''} ainda sem prazo de envio registrado: o prazo é preenchido na próxima consulta ao Mercado Livre (a cada 15 minutos).</div>` : ''}
         ${pdBarraSel()}
         <div style="overflow-x:auto;"><table class="cp-tab pd-tab" data-sem-ordem><thead><tr><th style="width:30px;"><input type="checkbox" title="Marcar ou desmarcar todos os pedidos da lista" ${lista.length && lista.slice(0, 400).every(p => pd.sel.has(p.k)) ? 'checked' : ''} onchange="pdMarcarTodos(this.checked)"></th><th>Produtos</th><th class="num">Valor</th><th>Comprador</th><th>Pedido</th><th>Tempo</th><th>Envio</th><th>Estado</th><th></th></tr></thead><tbody>
           ${lista.length ? lista.slice(0, 400).map(p => { const [est, cls] = pdEstado(p);
@@ -129,7 +156,7 @@
               <td>${PD_TIPO[p.logistic_type] || pdEsc(p.logistic_type || '—')}</td>
               <td><span class="cp-sit ${cls}">${est}</span></td>
               <td style="text-align:right;white-space:nowrap;">${!p.cancel && p.shipping_id ? `<button class="btn-out btn-sm" onclick="if(typeof vdEtiqueta==='function')vdEtiqueta('${p.order_id}', this)" title="Abre a etiqueta do envio em PDF para imprimir">🖨 Etiqueta</button> ` : ''}<button class="btn-out btn-sm" onclick="pdDetalhe('${p.order_id}')">Detalhes</button></td></tr>`; }).join('')
-            : `<tr><td colspan="9"><div class="vazio"><b>${pd.aba === 'atrasados' ? 'Nenhum pedido atrasado' : 'Nada nesta lista'}</b>${pd.aba === 'atrasados' ? 'Todos os pedidos liberados estão dentro do prazo de envio.' : 'Troque a aba ou a busca.'}</div></td></tr>`}
+            : `<tr><td colspan="9"><div class="vazio"><b>${buscando ? 'Nenhum pedido encontrado' : pd.aba === 'atrasados' ? 'Nenhum pedido atrasado' : 'Nada nesta lista'}</b>${buscando ? (pd.extrasTermo === pd.busca.trim() ? 'Procurei em todas as abas e em todas as datas.' : 'Clique em Buscar (ou Enter) para procurar também nas vendas mais antigas.') : pd.aba === 'atrasados' ? 'Todos os pedidos liberados estão dentro do prazo de envio.' : 'Troque a aba ou a busca.'}</div></td></tr>`}
         </tbody></table></div>${lista.length > 400 ? `<div class="text-muted" style="padding:10px 16px;font-size:12px;">Mostrando 400 de ${lista.length}. Use a busca para achar um pedido.</div>` : ''}</div>`;
     }
 
