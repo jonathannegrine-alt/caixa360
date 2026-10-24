@@ -109,7 +109,7 @@
       const ft = b.peso_g && typeof frFreteTabela === 'function' ? frFreteTabela(Number(b.peso_g), preco) : null;
       const f = ft != null ? ft : (inf.frete_un != null ? Number(inf.frete_un) : Number(b.frete_lista) || 0);
       const mc = preco - preco * t - preco * i - f - custo + (reb || 0);
-      return { mc, pct: mc / preco * 100, frete: f, custo };
+      return { mc, pct: mc / preco * 100, frete: f, custo, tarifa: t * 100, imposto: i * 100 };
     }
     function pmDesenhar(){
       const v = document.getElementById('view-promocoes'); if(!v || !v.classList.contains('active')) return;

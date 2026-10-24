@@ -197,9 +197,12 @@
       if(origem !== 'pct' && orig && preco) set('pc-p-pct', String(pcR((1 - preco / orig) * 100)).replace('.', ','));
       const on = document.getElementById('pc-p-meli-on'), box = document.getElementById('pc-p-meli-box'); if(box) box.style.display = on && on.checked ? 'block' : 'none';
       const tx = m => m ? `<b class="${m.mc >= 0 ? (m.pct < 10 ? 'pm-baixa' : 'mc-pos') : 'mc-neg'}">R$ ${pqN(m.mc)} (${pqN(m.pct, 1)}%)</b>` : '<span class="text-muted">sem custo no cadastro</span>';
-      if(!(preco > 0)){ el.innerHTML = '<span class="text-muted">Informe o preço ou a porcentagem para ver a margem.</span>'; return; }
+      // valores usados na simulação (custo do cadastro do SKU, imposto, tarifa e frete), visíveis antes mesmo de digitar o preço
+      const sku = (pc.base[a.item] || {}).sku || ((typeof pm !== 'undefined' && pm.info[a.item]) || {}).sku || '';
+      const usa = m => `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2,transparent);"><b>Custo do produto: ${m && m.custo > 0 ? 'R$ ' + pqN(m.custo) : (typeof pmCustoSku === 'function' && pmCustoSku(sku) > 0 ? 'R$ ' + pqN(pmCustoSku(sku)) : '<span class="mc-neg">sem custo no cadastro</span>')}</b>${sku ? ' <span class="text-muted">(SKU ' + pqE(sku) + ')</span>' : ''}${m ? `<div class="text-muted" style="font-size:12.5px;">Imposto ${pqN(m.imposto, 1)}% · tarifa ${pqN(m.tarifa, 1)}% · frete R$ ${pqN(m.frete)}</div>` : ''}</div>`;
+      if(!(preco > 0)){ el.innerHTML = '<span class="text-muted">Informe o preço ou a porcentagem para ver a margem.</span>' + usa(pmMargem(a.item, orig, 0)); return; }
       const reb = orig * (p.ml_pct || 0) / 100, m0 = pmMargem(a.item, orig, 0), m1 = pmMargem(a.item, preco, reb), desc = orig ? (1 - preco / orig) * 100 : 0;
-      el.innerHTML = `Desconto de <b>${pqN(desc, 1)}%</b>. Margem hoje: ${tx(m0)} → na promoção: ${tx(m1)}${m1 ? ' <small class="text-muted">(custo R$ ' + pqN(m1.custo) + ' · frete R$ ' + pqN(m1.frete) + ')</small>' : ''}`;
+      el.innerHTML = `Desconto de <b>${pqN(desc, 1)}%</b>. Margem hoje: ${tx(m0)} → na promoção: ${tx(m1)}` + usa(m1);
       if(on && on.checked){
         if(origem === 'melipct' && orig) set('pc-p-meli', pqN(pcR(orig * (1 - pcNumCampo('pc-p-meli-pct') / 100))));
         const pmeli = pcNumCampo('pc-p-meli'); if(origem !== 'melipct' && orig && pmeli) set('pc-p-meli-pct', String(pcR((1 - pmeli / orig) * 100)).replace('.', ','));
