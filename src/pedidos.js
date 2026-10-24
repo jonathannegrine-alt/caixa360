@@ -7,9 +7,14 @@
 // Busca (nº da venda, carrinho, envio, comprador ou SKU) procura em TODAS as abas; sem nada nos últimos 25 dias carregados,
 // procura no banco em qualquer data (pdBuscarBanco) e mostra também venda do Full.
 
-    let pd = { linhas: [], carregadoEm: 0, carregando: null, aba: 'atrasados', busca: '', erro: '', sel: new Set(), conf: new Set(), extras: [], extrasTermo: '', buscandoBanco: false };
+    let pd = { linhas: [], carregadoEm: 0, carregando: null, aba: 'atrasados', tipo: '', busca: '', erro: '', sel: new Set(), conf: new Set(), extras: [], extrasTermo: '', buscandoBanco: false };
     const PD_ABAS = [['atrasados', 'Atrasados'], ['hoje', 'Vencem hoje'], ['enviar', 'Para enviar'], ['aguardando', 'Aguardando liberação'], ['enviados', 'Enviados'], ['cancelados', 'Cancelados'], ['todos', 'Todos']];
     const PD_TIPO = { cross_docking: 'Coleta', xd_drop_off: 'Agência', drop_off: 'Correios', self_service: 'Flex', fulfillment: 'Full' };
+    // filtro por forma de envio (Coleta, Agência, Flex); vale nas abas e na lista, os quadros de cima mostram a divisão
+    const PD_GRUPOS = [['coleta', 'Coleta', ['cross_docking']], ['agencia', 'Agência', ['xd_drop_off', 'drop_off']], ['flex', 'Flex', ['self_service']]];
+    const pdGrupo = p => (PD_GRUPOS.find(g => g[2].includes(p.logistic_type)) || ['outro'])[0];
+    function pdTipo(t){ pd.tipo = t; pdDesenhar(); }
+    function pdIr(aba, tipo){ pd.aba = aba; pd.tipo = tipo || ''; pdDesenhar(); }
     const pdEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const pdDiaBR = t => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 
@@ -120,13 +125,17 @@
 
     function pdDesenhar(){
       const view = document.getElementById('view-pedidos'); if(!view) return;
-      const todos = pdPacotes(), n = a => todos.filter(p => pdNaAba(p, a)).length;
+      const geral = pdPacotes(), todos = pd.tipo ? geral.filter(p => pdGrupo(p) === pd.tipo) : geral, n = a => todos.filter(p => pdNaAba(p, a)).length;
+      // divisão por forma de envio dentro de cada quadro (clicar abre a aba já filtrada)
+      const pdDiv = a => { const d = PD_GRUPOS.map(([g, t]) => [g, t, geral.filter(p => pdNaAba(p, a) && pdGrupo(p) === g).length]).filter(x => x[2]);
+        return d.length ? '<div class="kpi-sub">' + d.map(([g, t, q]) => `<span onclick="event.stopPropagation();pdIr('${a}','${g}')" style="cursor:pointer;text-decoration:underline dotted;" title="Ver só ${t}"><b>${q}</b> ${t.toLowerCase()}</span>`).join('') + '</div>' : ''; };
+      const nG = a => geral.filter(p => pdNaAba(p, a)).length;
       const b = String(pd.busca || '').trim().toLowerCase(), buscando = !!b;
       // com busca, procura em todas as abas (o pedido aparece onde estiver)
       const lista = pdFiltrar(buscando ? pdPacotes(true) : todos.filter(p => pdNaAba(p, pd.aba)), b)
         .sort((x, y) => buscando ? String(y.data_venda).localeCompare(String(x.data_venda)) : pd.aba === 'enviados' ? String(y.enviado_em).localeCompare(String(x.enviado_em)) : (x.lim || 9e15) - (y.lim || 9e15) || String(x.data_venda).localeCompare(String(y.data_venda)));
       const dt = t => t ? new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
-      const atras = todos.filter(p => p.atrasado), maisVelho = atras.reduce((m, p) => Math.max(m, p.diasAtraso), 0);
+      const atras = geral.filter(p => p.atrasado), maisVelho = atras.reduce((m, p) => Math.max(m, p.diasAtraso), 0);
       const semPrazo = todos.filter(p => !p.saiu && !p.cancel && !p.aguardando && !p.lim).length;
       view.innerHTML = `
         <div class="pg-head"><div><div class="pg-title">Pedidos</div><div class="pg-sub">Vendas que saem do galpão (Coleta, Agência e Flex), do pagamento até o envio. O Full fica de fora.</div></div>
@@ -134,14 +143,15 @@
         ${pd.erro ? `<div class="alert alert-danger">${pdEsc(pd.erro)}</div>` : ''}
         ${atras.length ? `<div class="alert alert-danger"><b>${atras.length} pedido${atras.length > 1 ? 's' : ''} atrasado${atras.length > 1 ? 's' : ''} para envio</b>&nbsp;— o mais antigo passou do prazo há ${maisVelho ? maisVelho + ' dia' + (maisVelho > 1 ? 's' : '') : 'menos de um dia'}. Atraso no envio pesa na reputação da conta.</div>` : ''}
         <div class="kpi-grid k4i">
-          <div class="kpi k-atraso" onclick="pd.aba='atrasados';pdDesenhar();" style="cursor:pointer;"><div class="kpi-label">Atrasados</div><div class="kpi-value">${n('atrasados')}</div><div class="kpi-sub">passaram do prazo de envio</div></div>
-          <div class="kpi k-hoje" onclick="pd.aba='hoje';pdDesenhar();" style="cursor:pointer;"><div class="kpi-label">Vencem hoje</div><div class="kpi-value">${n('hoje')}</div><div class="kpi-sub">precisam sair hoje</div></div>
-          <div class="kpi k-frete" onclick="pd.aba='enviar';pdDesenhar();" style="cursor:pointer;"><div class="kpi-label">Para enviar</div><div class="kpi-value">${n('enviar')}</div><div class="kpi-sub">liberados e ainda no galpão</div></div>
-          <div class="kpi k-mc" onclick="pd.aba='enviados';pdDesenhar();" style="cursor:pointer;"><div class="kpi-label">Enviados · 7 dias</div><div class="kpi-value">${n('enviados')}</div><div class="kpi-sub">${n('aguardando')} aguardando liberação do ML</div></div>
+          <div class="kpi k-atraso" onclick="pdIr('atrasados')" style="cursor:pointer;"><div class="kpi-label">Atrasados</div><div class="kpi-value">${nG('atrasados')}</div><div class="kpi-sub">passaram do prazo de envio</div>${pdDiv('atrasados')}</div>
+          <div class="kpi k-hoje" onclick="pdIr('hoje')" style="cursor:pointer;"><div class="kpi-label">Vencem hoje</div><div class="kpi-value">${nG('hoje')}</div><div class="kpi-sub">precisam sair hoje</div>${pdDiv('hoje')}</div>
+          <div class="kpi k-frete" onclick="pdIr('enviar')" style="cursor:pointer;"><div class="kpi-label">Para enviar</div><div class="kpi-value">${nG('enviar')}</div><div class="kpi-sub">liberados e ainda no galpão</div>${pdDiv('enviar')}</div>
+          <div class="kpi k-mc" onclick="pdIr('enviados')" style="cursor:pointer;"><div class="kpi-label">Enviados · 7 dias</div><div class="kpi-value">${nG('enviados')}</div><div class="kpi-sub">${nG('aguardando')} aguardando liberação do ML</div></div>
         </div>
         <div class="card"><div class="sku-barra">
           <div style="display:flex;gap:6px;flex:1;min-width:260px;"><input type="text" id="pd-busca" placeholder="Buscar por nº do pedido, comprador ou SKU" value="${pdEsc(pd.busca)}" oninput="pdBuscar(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();pdBuscarJa();}" style="flex:1;"><button class="btn btn-sm" onclick="pdBuscarJa()">🔍 Buscar</button>${buscando ? '<button class="btn-out btn-sm" onclick="pdLimpar()">Limpar</button>' : ''}</div>
           <div class="chips" style="${buscando ? 'opacity:.45;pointer-events:none;' : ''}">${PD_ABAS.map(([k, t]) => `<button class="chip ${pd.aba === k ? 'active' : ''}" onclick="pd.aba='${k}';pdDesenhar();">${t}<span class="n">${n(k)}</span></button>`).join('')}</div>
+          <div class="chips" style="${buscando ? 'opacity:.45;pointer-events:none;' : ''}"><span class="text-muted" style="font-size:12px;align-self:center;">Envio:</span>${[['', 'Todos']].concat(PD_GRUPOS).map(([g, t]) => `<button class="chip ${pd.tipo === g ? 'active' : ''}" onclick="pdTipo('${g}')">${t}<span class="n">${(g ? geral.filter(p => pdGrupo(p) === g) : geral).filter(p => pdNaAba(p, pd.aba)).length}</span></button>`).join('')}</div>
         </div>
         ${buscando ? `<div class="alert alert-info" style="margin:0 16px 10px;">${pd.buscandoBanco ? 'Não achei nos pedidos dos últimos 25 dias; procurando em todas as datas…' : `Buscando "${pdEsc(pd.busca.trim())}" em <b>todas as abas</b>${pd.extrasTermo === pd.busca.trim() ? ' e em todas as datas' : ''}. A coluna Estado mostra onde cada pedido está.`}</div>` : ''}
         ${!buscando && semPrazo && (pd.aba === 'enviar' || pd.aba === 'atrasados') ? `<div class="text-muted" style="font-size:12px;padding:0 16px 8px;">${semPrazo} pedido${semPrazo > 1 ? 's' : ''} ainda sem prazo de envio registrado: o prazo é preenchido na próxima consulta ao Mercado Livre (a cada 15 minutos).</div>` : ''}
