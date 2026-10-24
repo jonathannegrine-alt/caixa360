@@ -577,7 +577,31 @@
       if(d && d.ok && d.pdf){ vdAbrirPdf(d.pdf); if(m) m.textContent = 'Nota aberta em outra aba.'; }
       else if(m) m.textContent = (d && (d.motivo || d.error)) || 'Não foi possível abrir a nota.';
     }
-    async function vdEtiqueta(orderId, bt){
+    // Aviso antes de baixar a etiqueta no ML: baixar aqui marca "impressa" no Mercado Livre e muda a venda de etapa
+    // em outro sistema (ex.: UpSeller pula para "Retirar"). Aparece toda vez, até a pessoa marcar "estou ciente" (por aparelho).
+    const VD_ETQ_AVISO = 'mk_etq_aviso_ok';
+    function vdEtiqueta(orderId, bt){
+      let ok = false; try { ok = localStorage.getItem(VD_ETQ_AVISO) === '1'; } catch(e){}
+      if(ok) return vdEtiquetaAbrir(orderId, bt);
+      const fundo = document.createElement('div');
+      fundo.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+      fundo.innerHTML = `<div style="background:var(--surface,#fff);color:var(--text,#111);max-width:460px;width:100%;border-radius:12px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3);">
+        <div style="font-weight:700;font-size:16px;margin-bottom:8px;">⚠️ Antes de abrir a etiqueta</div>
+        <div style="font-size:14px;line-height:1.5;">Ao abrir a etiqueta por aqui, o Mercado Livre marca a venda como <b>etiqueta impressa</b>.
+          Se a expedição usa outro sistema (como a UpSeller), a venda pode pular etapas lá, por exemplo ir direto para <b>Retirar</b> sem ninguém ter impresso.</div>
+        <label style="display:flex;gap:8px;align-items:center;margin:14px 0 4px;font-size:13px;cursor:pointer;"><input type="checkbox" id="vd-etq-ciente" style="width:auto;margin:0;"> Estou ciente, não mostrar mais este aviso neste aparelho</label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;"><button class="btn-out btn" data-a="nao">Cancelar</button><button class="btn" data-a="sim">Abrir a etiqueta</button></div></div>`;
+      fundo.addEventListener('click', ev => {
+        const a = ev.target && ev.target.dataset ? ev.target.dataset.a : null;
+        if(ev.target === fundo || a === 'nao'){ fundo.remove(); return; }
+        if(a !== 'sim') return;
+        const cx = fundo.querySelector('#vd-etq-ciente');
+        if(cx && cx.checked){ try { localStorage.setItem(VD_ETQ_AVISO, '1'); } catch(e){} }
+        fundo.remove(); vdEtiquetaAbrir(orderId, bt);   // ainda dentro do clique: a nova aba abre sem bloqueio
+      });
+      document.body.appendChild(fundo);
+    }
+    async function vdEtiquetaAbrir(orderId, bt){
       const el = document.getElementById('vd-det-msg'), rot = bt.textContent; bt.disabled = true;
       const msg = el && bt.closest('.modal') ? el : { set textContent(t){ if(t && typeof toast === 'function') toast(t); } }; bt.textContent = 'Buscando etiqueta…'; if(msg) msg.textContent = '';
       const w = vdJanelaAguarde();

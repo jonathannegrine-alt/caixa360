@@ -126,8 +126,11 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       const cid = cidadeDe(s); if (cid) campos.cidade = cid
       const cep = cepDe(s); if (cep) campos.cep = cep
       if (s.tracking_number) campos.rastreio = String(s.tracking_number)
-      // etiqueta pronta e ainda sem cópia: guarda agora (depois que o pacote sai o ML não entrega mais)
-      if (status === 'ready_to_ship' && !comEtiqueta.has(sid) && await guardarEtiqueta(supaUrl, dbH, userId, sid, t.access_token)) { campos.etiqueta_em = new Date().toISOString(); etiquetas++ }
+      // etiqueta JÁ IMPRESSA e ainda sem cópia: guarda agora (depois que o pacote sai o ML não entrega mais).
+      // Nunca baixar antes da 1ª impressão: o ML marca "impressa" a quem baixa e a UpSeller pula a venda para "Retirar"
+      // sem ninguém ter impresso (caso de 24/10/2026, 5 coletas perdidas). A operação do galpão não pode mudar por leitura nossa.
+      const jaImpressa = !!(s.date_first_printed || hist.date_first_printed) || String(s.substatus || '') === 'printed'
+      if (status === 'ready_to_ship' && jaImpressa && !comEtiqueta.has(sid) && await guardarEtiqueta(supaUrl, dbH, userId, sid, t.access_token)) { campos.etiqueta_em = new Date().toISOString(); etiquetas++ }
       await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(campos) })
     })
   }
