@@ -290,6 +290,7 @@
       if(R.extra.lancar && !proposta && n.id > 0){ const o = oc.ordens.find(x => Number(x.id) === Number(n.id)), P = o ? ocParcelasDaOrdem(o) : [];
         if(P.some(p => p.pago !== null) && !(typeof pagTodos === 'function' ? pagTodos() : pagamentos).some(p => String(p.tiny_key || '').startsWith('oc:' + n.id + ':'))){
           toast('As parcelas desta ordem já estão no Contas a pagar (vieram do Olist). Desmarque "Lançar as parcelas no Contas a pagar" para não duplicar.'); return; } }
+      { const ant = n.id ? oc.ordens.find(x => Number(x.id) === Number(n.id)) : null; if(ant && ant.extra && ant.extra.encerrada) R.extra.encerrada = ant.extra.encerrada; }
       if(n.id > 0) R.extra.editada = true;                     // ordem do Olist alterada aqui: a busca no Olist não sobrescreve
       const reg = { usuario_id: usuarioAtual.id, id: n.id || -Date.now(), numero: n.numero, data: n.data || getToday(), data_prevista_local: n.prev || null, situacao: 0, fornecedor: n.fornecedor.trim(), total: R.t.geral, itens: R.itens, origem: 'caixa360', extra: R.extra };
       if(btn){ btn.disabled = true; btn.textContent = 'Salvando…'; }

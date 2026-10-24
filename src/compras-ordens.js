@@ -51,8 +51,11 @@
       // atendida no Olist e sem nenhuma conferência aqui = já tinha chegado antes de existir a conferência
       const antiga = Number(o.situacao) === 1 && recebido === 0;
       // proposta (extra.etapa = 'proposta'): enviada ao fornecedor, ainda não comprada; não conta como a caminho nem gera contas
-      const sit = Number(o.situacao) === 2 ? 'Cancelada' : o.extra && o.extra.etapa === 'proposta' ? 'Proposta' : antiga ? 'Recebida' : falta === 0 && comprado > 0 ? 'Recebida' : recebido > 0 ? 'Parcial' : 'A receber';
-      return { itens, comprado, recebido: antiga ? comprado : recebido, falta: antiga ? 0 : falta, valorFalta: antiga ? 0 : valorFalta, sit, antiga };
+      // encerrada com falta (extra.encerrada): o que não veio deixa de contar como em trânsito
+      const enc = o.extra && o.extra.encerrada && Number(o.situacao) !== 2 ? o.extra.encerrada : null;
+      const sit = Number(o.situacao) === 2 ? 'Cancelada' : o.extra && o.extra.etapa === 'proposta' ? 'Proposta' : antiga || enc ? 'Recebida' : falta === 0 && comprado > 0 ? 'Recebida' : recebido > 0 ? 'Parcial' : 'A receber';
+      if(enc) itens.forEach(i => { i.faltou = i.falta; i.falta = 0; });
+      return { itens, comprado, recebido: antiga ? comprado : recebido, falta: antiga || enc ? 0 : falta, valorFalta: antiga || enc ? 0 : valorFalta, sit, antiga, enc, faltou: enc ? falta : 0 };
     }
 
     // unidades compradas e ainda não recebidas, por SKU (usado pela Sugestão de compras)
@@ -183,8 +186,9 @@
       const dth = t => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
       vmlModal(`Ordem nº ${ocEsc(o.numero || o.id)} — ${ocEsc(o.fornecedor || '')}`, `
         ${r.antiga ? '<div class="alert alert-info">Esta ordem já estava como atendida no Olist antes de a conferência existir aqui, então aparece como recebida.</div>' : ''}
+        ${r.enc ? `<div class="alert alert-warning" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><div style="flex:1;min-width:220px;"><b>Encerrada com falta</b> em ${ocEsc(dth(r.enc.em))}${r.enc.por ? ' por ' + ocEsc(r.enc.por) : ''}: faltaram ${(r.enc.itens || []).map(x => ocInt(x.qtd) + ' un. de ' + ocEsc(x.sku)).join(', ') || ocInt(r.faltou) + ' un.'}.${r.enc.obs ? '<br><span class="text-muted">' + ocEsc(r.enc.obs) + '</span>' : ''}</div><button class="btn-out btn-sm" onclick="ocReabrir(${o.id}, this)">Reabrir</button></div>` : ''}
         <div style="overflow-x:auto;"><table class="cp-tab"><thead><tr><th>Produto</th><th class="num">Comprado</th><th class="num">Já recebido</th><th class="num">Falta</th>${aberta ? '<th class="num">Chegou agora <a class="fx-link" style="color:var(--primary);font-size:11px;margin-left:6px;" onclick="ocReceberTudo()">receber tudo</a></th>' : ''}</tr></thead><tbody>
-          ${r.itens.map((i, n) => `<tr><td class="cp-prod">${typeof fotoLinha === 'function' ? fotoLinha(i.sku, `<b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span>`) : `<b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span>`}</td><td class="num">${ocInt(i.comprado)}</td><td class="num">${ocInt(r.antiga ? i.comprado : i.recebido)}</td><td class="num"><b>${ocInt(r.antiga ? 0 : i.falta)}</b></td>
+          ${r.itens.map((i, n) => `<tr><td class="cp-prod">${typeof fotoLinha === 'function' ? fotoLinha(i.sku, `<b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span>`) : `<b>${ocEsc(i.sku)}</b><span>${ocEsc(i.descricao || '')}</span>`}</td><td class="num">${ocInt(i.comprado)}</td><td class="num">${ocInt(r.antiga ? i.comprado : i.recebido)}</td><td class="num"><b>${ocInt(r.antiga ? 0 : i.falta)}</b>${i.faltou ? `<div style="font-size:11.5px;color:var(--warning,#d97706);">faltou ${ocInt(i.faltou)}</div>` : ''}</td>
             ${aberta ? `<td class="num"><input type="number" min="0" step="1" class="cp-dias oc-qtd" style="width:110px !important;" data-sku="${ocEsc(i.sku)}" data-falta="${i.falta}" placeholder="${i.sku ? '0' : 'vincule o SKU'}" ${i.falta && i.sku ? '' : 'disabled'} title="${i.sku ? '' : 'Item sem SKU: em Editar ordem, escolha o produto para poder lançar a chegada'}"></td>` : ''}</tr>`).join('')}
         </tbody></table></div>
         ${aberta ? `
@@ -199,7 +203,7 @@
           ${hist.map(h => `<tr><td>${dth(h.recebido_em)}</td><td><b>${ocEsc(h.sku)}</b></td><td style="text-align:right;">${ocInt(h.qtd)} un.</td><td class="text-muted" style="font-size:12px;">${h.conferido_por ? 'conferido por <b>' + ocEsc(h.conferido_por) + '</b> · ' : ''}${h.somou === false ? 'sem somar ao galpão' : 'somado ao galpão'}${h.obs ? ' · ' + ocEsc(h.obs) : ''}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="ocDesfazer(${h.id})">Desfazer</button></td></tr>`).join('')}
         </tbody></table>` : ''}
         ${typeof ocParcelasHtml === 'function' ? ocParcelasHtml(o) : ''}`,
-        `${Number(o.id) < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${o.id}, this)">Excluir ordem</button><button class="btn-out" onclick="ocEditar(${o.id})">Editar ordem</button>` : '<span style="margin-right:auto;"></span><button class="btn-out" onclick="ocEditar(' + o.id + ')">Editar ordem</button>'}<button class="btn-out" onclick="ocDuplicar(${o.id})" title="Abre uma ordem nova com os mesmos itens e fornecedor">Repetir compra</button><button class="btn-out" onclick="ocPdf(${o.id})">PDF</button><button class="btn-out" onclick="ocPdf(${o.id}, true)" title="Só itens e quantidades, para o galpão conferir e dar entrada">Lista p/ galpão</button>${hist.length && typeof ocPdfConferencia === 'function' ? `<button class="btn-out" onclick="ocPdfConferencia(${o.id})" title="PDF com as chegadas lançadas: data, quantidades e quem conferiu">Baixar conferência</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${aberta ? `<button class="btn" onclick="ocLancar(${o.id}, this)">Lançar chegada</button>` : ''}${r.sit === 'Proposta' ? `<button class="btn" onclick="ocGerarCompra(${o.id})">Gerar compra</button>` : ''}`);
+        `${Number(o.id) < 0 ? `<button class="btn-out" style="color:var(--danger);margin-right:auto;" onclick="ocExcluirLocal(${o.id}, this)">Excluir ordem</button><button class="btn-out" onclick="ocEditar(${o.id})">Editar ordem</button>` : '<span style="margin-right:auto;"></span><button class="btn-out" onclick="ocEditar(' + o.id + ')">Editar ordem</button>'}<button class="btn-out" onclick="ocDuplicar(${o.id})" title="Abre uma ordem nova com os mesmos itens e fornecedor">Repetir compra</button><button class="btn-out" onclick="ocPdf(${o.id})">PDF</button><button class="btn-out" onclick="ocPdf(${o.id}, true)" title="Só itens e quantidades, para o galpão conferir e dar entrada">Lista p/ galpão</button>${hist.length && typeof ocPdfConferencia === 'function' ? `<button class="btn-out" onclick="ocPdfConferencia(${o.id})" title="PDF com as chegadas lançadas: data, quantidades e quem conferiu">Baixar conferência</button>` : ''}<button class="btn-out" onclick="fecharModal('modal-vml')">Fechar</button>${r.sit === 'Parcial' ? `<button class="btn-out" style="color:var(--warning,#d97706);" onclick="ocEncerrar(${o.id}, this)" title="O que falta não vem mais: a ordem passa para Recebida e a falta deixa de contar como em trânsito">Encerrar com falta</button>` : ''}${aberta ? `<button class="btn" onclick="ocLancar(${o.id}, this)">Lançar chegada</button>` : ''}${r.sit === 'Proposta' ? `<button class="btn" onclick="ocGerarCompra(${o.id})">Gerar compra</button>` : ''}`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '860px';
     }
     function ocReceberTudo(){ document.querySelectorAll('.oc-qtd').forEach(i => { if(!i.disabled) i.value = i.dataset.falta; }); }
@@ -245,6 +249,29 @@
       if(typeof pepsRecalcular === 'function') pepsRecalcular(false);   // a chegada vira um lote de custo
       fecharModal('modal-vml');
       ocDesenhar();
+    }
+
+    // "Encerrar com falta": o fornecedor não vai mandar o resto. Guarda quem, quando e o que faltou em extra.encerrada.
+    async function ocEncerrar(id, btn){
+      const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o) return;
+      const r = ocResumo(o), falta = r.itens.filter(i => i.falta > 0);
+      const quem = (document.getElementById('oc-quem')?.value || '').trim(), obs = (document.getElementById('oc-obs')?.value || '').trim();
+      if(!confirm('Encerrar a ordem nº ' + (o.numero || o.id) + ' com falta?\n\n' + falta.map(i => '• ' + ocInt(i.falta) + ' un. de ' + i.sku).join('\n') + '\n\nA ordem passa para Recebida e essas unidades deixam de contar como em trânsito. Dá para reabrir depois.')) return;
+      if(btn){ btn.disabled = true; btn.textContent = 'Encerrando…'; }
+      const extra = { ...(o.extra || {}), encerrada: { em: new Date().toISOString(), por: quem || null, obs: obs || null, itens: falta.map(i => ({ sku: i.sku, qtd: i.falta })) } };
+      const { error } = await supa.from('olist_ordens').update({ extra }).eq('usuario_id', usuarioAtual.id).eq('id', o.id);
+      if(error){ alert('Não consegui encerrar: ' + error.message); if(btn){ btn.disabled = false; btn.textContent = 'Encerrar com falta'; } return; }
+      o.extra = extra;
+      ocDesenhar(); ocConferir(o.id);
+    }
+    async function ocReabrir(id, btn){
+      const o = oc.ordens.find(x => Number(x.id) === Number(id)); if(!o || !o.extra) return;
+      if(btn) btn.disabled = true;
+      const extra = { ...o.extra }; delete extra.encerrada;
+      const { error } = await supa.from('olist_ordens').update({ extra }).eq('usuario_id', usuarioAtual.id).eq('id', o.id);
+      if(error){ alert('Não consegui reabrir: ' + error.message); if(btn) btn.disabled = false; return; }
+      o.extra = extra;
+      ocDesenhar(); ocConferir(o.id);
     }
 
     async function ocDesfazer(recId){
