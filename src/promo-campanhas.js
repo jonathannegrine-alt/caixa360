@@ -23,7 +23,7 @@
       for(let i = 0; i < fila.length; i += 40){
         let d; try { d = await pqFuncao('ml-promos', { acao: 'ativas', conta: c, itens: fila.slice(i, i + 40) }); } catch(e){ d = null; }
         if(pmConta() !== c) return;
-        ((d && d.ativas) || []).forEach(x => { pc.lido[x.item] = { reb: Number(x.reb) || 0, reb_oferta: Number(x.reb_oferta) || 0 }; if(x.n > 0) pc.promo[x.item] = { n: x.n, nome: x.nome }; else delete pc.promo[x.item]; });
+        ((d && d.ativas) || []).forEach(x => { pc.lido[x.item] = { reb: Number(x.reb) || 0, reb_oferta: Number(x.reb_oferta) || 0 }; if(x.n > 0) pc.promo[x.item] = { n: x.n, nome: x.nome, menor: Number(x.menor) || 0, cheio: Number(x.cheio) || 0 }; else delete pc.promo[x.item]; });
         if(!document.activeElement || document.activeElement.id !== 'pc-busca') pcDesenhar();
       }
     }
@@ -57,6 +57,12 @@
       if(r.reb > 0) return `<span class="v-tag" style="flex:none;background:rgba(22,163,74,.12);color:var(--success,#16a34a);" title="O Mercado Livre paga parte do desconto numa promoção ativa deste anúncio">Rebate ${pqN(r.reb, 1)}%</span>`;
       if(r.reb_oferta > 0) return `<span class="v-tag" style="flex:none;" title="Há promoção com rebate do Mercado Livre disponível para este anúncio entrar">Rebate disponível ${pqN(r.reb_oferta, 1)}%</span>`;
       return '';
+    }
+    // com promoção ativa: o menor preço em promoção em cima e o preço cheio riscado embaixo
+    function pcPrecoCel(x){
+      const p = pc.promo[x.item_id], cheio = (p && p.cheio) || Number(x.preco) || 0;
+      if(!p || !(p.menor > 0) || p.menor >= cheio - 0.005) return `<span class="pc-an-p">R$ ${pqN(x.preco)}</span>`;
+      return `<span class="pc-an-p" style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;" title="Menor preço entre as promoções ativas; embaixo, o preço sem promoção"><span style="color:var(--success,#16a34a);">R$ ${pqN(p.menor)}</span><small style="font-weight:500;color:var(--text-muted);text-decoration:line-through;font-size:12px;">R$ ${pqN(cheio)}</small></span>`;
     }
     function pcAbas(){
       const a = pm.aba || 'ml';
@@ -420,7 +426,7 @@
         <div>${l.length ? l.slice(0, 200).map(x => `<div class="pc-an ${pc.aberto[x.item_id] ? 'aberto' : ''}"><button class="pc-an-cab" onclick="pcAbrirAnuncio('${x.item_id}')" aria-expanded="${pc.aberto[x.item_id] ? 'true' : 'false'}">
               ${x.thumbnail ? `<img src="${pqE(x.thumbnail)}" loading="lazy" alt="">` : '<span class="pm-sem"></span>'}<span class="pc-an-t"><b>${pqE(x.titulo || x.item_id)}</b><small>${pcTipoTag(x.item_id)}${pqE(x.sku || 'sem SKU')} · ${pqE(x.item_id)}${x.pausado ? ' · <i style="font-style:normal;color:var(--warning,#d97706);">pausado</i>' : ''}${pc.vend[x.item_id] ? ' · ' + pc.vend[x.item_id].toLocaleString('pt-BR') + ' vendidos em 30 dias' : ''}</small></span>
               <span class="pc-an-tags">${pc.promo[x.item_id] ? `<span class="v-tag conta" style="flex:none;" title="${pqE(pc.promo[x.item_id].nome ? 'Participando de: ' + pc.promo[x.item_id].nome : 'Este anúncio está em promoção. Clique para ver a campanha.')}">Promoção ativa${pc.promo[x.item_id].n > 1 ? ' (' + pc.promo[x.item_id].n + ')' : ''}</span>` : ''}${pcRebTag(x.item_id)}</span>
-              <span class="pc-an-p">R$ ${pqN(x.preco)}</span><span class="pc-seta">${pc.aberto[x.item_id] ? '▾' : '▸'}</span></button>${pcCartoesAnuncio(x.item_id)}</div>`).join('') : '<div class="vazio"><b>Nenhum anúncio encontrado</b></div>'}</div>
+              ${pcPrecoCel(x)}<span class="pc-seta">${pc.aberto[x.item_id] ? '▾' : '▸'}</span></button>${pcCartoesAnuncio(x.item_id)}</div>`).join('') : '<div class="vazio"><b>Nenhum anúncio encontrado</b></div>'}</div>
         ${l.length > 200 ? '<div class="text-muted" style="font-size:12px;padding:10px 18px;">Mostrando 200. Use a busca para achar os outros.</div>' : ''}</div>`;
     }
     function pcDesenharMinhas(){

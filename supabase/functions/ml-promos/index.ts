@@ -85,7 +85,8 @@ Deno.serve(async (req: Request) => {
     if (body?.acao === 'ativas') {
       const ids = [...new Set((Array.isArray(body?.itens) ? body.itens : []).map((x: unknown) => String(x)).filter((x: string) => /^MLB\d{6,14}$/.test(x)))].slice(0, 120) as string[]
       // reb = maior % de rebate do Mercado Livre (meli_percentage) entre as promoções em andamento; reb_oferta = entre as que o anúncio pode entrar
-      const out: { item: string, n: number, nome: string, reb: number, reb_oferta: number }[] = []
+      // menor = menor preço entre as promoções em andamento; cheio = preço sem promoção (original_price)
+      const out: { item: string, n: number, nome: string, reb: number, reb_oferta: number, menor: number, cheio: number }[] = []
       const maxReb = (l: any[]) => l.reduce((m: number, x: any) => Math.max(m, Number(x.meli_percentage) || 0), 0)
       for (let i = 0; i < ids.length; i += 8) {
         await Promise.all(ids.slice(i, i + 8).map(async item => {
@@ -93,7 +94,9 @@ Deno.serve(async (req: Request) => {
           if (!Array.isArray(j)) return
           const at = j.filter((x: any) => x.status === 'started')
           out.push({ item, n: at.length, nome: at.map((x: any) => x.name || x.type || '').filter(Boolean).slice(0, 4).join(', '),
-            reb: maxReb(at), reb_oferta: maxReb(j.filter((x: any) => x.status === 'candidate' || x.status === 'pending')) })
+            reb: maxReb(at), reb_oferta: maxReb(j.filter((x: any) => x.status === 'candidate' || x.status === 'pending')),
+            menor: at.reduce((m: number, x: any) => { const p = Number(x.price) || 0; return p > 0 && (!m || p < m) ? p : m }, 0),
+            cheio: at.reduce((m: number, x: any) => Math.max(m, Number(x.original_price) || 0), 0) })
         }))
       }
       return resp({ ok: true, ativas: out })
