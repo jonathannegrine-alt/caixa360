@@ -84,10 +84,18 @@ Deno.serve(async (req: Request) => {
 
     if (body?.acao === 'etiqueta') {
       if (!sid) return resp({ error: 'Esta venda não tem envio pelo Mercado Envios.' }, 400)
+      // SÓ CONSULTA (2026-10-24): o Caixa 360 não tem função de logística. Baixar a etiqueta no ML marca "impressa" e muda a
+      // etapa no sistema de expedição do cliente; por isso só entrega cópia guardada ou etiqueta que já foi impressa antes.
+      const pedeMl = async () => {
+        const sh = await g(`${ML}/shipments/${sid}`)
+        return !!(sh && (sh.date_first_printed || sh.status_history?.date_first_printed || String(sh.substatus || '') === 'printed'))
+      }
+      const naoImpressa = { ok: false, motivo: 'Esta etiqueta ainda não foi impressa. Por enquanto o Caixa 360 só consulta: a etiqueta aparece aqui depois de impressa no sistema que vocês usam para a expedição (assim nada muda na operação).' }
       if (body?.formato === 'zpl') {
         const cz = `etiquetas/${userId}/${sid}.zpl.gz`
         const gz = await fetch(`${supaUrl}/storage/v1/object/${cz}`, { headers: dbH }).catch(() => null)
         if (gz && gz.ok) return resp({ ok: true, origem: 'guardada', formato: 'zpl', zpl: strFromU8(gunzipSync(new Uint8Array(await gz.arrayBuffer()))), envio: sid })
+        if (!await pedeMl()) return resp(naoImpressa)
         const r = await fetch(`${ML}/shipment_labels?shipment_ids=${sid}&response_type=zpl2`, { headers: { Authorization: 'Bearer ' + tk } }).catch(() => null)
         const zb = r && r.ok ? new Uint8Array(await r.arrayBuffer()) : null
         let zpl = ''
@@ -100,6 +108,7 @@ Deno.serve(async (req: Request) => {
       const caminho = `etiquetas/${userId}/${sid}.pdf`
       const guardada = await fetch(`${supaUrl}/storage/v1/object/${caminho}`, { headers: dbH }).catch(() => null)
       if (guardada && guardada.ok) return resp({ ok: true, origem: 'guardada', pdf: b64(await guardada.arrayBuffer()), envio: sid })
+      if (v.logistic_type !== 'fulfillment' && !await pedeMl()) return resp(naoImpressa)
       const r = await fetch(`${ML}/shipment_labels?shipment_ids=${sid}&response_type=pdf`, { headers: { Authorization: 'Bearer ' + tk } }).catch(() => null)
       if (!r || !r.ok || !(r.headers.get('content-type') || '').includes('pdf')) {
         return resp({ ok: false, motivo: v.logistic_type === 'fulfillment'

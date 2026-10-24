@@ -394,7 +394,7 @@
             ${st !== 'cancelada' && ex.envio_status && VD_ENVIO[ex.envio_status] ? `<div class="v-envio" title="${ex.rastreio ? 'Rastreio: ' + vmlEsc(ex.rastreio) : 'Situação do envio'}" onclick="vdPagamento('${v.order_id}','entrega')">${VD_ENVIO[ex.envio_status]}</div>` : ''}
             <button class="btn-out btn btn-sm v-bt-msg" onclick="abrirMensagensVenda('${v.pack_id || v.order_id}','${v.order_id}','${v.ml_user_id || ''}')">Mensagens</button>
             <button class="btn-out btn btn-sm" onclick="vdPagamento('${v.order_id}')">Detalhes</button>
-            ${st !== 'cancelada' && ex.shipping_id && ex.logistic_type !== 'fulfillment' ? `<button class="btn-out btn btn-sm" onclick="vdEtiqueta('${v.order_id}', this)" title="Abre a etiqueta do envio em PDF para imprimir">🖨 ${ex.etiqueta_em ? 'Reimprimir etiqueta' : 'Imprimir etiqueta'}</button>` : ''}
+            ${st !== 'cancelada' && ex.shipping_id && ex.logistic_type !== 'fulfillment' ? `<button class="btn-out btn btn-sm" onclick="vdEtiqueta('${v.order_id}', this)" title="Mostra a etiqueta depois de impressa no sistema de expedição (só consulta, não muda nada na operação)">🖨 ${ex.etiqueta_em ? 'Reimprimir etiqueta' : 'Imprimir etiqueta'}</button>` : ''}
             <a class="btn-out btn btn-sm v-bt-ml" style="text-align:center;text-decoration:none;" href="https://www.mercadolivre.com.br/vendas/${v.order_id}/detalhe" target="_blank" rel="noopener">Abrir no ML</a>
           </div>
         </div>`;
@@ -512,7 +512,7 @@
         bloco('comprador', 'Comprador',
           l('Nome', vmlEsc(c.nome || '—')) + l('Apelido', vmlEsc(c.apelido)) + l(c.doc_tipo || 'Documento', c.doc ? vmlEsc(c.doc) + ' ' + cp(c.doc) : 'não informado') + l('Código no Mercado Livre', vmlEsc(c.id))) +
         `<div class="vd-acoes">
-          ${e ? `<button class="btn-out btn btn-sm" onclick="vdEtiqueta('${orderId}', this)" title="Abre a etiqueta do envio em PDF. Vale também para etiqueta já impressa na UpSeller; depois que o pacote sai, usa a cópia guardada aqui.">🖨 ${d.tem_etiqueta ? 'Reimprimir etiqueta' : 'Imprimir etiqueta'}</button>` : ''}
+          ${e ? `<button class="btn-out btn btn-sm" onclick="vdEtiqueta('${orderId}', this)" title="Mostra a etiqueta depois de impressa no sistema de expedição (só consulta, não muda nada na operação); depois que o pacote sai, usa a cópia guardada aqui.">🖨 ${d.tem_etiqueta ? 'Reimprimir etiqueta' : 'Imprimir etiqueta'}</button>` : ''}
           <button class="btn-out btn btn-sm" onclick="vdNotaFiscal('${orderId}', this)" title="Mostra a nota fiscal que o Mercado Livre tem desta venda (Full e coleta). Nada é guardado.">🧾 Ver nota fiscal</button>
           <span id="vd-det-msg" class="text-muted" style="font-size:12.5px;"></span>
         </div><div id="vd-det-nf"></div>`;
@@ -577,30 +577,8 @@
       if(d && d.ok && d.pdf){ vdAbrirPdf(d.pdf); if(m) m.textContent = 'Nota aberta em outra aba.'; }
       else if(m) m.textContent = (d && (d.motivo || d.error)) || 'Não foi possível abrir a nota.';
     }
-    // Aviso antes de baixar a etiqueta no ML: baixar aqui marca "impressa" no Mercado Livre e muda a venda de etapa
-    // em outro sistema (ex.: UpSeller pula para "Retirar"). Aparece toda vez, até a pessoa marcar "estou ciente" (por aparelho).
-    const VD_ETQ_AVISO = 'mk_etq_aviso_ok';
-    function vdEtiqueta(orderId, bt){
-      let ok = false; try { ok = localStorage.getItem(VD_ETQ_AVISO) === '1'; } catch(e){}
-      if(ok) return vdEtiquetaAbrir(orderId, bt);
-      const fundo = document.createElement('div');
-      fundo.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
-      fundo.innerHTML = `<div style="background:var(--surface,#fff);color:var(--text,#111);max-width:460px;width:100%;border-radius:12px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3);">
-        <div style="font-weight:700;font-size:16px;margin-bottom:8px;">⚠️ Antes de abrir a etiqueta</div>
-        <div style="font-size:14px;line-height:1.5;">Ao abrir a etiqueta por aqui, o Mercado Livre marca a venda como <b>etiqueta impressa</b>.
-          Se a expedição usa outro sistema (como a UpSeller), a venda pode pular etapas lá, por exemplo ir direto para <b>Retirar</b> sem ninguém ter impresso.</div>
-        <label style="display:flex;gap:8px;align-items:center;margin:14px 0 4px;font-size:13px;cursor:pointer;"><input type="checkbox" id="vd-etq-ciente" style="width:auto;margin:0;"> Estou ciente, não mostrar mais este aviso neste aparelho</label>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;"><button class="btn-out btn" data-a="nao">Cancelar</button><button class="btn" data-a="sim">Abrir a etiqueta</button></div></div>`;
-      fundo.addEventListener('click', ev => {
-        const a = ev.target && ev.target.dataset ? ev.target.dataset.a : null;
-        if(ev.target === fundo || a === 'nao'){ fundo.remove(); return; }
-        if(a !== 'sim') return;
-        const cx = fundo.querySelector('#vd-etq-ciente');
-        if(cx && cx.checked){ try { localStorage.setItem(VD_ETQ_AVISO, '1'); } catch(e){} }
-        fundo.remove(); vdEtiquetaAbrir(orderId, bt);   // ainda dentro do clique: a nova aba abre sem bloqueio
-      });
-      document.body.appendChild(fundo);
-    }
+    // etiqueta: só consulta (cópia guardada ou etiqueta já impressa no sistema de expedição); ver ml-venda acao etiqueta
+    function vdEtiqueta(orderId, bt){ return vdEtiquetaAbrir(orderId, bt); }
     async function vdEtiquetaAbrir(orderId, bt){
       const el = document.getElementById('vd-det-msg'), rot = bt.textContent; bt.disabled = true;
       const msg = el && bt.closest('.modal') ? el : { set textContent(t){ if(t && typeof toast === 'function') toast(t); } }; bt.textContent = 'Buscando etiqueta…'; if(msg) msg.textContent = '';
