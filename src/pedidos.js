@@ -13,8 +13,15 @@
     // filtro por forma de envio (Coleta, Agência, Flex); vale nas abas e na lista, os quadros de cima mostram a divisão
     const PD_GRUPOS = [['coleta', 'Coleta', ['cross_docking']], ['agencia', 'Agência', ['xd_drop_off', 'drop_off']], ['flex', 'Flex', ['self_service']]];
     const pdGrupo = p => (PD_GRUPOS.find(g => g[2].includes(p.logistic_type)) || ['outro'])[0];
-    function pdTipo(t){ pd.tipo = t; pdDesenhar(); }
-    function pdIr(aba, tipo){ pd.aba = aba; pd.tipo = tipo || ''; pdDesenhar(); }
+    // clicar de novo no que já está marcado tira o filtro (quadro/aba volta para Todos; forma de envio volta para Todas)
+    function pdTipo(t){ pd.tipo = pd.tipo === t ? '' : t; pdDesenhar(); }
+    function pdAba(a){ pd.aba = pd.aba === a && a !== 'todos' ? 'todos' : a; pdDesenhar(); }
+    function pdIr(aba, tipo){
+      if(tipo){ if(pd.aba === aba && pd.tipo === tipo) pd.tipo = ''; else { pd.aba = aba; pd.tipo = tipo; } }
+      else if(pd.aba === aba){ pd.aba = 'todos'; pd.tipo = ''; }
+      else { pd.aba = aba; pd.tipo = ''; }
+      pdDesenhar();
+    }
     const pdEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const pdDiaBR = t => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 
@@ -128,8 +135,10 @@
       const geral = pdPacotes(), todos = pd.tipo ? geral.filter(p => pdGrupo(p) === pd.tipo) : geral, n = a => todos.filter(p => pdNaAba(p, a)).length;
       // divisão por forma de envio dentro de cada quadro (clicar abre a aba já filtrada)
       const pdDiv = a => { const d = PD_GRUPOS.map(([g, t]) => [g, t, geral.filter(p => pdNaAba(p, a) && pdGrupo(p) === g).length]).filter(x => x[2]);
-        return d.length ? '<div class="kpi-sub">' + d.map(([g, t, q]) => `<span onclick="event.stopPropagation();pdIr('${a}','${g}')" style="cursor:pointer;text-decoration:underline dotted;" title="Ver só ${t}"><b>${q}</b> ${t.toLowerCase()}</span>`).join('') + '</div>' : ''; };
+        return d.length ? '<div class="kpi-sub">' + d.map(([g, t, q]) => { const on = pd.aba === a && pd.tipo === g; return `<span class="pd-div ${on ? 'on' : ''}" onclick="event.stopPropagation();pdIr('${a}','${g}')" title="${on ? 'Clique de novo para tirar o filtro' : 'Ver só ' + t}"><b>${q}</b> ${t.toLowerCase()}${on ? ' ✕' : ''}</span>`; }).join('') + '</div>' : ''; };
       const nG = a => geral.filter(p => pdNaAba(p, a)).length;
+      const pdOn = a => pd.aba === a ? 'pd-on' : '';
+      const pdSelo = a => pd.aba === a ? '<span class="pd-selo" title="Filtro ligado. Clique de novo para ver todos">✓ filtrando · ✕</span>' : '';
       const b = String(pd.busca || '').trim().toLowerCase(), buscando = !!b;
       // com busca, procura em todas as abas (o pedido aparece onde estiver)
       const lista = pdFiltrar(buscando ? pdPacotes(true) : todos.filter(p => pdNaAba(p, pd.aba)), b)
@@ -143,14 +152,14 @@
         ${pd.erro ? `<div class="alert alert-danger">${pdEsc(pd.erro)}</div>` : ''}
         ${atras.length ? `<div class="alert alert-danger"><b>${atras.length} pedido${atras.length > 1 ? 's' : ''} atrasado${atras.length > 1 ? 's' : ''} para envio</b>&nbsp;— o mais antigo passou do prazo há ${maisVelho ? maisVelho + ' dia' + (maisVelho > 1 ? 's' : '') : 'menos de um dia'}. Atraso no envio pesa na reputação da conta.</div>` : ''}
         <div class="kpi-grid k4i">
-          <div class="kpi k-atraso" onclick="pdIr('atrasados')" style="cursor:pointer;"><div class="kpi-label">Atrasados</div><div class="kpi-value">${nG('atrasados')}</div><div class="kpi-sub">passaram do prazo de envio</div>${pdDiv('atrasados')}</div>
-          <div class="kpi k-hoje" onclick="pdIr('hoje')" style="cursor:pointer;"><div class="kpi-label">Vencem hoje</div><div class="kpi-value">${nG('hoje')}</div><div class="kpi-sub">precisam sair hoje</div>${pdDiv('hoje')}</div>
-          <div class="kpi k-frete" onclick="pdIr('enviar')" style="cursor:pointer;"><div class="kpi-label">Para enviar</div><div class="kpi-value">${nG('enviar')}</div><div class="kpi-sub">liberados e ainda no galpão</div>${pdDiv('enviar')}</div>
-          <div class="kpi k-mc" onclick="pdIr('enviados')" style="cursor:pointer;"><div class="kpi-label">Enviados · 7 dias</div><div class="kpi-value">${nG('enviados')}</div><div class="kpi-sub">${nG('aguardando')} aguardando liberação do ML</div></div>
+          <div class="kpi k-atraso ${pdOn('atrasados')}" onclick="pdIr('atrasados')" style="cursor:pointer;">${pdSelo('atrasados')}<div class="kpi-label">Atrasados</div><div class="kpi-value">${nG('atrasados')}</div><div class="kpi-sub">passaram do prazo de envio</div>${pdDiv('atrasados')}</div>
+          <div class="kpi k-hoje ${pdOn('hoje')}" onclick="pdIr('hoje')" style="cursor:pointer;">${pdSelo('hoje')}<div class="kpi-label">Vencem hoje</div><div class="kpi-value">${nG('hoje')}</div><div class="kpi-sub">precisam sair hoje</div>${pdDiv('hoje')}</div>
+          <div class="kpi k-frete ${pdOn('enviar')}" onclick="pdIr('enviar')" style="cursor:pointer;">${pdSelo('enviar')}<div class="kpi-label">Para enviar</div><div class="kpi-value">${nG('enviar')}</div><div class="kpi-sub">liberados e ainda no galpão</div>${pdDiv('enviar')}</div>
+          <div class="kpi k-mc ${pdOn('enviados')}" onclick="pdIr('enviados')" style="cursor:pointer;">${pdSelo('enviados')}<div class="kpi-label">Enviados · 7 dias</div><div class="kpi-value">${nG('enviados')}</div><div class="kpi-sub">${nG('aguardando')} aguardando liberação do ML</div></div>
         </div>
         <div class="card"><div class="sku-barra">
           <div style="display:flex;gap:6px;flex:1;min-width:260px;"><input type="text" id="pd-busca" placeholder="Buscar por nº do pedido, comprador ou SKU" value="${pdEsc(pd.busca)}" oninput="pdBuscar(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();pdBuscarJa();}" style="flex:1;"><button class="btn btn-sm" onclick="pdBuscarJa()">🔍 Buscar</button>${buscando ? '<button class="btn-out btn-sm" onclick="pdLimpar()">Limpar</button>' : ''}</div>
-          <div class="chips" style="${buscando ? 'opacity:.45;pointer-events:none;' : ''}">${PD_ABAS.map(([k, t]) => `<button class="chip ${pd.aba === k ? 'active' : ''}" onclick="pd.aba='${k}';pdDesenhar();">${t}<span class="n">${n(k)}</span></button>`).join('')}</div>
+          <div class="chips" style="${buscando ? 'opacity:.45;pointer-events:none;' : ''}">${PD_ABAS.map(([k, t]) => `<button class="chip ${pd.aba === k ? 'active' : ''}" onclick="pdAba('${k}')">${t}<span class="n">${n(k)}</span></button>`).join('')}</div>
           <div class="chips" style="${buscando ? 'opacity:.45;pointer-events:none;' : ''}"><span class="text-muted" style="font-size:12px;align-self:center;">Envio:</span>${[['', 'Todos']].concat(PD_GRUPOS).map(([g, t]) => `<button class="chip ${pd.tipo === g ? 'active' : ''}" onclick="pdTipo('${g}')">${t}<span class="n">${(g ? geral.filter(p => pdGrupo(p) === g) : geral).filter(p => pdNaAba(p, pd.aba)).length}</span></button>`).join('')}</div>
         </div>
         ${buscando ? `<div class="alert alert-info" style="margin:0 16px 10px;">${pd.buscandoBanco ? 'Não achei nos pedidos dos últimos 25 dias; procurando em todas as datas…' : `Buscando "${pdEsc(pd.busca.trim())}" em <b>todas as abas</b>${pd.extrasTermo === pd.busca.trim() ? ' e em todas as datas' : ''}. A coluna Estado mostra onde cada pedido está.`}</div>` : ''}
