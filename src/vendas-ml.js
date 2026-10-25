@@ -170,7 +170,7 @@
       if(f.campo === 'venda' || f.campo === 'carrinho'){ const n = t.replace(/\D/g, '') || '0'; return q.or('order_txt.eq.' + n + ',pack_txt.eq.' + n); }
       if(f.campo === 'mlb') return q.ilike('item_id', limpo.replace(/^(mlb)\s*-\s*/i, '$1'));
       if(f.campo === 'sku' && !f.parcial) return q.ilike('sku', limpo);
-      if(f.campo === 'nome') return q.ilike('comprador_nome', '%' + limpo.replace(/[aeiouc\u00C0-\u00FF]/gi, '_') + '%');   // sem depender de acento
+      if(f.campo === 'nome') return q.ilike('comprador_nome', '%' + limpo.replace(/[aeiouc\u00C0-\u00FF]/gi, '_').replace(/\s+/g, '%') + '%');   // sem acento e por partes ("samuel simoes" acha "Samuel José Simões")
       return q.ilike(VD_CAMPOS[f.campo] || 'sku', '%' + limpo + '%');
     }
 
@@ -485,6 +485,22 @@
     const VD_PAG = { account_money:'Saldo em conta', credit_card:'Cartão de crédito', debit_card:'Cartão de débito', ticket:'Boleto', bank_transfer:'Pix ou transferência', digital_currency:'Mercado Crédito', digital_wallet:'Carteira digital' };
     const VD_PAG_ST = { approved:'Aprovado', pending:'Pendente', in_process:'Em análise', rejected:'Recusado', refunded:'Devolvido', cancelled:'Cancelado', charged_back:'Contestado', accredited:'Pagamento creditado' };
     const VD_LOG = { fulfillment:'Full', self_service:'Flex', cross_docking:'Coleta', xd_drop_off:'Agência', drop_off:'Correios' };
+    // de onde a venda sai: Full (depósito Full da loja) ou galpão — mesma regra da baixa do estoque
+    // (estoque_baixar_vendas: 1º galpão ativo que atende a loja)
+    let vdDeps = null;
+    async function vdOrigem(orderId, tipo){
+      try {
+        if(!vdDeps) vdDeps = supa.from('estoque_depositos').select('id,nome,tipo,ml_user_id,lojas,ativo').eq('usuario_id', usuarioAtual.id).order('id').then(r => r.data || []);
+        const [v, deps] = await Promise.all([supa.from('vendas_ml').select('ml_user_id').eq('usuario_id', usuarioAtual.id).eq('order_id', orderId).limit(1), vdDeps]);
+        const conta = String((v.data && v.data[0] && v.data[0].ml_user_id) || '');
+        if(tipo === 'fulfillment'){
+          const f = deps.find(d => d.tipo === 'full' && String(d.ml_user_id || '') === conta) || deps.find(d => d.tipo === 'full' && !d.ml_user_id);
+          return 'Full (armazém do Mercado Livre)' + (f ? ' · ' + vmlEsc(f.nome) : '');
+        }
+        const g = deps.filter(d => d.tipo === 'proprio' && d.ativo && (!Array.isArray(d.lojas) || !d.lojas.length || d.lojas.map(String).includes(conta)));
+        return 'Galpão' + (g[0] && g[0].nome !== 'Galpão' ? ' · ' + vmlEsc(g[0].nome) : '');
+      } catch(e){ return tipo === 'fulfillment' ? 'Full (armazém do Mercado Livre)' : 'Galpão'; }
+    }
     async function vdDetalheML(orderId, foco){
       const alvo = () => document.getElementById('vd-det-ml');
       let d; try { d = await vdFuncao({ acao: 'detalhe', pedido: orderId }); } catch(e){ d = { error: 'sem conexão' }; }
@@ -496,11 +512,12 @@
       const dd = s => s ? ptDate(vmlDataBRT(s).dia) : '';
       const cp = txt => `<button class="ico-btn" style="width:20px;height:20px;border:none;background:none;" title="Copiar" onclick="vmlCopiar('${vmlEsc(txt)}', this)">⧉</button>`;
       const e = d.entrega, p = d.pagamento, c = d.comprador || {};
+      const origem = e ? await vdOrigem(orderId, e.tipo) : '';
       const end = e ? [e.endereco, e.complemento, e.bairro, [e.cidade, e.uf].filter(Boolean).join(' - ')].filter(Boolean).join(', ') : '';
       const bloco = (id, tit, corpo) => `<div class="vd-sec" id="vd-sec-${id}"><h4>${tit}</h4><div class="vd-cols">${corpo}</div></div>`;
       el.innerHTML =
         (e ? bloco('entrega', 'Entrega',
-          l('Nº do envio', '#' + vmlEsc(e.envio) + ' ' + cp(e.envio)) + l('Tipo', VD_LOG[e.tipo] || vmlEsc(e.tipo)) + l('Situação', (VD_ENVIO[e.status] || vmlEsc(e.status)) + (e.substatus ? ' <small class="text-muted">(' + vmlEsc(e.substatus) + ')</small>' : '')) +
+          l('Nº do envio', '#' + vmlEsc(e.envio) + ' ' + cp(e.envio)) + l('Sai de', origem) + l('Tipo', VD_LOG[e.tipo] || vmlEsc(e.tipo)) + l('Situação', (VD_ENVIO[e.status] || vmlEsc(e.status)) + (e.substatus ? ' <small class="text-muted">(' + vmlEsc(e.substatus) + ')</small>' : '')) +
           l('Código de rastreio', e.rastreio ? vmlEsc(e.rastreio) + ' ' + cp(e.rastreio) : '') + l('Transportadora', vmlEsc(e.transportadora)) + l('Entrega prevista', dd(e.prevista)) + l('Limite para despachar', dh(e.limite_envio)) +
           l('Pacote', e.altura || e.largura || e.comprimento ? `${e.altura} × ${e.largura} × ${e.comprimento} cm` : '') + l('Peso', e.peso ? e.peso.toLocaleString('pt-BR') + ' g' : '') + l('Valor declarado', e.valor_declarado ? 'R$ ' + vmlNum(e.valor_declarado) : '') +
           l('Destinatário', vmlEsc(e.destinatario)) + l('CEP', e.cep ? vdCep(e.cep) + ' ' + cp(vdCep(e.cep)) : '') +
