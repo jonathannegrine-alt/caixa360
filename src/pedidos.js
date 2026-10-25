@@ -83,6 +83,8 @@
     // estado em português, como o vendedor vê no Mercado Livre
     function pdEstado(p){
       if(p.cancel) return ['Cancelado', 'cp-semvenda'];
+      // Full (só aparece pela busca): a etapa gravada é a da hora da venda; a atual o detalhe lê na hora no ML
+      if(p.logistic_type === 'fulfillment') return ['Full · ver no detalhe', 'cp-semvenda'];
       if(p.saiu) return p.envio_status === 'delivered' ? ['Entregue', 'cp-ok'] : p.envio_status === 'not_delivered' ? ['Não entregue', 'cp-urgente'] : ['Enviado', 'cp-ok'];
       const sub = String(p.envio_substatus || '');
       const nome = p.envio_status === 'pending' ? (sub === 'buffered' ? 'Aguardando liberação do ML' : 'Pendente')
