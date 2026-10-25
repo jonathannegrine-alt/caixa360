@@ -122,12 +122,13 @@
     async function pdBuscarBanco(t){
       const num = /^\d{6,}$/.test(t), esc = t.replace(/[%,()]/g, ' ');
       let q = supa.from('vendas_ml').select(PD_CAMPOS).eq('usuario_id', usuarioAtual.id);
-      q = num ? q.or('order_id.eq.' + t + ',pack_id.eq.' + t + ',shipping_id.eq.' + t) : q.or('comprador_apelido.ilike.%' + esc + '%,comprador_nome.ilike.%' + esc + '%,sku.ilike.%' + esc + '%');
+      q = num ? q.or('order_id.eq.' + t + ',pack_id.eq.' + t + ',shipping_id.eq.' + t) : q.or('comprador_apelido.ilike.%' + esc + '%,comprador_nome.ilike.%' + esc.replace(/[aeiouc\u00C0-\u00FF]/gi, '_') + '%,sku.ilike.%' + esc + '%');
       const r = await q.order('data_venda', { ascending: false }).limit(200);
       return r.error ? [] : (r.data || []);
     }
     function pdFiltrar(lista, b){
-      return !b ? lista : lista.filter(p => [p.order_id, p.pack_id, p.shipping_id, p.comprador_nome, p.comprador_apelido, ...p.itens.map(v => v.sku + ' ' + v.titulo)].join(' ').toLowerCase().includes(b));
+      const sa = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');   // sem acento: "simoes" acha "Simões"
+      return !b ? lista : lista.filter(p => sa([p.order_id, p.pack_id, p.shipping_id, p.comprador_nome, p.comprador_apelido, ...p.itens.map(v => v.sku + ' ' + v.titulo)].join(' ').toLowerCase()).includes(sa(b)));
     }
 
     function pdDesenhar(){

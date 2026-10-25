@@ -170,6 +170,7 @@
       if(f.campo === 'venda' || f.campo === 'carrinho'){ const n = t.replace(/\D/g, '') || '0'; return q.or('order_txt.eq.' + n + ',pack_txt.eq.' + n); }
       if(f.campo === 'mlb') return q.ilike('item_id', limpo.replace(/^(mlb)\s*-\s*/i, '$1'));
       if(f.campo === 'sku' && !f.parcial) return q.ilike('sku', limpo);
+      if(f.campo === 'nome') return q.ilike('comprador_nome', '%' + limpo.replace(/[aeiouc\u00C0-\u00FF]/gi, '_') + '%');   // sem depender de acento
       return q.ilike(VD_CAMPOS[f.campo] || 'sku', '%' + limpo + '%');
     }
 

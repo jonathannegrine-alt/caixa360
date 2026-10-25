@@ -21,6 +21,10 @@ const ufDe = (s: any): string | null => { const id = String(s?.destination?.ship
 const endDe = (s: any) => s?.destination?.shipping_address || s?.receiver_address || {}
 const cidadeDe = (s: any): string | null => { const c = String(endDe(s)?.city?.name || '').trim(); return c || null }
 const cepDe = (s: any): string | null => { const c = String(endDe(s)?.zip_code || '').replace(/\D/g, ''); return c || null }
+// nome do comprador: o pedido (/orders) deixou de trazer first_name/last_name; o envio traz o nome do destinatário.
+// Serve para buscar a venda pelo nome (Vendas e Pedidos). Só preenche onde está vazio.
+const nomeDe = (s: any): string | null => { const n = String(s?.destination?.receiver_name || s?.receiver_address?.receiver_name || endDe(s)?.receiver_name || '').replace(/\s+/g, ' ').trim(); return n || null }
+const MAX_NOME = 550      // vendas antigas sem nome preenchidas por conta, por chamada
 
 // Guarda uma cópia da etiqueta no depósito "etiquetas": o ML só a entrega enquanto o pacote não saiu.
 // Desde 16/10/2026 guarda o código da impressora térmica (ZPL) compactado, <envio>.zpl.gz (~1,3 KB contra ~40 KB do
@@ -89,8 +93,9 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
   for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
     // vendas do galpão ainda sem envio registrado (canceladas ficam de fora). Mais antigas primeiro: com mais de
     // MAX_ENVIOS pendentes, as antigas ficavam dias sem conferir (venda de 29/09 despachada em 01/10 só baixou em 15/10)
-    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&data_venda=gte.${desde}&enviado_em=is.null&shipping_id=not.is.null&status=neq.cancelled&or=(logistic_type.is.null,logistic_type.neq.fulfillment)&select=shipping_id,etiqueta_em&order=data_venda.asc&limit=3000`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&data_venda=gte.${desde}&enviado_em=is.null&shipping_id=not.is.null&status=neq.cancelled&or=(logistic_type.is.null,logistic_type.neq.fulfillment)&select=shipping_id,etiqueta_em,comprador_nome&order=data_venda.asc&limit=3000`, { headers: dbH }).then(r => r.json()).catch(() => [])
     const ids = [...new Set((Array.isArray(vendas) ? vendas : []).map((v: any) => String(v.shipping_id)))].slice(0, MAX_ENVIOS)
+    const semNome = new Set((Array.isArray(vendas) ? vendas : []).filter((v: any) => !v.comprador_nome).map((v: any) => String(v.shipping_id)))
     const comEtiqueta = new Set((Array.isArray(vendas) ? vendas : []).filter((v: any) => v.etiqueta_em).map((v: any) => String(v.shipping_id)))
     await emLotes(ids, 6, async sid => {
       const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: { Authorization: `Bearer ${t.access_token}`, 'x-format-new': 'true' } }).catch(() => null)
@@ -126,6 +131,7 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       const cid = cidadeDe(s); if (cid) campos.cidade = cid
       const cep = cepDe(s); if (cep) campos.cep = cep
       if (s.tracking_number) campos.rastreio = String(s.tracking_number)
+      const nm = nomeDe(s); if (nm && semNome.has(sid)) campos.comprador_nome = nm
       // etiqueta JÁ IMPRESSA e ainda sem cópia: guarda agora (depois que o pacote sai o ML não entrega mais).
       // Nunca baixar antes da 1ª impressão: o ML marca "impressa" a quem baixa e a UpSeller pula a venda para "Retirar"
       // sem ninguém ter impresso (caso de 24/10/2026, 5 coletas perdidas). A operação do galpão não pode mudar por leitura nossa.
@@ -134,7 +140,7 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(campos) })
     })
   }
-  return { conferidos, enviados, etiquetas, estados: await estados(supaUrl, dbH, userId, clientId, secret) }
+  return { conferidos, enviados, etiquetas, estados: await estados(supaUrl, dbH, userId, clientId, secret), nomes: await nomes(supaUrl, dbH, userId, clientId, secret) }
 }
 
 // Estado (UF) de entrega de cada venda, para a análise por estado. Mais novas primeiro; o histórico é preenchido aos poucos.
@@ -153,7 +159,27 @@ async function estados(supaUrl: string, dbH: Record<string, string>, userId: str
       feitos++
       const campos: Record<string, unknown> = { uf, cidade: (s && cidadeDe(s)) || '--' }
       const cep = s && cepDe(s); if (cep) campos.cep = cep
+      const nm = s && nomeDe(s); if (nm) campos.comprador_nome = nm
       await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(campos) })
+    })
+  }
+  return feitos
+}
+
+// Nome do comprador das vendas que já tinham estado/cidade (histórico): mais novas primeiro, aos poucos.
+// Envio que o ML não entrega mais (404/403) ou sem nome fica com '' para não ser tentado de novo.
+async function nomes(supaUrl: string, dbH: Record<string, string>, userId: string, clientId: string, secret: string) {
+  let feitos = 0
+  for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
+    const vendas = await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&ml_user_id=eq.${t.ml_user_id}&comprador_nome=is.null&cidade=not.is.null&shipping_id=not.is.null&select=shipping_id&order=data_venda.desc&limit=${MAX_NOME * 2}`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    const ids = [...new Set((Array.isArray(vendas) ? vendas : []).map((v: any) => String(v.shipping_id)))].slice(0, MAX_NOME)
+    await emLotes(ids, 8, async sid => {
+      const r = await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: { Authorization: `Bearer ${t.access_token}`, 'x-format-new': 'true' } }).catch(() => null)
+      if (!r) return
+      const s = r.ok ? await r.json().catch(() => null) : null
+      if (!s && r.status !== 404 && r.status !== 403) return
+      feitos++
+      await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}&comprador_nome=is.null`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ comprador_nome: (s && nomeDe(s)) || '' }) })
     })
   }
   return feitos
@@ -239,7 +265,7 @@ Deno.serve(async (req: Request) => {
       const res: any[] = []
       for (const u of ids) res.push({ usuario: u, ...(await conferir(supaUrl, dbH, String(u), clientId, secret)) })
       const limpas = await limparEtiquetas(supaUrl, dbH).catch(() => 0)
-      return resp({ ok: true, usuarios: res.length, conferidos: res.reduce((s, r) => s + r.conferidos, 0), enviados: res.reduce((s, r) => s + r.enviados, 0), etiquetas: res.reduce((s, r) => s + (r.etiquetas || 0), 0), etiquetas_apagadas: limpas, estados: res.reduce((s, r) => s + (r.estados || 0), 0) })
+      return resp({ ok: true, usuarios: res.length, conferidos: res.reduce((s, r) => s + r.conferidos, 0), enviados: res.reduce((s, r) => s + r.enviados, 0), etiquetas: res.reduce((s, r) => s + (r.etiquetas || 0), 0), etiquetas_apagadas: limpas, estados: res.reduce((s, r) => s + (r.estados || 0), 0), nomes: res.reduce((s, r) => s + (r.nomes || 0), 0) })
     }
 
     const authHeader = req.headers.get('Authorization') || ''
