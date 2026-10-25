@@ -24,7 +24,7 @@ const cepDe = (s: any): string | null => { const c = String(endDe(s)?.zip_code |
 // nome do comprador: o pedido (/orders) deixou de trazer first_name/last_name; o envio traz o nome do destinatário.
 // Serve para buscar a venda pelo nome (Vendas e Pedidos). Só preenche onde está vazio.
 const nomeDe = (s: any): string | null => { const n = String(s?.destination?.receiver_name || s?.receiver_address?.receiver_name || endDe(s)?.receiver_name || '').replace(/\s+/g, ' ').trim(); return n || null }
-const MAX_NOME = 550      // vendas antigas sem nome preenchidas por conta, por chamada
+const MAX_NOME = 300      // vendas antigas sem nome preenchidas por conta, por chamada (no cron, só depois dos envios de todos)
 
 // Guarda uma cópia da etiqueta no depósito "etiquetas": o ML só a entrega enquanto o pacote não saiu.
 // Desde 16/10/2026 guarda o código da impressora térmica (ZPL) compactado, <envio>.zpl.gz (~1,3 KB contra ~40 KB do
@@ -87,7 +87,7 @@ async function tokens(supaUrl: string, dbH: Record<string, string>, userId: stri
   return lista.filter((t: any) => !t.invalido)
 }
 
-async function conferir(supaUrl: string, dbH: Record<string, string>, userId: string, clientId: string, secret: string) {
+async function conferir(supaUrl: string, dbH: Record<string, string>, userId: string, clientId: string, secret: string, comNomes = true) {
   const desde = new Date(Date.now() - DIAS * 86400000).toISOString()
   let conferidos = 0, enviados = 0, etiquetas = 0
   for (const t of await tokens(supaUrl, dbH, userId, clientId, secret)) {
@@ -140,7 +140,7 @@ async function conferir(supaUrl: string, dbH: Record<string, string>, userId: st
       await fetch(`${supaUrl}/rest/v1/vendas_ml?usuario_id=eq.${userId}&shipping_id=eq.${sid}`, { method: 'PATCH', headers: { ...dbH, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(campos) })
     })
   }
-  return { conferidos, enviados, etiquetas, estados: await estados(supaUrl, dbH, userId, clientId, secret), nomes: await nomes(supaUrl, dbH, userId, clientId, secret) }
+  return { conferidos, enviados, etiquetas, estados: await estados(supaUrl, dbH, userId, clientId, secret), nomes: comNomes ? await nomes(supaUrl, dbH, userId, clientId, secret) : 0 }
 }
 
 // Estado (UF) de entrega de cada venda, para a análise por estado. Mais novas primeiro; o histórico é preenchido aos poucos.
@@ -263,7 +263,9 @@ Deno.serve(async (req: Request) => {
       const us = await fetch(`${supaUrl}/rest/v1/ml_tokens?select=usuario_id`, { headers: dbH }).then(r => r.json()).catch(() => [])
       const ids = [...new Set((Array.isArray(us) ? us : []).map((u: any) => u.usuario_id))]
       const res: any[] = []
-      for (const u of ids) res.push({ usuario: u, ...(await conferir(supaUrl, dbH, String(u), clientId, secret)) })
+      for (const u of ids) res.push({ usuario: u, ...(await conferir(supaUrl, dbH, String(u), clientId, secret, false)) })
+      // nomes do histórico por último: se a rodada passar do tempo, os envios de todos já foram atualizados
+      for (const r of res) r.nomes = await nomes(supaUrl, dbH, String(r.usuario), clientId, secret).catch(() => 0)
       const limpas = await limparEtiquetas(supaUrl, dbH).catch(() => 0)
       return resp({ ok: true, usuarios: res.length, conferidos: res.reduce((s, r) => s + r.conferidos, 0), enviados: res.reduce((s, r) => s + r.enviados, 0), etiquetas: res.reduce((s, r) => s + (r.etiquetas || 0), 0), etiquetas_apagadas: limpas, estados: res.reduce((s, r) => s + (r.estados || 0), 0), nomes: res.reduce((s, r) => s + (r.nomes || 0), 0) })
     }
