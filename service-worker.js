@@ -1,15 +1,8 @@
-const CACHE_NAME = 'caixa360-v1';
-const URLS_ESTATICAS = [
-  '/caixa360/',
-  '/caixa360/index.html',
-];
+// v2: a cópia guardada é a última que veio da rede (a v1 guardava o index.html só na instalação e, com o sinal
+// fraco no celular, abria um menu de meses atrás — sem Pedidos, Lucro das vendas, Promoções)
+const CACHE_NAME = 'caixa360-v2';
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(URLS_ESTATICAS))
-  );
-  self.skipWaiting();
-});
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', e => {
   e.waitUntil(
@@ -21,11 +14,14 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Sempre busca da rede para Supabase e APIs externas
-  if (e.request.url.includes('supabase') || e.request.url.includes('anthropic') || e.request.url.includes('api.mercadolibre')) {
-    return;
-  }
+  const req = e.request;
+  // Sempre da rede, sem cópia: Supabase, APIs externas e tudo que não é do próprio site
+  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  // Rede primeiro (sem o cache do navegador); a cópia só é usada sem internet e é sempre a mais recente
   e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+    fetch(req, { cache: 'no-cache' }).then(r => {
+      if (r.ok) { const c = r.clone(); caches.open(CACHE_NAME).then(cache => cache.put(req, c)); }
+      return r;
+    }).catch(() => caches.match(req).then(r => r || caches.match('/caixa360/index.html')))
   );
 });
