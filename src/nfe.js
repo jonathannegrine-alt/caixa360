@@ -328,10 +328,27 @@
         if(g('mult')) l.mult = nfeNum(g('mult').value) > 0 ? nfeNum(g('mult').value) : 1;
         if(g('custo')) l.custo = g('custo').value.trim() === '' ? null : nfeNum(g('custo').value); });
     }
+    // produtos para o campo "Nosso SKU": a lista mostra SKU e nome; digitar palavras do nome ("vaso diamante bege") também acha
+    const nfeProdNome = s => typeof ocNomeProduto === 'function' ? ocNomeProduto(s) : ((typeof skus !== 'undefined' ? skus : []).find(x => x.sku === s) || {}).titulo || '';
+    const nfeSA = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    function nfeProds(){
+      return [...new Set([...(typeof skus !== 'undefined' ? skus : []).map(x => x.sku), ...(typeof estoqueGalpao !== 'undefined' ? estoqueGalpao : []).map(x => x.sku)])].filter(Boolean).sort().map(s => ({ sku: s, nome: nfeProdNome(s) }));
+    }
+    // texto que não é um SKU conhecido: um produto com todas as palavras (nome + SKU) troca pelo SKU dele
+    function nfeSkuNome(k){
+      const el = document.getElementById('nfi-sku-' + k); if(!el) return;
+      const txt = el.value.trim(), P = nfeProds(), nm = document.getElementById('nfi-nome-' + k);
+      const igual = P.find(p => nfeSA(p.sku) === nfeSA(txt)); if(nm) nm.textContent = igual ? igual.nome : '';
+      if(!txt || igual) return;
+      const pal = nfeSA(txt).split(/[\s\-·]+/).filter(Boolean);
+      const achou = P.filter(p => { const t = nfeSA(p.nome + ' ' + p.sku.split('-').join(' ')); return pal.every(w => t.includes(w)); });
+      if(achou.length === 1){ el.value = achou[0].sku; if(nm) nm.textContent = achou[0].nome; }
+      else if(typeof toast === 'function') toast(achou.length ? achou.length + ' produtos com essas palavras: escolha na lista ou digite também a cor.' : 'Nenhum produto com esse nome ou SKU.');
+    }
     const nfeCustoAuto = (l, fator) => Math.round(l.vun * fator / (l.mult || 1) * 10000) / 10000;
     function nfeImpDesenhar(){
       const I = nfe.imp, n = I.n, O = nfeImpOrdens(), nNF = Number(String(I.chave).slice(25, 34));
-      const skusL = [...new Set([...(typeof skus !== 'undefined' ? skus : []).map(x => x.sku), ...(typeof estoqueGalpao !== 'undefined' ? estoqueGalpao : []).map(x => x.sku)])].filter(Boolean).sort();
+      const prodsL = nfeProds();
       const din = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
       vmlModal('Importar compra — nota nº ' + nNF, `
         <div class="text-muted" style="margin-bottom:10px;line-height:1.6;">${nfeEsc(n.emit_nome || '')} · ${nfeEsc(nfeCnpj(n.emit_cnpj))} · emitida em ${n.emissao ? new Date(n.emissao).toLocaleDateString('pt-BR') : '—'} · ${fmt(Number(n.valor) || 0)}
@@ -342,11 +359,11 @@
             ${O.dele.length ? '<optgroup label="Deste fornecedor">' + O.dele.map(x => `<option value="${x.id}" ${String(I.ordem) === String(x.id) ? 'selected' : ''}>Ligar à ordem ${nfeEsc(x.numero)} · ${x.data ? ptDate(String(x.data).slice(0, 10)) : ''} · ${fmt(Number(x.total) || 0)}</option>`).join('') + '</optgroup>' : ''}
             ${O.outras.length ? '<optgroup label="Outras ordens">' + O.outras.map(x => `<option value="${x.id}" ${String(I.ordem) === String(x.id) ? 'selected' : ''}>Ligar à ordem ${nfeEsc(x.numero)} · ${nfeEsc(x.fornecedor || '')} · ${fmt(Number(x.total) || 0)}</option>`).join('') + '</optgroup>' : ''}</select></label>
         </div>
-        <datalist id="nfi-skus">${skusL.map(x => `<option value="${nfeEsc(x)}">`).join('')}</datalist>
+        <datalist id="nfi-skus">${prodsL.map(x => `<option value="${nfeEsc(x.sku)}" label="${nfeEsc(x.nome)}">`).join('')}</datalist>
         <div style="overflow-x:auto;max-height:46vh;"><table class="cp-tab"><thead><tr><th>Item da nota</th><th class="num">Qtd.</th><th class="num">Valor na nota</th><th>Nosso SKU</th><th title="Marque quando o mesmo código vale para vários SKUs (cores). A quantidade de cada SKU vem da ordem de compra ligada.">Vários SKUs</th><th class="num" title="Quantas unidades do nosso SKU vêm em cada unidade da nota (ex.: caixa com 10)">Un. por item</th><th class="num">Custo do produto</th></tr></thead><tbody>
           ${I.linhas.map((l, k) => { const custo = l.custo != null ? l.custo : nfeCustoAuto(l, I.fator);
             return `<tr><td style="white-space:normal;min-width:220px;"><b>${nfeEsc(l.codigo)}</b> · ${nfeEsc(l.descricao)}</td><td class="num">${(l.qtd || 0).toLocaleString('pt-BR')} ${nfeEsc(l.unidade || '')}</td><td class="num">R$ ${din(l.vun)}${l.ipi ? '<div class="cp-sub">+ IPI ' + String(l.ipi).replace('.', ',') + '%</div>' : ''}</td>
-              <td><input id="nfi-sku-${k}" list="nfi-skus" value="${nfeEsc(l.sku)}" placeholder="${l.varia ? 'vários (pela ordem)' : 'SKU'}" style="min-width:150px;" ${l.varia ? 'disabled' : ''}></td>
+              <td><input id="nfi-sku-${k}" list="nfi-skus" value="${nfeEsc(l.sku)}" placeholder="${l.varia ? 'vários (pela ordem)' : 'SKU ou nome'}" style="min-width:150px;" ${l.varia ? 'disabled' : ''} onchange="nfeSkuNome(${k})"><div class="cp-sub" id="nfi-nome-${k}">${!l.varia && l.sku ? nfeEsc(nfeProdNome(l.sku)) : ''}</div></td>
               <td style="text-align:center;"><input type="checkbox" id="nfi-varia-${k}" ${l.varia ? 'checked' : ''} onchange="nfeImpLer();nfeImpDesenhar()"></td>
               <td class="num"><input id="nfi-mult-${k}" type="number" min="1" step="1" value="${l.mult}" style="width:70px;" onchange="nfeImpLer();nfe.imp.linhas[${k}].custo=null;nfeImpDesenhar()"></td>
               <td class="num"><input id="nfi-custo-${k}" class="money-input" value="${din(custo)}" style="width:100px;text-align:right;"></td></tr>`; }).join('')}
