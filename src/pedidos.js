@@ -30,6 +30,7 @@
       if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return;
       if(pd.carregando) return pd.carregando;
       if(pd.uid !== usuarioAtual.id){ pd.uid = usuarioAtual.id; pd.carregadoEm = 0; }   // troca de usuário (ou demonstração) não aproveita os dados do outro
+      if(typeof vmlNotas === 'function') vmlNotas();   // anotações das vendas (carrega do banco em segundo plano)
       if(!forcar && pd.carregadoEm && Date.now() - pd.carregadoEm < 3 * 60 * 1000) return;
       pd.carregando = (async () => {
         const desde = new Date(Date.now() - 25 * 86400000).toISOString();
@@ -270,7 +271,9 @@
       if(typeof vmlModal !== 'function' || typeof vdDetalheML !== 'function') return;
       const p = pdPacotes().find(x => x.itens.some(v => String(v.order_id) === String(orderId)));
       const itens = p ? p.itens.map(v => `<div class="d-flex gap-2" style="align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">${pdFotoDet(v)}<div><div class="v-tit"><span class="v-qtd">${Number(v.qtd) || 1}x</span>${pdEsc(v.titulo || '')}</div><div class="text-muted">SKU: ${pdEsc(v.sku || '—')}${v.variacao ? ' · ' + pdEsc(v.variacao) : ''} · #${pdEsc(v.order_id)}</div></div></div>`).join('') : '';
-      vmlModal('Pedido #' + pdEsc(orderId), itens + (p ? pdConfCaixa(p) : '') + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>',
+      const nota = typeof vmlNotas === 'function' ? (vmlNotas()[String(orderId)] || '') : '';
+      const notaHtml = typeof vdNota === 'function' ? `<div style="margin-top:8px;"><button class="ico-btn" style="width:auto;padding:0 8px;gap:5px;" onclick="vdNota('${pdEsc(orderId)}')" title="Anotação da venda">✎ ${nota ? 'Anotação' : (window.EQUIPE && !window.EQUIPE.alterar ? 'Sem anotação' : 'Anotar')}</button>${nota ? `<div style="white-space:pre-wrap;font-size:13px;margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--surface-2,#f4f5f7);">${pdEsc(nota)}</div>` : ''}</div>` : '';
+      vmlModal('Pedido #' + pdEsc(orderId), itens + (p ? pdConfCaixa(p) : '') + notaHtml + '<div id="vd-det-ml"><div class="text-muted" style="padding:16px 0 4px;">Buscando entrega, pagamento e comprador no Mercado Livre…</div></div>',
         `<a class="btn-out btn" href="https://www.mercadolivre.com.br/vendas/${pdEsc(orderId)}/detalhe" target="_blank" rel="noopener" style="text-decoration:none;">Abrir no Mercado Livre ↗</a><button class="btn-out btn" onclick="fecharModal('modal-vml')">Fechar</button>`);
       vdDetalheML(orderId);
     }

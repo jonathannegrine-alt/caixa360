@@ -724,19 +724,53 @@
       vdDesenhar();
     }
 
-    // Anotações por venda (ficam neste navegador)
-    function vmlNotas(){ try { return JSON.parse(localStorage.getItem('mk_vml_notas') || '{}'); } catch(e){ return {}; } }
-    function vdNota(orderId){
-      const atual = vmlNotas()[orderId] || '';
-      vmlModal('Anotação da venda #' + orderId,
-        `<textarea id="vml-nota" rows="4" placeholder="Escreva uma anotação para esta venda">${vmlEsc(atual)}</textarea>`,
-        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" onclick="vdSalvarNota('${orderId}')">Salvar</button>`);
+    // Anotações por venda: tabela vendas_notas (uma por venda; o banco grava quem escreveu). Até 31/10/2026 ficavam no
+    // navegador (localStorage mk_vml_notas): ao abrir, as daquele navegador sobem para o banco uma vez.
+    let vdNotas = { uid: null, mapa: {}, info: {}, lendo: null };
+    function vmlNotas(){
+      if(typeof usuarioAtual === 'undefined' || !usuarioAtual) return {};
+      if(vdNotas.uid !== usuarioAtual.id && !vdNotas.lendo) vdNotas.lendo = vdNotasLer().finally(() => { vdNotas.lendo = null; vdNotasRedesenhar(); });
+      return vdNotas.mapa;
     }
-    function vdSalvarNota(orderId){
-      const n = vmlNotas(); const t = document.getElementById('vml-nota').value.trim();
-      if(t) n[orderId] = t; else delete n[orderId];
-      localStorage.setItem('mk_vml_notas', JSON.stringify(n));
-      fecharModal('modal-vml'); vdDesenhar();
+    function vdNotasRedesenhar(){
+      try { const v = document.getElementById('view-vendas'); if(v && v.classList.contains('active') && typeof vdDesenhar === 'function') vdDesenhar(); } catch(e){}
+    }
+    async function vdNotasLer(){
+      const uid = usuarioAtual.id, mapa = {}, info = {};
+      const r = await supa.from('vendas_notas').select('order_id,texto,criado_em,feito_por,alterado_por,alterado_em').eq('usuario_id', uid).limit(5000);
+      (r.data || []).forEach(x => { mapa[String(x.order_id)] = x.texto; info[String(x.order_id)] = x; });
+      // notas antigas deste navegador (só o dono, só uma vez)
+      if(!r.error && !window.EQUIPE && !(typeof MODO_DEMO !== 'undefined' && MODO_DEMO)){
+        let loc = {}; try { loc = JSON.parse(localStorage.getItem('mk_vml_notas') || '{}'); } catch(e){}
+        const novas = Object.entries(loc).filter(([id, t]) => /^\d+$/.test(id) && String(t || '').trim() && !mapa[id]).map(([id, t]) => ({ usuario_id: uid, order_id: id, texto: String(t).trim() }));
+        let ok = true;
+        if(novas.length){ const g = await supa.from('vendas_notas').upsert(novas, { onConflict: 'usuario_id,order_id', ignoreDuplicates: true }); ok = !g.error; if(ok) novas.forEach(n => { mapa[n.order_id] = n.texto; }); }
+        // subiu: guarda uma cópia com outro nome e para de usar a antiga
+        if(ok && Object.keys(loc).length){ try { localStorage.setItem('mk_vml_notas_antigas', JSON.stringify(loc)); localStorage.removeItem('mk_vml_notas'); } catch(e){} }
+      }
+      vdNotas = { uid, mapa, info, lendo: null };
+    }
+    async function vdNota(orderId){
+      if(vdNotas.uid !== (usuarioAtual && usuarioAtual.id)) await vdNotasLer().catch(() => {});
+      const atual = vdNotas.mapa[String(orderId)] || '', i = vdNotas.info[String(orderId)];
+      if(typeof equipeNomesCarregar === 'function') await equipeNomesCarregar().catch(() => {});
+      const quem = u => typeof equipeQuem === 'function' ? equipeQuem(u) : '';
+      const dt = t => t ? new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+      const pode = !window.EQUIPE || window.EQUIPE.alterar;
+      vmlModal('Anotação da venda #' + orderId,
+        `<textarea id="vml-nota" rows="5" placeholder="Escreva uma anotação para esta venda" ${pode ? '' : 'readonly'}>${vmlEsc(atual)}</textarea>` +
+        (i ? `<div class="text-muted" style="font-size:12px;margin-top:6px;">Escrita ${i.feito_por ? 'por ' + vmlEsc(quem(i.feito_por)) + ' ' : ''}em ${dt(i.criado_em)}${i.alterado_em ? ' · alterada' + (i.alterado_por ? ' por ' + vmlEsc(quem(i.alterado_por)) : '') + ' em ' + dt(i.alterado_em) : ''}</div>` : ''),
+        `<button class="btn-out btn" onclick="fecharModal('modal-vml')">${pode ? 'Cancelar' : 'Fechar'}</button>${pode ? `<button class="btn" onclick="vdSalvarNota('${orderId}', this)">Salvar</button>` : ''}`);
+    }
+    async function vdSalvarNota(orderId, bt){
+      const t = document.getElementById('vml-nota').value.trim(), uid = usuarioAtual.id;
+      if(bt){ bt.disabled = true; bt.textContent = 'Salvando…'; }
+      const r = t ? await supa.from('vendas_notas').upsert({ usuario_id: uid, order_id: String(orderId), texto: t }, { onConflict: 'usuario_id,order_id' })
+                  : await supa.from('vendas_notas').delete().eq('usuario_id', uid).eq('order_id', String(orderId));
+      if(r.error){ alert('Não consegui salvar a anotação: ' + r.error.message); if(bt){ bt.disabled = false; bt.textContent = 'Salvar'; } return; }
+      await vdNotasLer().catch(() => {});
+      fecharModal('modal-vml'); vdNotasRedesenhar();
+      if(typeof pdDesenhar === 'function') try { const v = document.getElementById('view-pedidos'); if(v && v.classList.contains('active')) pdDesenhar(); } catch(e){}
     }
 
     // ----- exportação (limitada: período curto e poucas linhas, como no Mercado Turbo) -----

@@ -12,7 +12,7 @@
     const EQ_LOGISTICA = ['pedidos', 'estoque'];
     const EQ_RPC = ['sku_fotos', 'vendas_ml_sku_dia', 'vendas_full_sku', 'equipe_nomes'];
     // colaborador com "visualizar e alterar": tabelas que cada tela grava (o banco confere de novo: migration 20261231)
-    const EQ_ESCRITA = { pedidos: ['vendas_conferir'], estoque: ['estoque_mov', 'estoque_contagens', 'estoque_envios_full', 'sku_fotos_manual'] };            // funções do banco que o colaborador pode chamar (só leitura)
+    const EQ_ESCRITA = { pedidos: ['vendas_conferir', 'vendas_notas'], estoque: ['estoque_mov', 'estoque_contagens', 'estoque_envios_full', 'sku_fotos_manual'] };            // funções do banco que o colaborador pode chamar (só leitura)
     const EQ_FUNCOES = ['ml-venda'];          // funções de borda (a ml-venda só consulta para colaborador)
 
     (function(){
