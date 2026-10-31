@@ -47,6 +47,7 @@
           ${nfe.certs.length ? '<button class="btn-out btn-sm" onclick="nfeConsultarAgora(this)">Consultar agora</button>' : ''}
           <div class="text-muted" style="font-size:12px;margin-top:12px;">Segurança: o arquivo e a senha seguem direto para o servidor e ficam guardados cifrados. Depois de enviados, nem esta tela consegue ler o certificado; ele só é usado pela consulta à SEFAZ. Use "Remover" para apagar quando quiser.</div>
         </div>`;
+      if(typeof icmsRenderCard === 'function') icmsRenderCard();
     }
     function nfeEnviarCert(loja){
       const nome = typeof contaNome === 'function' && loja ? contaNome(loja) : '';
@@ -309,6 +310,17 @@
         const ipiPct = Number(i.valor) > 0 && Number(i.ipi) > 0 ? Math.round(Number(i.ipi) / Number(i.valor) * 10000) / 100 : 0;
         return { codigo: String(i.codigo), descricao: i.descricao, unidade: i.unidade, qtd: Number(i.qtd) || 0, vun: Number(i.valor_un) || 0, ipi: ipiPct,
           sku: mp.sku || '', mult: Number(mp.mult) > 0 ? Number(mp.mult) : 1, varia: !!mp.varia, custo: null }; }) };
+      // estados e ICMS de cada item pelo XML (a lista de itens guardada não tem); sem o XML, origem pelo código da chave
+      const I = nfe.imp; I.ufOrig = typeof ICMS_COD_UF !== 'undefined' ? ICMS_COD_UF[Number(String(chave).slice(0, 2))] || '' : '';
+      try {
+        const D = new DOMParser().parseFromString(await nfeXml(chave), 'application/xml'), q = (el, t) => { const x = el && el.getElementsByTagName(t)[0]; return x ? x.textContent : ''; };
+        const em = D.getElementsByTagName('enderEmit')[0], de = D.getElementsByTagName('enderDest')[0];
+        if(q(em, 'UF')) I.ufOrig = q(em, 'UF'); if(q(de, 'UF')) I.ufDest = q(de, 'UF');
+        [...D.getElementsByTagName('det')].forEach((d, k) => { const l = I.linhas[k], ic = d.getElementsByTagName('ICMS')[0]; if(!l || !ic) return;
+          l.pIcms = Number(q(ic, 'pICMS')) || 0; l.importado = ['1', '2', '3', '8'].includes(q(ic, 'orig')); });
+      } catch(e){}
+      if(!I.ufDest) I.ufDest = typeof icmsUfLoja === 'function' ? icmsUfLoja() : 'SP';
+      I.difal = !!(typeof comprasCfg !== 'undefined' && comprasCfg.difalEntrada) && I.ufOrig && I.ufOrig !== I.ufDest;
       nfeImpDesenhar();
     }
     // ordens que podem ser desta nota: do mesmo fornecedor (pelo cadastro ou pelo nome da nota) e ainda sem nota ligada
@@ -346,6 +358,13 @@
       else if(typeof toast === 'function') toast(achou.length ? achou.length + ' produtos com essas palavras: escolha na lista ou digite também a cor.' : 'Nenhum produto com esse nome ou SKU.');
     }
     const nfeCustoAuto = (l, fator) => Math.round(l.vun * fator / (l.mult || 1) * 10000) / 10000;
+    // DIFAL por unidade do nosso SKU: (valor na nota + IPI) × diferença de alíquota; o preço da ordem continua sem IPI
+    // (a ordem soma o IPI à parte) e sem DIFAL (não é pago ao fornecedor)
+    function nfeDifalPct(l){ const I = nfe.imp; return I.difal && typeof icmsDifal === 'function' ? icmsDifal(I.ufOrig, I.ufDest, l.importado, l.pIcms) : 0; }
+    function nfeCustoReal(l, preco){
+      const ipi = preco * (l.ipi || 0) / 100, difal = l.vun * (1 + (l.ipi || 0) / 100) / (l.mult || 1) * nfeDifalPct(l) / 100;
+      return { ipi, difal, total: preco + ipi + difal };
+    }
     function nfeImpDesenhar(){
       const I = nfe.imp, n = I.n, O = nfeImpOrdens(), nNF = Number(String(I.chave).slice(25, 34));
       const prodsL = nfeProds();
@@ -359,14 +378,21 @@
             ${O.dele.length ? '<optgroup label="Deste fornecedor">' + O.dele.map(x => `<option value="${x.id}" ${String(I.ordem) === String(x.id) ? 'selected' : ''}>Ligar à ordem ${nfeEsc(x.numero)} · ${x.data ? ptDate(String(x.data).slice(0, 10)) : ''} · ${fmt(Number(x.total) || 0)}</option>`).join('') + '</optgroup>' : ''}
             ${O.outras.length ? '<optgroup label="Outras ordens">' + O.outras.map(x => `<option value="${x.id}" ${String(I.ordem) === String(x.id) ? 'selected' : ''}>Ligar à ordem ${nfeEsc(x.numero)} · ${nfeEsc(x.fornecedor || '')} · ${fmt(Number(x.total) || 0)}</option>`).join('') + '</optgroup>' : ''}</select></label>
         </div>
+        ${(() => { const p = I.linhas.length ? nfeDifalPct({ ...I.linhas[0], importado: I.linhas[0].importado }) : 0, tot = I.linhas.reduce((s, l) => s + l.vun * (1 + (l.ipi || 0) / 100) * l.qtd * nfeDifalPct(l) / 100, 0);
+          const inter = I.linhas[0] && I.linhas[0].pIcms ? I.linhas[0].pIcms : (typeof icmsInter === 'function' ? icmsInter(I.ufOrig, I.ufDest, I.linhas[0] && I.linhas[0].importado) : 0);
+          return `<div style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:10px 0;padding:8px 10px;border:1px solid var(--border, #ddd);border-radius:8px;">
+            <label style="display:flex;gap:6px;align-items:center;font-weight:600;"><input type="checkbox" ${I.difal ? 'checked' : ''} ${!I.ufOrig || I.ufOrig === I.ufDest ? 'disabled' : ''} onchange="nfeImpLer();nfe.imp.difal=this.checked;nfeImpDesenhar()"> Calcular DIFAL (ICMS de outro estado)</label>
+            <span class="text-muted">${I.ufOrig && I.ufOrig !== I.ufDest ? `${nfeEsc(I.ufOrig)} → ${nfeEsc(I.ufDest)}: interna ${nfeEsc(I.ufDest)} ${String(typeof icmsInterna === 'function' ? icmsInterna(I.ufDest) : 0).replace('.', ',')}% − ${String(inter).replace('.', ',')}% da nota${I.difal ? ` = <b>${String(p).replace('.', ',')}%</b> · DIFAL da nota <b>${fmt(tot)}</b>` : ''}` : 'Nota do mesmo estado: sem DIFAL.'}</span>
+            <a href="#" onclick="event.preventDefault();nfeImpLer();icmsTabela(true)" style="margin-left:auto;">tabela de ICMS</a></div>`; })()}
         <datalist id="nfi-skus">${prodsL.map(x => `<option value="${nfeEsc(x.sku)}" label="${nfeEsc(x.nome)}">`).join('')}</datalist>
-        <div style="overflow-x:auto;max-height:46vh;"><table class="cp-tab"><thead><tr><th>Item da nota</th><th class="num">Qtd.</th><th class="num">Valor na nota</th><th>Nosso SKU</th><th title="Marque quando o mesmo código vale para vários SKUs (cores). A quantidade de cada SKU vem da ordem de compra ligada.">Vários SKUs</th><th class="num" title="Quantas unidades do nosso SKU vêm em cada unidade da nota (ex.: caixa com 10)">Un. por item</th><th class="num">Custo do produto</th></tr></thead><tbody>
+        <div style="overflow-x:auto;max-height:46vh;"><table class="cp-tab"><thead><tr><th>Item da nota</th><th class="num">Qtd.</th><th class="num">Valor na nota</th><th>Nosso SKU</th><th title="Marque quando o mesmo código vale para vários SKUs (cores). A quantidade de cada SKU vem da ordem de compra ligada.">Vários SKUs</th><th class="num" title="Quantas unidades do nosso SKU vêm em cada unidade da nota (ex.: caixa com 10)">Un. por item</th><th class="num" title="Preço de cada unidade do nosso SKU que vai para a ordem de compra, sem IPI (a ordem soma o IPI à parte)">Preço na ordem</th><th class="num" title="Preço na ordem + IPI + DIFAL (se marcado): quanto o produto custa de verdade">Custo real</th></tr></thead><tbody>
           ${I.linhas.map((l, k) => { const custo = l.custo != null ? l.custo : nfeCustoAuto(l, I.fator);
             return `<tr><td style="white-space:normal;min-width:220px;"><b>${nfeEsc(l.codigo)}</b> · ${nfeEsc(l.descricao)}</td><td class="num">${(l.qtd || 0).toLocaleString('pt-BR')} ${nfeEsc(l.unidade || '')}</td><td class="num">R$ ${din(l.vun)}${l.ipi ? '<div class="cp-sub">+ IPI ' + String(l.ipi).replace('.', ',') + '%</div>' : ''}</td>
               <td><input id="nfi-sku-${k}" list="nfi-skus" value="${nfeEsc(l.sku)}" placeholder="${l.varia ? 'vários (pela ordem)' : 'SKU ou nome'}" style="min-width:150px;" ${l.varia ? 'disabled' : ''} onchange="nfeSkuNome(${k})"><div class="cp-sub" id="nfi-nome-${k}">${!l.varia && l.sku ? nfeEsc(nfeProdNome(l.sku)) : ''}</div></td>
               <td style="text-align:center;"><input type="checkbox" id="nfi-varia-${k}" ${l.varia ? 'checked' : ''} onchange="nfeImpLer();nfeImpDesenhar()"></td>
               <td class="num"><input id="nfi-mult-${k}" type="number" min="1" step="1" value="${l.mult}" style="width:70px;" onchange="nfeImpLer();nfe.imp.linhas[${k}].custo=null;nfeImpDesenhar()"></td>
-              <td class="num"><input id="nfi-custo-${k}" class="money-input" value="${din(custo)}" style="width:100px;text-align:right;"></td></tr>`; }).join('')}
+              <td class="num"><input id="nfi-custo-${k}" class="money-input" value="${din(custo)}" style="width:100px;text-align:right;" onchange="nfeImpLer();nfeImpDesenhar()"></td>
+              <td class="num">${(() => { const r = nfeCustoReal(l, custo); return '<b>R$ ' + din(r.total) + '</b>' + (r.ipi || r.difal ? '<div class="cp-sub">' + [r.ipi ? 'IPI ' + din(r.ipi) : '', r.difal ? 'DIFAL ' + din(r.difal) : ''].filter(Boolean).join(' · ') + '</div>' : ''); })()}</td></tr>`; }).join('')}
         </tbody></table></div>
         <div class="text-muted" style="font-size:12px;margin-top:8px;">O SKU de cada código fica guardado: na próxima nota deste fornecedor ele já vem preenchido. Criar ordem nova abre a ordem de compra para você revisar e salvar (as parcelas vão para o Contas a pagar como sempre).</div>`,
         `<button class="btn-out" onclick="nfeVer('${nfeEsc(I.chave)}')">Voltar</button><button class="btn" onclick="nfeImpConfirmar(this)">Continuar</button>`);
@@ -411,6 +437,7 @@
       ocNova.nfe = I.chave;
       // duplicatas da nota viram as parcelas só quando o valor da nota é o real (fator 1); com fator, gere pela condição
       if(I.fator === 1 && (n.duplicatas || []).length) ocNova.parcelas = n.duplicatas.map(d => ({ data: d.vencimento, val: Number(d.valor) || 0 }));
-      ocNova.obs = 'Importada da nota fiscal nº ' + Number(String(I.chave).slice(25, 34)) + ' (' + (n.emit_nome || '') + ').';
+      const difTot = I.linhas.reduce((s, l) => s + l.vun * (1 + (l.ipi || 0) / 100) * l.qtd * nfeDifalPct(l) / 100, 0);
+      ocNova.obs = 'Importada da nota fiscal nº ' + Number(String(I.chave).slice(25, 34)) + ' (' + (n.emit_nome || '') + ').' + (difTot > 0 ? ' DIFAL calculado (' + I.ufOrig + ' → ' + I.ufDest + '): ' + fmt(difTot) + ', fora do total da ordem.' : '');
       ocCriarDesenhar();
     }
