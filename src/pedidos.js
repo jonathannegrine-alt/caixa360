@@ -245,6 +245,7 @@
     // janela de detalhes: itens do pacote + entrega, pagamento, comprador e etiqueta lidos no Mercado Livre
     // "Conferir na fatura Flex": a mesma marcação da página Vendas (tabela vendas_conferir), usada na conferência da fatura
     function pdConfCaixa(p){
+      if(window.EQUIPE) return '';   // colaborador só consulta
       const conf = pd.conf.has(String(p.order_id));
       if(p.logistic_type !== 'self_service' && !conf) return '';
       return `<label style="display:flex;gap:5px;align-items:center;margin-top:4px;font-size:12px;cursor:pointer;white-space:nowrap;${conf ? 'color:var(--warning,#d97706);font-weight:700;' : 'color:var(--text-muted);'}" title="Marque para conferir este pedido quando chegar a fatura do Flex (ex.: comprador diz que não recebeu)"><input type="checkbox" style="width:auto;margin:0;" ${conf ? 'checked' : ''} onchange="pdConferir('${p.order_id}', '${p.ml_user_id || ''}', ${p.shipping_id || 'null'}, this)"> ⚑ Conferir na fatura Flex</label>`;

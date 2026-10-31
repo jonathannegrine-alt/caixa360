@@ -113,6 +113,8 @@
     }
 
     async function entrarNoApp(user){
+      // colaborador (Configurações → Equipe do dono): abre só as telas liberadas, sem carregar o resto
+      if(typeof equipeEntrar === 'function' && await equipeEntrar(user).catch(() => false)) return;
       usuarioAtual = user;
       document.getElementById('login-sync').style.display = 'flex';
       document.querySelector('.login-form').style.display = 'none';
@@ -226,6 +228,7 @@
       limparSessaoLocal();
       try { sessionStorage.removeItem('mk_pagina'); } catch(e){}
       await supa.auth.signOut();
+      if(window.EQUIPE){ location.reload(); return; }   // colaborador: recomeça do zero (menu e guarda voltam ao normal)
       usuarioAtual = null;
       document.getElementById('tela-login').classList.add('ativo');
       document.getElementById('user-bar').style.display = 'none';

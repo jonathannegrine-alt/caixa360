@@ -50,7 +50,13 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) return resp({ error: 'Não autenticado' }, 401)
     const jwtRes = await fetch(`${supaUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: authHeader } })
     if (!jwtRes.ok) return resp({ error: 'Sessão inválida — faça login novamente.' }, 401)
-    const { id: userId } = await jwtRes.json()
+    let { id: userId } = await jwtRes.json()
+    // colaborador (tabela equipe) com a tela Pedidos: consulta a venda na conta do dono; nada além de ver
+    const eq = await fetch(`${supaUrl}/rest/v1/equipe?membro_id=eq.${userId}&ativo=is.true&select=dono_id,paginas`, { headers: dbH }).then(r => r.json()).catch(() => [])
+    if (Array.isArray(eq) && eq[0]) {
+      if (!(eq[0].paginas || []).includes('pedidos') || !['detalhe', 'etiqueta', 'danfe', 'nota', ''].includes(String(body?.acao || ''))) return resp({ error: 'Sem permissão para isso.' }, 403)
+      userId = eq[0].dono_id
+    }
 
     // visitas dos anúncios por dia (soma das contas pedidas), para a aba "Visitas e conversão"
     if (body?.acao === 'visitas') {
