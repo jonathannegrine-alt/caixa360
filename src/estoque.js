@@ -525,7 +525,7 @@
       const r = await supa.from('estoque_mov').select('*').eq('usuario_id', usuarioAtual.id).eq('deposito_id', dep.id).eq('sku_norm', k).order('criado_em', { ascending: false }).limit(300);
       const mv = r.data || [];
       if(typeof equipeNomesCarregar === 'function') await equipeNomesCarregar().catch(() => {});
-      const quem = m => typeof equipeQuem === 'function' ? equipeQuem(m.feito_por) : '';
+      const quem = m => typeof equipeQuem !== 'function' ? '' : !m.feito_por && String(m.criado_em) < '2026-10-31T14:30' ? '—' : equipeQuem(m.feito_por);   // antes disso não havia registro
       let saldo = estSaldoDe(dep.id, k);
       const dt = t => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
       const linhas = mv.map(m => { const depois = saldo; saldo -= Number(m.qtd); return `<tr><td>${dt(m.criado_em)}</td><td>${ES_MOTIVO[m.motivo] || m.motivo}${m.ref ? ` <span class="ap-parc">${esEsc(m.ref)}</span>` : ''}</td><td class="num ${Number(m.qtd) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(m.qtd) > 0 ? '+' : ''}${esInt(m.qtd)}</b></td><td class="num">${esInt(depois)}</td><td class="text-muted" style="font-size:12px;white-space:normal;">${esEsc(m.obs || '')}</td><td style="font-size:12px;white-space:nowrap;">${esEsc(quem(m))}</td></tr>`; }).join('');
