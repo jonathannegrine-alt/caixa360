@@ -9,7 +9,7 @@ const CORS = {
   'Content-Type': 'application/json',
 }
 const resp = (body: object, status = 200) => new Response(JSON.stringify(body), { headers: CORS, status })
-const PAGINAS = ['pedidos']
+const PAGINAS = ['pedidos', 'estoque']
 const DEMO = 'c9c1dcb9-c774-46f8-8c41-7b0a3077f967'
 const MAX = 15
 

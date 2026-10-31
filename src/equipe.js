@@ -6,8 +6,11 @@
 // banco + EQ_PAGINAS aqui + PAGINAS na função "equipe" (+ RPC/função de borda que a tela usar, nas listas abaixo).
 // Carregado logo depois de demo.js: a guarda precisa envolver o fetch antes de o cliente do Supabase ser criado.
     var EQUIPE = null;   // { dono_id, paginas, nome, membro, email } quando quem entrou é colaborador
-    const EQ_PAGINAS = [['pedidos', 'Pedidos', 'Pedidos do galpão até o envio e o detalhe de cada venda (com valores).']];
-    const EQ_RPC = ['sku_fotos'];            // funções do banco que o colaborador pode chamar (só leitura)
+    const EQ_PAGINAS = [['pedidos', 'Pedidos', 'Pedidos do galpão até o envio e o detalhe de cada venda (com valores).'],
+      ['estoque', 'Estoque', 'Estoque do galpão: físico, a caminho, ocupado, disponível e movimentações.']];
+    // perfil Logística (padrão ao criar): Pedidos + Estoque
+    const EQ_LOGISTICA = ['pedidos', 'estoque'];
+    const EQ_RPC = ['sku_fotos', 'vendas_ml_sku_dia', 'vendas_full_sku'];            // funções do banco que o colaborador pode chamar (só leitura)
     const EQ_FUNCOES = ['ml-venda'];          // funções de borda (a ml-venda só consulta para colaborador)
 
     (function(){
@@ -65,9 +68,20 @@
       window.nav = function(p, fromPop){ return navOrig(pags.includes(p) ? p : pags[0], fromPop); };
       const main = document.querySelector('.main');
       if(main && !document.getElementById('eq-faixa')) main.insertAdjacentHTML('afterbegin', '<div id="eq-faixa" class="alert alert-info" style="margin-bottom:12px;">Acesso de colaborador: só consulta' + (m.nome ? ' · ' + eqEsc(m.nome) : '') + '.</div>');
+      if(pags.includes('estoque')) await equipeCarregarEstoque(m.dono_id).catch(() => {});
       window._navPronto = true;
       window.nav(pags.includes((location.hash || '').slice(1)) ? location.hash.slice(1) : pags[0]);
       return true;
+    }
+
+    // cadastro, kits e espelho do galpão do dono (o login normal carrega isso em carregarDoSupabase, que o colaborador não roda)
+    async function equipeCarregarEstoque(uid){
+      const [s, c, k, e] = await Promise.all([supa.from('skus').select('*').eq('usuario_id', uid), supa.from('sku_componentes').select('*').eq('usuario_id', uid),
+        supa.from('sku_composicao').select('*').eq('usuario_id', uid), supa.from('estoque_componentes').select('*').eq('usuario_id', uid)]);
+      if(s.data) skus = s.data.map(x => ({ id: x.id, sku: x.sku, custo: x.custo, imposto: x.imposto, titulo: x.titulo || '', pai: x.pai || null, variacao: x.variacao || null }));
+      if(c.data) componentes = c.data.map(x => ({ codigo: x.codigo, descricao: x.descricao, custo_unitario: x.custo_unitario, fornecedor: x.fornecedor, lead_time_dias: x.lead_time_dias }));
+      if(k.data) composicaoKit = k.data.map(x => ({ sku_comercial: x.sku_comercial, titulo_comercial: x.titulo_comercial, sku_componente: x.sku_componente, qty: x.qty }));
+      if(e.data) estoqueGalpao = e.data.map(x => ({ sku: x.sku, descricao: x.descricao, qtd_galpao: x.qtd_galpao, qtd_full: x.qtd_full, qtd_full_pendente: x.qtd_full_pendente || 0, em_transito: x.em_transito, custo_medio: x.custo_medio }));
     }
 
     // ---------- Configurações → Equipe (dono) ----------
@@ -100,7 +114,7 @@
         <label class="pf-c"><span>Nome</span><input id="eq-nome" placeholder="Ex.: Willian (logística)"></label>
         <label class="pf-c"><span>E-mail</span><input id="eq-email" type="email" autocomplete="off"></label>
         <label class="pf-c"><span>Senha (mínimo 8 caracteres)</span><input id="eq-senha" type="password" autocomplete="new-password"></label>
-        <div class="pf-c"><span>Telas que pode ver</span>${EQ_PAGINAS.map(([k, t, d]) => `<label style="display:flex;gap:8px;align-items:flex-start;margin-top:4px;"><input type="checkbox" class="eq-pag" value="${k}" checked> <span><b>${t}</b><br><small class="text-muted">${d}</small></span></label>`).join('')}</div>
+        <div class="pf-c"><span>Telas que pode ver <small class="text-muted">(já vem no perfil Logística: Pedidos + Estoque)</small></span>${EQ_PAGINAS.map(([k, t, d]) => `<label style="display:flex;gap:8px;align-items:flex-start;margin-top:4px;"><input type="checkbox" class="eq-pag" value="${k}" ${EQ_LOGISTICA.includes(k) ? 'checked' : ''}> <span><b>${t}</b><br><small class="text-muted">${d}</small></span></label>`).join('')}</div>
         <div id="eq-msg" style="font-size:13px;margin-top:8px;"></div>`,
         `<button class="btn-out" onclick="fecharModal('modal-vml')">Cancelar</button><button class="btn" id="eq-bt" onclick="equipeCriar()">Criar acesso</button>`);
     }
