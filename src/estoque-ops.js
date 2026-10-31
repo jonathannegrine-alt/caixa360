@@ -527,6 +527,7 @@
       if(!esoCtVolta) esoCtDep = aberto.id; esoCtVolta = false; const dep = est.depositos.find(d => d.id === esoCtDep) || aberto;
       const dt = t => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
       const minhas = eso.contagens.filter(c => Number(c.deposito_id) === dep.id);
+      const quem = c => typeof equipeQuem === 'function' && c.feito_por ? '<div class="cp-sub">por ' + esEsc(equipeQuem(c.feito_por)) + '</div>' : '';
       vmlModal('Contagem de estoque — ' + esEsc(dep.nome), `
         <div class="text-muted" style="margin-bottom:12px;">Informe o que foi contado e o sistema mostra a diferença para o que ele esperava. Você decide se ajusta o estoque ou só guarda a comparação.</div>
         <div class="d-flex" style="gap:8px;flex-wrap:wrap;margin-bottom:16px;">
@@ -536,7 +537,7 @@
         </div>
         <div class="form-label">Contagens anteriores</div>
         <div style="overflow-x:auto;max-height:44vh;"><table class="cp-tab"><thead><tr><th>Nº</th><th>Quando</th><th>Origem</th><th class="num">Produtos</th><th class="num">Com diferença</th><th>Situação</th><th></th></tr></thead><tbody>
-          ${minhas.length ? minhas.map(c => { const dif = (c.itens || []).filter(i => Number(i.real) !== Number(i.sistema)).length; return `<tr><td><b>CT${c.id}</b></td><td>${dt(c.criado_em)}</td><td>${esEsc(c.origem || '')}${c.obs ? '<div class="cp-sub" style="white-space:normal;">' + esEsc(c.obs) + '</div>' : ''}</td><td class="num">${(c.itens || []).length}</td><td class="num">${dif}</td><td>${c.aplicada_em ? '<span class="cp-sit cp-ok">Estoque ajustado</span>' : '<span class="cp-sit cp-semvenda">Só comparação</span>'}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="esoContagemVer(${c.id})">Ver</button></td></tr>`; }).join('') : '<tr><td colspan="7" class="text-muted" style="padding:16px;text-align:center;">Nenhuma contagem ainda.</td></tr>'}
+          ${minhas.length ? minhas.map(c => { const dif = (c.itens || []).filter(i => Number(i.real) !== Number(i.sistema)).length; return `<tr><td><b>CT${c.id}</b></td><td>${dt(c.criado_em)}${quem(c)}</td><td>${esEsc(c.origem || '')}${c.obs ? '<div class="cp-sub" style="white-space:normal;">' + esEsc(c.obs) + '</div>' : ''}</td><td class="num">${(c.itens || []).length}</td><td class="num">${dif}</td><td>${c.aplicada_em ? '<span class="cp-sit cp-ok">Estoque ajustado</span>' : '<span class="cp-sit cp-semvenda">Só comparação</span>'}</td><td style="text-align:right;"><button class="btn-out btn-sm" onclick="esoContagemVer(${c.id})">Ver</button></td></tr>`; }).join('') : '<tr><td colspan="7" class="text-muted" style="padding:16px;text-align:center;">Nenhuma contagem ainda.</td></tr>'}
         </tbody></table></div>`);
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) mc.style.maxWidth = '920px';
     }

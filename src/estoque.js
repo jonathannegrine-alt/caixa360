@@ -110,6 +110,7 @@
       if(!host){ host = document.createElement('div'); host.id = 'est-host'; view.appendChild(host); }
       if(!est.carregadoEm || !host.innerHTML.trim()){ if(typeof carregandoMsg === 'function') carregandoMsg(host, 'Carregando o estoque…'); else host.innerHTML = '<div class="vazio"><b>Carregando o estoque…</b></div>'; }
       await estCarregar(false);
+      if(typeof equipeNomesCarregar === 'function') equipeNomesCarregar().catch(() => {});   // nomes do "feito por"
       if(typeof ocCarregar === 'function') try { await ocCarregar(false); } catch(e){}
       if(typeof esoSincronizar === 'function') try { await esoSincronizar(false); } catch(e){}
       estDesenhar();
@@ -523,10 +524,12 @@
       const dep = est.depositos.find(d => d.id === est.dep); if(!dep) return;
       const r = await supa.from('estoque_mov').select('*').eq('usuario_id', usuarioAtual.id).eq('deposito_id', dep.id).eq('sku_norm', k).order('criado_em', { ascending: false }).limit(300);
       const mv = r.data || [];
+      if(typeof equipeNomesCarregar === 'function') await equipeNomesCarregar().catch(() => {});
+      const quem = m => typeof equipeQuem === 'function' ? equipeQuem(m.feito_por) : '';
       let saldo = estSaldoDe(dep.id, k);
       const dt = t => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' });
-      const linhas = mv.map(m => { const depois = saldo; saldo -= Number(m.qtd); return `<tr><td>${dt(m.criado_em)}</td><td>${ES_MOTIVO[m.motivo] || m.motivo}${m.ref ? ` <span class="ap-parc">${esEsc(m.ref)}</span>` : ''}</td><td class="num ${Number(m.qtd) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(m.qtd) > 0 ? '+' : ''}${esInt(m.qtd)}</b></td><td class="num">${esInt(depois)}</td><td class="text-muted" style="font-size:12px;white-space:normal;">${esEsc(m.obs || '')}</td></tr>`; }).join('');
-      vmlModal(`${esEsc(k.toUpperCase())} — movimentações em ${esEsc(dep.nome)}`, mv.length ? `<div style="max-height:60vh;overflow:auto;"><table class="cp-tab"><thead><tr><th>Quando</th><th>Motivo</th><th class="num">Quantidade</th><th class="num">Saldo depois</th><th>Observação</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<div class="vazio"><b>Sem movimentações</b>Este produto ainda não teve entrada nem saída neste depósito.</div>');
+      const linhas = mv.map(m => { const depois = saldo; saldo -= Number(m.qtd); return `<tr><td>${dt(m.criado_em)}</td><td>${ES_MOTIVO[m.motivo] || m.motivo}${m.ref ? ` <span class="ap-parc">${esEsc(m.ref)}</span>` : ''}</td><td class="num ${Number(m.qtd) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(m.qtd) > 0 ? '+' : ''}${esInt(m.qtd)}</b></td><td class="num">${esInt(depois)}</td><td class="text-muted" style="font-size:12px;white-space:normal;">${esEsc(m.obs || '')}</td><td style="font-size:12px;white-space:nowrap;">${esEsc(quem(m))}</td></tr>`; }).join('');
+      vmlModal(`${esEsc(k.toUpperCase())} — movimentações em ${esEsc(dep.nome)}`, mv.length ? `<div style="max-height:60vh;overflow:auto;"><table class="cp-tab"><thead><tr><th>Quando</th><th>Motivo</th><th class="num">Quantidade</th><th class="num">Saldo depois</th><th>Observação</th><th title="Quem lançou: você, o dono da conta, um colaborador ou o sistema (automático). Registro desde 31/10/2026.">Feito por</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<div class="vazio"><b>Sem movimentações</b>Este produto ainda não teve entrada nem saída neste depósito.</div>');
       const mc = document.querySelector('#modal-vml .modal-content'); if(mc) { mc.style.maxWidth = '1040px'; mc.style.width = '96vw'; }
     }
 

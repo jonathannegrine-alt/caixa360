@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
         const m = String(cj?.msg || cj?.message || cj?.error_description || '')
         return resp({ error: /already|registered|exists/i.test(m) ? 'Este e-mail já tem cadastro no Caixa 360. Use outro e-mail para o colaborador.' : 'Não consegui criar o login: ' + (m || c.status) })
       }
-      const ins = await fetch(`${supaUrl}/rest/v1/equipe`, { method: 'POST', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify({ membro_id: cj.id, dono_id: dono, email, nome: nome || null, paginas }) })
+      const ins = await fetch(`${supaUrl}/rest/v1/equipe`, { method: 'POST', headers: { ...dbH, Prefer: 'return=minimal' }, body: JSON.stringify({ membro_id: cj.id, dono_id: dono, email, nome: nome || null, paginas, alterar: body?.alterar === true }) })
       if (!ins.ok) {
         await fetch(`${supaUrl}/auth/v1/admin/users/${cj.id}`, { method: 'DELETE', headers: dbH })
         return resp({ error: 'Não consegui guardar o colaborador: ' + (await ins.text()).slice(0, 200) })
